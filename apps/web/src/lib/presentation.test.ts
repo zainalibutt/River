@@ -1,6 +1,13 @@
 import { awaitingHuman, type SessionStep } from '@river/engine'
 import { describe, expect, it } from 'vitest'
-import { cloneView, formatAmount, orderedSeats, reduceStep } from './presentation.js'
+import {
+  botDwell,
+  cloneView,
+  dwellFor,
+  formatAmount,
+  orderedSeats,
+  reduceStep,
+} from './presentation.js'
 
 describe('presentation reducer', () => {
   it('reconciles a complete hand to the engine projection', () => {
@@ -51,5 +58,30 @@ describe('presentation reducer', () => {
     expect(orderedSeats(view)[0]?.id).toBe('you')
     expect(formatAmount(87_250, true)).toBe('87.3K')
     expect(formatAmount(87_250, false)).toBe('87,250')
+  })
+})
+
+describe('bot pacing', () => {
+  it('separates tiers and pauses OG before aggression', () => {
+    const mid = () => 0.5
+    expect(botDwell({ kind: 'call' }, 'rookie', mid)).toBe(600)
+    expect(botDwell({ kind: 'call' }, 'novice', mid)).toBe(900)
+    expect(botDwell({ kind: 'call' }, 'og', mid)).toBe(1200)
+    expect(botDwell({ kind: 'raiseTo', to: 4000 }, 'og', mid)).toBe(1800)
+    expect(botDwell({ kind: 'allIn' }, 'og', mid)).toBe(1800)
+  })
+
+  it('folds quicker and never drops below the floor', () => {
+    const low = () => 0
+    expect(botDwell({ kind: 'fold' }, 'rookie', low)).toBe(250)
+    expect(botDwell({ kind: 'fold' }, 'og', low)).toBe(600)
+    expect(botDwell({ kind: 'fold' }, 'novice', () => 0.5)).toBe(700)
+  })
+
+  it('leaves hero actions instant', () => {
+    const session = awaitingHuman()
+    const view = session.view()
+    const step: SessionStep = { kind: 'action', seatId: 'you', decision: { kind: 'call' } }
+    expect(dwellFor(step, view, 'og', () => 0.5)).toBe(0)
   })
 })

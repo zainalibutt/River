@@ -1,4 +1,20 @@
-import type { SessionStep, SoloTableView, ViewSeat } from '@river/engine'
+import type {
+  BotDecision,
+  BotSkill,
+  SessionStep,
+  SoloTableView,
+  TurnAction,
+  ViewSeat,
+} from '@river/engine'
+
+const BOT_DWELL: Record<BotSkill, { min: number; max: number; aggression: number }> = {
+  rookie: { min: 400, max: 800, aggression: 0 },
+  novice: { min: 600, max: 1200, aggression: 0 },
+  og: { min: 800, max: 1600, aggression: 600 },
+}
+
+const FOLD_RELIEF = 200
+const MIN_DWELL = 250
 
 export function cloneView(view: SoloTableView): SoloTableView {
   return {
@@ -184,14 +200,31 @@ export function orderedSeats(view: SoloTableView): ViewSeat[] {
   return [...view.seats.slice(heroIndex), ...view.seats.slice(0, heroIndex)]
 }
 
-export function dwellFor(step: SessionStep, view: SoloTableView): number {
+export function botDwell(
+  decision: BotDecision | TurnAction,
+  skill: BotSkill,
+  sample: () => number = Math.random,
+): number {
+  const range = BOT_DWELL[skill]
+  const base = range.min + sample() * (range.max - range.min)
+  const aggressive = decision.kind === 'raiseTo' || decision.kind === 'allIn'
+  const relief = decision.kind === 'fold' ? FOLD_RELIEF : 0
+  return Math.max(MIN_DWELL, Math.round(base + (aggressive ? range.aggression : 0) - relief))
+}
+
+export function dwellFor(
+  step: SessionStep,
+  view: SoloTableView,
+  skill: BotSkill,
+  sample: () => number = Math.random,
+): number {
   switch (step.kind) {
     case 'handStarted':
       return 400
     case 'blind':
       return 180
     case 'action':
-      return seatById(view, step.seatId)?.isBot ? 700 : 0
+      return seatById(view, step.seatId)?.isBot ? botDwell(step.decision, skill, sample) : 0
     case 'board':
       return step.street === 'flop' ? 520 : 340
     case 'uncontested':

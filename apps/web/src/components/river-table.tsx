@@ -85,6 +85,7 @@ export function RiverTable() {
   const [tvMode, setTvMode] = useState(false)
   const [stageScale, setStageScale] = useState(2 / 3)
   const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+  const skillRef = useRef<BotSkill>('rookie')
   const callRef = useRef<HTMLButtonElement>(null)
   const allInRef = useRef<HTMLButtonElement>(null)
   const raiseRef = useRef<HTMLInputElement>(null)
@@ -111,7 +112,7 @@ export function RiverTable() {
           setView(cloneView(shown))
         }, cursor)
         timers.current.push(timer)
-        cursor += dwellFor(step, shown)
+        cursor += dwellFor(step, shown, skillRef.current)
       }
       const finalTimer = setTimeout(() => {
         setView(cloneView(after))
@@ -249,6 +250,7 @@ export function RiverTable() {
     clearPlayback()
     const session = createSession(next)
     sessionRef.current = session
+    skillRef.current = next
     setSkill(next)
     setView(cloneView(session.view()))
     setBusy(false)
