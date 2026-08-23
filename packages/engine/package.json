@@ -1,0 +1,11 @@
+{
+  "name": "@river/engine",
+  "version": "0.1.0",
+  "description": "Pure poker game logic — deck, evaluator, betting. No IO.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

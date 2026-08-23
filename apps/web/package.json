@@ -1,0 +1,11 @@
+{
+  "name": "@river/web",
+  "version": "0.1.0",
+  "description": "Next.js + React Three Fiber web client.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
