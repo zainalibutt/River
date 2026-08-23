@@ -82,9 +82,13 @@ export function RiverTable() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [twoColour, setTwoColour] = useState(false)
+  const [tvMode, setTvMode] = useState(false)
   const [stageScale, setStageScale] = useState(2 / 3)
   const timers = useRef<ReturnType<typeof setTimeout>[]>([])
   const callRef = useRef<HTMLButtonElement>(null)
+  const allInRef = useRef<HTMLButtonElement>(null)
+  const raiseRef = useRef<HTMLInputElement>(null)
+  const modalCloseRef = useRef<HTMLButtonElement>(null)
 
   const clearPlayback = useCallback(() => {
     for (const timer of timers.current) clearTimeout(timer)
@@ -188,11 +192,58 @@ export function RiverTable() {
       ) {
         act({ kind: 'fold' })
       }
-      if (event.key === 'Escape') setSettingsOpen((open) => !open)
+      if (event.key.toLowerCase() === 'a' && view.legal?.allIn.enabled) {
+        allInRef.current?.focus()
+        allInRef.current?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+      }
+      if (event.key.toLowerCase() === 'r' && view.legal?.raiseTo.enabled) {
+        raiseRef.current?.focus()
+      }
+      if (/^[1-4]$/.test(event.key) && view.legal?.raiseTo.enabled) {
+        const minimum = view.legal.raiseTo.min
+        const maximum = view.legal.allIn.amount
+        const values = [minimum, Math.round(view.pot / 2), view.pot, maximum]
+        setRaiseTo(Math.min(maximum, Math.max(minimum, values[Number(event.key) - 1] ?? minimum)))
+      }
+      if (event.key.toLowerCase() === 'v' && view.commit !== null) setVerifyOpen(true)
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const controls = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '.river-stage button:not(:disabled), .river-stage input:not(:disabled)',
+          ),
+        )
+        const current = controls.indexOf(document.activeElement as HTMLElement)
+        const delta = event.key === 'ArrowRight' ? 1 : -1
+        controls[(current + delta + controls.length) % controls.length]?.focus()
+      }
+      if (event.key === 'Escape') {
+        if (verifyOpen) setVerifyOpen(false)
+        else if (settingsOpen) setSettingsOpen(false)
+        else setSettingsOpen(true)
+      }
+    }
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'a') return
+      allInRef.current?.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }))
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [act, view.legal])
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [act, settingsOpen, verifyOpen, view.commit, view.legal, view.pot])
+
+  useEffect(() => {
+    const syncFullscreen = () => setTvMode(document.fullscreenElement !== null)
+    document.addEventListener('fullscreenchange', syncFullscreen)
+    syncFullscreen()
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen)
+  }, [])
+
+  useEffect(() => {
+    if (settingsOpen || verifyOpen) modalCloseRef.current?.focus()
+  }, [settingsOpen, verifyOpen])
 
   const changeSkill = (next: BotSkill) => {
     clearPlayback()
@@ -231,9 +282,16 @@ export function RiverTable() {
           <div className="felt" />
           <div className="table-rail" />
           <nav className="menu-cluster" aria-label="Table menu">
-            <button type="button" onClick={() => void enterTvMode()} aria-label="Toggle TV mode">
+            <HoldButton
+              disabled={false}
+              duration={tvMode ? 1000 : 0}
+              className="tv-button"
+              ariaLabel={tvMode ? 'Hold to exit TV mode' : 'Enter TV mode'}
+              ariaPressed={tvMode}
+              onComplete={() => void enterTvMode()}
+            >
               TV
-            </button>
+            </HoldButton>
             <button type="button" onClick={() => setSettingsOpen(true)} aria-label="Settings">
               SET
             </button>
@@ -294,6 +352,8 @@ export function RiverTable() {
             raiseTo={raiseTo}
             setRaiseTo={setRaiseTo}
             callRef={callRef}
+            allInRef={allInRef}
+            raiseRef={raiseRef}
             onStart={startHand}
             onRebuy={rebuy}
             onAction={act}
@@ -314,6 +374,7 @@ export function RiverTable() {
                 aria-labelledby="settings-title"
               >
                 <button
+                  ref={modalCloseRef}
                   className="modal-close"
                   type="button"
                   onClick={() => setSettingsOpen(false)}
@@ -354,7 +415,12 @@ export function RiverTable() {
                 aria-modal="true"
                 aria-labelledby="verify-title"
               >
-                <button className="modal-close" type="button" onClick={() => setVerifyOpen(false)}>
+                <button
+                  ref={modalCloseRef}
+                  className="modal-close"
+                  type="button"
+                  onClick={() => setVerifyOpen(false)}
+                >
                   CLOSE
                 </button>
                 <p className="eyebrow">FAIRNESS COMMIT</p>
@@ -494,6 +560,8 @@ function ActionRail({
   raiseTo,
   setRaiseTo,
   callRef,
+  allInRef,
+  raiseRef,
   onStart,
   onRebuy,
   onAction,
@@ -503,6 +571,8 @@ function ActionRail({
   raiseTo: number
   setRaiseTo: (value: number) => void
   callRef: React.RefObject<HTMLButtonElement | null>
+  allInRef: React.RefObject<HTMLButtonElement | null>
+  raiseRef: React.RefObject<HTMLInputElement | null>
   onStart: () => void
   onRebuy: () => void
   onAction: (action: TurnAction) => void
@@ -528,6 +598,7 @@ function ActionRail({
       <div className={canRaise ? 'bet-sizing' : 'bet-sizing hidden'}>
         <output>RAISE TO {formatAmount(raiseTo, false)}</output>
         <input
+          ref={raiseRef}
           aria-label="Raise amount"
           type="range"
           min={minimum}
@@ -560,6 +631,7 @@ function ActionRail({
       </div>
       <div className="action-buttons">
         <HoldButton
+          buttonRef={allInRef}
           disabled={!legal?.allIn.enabled || disabled}
           duration={600}
           className="all-in-button"
@@ -583,16 +655,16 @@ function ActionRail({
         >
           {legal?.check.enabled ? 'CHECK' : `CALL ${formatAmount(legal?.call.amount ?? 0, false)}`}
         </button>
-        <button
-          type="button"
+        <HoldButton
           className="raise-button"
           disabled={!canRaise || disabled}
-          onClick={() =>
+          duration={raiseTo >= maximum ? 600 : 0}
+          onComplete={() =>
             onAction(raiseTo >= maximum ? { kind: 'allIn' } : { kind: 'raiseTo', to: raiseTo })
           }
         >
           {raiseTo >= maximum ? 'ALL IN' : `RAISE TO ${formatAmount(raiseTo, false)}`}
-        </button>
+        </HoldButton>
       </div>
     </div>
   )
@@ -603,12 +675,18 @@ function HoldButton({
   disabled,
   onComplete,
   className,
+  ariaLabel,
+  ariaPressed,
+  buttonRef,
   children,
 }: {
   duration: number
   disabled: boolean
   onComplete: () => void
   className: string
+  ariaLabel?: string
+  ariaPressed?: boolean
+  buttonRef?: React.RefObject<HTMLButtonElement | null>
   children: React.ReactNode
 }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -642,9 +720,12 @@ function HoldButton({
   }
   return (
     <button
+      ref={buttonRef}
       type="button"
       className={`${className}${holding ? ' holding' : ''}`}
       disabled={disabled}
+      aria-label={ariaLabel}
+      aria-pressed={ariaPressed}
       style={{ '--hold-duration': `${duration}ms` } as CSSProperties}
       onPointerDown={startPointer}
       onPointerUp={cancel}
