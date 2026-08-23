@@ -5,15 +5,22 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "dev": "tsx watch apps/server/src/index.ts",
+    "dev": "npm run dev --workspace @river/web",
+    "dev:server": "tsx watch apps/server/src/index.ts",
+    "build": "npm run build --workspace @river/web",
     "demo": "tsx packages/engine/src/cli/demo.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
     "lint": "biome check .",
     "format": "biome check --write .",
+    "pretest": "npm run build --workspace @river/engine",
     "test": "vitest run"
   },
   "devDependencies": {

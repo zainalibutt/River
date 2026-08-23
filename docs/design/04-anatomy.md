@@ -155,7 +155,7 @@ When `view.commit` is null the pill renders at 40% opacity with the label only. 
 
 ## Hero block
 
-600x120 at y=796, above the rail. This is the reserved bounding region for the hero cards and the position-0 seat plate together, not a second plate: the plate straddles the rail edge while the two 120x168 hole cards overlap the block upward by 48px. Cards are always face-up when `hole` is non-null. There is no peek interaction in 2D — the peek is a 3D body animation per `docs/spec.md`, and hiding your own cards behind an interaction on a couch-play product adds friction with no benefit.
+The hero uses a 420px plate anchored at 57%, 78%, with its two cards extending to the left. Together they occupy the 600x120 hero block above the rail and remain optically centred at 6 o'clock. This is one composite seat, not a second plate: the plate straddles the rail edge while the two 120x168 hole cards overlap the block upward by 48px. Cards are always face-up when `hole` is non-null. There is no peek interaction in 2D — the peek is a 3D body animation per `docs/spec.md`, and hiding your own cards behind an interaction on a couch-play product adds friction with no benefit.
 
 ## Between-hands countdown
 

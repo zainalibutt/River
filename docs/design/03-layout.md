@@ -55,7 +55,7 @@ Positions are percentages of the table stage, giving the seat plate centre.
 
 | Position | Angle | x | y |
 |---|---|---|---|
-| 0 (hero) | 90 | 50.0% | 84.0% |
+| 0 (hero) | 90 | 57.0% | 78.0% |
 | 1 | 130 | 23.0% | 76.0% |
 | 2 | 170 | 13.0% | 55.9% |
 | 3 | 210 | 13.6% | 33.0% |
@@ -71,7 +71,7 @@ Positions 2 and 7 use the 300px narrow variant (`04-anatomy.md`). Their outer ed
 
 | Position | Angle | x | y |
 |---|---|---|---|
-| 0 (hero) | 90 | 50.0% | 84.0% |
+| 0 (hero) | 90 | 57.0% | 78.0% |
 | 1 | 150 | 13.6% | 67.0% |
 | 2 | 210 | 13.6% | 33.0% |
 | 3 | 270 | 50.0% | 16.0% |
@@ -82,7 +82,7 @@ Positions 2 and 7 use the 300px narrow variant (`04-anatomy.md`). Their outer ed
 
 | Position | x | y |
 |---|---|---|
-| 0 (hero) | 50.0% | 84.0% |
+| 0 (hero) | 57.0% | 78.0% |
 | 1 (opponent) | 50.0% | 16.0% |
 
 Heads-up is the Phase 2 exit shape per Q1, so it is the layout that must be finished first. It gets one refinement the others do not: because only two seats exist, the opponent plate may use the 400px wide variant and show a larger avatar area, since there is no crowding to manage.
