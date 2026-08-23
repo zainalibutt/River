@@ -201,6 +201,18 @@ export class BettingHand {
       this.lastToAct = -1
       return
     }
+    const playersWithChips = active.filter((p) => !p.allIn)
+    if (
+      playersWithChips.length <= 1 &&
+      playersWithChips.every((player) => player.betThisStreet >= this.obligation)
+    ) {
+      while (this.street !== 'river') {
+        this.startNextStreet()
+      }
+      this.finished = true
+      this.lastToAct = -1
+      return
+    }
     while (this.findToAct() === null) {
       if (this.street === 'river') {
         this.finished = true

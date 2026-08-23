@@ -168,8 +168,13 @@ describe('solo session', () => {
 
   it('busts a seat that loses its last chips and allows a rebuy', () => {
     const session = bustHand()
-    session.start()
-    playUntilBetween(session)
+    const startSteps = session.start()
+    expect(startSteps.filter((step) => step.kind === 'await')).toHaveLength(1)
+    const runout = session.act('you', { kind: 'call' })
+    expect(runout.ok).toBe(true)
+    expect(session.view().phase).toBe('between')
+    expect(session.view().board).toHaveLength(5)
+    expect(runout.steps.filter((step) => step.kind === 'await')).toHaveLength(0)
     expect(session.view().seats.some((seat) => seat.busted)).toBe(true)
     expect(session.rebuy('p2', STAKE_250_500.defaultBuyIn)).toBe(true)
     expect(session.view().seats.find((seat) => seat.id === 'p2')?.busted).toBe(false)

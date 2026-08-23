@@ -97,6 +97,25 @@ describe('betting all-in and side pots', () => {
     expect(betting.toActId).toBeUndefined()
   })
 
+  it('runs through remaining streets after the last player matches an all-in blind', () => {
+    const betting = hand([1000, 20], 0, ['a', 'b'])
+    expect(betting.toActId).toBe('a')
+    betting.call('a')
+    expect(betting.finished).toBe(true)
+    expect(betting.street).toBe('river')
+    expect(betting.toActId).toBeUndefined()
+  })
+
+  it('requires the last player with chips to answer an unmatched all-in', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    betting.allIn('b')
+    expect(betting.finished).toBe(false)
+    expect(betting.toActId).toBe('a')
+    betting.call('a')
+    expect(betting.finished).toBe(true)
+    expect(betting.street).toBe('river')
+  })
+
   it('does not reopen betting after an incomplete all-in raise', () => {
     const betting = hand([1000, 1000, 150], 2, ['a', 'b', 'c'])
     betting.call('c')
@@ -117,8 +136,9 @@ describe('betting all-in and side pots', () => {
     betting.allIn('b')
     betting.allIn('c')
     betting.call('a')
-    expect(betting.street).toBe('flop')
-    expect(betting.toActId).toBe('a')
+    expect(betting.street).toBe('river')
+    expect(betting.finished).toBe(true)
+    expect(betting.toActId).toBeUndefined()
     expect(betting.sidePots()).toEqual([
       { amount: 870, eligibleIds: ['a', 'b', 'c'] },
       { amount: 380, eligibleIds: ['a', 'c'] },
