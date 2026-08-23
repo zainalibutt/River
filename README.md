@@ -2,7 +2,7 @@
 
 > Multiplayer Texas Hold'em for friend groups. PC browser + PS5 browser couch play. Born the day its creator got banned from Blackjackist.
 
-**Status:** foundation — monorepo scaffold (`packages/engine`, `apps/server`, `apps/web`), CI green, database schema live on Supabase (London, free tier). Engine work next. Product spec: [`docs/spec.md`](docs/spec.md).
+**Status:** engine core complete — deck, deterministic shuffle, evaluator, betting and side pots are tested; the solo browser loop is next. Product decisions live in [`docs/spec.md`](docs/spec.md).
 
 ## Problem
 

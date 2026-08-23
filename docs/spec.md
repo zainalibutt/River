@@ -42,7 +42,7 @@ Multiplayer Texas Hold'em for friend groups. the reference x Blackjackist inspir
 - **Player bodies v1, basic**: low-poly seated characters, rigs via Mixamo-style pipeline; idle breathe/sway, card peek, chip toss, win/lose react, plus **stand-up on all-in** (signature moment, the reference-style). No facial work.
 - Camera: fixed cinematic angles + dramatic auto-zoom on all-ins/showdowns.
 - Launch venues (3): **Rooftop bar**, **Underground basement**, **High-end suite**. Varied mood/lighting per the reference tradition.
-- Art production: agent-driven procedural Blender (bpy) + AI textures + asset packs where quality demands. Art spike after engine core: table + chips + cards + one seated rig rendered before any React exists.
+- Art production: agent-driven procedural Blender (bpy) + AI textures + asset packs where quality demands. After the engine core, establish the visual direction and test the asset pipeline with table, chips, cards, and one seated rig. This is a feasibility proof, not a renderer commitment; production 3D work starts only after the real-PS5 hardware gate.
 - Cosmetics v1: basic set proving the system (felts / card backs / chip sets); full wearables (rings, hats, outfits) arrive with richer character models later.
 - Music/audio: licensed ambient loops at launch + selective original pieces later.
 

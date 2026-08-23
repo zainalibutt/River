@@ -17,9 +17,14 @@ Thumbs.db
 
 # local working docs & assistant state (manifest in LOCAL.md)
 AGENTS.md
+CLAUDE.md
 IDEAS.md
 LOCAL.md
 docs/roadmap.md
+AI_NOTES.md
+**/AI_NOTES.md
+**/*.ai.md
+**/*.ai-notes.md
 kilo.json
 kilo.jsonc
 .kilo/
@@ -27,3 +32,4 @@ kilo.jsonc
 .mcp.json
 .claude/
 .codex/
+.ai/
