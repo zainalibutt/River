@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "tsx watch apps/server/src/index.ts",
+    "demo": "tsx packages/engine/src/cli/demo.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",

@@ -30,10 +30,10 @@ Multiplayer Texas Hold'em for friend groups. the reference x Blackjackist inspir
 
 ## Economy (server-authoritative, append-only ledger, config-driven)
 
-- Signup bankroll: **10,000**.
-- Stakes ladder: entry 25/50 (min buy-in 5,000), higher tiers gated by buy-in.
-- Bust rescue (amended Aug 2026): when broke, instant top-up to **2,500** chips, capped claims/day (config-driven), so nobody sits out friends-night at zero. Supersedes the claim-5,000-per-24h rule.
-- Daily login: flat grant + growing streak, day 7 largest (~10k). Percentage compounding rejected.
+- Signup bankroll: **100,000**.
+- Stakes ladder: entry **250/500** (min buy-in 50,000 = 100 BB, default buy-in 100,000 = 200 BB, max 200,000 = 400 BB), higher tiers gated by buy-in. *(Aug 2026: chip scale ×10 — 25/50 → 250/500, economy figures scaled to match — cosmetic denomination change, ratios unchanged.)*
+- Bust rescue (amended Aug 2026): when broke, instant top-up to **25,000** chips, capped claims/day (config-driven), so nobody sits out friends-night at zero. Supersedes the claim-5,000-per-24h rule.
+- Daily login: flat grant + growing streak, day 7 largest (~100k). Percentage compounding rejected.
 - Chip sink: cosmetics purchasable *with chips* (legal — chips unbuyable).
 
 ## Presentation
