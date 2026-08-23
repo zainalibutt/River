@@ -54,11 +54,11 @@ function potOdds(input: BotDecisionInput): number {
   return input.betToCall / (input.pot + input.betToCall)
 }
 
-function raiseTo(input: BotDecisionInput, profile: BotProfile): number {
+function aggressiveDecision(input: BotDecisionInput, profile: BotProfile): BotDecision {
   const max = input.stack + input.betThisStreet
+  if (max < input.minRaiseTo) return { kind: 'allIn' }
   const to = Math.min(input.minRaiseTo + Math.floor(input.pot * (0.5 + profile.aggression)), max)
-  if (to >= max) return max
-  return Math.max(to, input.minRaiseTo)
+  return { kind: 'raiseTo', to: Math.max(to, input.minRaiseTo) }
 }
 
 export function decideBotTurn(input: BotDecisionInput, profile: BotProfile, rng: Rng): BotDecision {
@@ -75,7 +75,7 @@ export function decideBotTurn(input: BotDecisionInput, profile: BotProfile, rng:
   }
 
   if (facing) {
-    if (edge >= profile.rerollFloor) return { kind: 'raiseTo', to: raiseTo(input, profile) }
+    if (edge >= profile.rerollFloor) return aggressiveDecision(input, profile)
     if (edge >= profile.callFloor) return { kind: 'call' }
     if (roll < profile.looseness && potOdds(input) < 0.4) return { kind: 'call' }
     return { kind: 'fold' }
@@ -85,7 +85,7 @@ export function decideBotTurn(input: BotDecisionInput, profile: BotProfile, rng:
     if (strength >= profile.allInFloor && rng() < profile.aggression * 0.6 + 0.1) {
       return { kind: 'allIn' }
     }
-    return { kind: 'raiseTo', to: raiseTo(input, profile) }
+    return aggressiveDecision(input, profile)
   }
   if (
     strength >= profile.allInFloor &&

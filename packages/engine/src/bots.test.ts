@@ -60,11 +60,28 @@ describe('bot decisions', () => {
   })
 
   it('presents distinct behaviour across skills', () => {
-    const weak = withHole('2c 7d')
-    const rookie = decideBotTurn(weak, BOT_PROFILES.rookie, mulberry32(7))
-    const og = decideBotTurn(weak, BOT_PROFILES.og, mulberry32(7))
-    const kinds = new Set([rookie.kind, og.kind])
-    expect(kinds.size).toBeGreaterThan(0)
+    const weakFacing = { ...withHole('2c 7d'), betToCall: 500, pot: 1000 }
+    const countCalls = (skill: keyof typeof BOT_PROFILES): number =>
+      Array.from({ length: 200 }, (_, seed) =>
+        decideBotTurn(weakFacing, BOT_PROFILES[skill], mulberry32(seed)),
+      ).filter((decision) => decision.kind === 'call').length
+    expect(countCalls('rookie')).toBeGreaterThan(countCalls('og'))
+  })
+
+  it('uses all-in rather than an unreachable short-stack raise', () => {
+    const short = {
+      ...withHole('As Ad'),
+      betToCall: 500,
+      pot: 2000,
+      minRaiseTo: 1500,
+      currentBet: 1000,
+      stack: 400,
+      betThisStreet: 0,
+    }
+    for (let seed = 0; seed < 20; seed++) {
+      const decision = decideBotTurn(short, BOT_PROFILES.og, mulberry32(seed))
+      expect(decision.kind).not.toBe('raiseTo')
+    }
   })
 
   it('raises with a made hand on the river', () => {

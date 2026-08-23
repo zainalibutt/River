@@ -5,12 +5,14 @@ import { decideBotTurn } from './bots.js'
 import type { Card } from './cards.js'
 import { makeDeck } from './cards.js'
 import type { StakeConfig } from './config.js'
-import { BOT_PROFILES, DEFAULT_STAKE } from './config.js'
+import { BOT_PROFILES, DEFAULT_STAKE, SEATS_PER_SHAPE } from './config.js'
 import { compareRanks, evaluateBest } from './evaluator.js'
 import { commitSeed } from './fair.js'
 import { mulberry32, seedFromString } from './rng.js'
 import { shuffle } from './shuffle.js'
 import { at } from './util.js'
+
+const STREET_ORDER: Street[] = ['preflop', 'flop', 'turn', 'river']
 
 export interface SessionSeatDef {
   id: string
@@ -125,6 +127,7 @@ function emptyLegal(): LegalActions {
 
 export class SoloSession {
   private readonly seats: SeatState[]
+  private readonly initialStacks: ReadonlyMap<string, number>
   private readonly stake: StakeConfig
   private readonly rngSeed: string
   readonly countdownMs: number
@@ -149,15 +152,31 @@ export class SoloSession {
     if (options.seats.length < 2) {
       throw new Error('a session needs at least two seats')
     }
-    this.seats = options.seats.map((def) => ({
-      def,
-      stack: options.stacks?.[def.id] ?? (options.stake ?? DEFAULT_STAKE).defaultBuyIn,
-      hole: [],
-      busted: false,
-    }))
+    if (options.seats.length > SEATS_PER_SHAPE.full) {
+      throw new Error(`a session supports at most ${SEATS_PER_SHAPE.full} seats`)
+    }
+    if (new Set(options.seats.map((seat) => seat.id)).size !== options.seats.length) {
+      throw new Error('session seat ids must be unique')
+    }
+    this.seats = options.seats.map((def) => {
+      const stack = options.stacks?.[def.id] ?? (options.stake ?? DEFAULT_STAKE).defaultBuyIn
+      if (!Number.isFinite(stack) || stack < 0) {
+        throw new Error(`invalid stack for ${def.id}`)
+      }
+      return {
+        def: { ...def },
+        stack,
+        hole: [],
+        busted: stack === 0,
+      }
+    })
+    this.initialStacks = new Map(this.seats.map((seat) => [seat.def.id, seat.stack]))
     this.stake = options.stake ?? DEFAULT_STAKE
     this.rngSeed = options.rngSeed
     this.countdownMs = options.countdownMs ?? 3000
+    if (!Number.isFinite(this.countdownMs) || this.countdownMs < 0) {
+      throw new Error('countdown must be a non-negative finite number')
+    }
     this.now = options.nowMs ?? (() => 0)
     this.dealerIndex = 0
     this.fixedDeck = options.fixedDeck ?? null
@@ -169,7 +188,7 @@ export class SoloSession {
       handNumber: this.handNumber,
       phase: this.phase,
       street: this.lastStreet,
-      board: this.board,
+      board: this.board.map((card) => ({ ...card })),
       pot: betting === null ? 0 : betting.pot(),
       currentBet: betting === null ? 0 : betting.currentBet,
       countdownMs:
@@ -187,7 +206,10 @@ export class SoloSession {
           betStreet: player?.betThisStreet ?? 0,
           folded: player?.folded ?? false,
           allIn: player?.allIn ?? false,
-          hole: seat.def.botSkill === null || this.revealed ? seat.hole : null,
+          hole:
+            seat.def.botSkill === null || this.revealed
+              ? seat.hole.map((card) => ({ ...card }))
+              : null,
           hasHole: seat.hole.length > 0,
           sittingOut: this.handNumber > 0 && seat.stack <= 0,
           busted: seat.busted,
@@ -215,9 +237,15 @@ export class SoloSession {
 
   startHand(): SessionStep[] {
     if (this.phase === 'hand') return []
-    if (this.handNumber > 0) {
-      this.dealerIndex = (this.dealerIndex + 1) % this.seats.length
+    const active = this.seats.filter((seat) => seat.stack > 0)
+    if (active.length < 2) {
+      this.phase = 'between'
+      this.status = 'Not enough seated players to deal a hand.'
+      const notice: SessionStep = { kind: 'notice', message: this.status }
+      this.stepLog.push(notice)
+      return [notice]
     }
+    this.dealerIndex = this.findNextDealer(this.handNumber === 0)
     this.handNumber++
     this.pendingSeatId = null
     this.revealed = false
@@ -226,14 +254,6 @@ export class SoloSession {
     this.status = null
     for (const seat of this.seats) {
       seat.hole = []
-    }
-    const active = this.seats.filter((seat) => seat.stack > 0)
-    if (active.length < 2) {
-      this.phase = 'between'
-      this.status = 'Not enough seated players to deal a hand.'
-      const notice: SessionStep = { kind: 'notice', message: this.status }
-      this.stepLog.push(notice)
-      return [notice]
     }
     const dealerActive = active.findIndex(
       (seat) => seat.def.id === at(this.seats, this.dealerIndex).def.id,
@@ -290,6 +310,7 @@ export class SoloSession {
       return { ok: false, message: 'It is not your turn.', steps: [] }
     }
     const steps: SessionStep[] = []
+    this.status = null
     if (!this.apply(seatId, action, steps)) {
       return { ok: false, message: this.status ?? 'Invalid action.', steps: [] }
     }
@@ -302,7 +323,7 @@ export class SoloSession {
     const seat = this.findSeat(seatId)
     if (this.phase !== 'between') return false
     const value = amount ?? this.stake.defaultBuyIn
-    if (value <= 0 || value > this.stake.maxBuyIn) return false
+    if (value <= 0 || seat.stack + value > this.stake.maxBuyIn) return false
     seat.stack += value
     seat.busted = false
     return true
@@ -319,12 +340,14 @@ export class SoloSession {
     this.betweenSince = 0
     this.revealed = false
     this.handRng = null
+    this.drawPile = null
+    this.lastStreet = 'preflop'
     this.status = null
     this.stepLog.length = 0
     for (const seat of this.seats) {
-      seat.stack = this.stake.defaultBuyIn
+      seat.stack = this.initialStacks.get(seat.def.id) ?? this.stake.defaultBuyIn
       seat.hole = []
-      seat.busted = false
+      seat.busted = seat.stack === 0
     }
   }
 
@@ -341,10 +364,9 @@ export class SoloSession {
         if (this.handRng === null) throw new Error('hand rng missing')
         const profile = BOT_PROFILES[seat.def.botSkill]
         const decision = decideBotTurn(this.botInput(actorId), profile, this.handRng)
-        if (!this.apply(actorId, decision, steps)) break
-        const step: SessionStep = { kind: 'action', seatId: actorId, decision }
-        steps.push(step)
-        this.stepLog.push(step)
+        if (!this.apply(actorId, decision, steps)) {
+          throw new Error(`bot ${actorId} produced an illegal ${decision.kind} action`)
+        }
         continue
       }
       this.pendingSeatId = actorId
@@ -354,6 +376,7 @@ export class SoloSession {
       return
     }
     if (this.phase === 'hand' && this.betting !== null && this.betting.finished) {
+      this.advanceBoard(this.betting.street, steps)
       this.settle(steps)
     }
   }
@@ -380,29 +403,22 @@ export class SoloSession {
           break
       }
     } catch (error) {
-      if (error instanceof BettingError) return false
+      if (error instanceof BettingError) {
+        this.status = error.message
+        return false
+      }
       throw error
     }
+    const actionStep: SessionStep = { kind: 'action', seatId, decision: { ...action } }
+    steps.push(actionStep)
+    this.stepLog.push(actionStep)
     for (const seat of this.seats) {
       const player = betting.players.find((p) => p.id === seat.def.id)
       if (player !== undefined) {
         seat.stack = player.stack
       }
     }
-    if (betting.street !== this.lastStreet) {
-      this.lastStreet = betting.street
-      if (betting.street !== 'preflop' && this.drawPile !== null) {
-        const count = betting.street === 'flop' ? 3 : 1
-        const cards: Card[] = []
-        for (let i = 0; i < count; i++) {
-          cards.push(this.drawPile.next())
-        }
-        this.board.push(...cards)
-        const step: SessionStep = { kind: 'board', street: betting.street, cards }
-        steps.push(step)
-        this.stepLog.push(step)
-      }
-    }
+    this.advanceBoard(betting.street, steps)
     return true
   }
 
@@ -507,13 +523,42 @@ export class SoloSession {
     const seat = this.findSeat(seatId)
     const cost = betting.betToCall(seatId)
     const raise = betting.minRaiseTo()
+    const committed = betting.valueOf(seatId)
+    const maxTo = seat.stack + committed
     return {
       fold: { enabled: true, amount: 0 },
       check: { enabled: cost === 0, amount: 0 },
-      call: { enabled: cost > 0, amount: cost },
-      raiseTo: { enabled: seat.stack > 0, min: raise },
-      allIn: { enabled: seat.stack > 0, amount: seat.stack + betting.valueOf(seatId) },
+      call: { enabled: cost > 0 && seat.stack > 0, amount: Math.min(cost, seat.stack) },
+      raiseTo: { enabled: maxTo >= raise, min: raise },
+      allIn: { enabled: seat.stack > 0, amount: maxTo },
     }
+  }
+
+  private advanceBoard(target: Street, steps: SessionStep[]): void {
+    const drawPile = this.drawPile
+    if (drawPile === null) return
+    const currentIndex = STREET_ORDER.indexOf(this.lastStreet)
+    const targetIndex = STREET_ORDER.indexOf(target)
+    for (let index = currentIndex + 1; index <= targetIndex; index++) {
+      const street = at(STREET_ORDER, index)
+      this.lastStreet = street
+      if (street === 'preflop') continue
+      const count = street === 'flop' ? 3 : 1
+      const cards = Array.from({ length: count }, () => drawPile.next())
+      this.board.push(...cards)
+      const step: SessionStep = { kind: 'board', street, cards: cards.map((card) => ({ ...card })) }
+      steps.push(step)
+      this.stepLog.push(step)
+    }
+  }
+
+  private findNextDealer(includeCurrent: boolean): number {
+    const firstOffset = includeCurrent ? 0 : 1
+    for (let offset = firstOffset; offset < this.seats.length + firstOffset; offset++) {
+      const index = (this.dealerIndex + offset) % this.seats.length
+      if (at(this.seats, index).stack > 0) return index
+    }
+    throw new Error('no active dealer seat')
   }
 
   private dealOrder(active: SeatState[], dealerActive: number): SeatState[] {

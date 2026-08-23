@@ -3,7 +3,9 @@ import { STAKE_250_500 } from './config.js'
 import {
   awaitingHuman,
   bustHand,
+  deckOf,
   huSeats,
+  nineSeats,
   showdownHand,
   splitPotHand,
   uncontestedWinHand,
@@ -24,11 +26,12 @@ function playUntilBetween(session: SoloSession): void {
   while (session.view().phase !== 'between' && safety-- > 0) {
     const action = humanTurn(session)
     if (action === null) {
-      session.act(session.view().currentActorId ?? '', { kind: 'fold' })
-      continue
+      throw new Error('session stalled without a human action')
     }
-    session.act(session.view().currentActorId ?? '', action)
+    const result = session.act(session.view().currentActorId ?? '', action)
+    if (!result.ok) throw new Error(result.message ?? 'human action failed')
   }
+  if (session.view().phase !== 'between') throw new Error('session exceeded action safety limit')
 }
 
 function fixedSession(): SoloSession {
@@ -45,6 +48,8 @@ describe('solo session', () => {
     const second = fixedSession()
     first.start()
     second.start()
+    playUntilBetween(first)
+    playUntilBetween(second)
     const snap = (session: SoloSession) => session.history().map((step) => JSON.stringify(step))
     expect(snap(first)).toEqual(snap(second))
   })
@@ -54,6 +59,9 @@ describe('solo session', () => {
     const second = fixedSession()
     first.start()
     second.start()
+    playUntilBetween(first)
+    playUntilBetween(second)
+    expect(first.view().board).toHaveLength(5)
     expect(first.view().board.map((c) => c.rank + c.suit)).toEqual(
       second.view().board.map((c) => c.rank + c.suit),
     )
@@ -93,22 +101,23 @@ describe('solo session', () => {
       seats: [...huSeats('og'), { id: 'p3', name: 'OG 2', botSkill: 'og' }],
       rngSeed: 'sidepot',
       stake: STAKE_250_500,
-      stacks: { you: 100_000, p2: 60_000, p3: 120_000 },
+      stacks: { you: 250, p2: 250, p3: 500 },
     })
     const total = session.totalChips()
     session.start()
     expect(session.totalChips()).toBe(total)
-    playUntilBetween(session)
+    const shove = session.act('you', { kind: 'allIn' })
+    expect(shove.ok).toBe(true)
+    expect(session.view().phase).toBe('between')
+    expect(session.view().board).toHaveLength(5)
     expect(session.totalChips()).toBe(total)
     const showdown = session
       .history()
       .filter(
         (step): step is Extract<typeof step, { kind: 'showdown' }> => step.kind === 'showdown',
       )
-    if (showdown.length > 0) {
-      const sums = showdown.map((step) => step.potAwards.reduce((sum, a) => sum + a.amount, 0))
-      expect(sums[0]).toBeGreaterThan(0)
-    }
+    expect(showdown).toHaveLength(1)
+    expect(showdown[0]?.potAwards.reduce((sum, award) => sum + award.amount, 0)).toBe(total)
   })
 
   it('leaks no bot hole cards before showdown', () => {
@@ -176,7 +185,129 @@ describe('solo session', () => {
       const actor = session.view().currentActorId ?? 'you'
       const below = session.act(actor, { kind: 'raiseTo', to: pending.raiseTo.min - 1 })
       expect(below.ok).toBe(false)
+      expect(below.message).toMatch(/minimum/i)
     }
+  })
+
+  it('clamps a short call and disables an unreachable raise', () => {
+    const session = new SoloSession({
+      seats: huSeats('rookie'),
+      rngSeed: 'short-call',
+      stake: STAKE_250_500,
+      stacks: { you: 300, p2: 100_000 },
+      fixedDeck: deckOf('As 2c 7d 3h 4h 5h 6h 9c Qd'),
+    })
+    session.start()
+    const legal = session.view().legal
+    expect(session.view().currentActorId).toBe('you')
+    expect(legal?.call).toEqual({ enabled: true, amount: 50 })
+    expect(legal?.raiseTo.enabled).toBe(false)
+    expect(legal?.allIn).toEqual({ enabled: true, amount: 300 })
+  })
+
+  it('does not count a hand when fewer than two players can be dealt', () => {
+    const session = new SoloSession({
+      seats: huSeats('rookie'),
+      rngSeed: 'not-enough',
+      stacks: { you: 1000, p2: 0 },
+    })
+    expect(session.start()).toEqual([
+      { kind: 'notice', message: 'Not enough seated players to deal a hand.' },
+    ])
+    expect(session.view().handNumber).toBe(0)
+  })
+
+  it('supports a nine-seat projection without leaking bot cards', () => {
+    const session = new SoloSession({
+      seats: nineSeats('novice'),
+      rngSeed: 'nine-seat',
+    })
+    session.start()
+    expect(session.view().seats).toHaveLength(9)
+    expect(
+      session
+        .view()
+        .seats.filter((seat) => seat.isBot)
+        .every((seat) => seat.hole === null),
+    ).toBe(true)
+  })
+
+  it('terminates deterministically across skills, seeds, and table sizes', () => {
+    for (const skill of ['rookie', 'novice', 'og'] as const) {
+      for (const seats of [huSeats(skill), nineSeats(skill)]) {
+        for (let seed = 0; seed < 5; seed++) {
+          const session = new SoloSession({ seats, rngSeed: `${skill}-${seats.length}-${seed}` })
+          const total = session.totalChips()
+          session.start()
+          playUntilBetween(session)
+          expect(session.totalChips()).toBe(total)
+        }
+      }
+    }
+  })
+
+  it('skips an empty seat when rotating the dealer', () => {
+    const session = new SoloSession({
+      seats: [
+        { id: 'you', name: 'You', botSkill: null },
+        { id: 'empty', name: 'Empty', botSkill: 'rookie' },
+        { id: 'p3', name: 'Rookie', botSkill: 'rookie' },
+      ],
+      rngSeed: 'dealer-skip',
+      stacks: { you: 100_000, empty: 0, p3: 100_000 },
+    })
+    session.start()
+    playUntilBetween(session)
+    const next = session.start()
+    expect(next.find((step) => step.kind === 'handStarted')).toMatchObject({ dealerId: 'p3' })
+  })
+
+  it('restores configured stacks and ready state on reset', () => {
+    const session = new SoloSession({
+      seats: huSeats('rookie'),
+      rngSeed: 'reset',
+      stacks: { you: 12_000, p2: 34_000 },
+    })
+    session.start()
+    session.reset()
+    expect(session.view().phase).toBe('ready')
+    expect(session.view().street).toBe('preflop')
+    expect(session.view().handNumber).toBe(0)
+    expect(session.view().seats.map((seat) => seat.stack)).toEqual([12_000, 34_000])
+  })
+
+  it('rejects duplicate ids and tables above nine seats', () => {
+    expect(
+      () =>
+        new SoloSession({
+          seats: [
+            { id: 'same', name: 'One', botSkill: null },
+            { id: 'same', name: 'Two', botSkill: 'rookie' },
+          ],
+          rngSeed: 'duplicate',
+        }),
+    ).toThrow(/unique/)
+    expect(
+      () =>
+        new SoloSession({
+          seats: Array.from({ length: 10 }, (_, index) => ({
+            id: `p${index}`,
+            name: `Player ${index}`,
+            botSkill: index === 0 ? null : ('rookie' as const),
+          })),
+          rngSeed: 'too-many',
+        }),
+    ).toThrow(/at most 9/)
+  })
+
+  it('returns view snapshots that cannot mutate session cards', () => {
+    const session = awaitingHuman()
+    session.start()
+    const first = session.view()
+    const original = first.seats.find((seat) => seat.id === 'you')?.hole?.[0]?.rank
+    const exposed = first.seats.find((seat) => seat.id === 'you')?.hole?.[0]
+    if (exposed !== undefined) exposed.rank = original === 'A' ? 'K' : 'A'
+    expect(session.view().seats.find((seat) => seat.id === 'you')?.hole?.[0]?.rank).toBe(original)
   })
 
   it('emits blind and board steps in order', () => {
@@ -193,5 +324,7 @@ describe('solo session', () => {
     }
     const boardSteps = session.history().filter((step) => step.kind === 'board')
     expect(boardSteps.length).toBeGreaterThanOrEqual(3)
+    const kindsInHistory = session.history().map((step) => step.kind)
+    expect(kindsInHistory.indexOf('action')).toBeLessThan(kindsInHistory.indexOf('board'))
   })
 })

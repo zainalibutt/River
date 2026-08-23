@@ -65,6 +65,7 @@ export class BettingHand {
     this.postBlinds()
     this.obligation = options.bigBlind
     this.betLevel = options.bigBlind
+    this.afterAction()
   }
 
   get toActId(): string | undefined {
@@ -200,10 +201,11 @@ export class BettingHand {
       this.lastToAct = -1
       return
     }
-    if (this.findToAct() === null) {
+    while (this.findToAct() === null) {
       if (this.street === 'river') {
         this.finished = true
         this.lastToAct = -1
+        return
       } else {
         this.startNextStreet()
       }

@@ -90,6 +90,13 @@ describe('betting raises', () => {
 })
 
 describe('betting all-in and side pots', () => {
+  it('runs through remaining streets when nobody can act', () => {
+    const betting = hand([10, 20], 0, ['a', 'b'])
+    expect(betting.finished).toBe(true)
+    expect(betting.street).toBe('river')
+    expect(betting.toActId).toBeUndefined()
+  })
+
   it('does not reopen betting after an incomplete all-in raise', () => {
     const betting = hand([1000, 1000, 150], 2, ['a', 'b', 'c'])
     betting.call('c')
@@ -139,7 +146,8 @@ describe('betting all-in and side pots', () => {
     betting.call('b')
     expect(betting.players[1]?.allIn).toBe(true)
     expect(betting.betToCall('a')).toBe(0)
-    expect(betting.street).toBe('flop')
+    expect(betting.street).toBe('river')
+    expect(betting.finished).toBe(true)
     expect(betting.sidePots()).toEqual([
       { amount: 1200, eligibleIds: ['a', 'b'] },
       { amount: 400, eligibleIds: ['a'] },
