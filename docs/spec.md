@@ -4,7 +4,7 @@ Multiplayer Texas Hold'em for friend groups. the reference x Blackjackist inspir
 
 ## Pillars
 
-1. Couch-first social poker: PC browser + PS5 browser, one URL, DualSense equal citizen.
+1. Couch-first social poker: **desktop browser is the v1 target; PS5 browser is a standing compatibility commitment**, one URL, DualSense an equal citizen by design. See Platform & console UX for what "commitment without validation" binds us to.
 2. Fast rounds, zero friction between hands (Blackjackist pace).
 3. Trustable by construction: server-authoritative, provably-fair shuffles, auditable chip ledger.
 4. Design showcase: betting feel, motion design, lobbies, music, 10-foot TV legibility ≈ half the project weight.
@@ -12,13 +12,27 @@ Multiplayer Texas Hold'em for friend groups. the reference x Blackjackist inspir
 
 ## Platform & console UX
 
+### Platform retarget (Q9, decided Aug 2026)
+
+No PS5 is available to test on, so the planned hardware spike cannot run. Rather than delay 3D indefinitely or pretend to evidence we do not have, **v1 targets the desktop browser** and PS5 compatibility becomes a *designed-for, not-yet-verified* commitment.
+
+**PS5 compatibility is not dropped. It remains a first-class goal of this project.** What changes is only when it is proven. Until a console is in the room, every one of the following stays binding, because retrofitting them later costs far more than honouring them now:
+
+- **Conservative asset budgets.** 3D work targets a ceiling deliberately below what desktop GPUs allow, sized so a PS5 browser has a realistic chance of holding it. Budgets are recorded in `docs/design/10-art-direction.md` and are not raised because a desktop machine can cope.
+- **Gamepad parity from day one.** Every action reachable and confirmable with a controller alone. No pointer-only affordance ever ships.
+- **TV Mode and 10-foot legibility** stay first-class, not deferred polish.
+- **Fullscreen, audio-autoplay and browser-suspension paths** are feature-detected with graceful fallbacks, never assumed.
+- **A renderer fallback path.** The 2D DOM renderer remains permanent and complete, so a device that cannot hold the 3D scene still gets a full game.
+
+The hardware spike (Packet 5A) is **deferred, not cancelled**. It runs the moment console access exists, and its findings amend the budgets rather than being designed around. Until then, desktop profiling stands in as the measurement, with headroom deliberately left unused.
+
 - Web-first stack; PS5 compatibility = the site running well in the PS5 browser with gamepad + TV UI.
 - **TV Mode**: on-screen button → fullscreen where granted, hides all chrome, felt + actions only; unlock = hold 1s. Feature-detect fullscreen; immersive layout fallback. OS buttons uncapturable by design.
 - PWA shipped regardless (iOS/Android/desktop install, cached shell). PS5 home pinning unsupported; documented workaround: send URL via PlayStation Messages app, open from console.
 - Desktop wrapper (Tauri, Steam-style): wanted as late-v1 goal, non-blocking.
 - Phone touch: bonus input, low priority. Phone-as-second-screen: parked/noted.
 - Future rungs: Xbox Creator Program (individual-accessible real console); native PS5 = v2 with evidence.
-- **Hardware spike before renderer commitment:** real PS5 browser test — viewport quirks, Gamepad API/DualSense mapping, WebGL memory ceiling, audio policies.
+- **Hardware spike, deferred (Q9):** the real PS5 browser test — viewport quirks, Gamepad API/DualSense mapping, WebGL memory ceiling, audio policies — remains the eventual validation gate. It no longer blocks 3D production because no console is available; the conservative budget above substitutes until it can run.
 
 ## Game core
 
@@ -42,7 +56,7 @@ Multiplayer Texas Hold'em for friend groups. the reference x Blackjackist inspir
 - **Player bodies v1, basic**: low-poly seated characters, rigs via Mixamo-style pipeline; idle breathe/sway, card peek, chip toss, win/lose react, plus **stand-up on all-in** (signature moment, the reference-style). No facial work.
 - Camera: fixed cinematic angles + dramatic auto-zoom on all-ins/showdowns.
 - Launch venues (3): **Rooftop bar**, **Underground basement**, **High-end suite**. Varied mood/lighting per the reference tradition.
-- Art production: agent-driven procedural Blender (bpy) + AI textures + asset packs where quality demands. After the engine core, establish the visual direction and test the asset pipeline with table, chips, cards, and one seated rig. This is a feasibility proof, not a renderer commitment; production 3D work starts only after the real-PS5 hardware gate.
+- Art production: agent-driven procedural Blender (bpy) + AI textures + asset packs where quality demands. After the engine core, establish the visual direction and test the asset pipeline with table, chips, cards, and one seated rig. This is a feasibility proof, not a renderer commitment. Production 3D work previously waited on the real-PS5 hardware gate; per Q9 it now proceeds against the conservative self-imposed budget, with the console test deferred to whenever hardware exists.
 - Cosmetics v1: basic set proving the system (felts / card backs / chip sets); full wearables (rings, hats, outfits) arrive with richer character models later.
 - Music/audio: licensed ambient loops at launch + selective original pieces later.
 
