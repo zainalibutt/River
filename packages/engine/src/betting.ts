@@ -76,6 +76,10 @@ export class BettingHand {
     return this.betLevel
   }
 
+  valueOf(seatId: string): number {
+    return this.findPlayer(seatId).betThisStreet
+  }
+
   get uncontestedWinnerId(): string | undefined {
     const active = this.players.filter((p) => !p.folded)
     return active.length === 1 ? at(active, 0).id : undefined
