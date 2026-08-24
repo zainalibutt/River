@@ -116,7 +116,15 @@ describe('hidden information across transitions', () => {
     const room = makeRoom('leak-4')
     seatThree(room)
     room.submit({ kind: 'startHand' })
-    room.submit({ kind: 'kick', playerId: 'alice', targetPlayerId: 'carol', reason: 'host' })
+    room.submit({
+      kind: 'kick',
+      byPlayerId: 'alice',
+      targetPlayerId: 'carol',
+      reason: 'host',
+    })
+    // Assert the kick actually landed, or this case proves nothing.
+    const seats = room.viewFor('').seats
+    expect(seats.some((seat) => seat.playerId === 'carol')).toBe(false)
     assertNoLeaks(room, 'after a kick')
   })
 
