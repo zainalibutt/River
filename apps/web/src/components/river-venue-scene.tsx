@@ -2,9 +2,24 @@
 
 import { OrbitControls, useGLTF } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { type RefObject, Suspense, useLayoutEffect, useMemo, useRef } from 'react'
+import {
+  type RefObject,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import * as THREE from 'three'
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+import { type OrbitControls as OrbitControlsImpl, RectAreaLightUniformsLib } from 'three-stdlib'
+import {
+  type LightingSidecar,
+  loadLightingSidecar,
+  type SceneLight,
+  toSceneLights,
+  worldColourOf,
+} from '@/lib/lighting'
 import { VENUE_ORDER, type VenueId, venueOf, worldSeats } from '@/lib/venue'
 
 type SceneProps = {
@@ -121,17 +136,65 @@ function CameraOrbit({ venueId }: { venueId: VenueId }) {
   )
 }
 
-function Scene({ seatIds, seatRefs, venueId }: SceneProps) {
+function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
+  useEffect(() => {
+    // RectAreaLight renders black until its uniform tables are initialised.
+    RectAreaLightUniformsLib.init()
+  }, [])
+
   return (
     <>
-      <color attach="background" args={['#7ca8ba']} />
-      <hemisphereLight args={['#dbeeff', '#403225', 1.7]} />
-      <directionalLight
-        castShadow
-        intensity={2.1}
-        position={[-4, 8, 5]}
-        shadow-mapSize={[1024, 1024]}
-      />
+      {/* A low ambient so an unlit corner reads as dim rather than as a hole. */}
+      <ambientLight intensity={0.18} />
+      {lights.map((light) =>
+        light.kind === 'spot' ? (
+          <spotLight
+            key={light.name}
+            castShadow
+            angle={0.9}
+            color={light.colour}
+            distance={0}
+            intensity={light.intensity * 12}
+            penumbra={0.85}
+            position={light.position}
+            shadow-mapSize={[2048, 2048]}
+          />
+        ) : (
+          <rectAreaLight
+            key={light.name}
+            color={light.colour}
+            height={light.height}
+            intensity={light.intensity}
+            position={light.position}
+            width={light.width}
+          />
+        ),
+      )}
+    </>
+  )
+}
+
+function Scene({ seatIds, seatRefs, venueId }: SceneProps) {
+  const [sidecar, setSidecar] = useState<LightingSidecar>({})
+
+  useEffect(() => {
+    let cancelled = false
+    void loadLightingSidecar().then((loaded) => {
+      if (!cancelled) setSidecar(loaded)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const rig = sidecar[venueId]
+  const lights = useMemo(() => toSceneLights(rig), [rig])
+  const worldColour = worldColourOf(rig)
+
+  return (
+    <>
+      <color attach="background" args={[worldColour]} />
+      <VenueLights lights={lights} />
       <Suspense fallback={null}>
         <VenueAsset venueId={venueId} />
       </Suspense>
