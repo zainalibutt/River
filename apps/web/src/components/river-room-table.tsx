@@ -30,6 +30,16 @@ import {
   resolvePreset,
   shouldClearPreset,
 } from '@/lib/preset'
+import {
+  appendSocialEvent,
+  applySpeaking,
+  CHAT_MAX_LENGTH,
+  canSendEmote,
+  EMOTE_LABELS,
+  EMOTE_ORDER,
+  normaliseChat,
+  type SocialFeedEntry,
+} from '@/lib/social'
 import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib/socket'
 import { type VerifyResult, verifyHand } from '@/lib/verify'
 
@@ -206,6 +216,11 @@ export function RiverRoomTable() {
   const [preset, setPreset] = useState<PresetKind | null>(null)
   const presetFiredFor = useRef<string | null>(null)
   const [presetNotice, setPresetNotice] = useState<string | null>(null)
+  const viewRef = useRef<RoomView>(emptyView())
+  const [feed, setFeed] = useState<readonly SocialFeedEntry[]>([])
+  const [speaking, setSpeaking] = useState<ReadonlySet<string>>(() => new Set())
+  const [chatDraft, setChatDraft] = useState('')
+  const [socialOpen, setSocialOpen] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [verify, setVerify] = useState<VerifyResult>({
     status: 'idle',
@@ -255,6 +270,19 @@ export function RiverRoomTable() {
         unsubscribeMessage = socket.subscribe((message: ServerMessage) => {
           if (message.kind === 'error') {
             setNotice(message.message)
+            return
+          }
+          if (message.kind === 'social') {
+            const event = message.event
+            setSpeaking((current) => applySpeaking(current, event))
+            setFeed((current) =>
+              appendSocialEvent(current, event, {
+                selfId: viewRef.current.selfId,
+                nameFor: (playerId) =>
+                  viewRef.current.seats.find((seat) => seat.playerId === playerId)?.name ??
+                  'Player',
+              }),
+            )
             return
           }
           if (message.kind !== 'snapshot') return
@@ -364,6 +392,10 @@ export function RiverRoomTable() {
   const selfSeat = view.seats.find((seat) => seat.playerId === view.selfId) ?? null
   const seatedCount = view.seats.filter((seat) => seat.playerId !== null && seat.stack > 0).length
   const isHost = view.hostPlayerId === view.selfId
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
+
   const localTurn = view.currentActor?.playerId === view.selfId
 
   const handLive = view.phase === 'hand'
@@ -606,6 +638,76 @@ export function RiverRoomTable() {
               </HoldAction>
             ) : null}
             {connection !== 'connected' ? <div className="network-bar">Reconnecting…</div> : null}
+            <button
+              type="button"
+              className={`social-toggle${socialOpen ? ' open' : ''}`}
+              aria-expanded={socialOpen}
+              onClick={() => setSocialOpen((open) => !open)}
+            >
+              CHAT
+            </button>
+            {socialOpen ? (
+              <aside className="social-panel" aria-label="Table chat and emotes">
+                <ol className="social-feed" aria-live="polite" aria-relevant="additions">
+                  {feed.map((entry) => (
+                    <li key={entry.id} className={`social-line ${entry.kind}`}>
+                      <span className={`social-name${entry.self ? ' self' : ''}`}>
+                        {entry.name}
+                        {speaking.has(entry.playerId) ? (
+                          <em className="speaking-mark">
+                            <span className="visually-hidden">speaking</span>
+                            <span aria-hidden="true">&bull;</span>
+                          </em>
+                        ) : null}
+                      </span>
+                      <span className="social-text">{entry.text}</span>
+                    </li>
+                  ))}
+                </ol>
+
+                <fieldset className="emote-rail" aria-label="Emotes">
+                  {EMOTE_ORDER.map((emote) => (
+                    <button
+                      key={emote}
+                      type="button"
+                      disabled={!canSendEmote(localTurn, connection === 'connected')}
+                      title={
+                        localTurn ? 'Emotes are unavailable during your turn' : EMOTE_LABELS[emote]
+                      }
+                      onClick={() => socketRef.current?.social({ kind: 'emote', emote })}
+                    >
+                      {EMOTE_LABELS[emote]}
+                    </button>
+                  ))}
+                </fieldset>
+
+                <form
+                  className="chat-entry"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    const text = normaliseChat(chatDraft)
+                    setChatDraft('')
+                    if (text === null) return
+                    socketRef.current?.social({ kind: 'chat', text })
+                  }}
+                >
+                  <label className="visually-hidden" htmlFor="chat-input">
+                    Message the table
+                  </label>
+                  <input
+                    id="chat-input"
+                    value={chatDraft}
+                    maxLength={CHAT_MAX_LENGTH}
+                    autoComplete="off"
+                    placeholder="Say something"
+                    onChange={(event) => setChatDraft(event.target.value)}
+                  />
+                  <button type="submit" disabled={connection !== 'connected'}>
+                    SEND
+                  </button>
+                </form>
+              </aside>
+            ) : null}
             {presetArmable ? (
               <fieldset className="preset-rail" aria-label="Preset actions">
                 {PRESET_KINDS.map((kind) => (

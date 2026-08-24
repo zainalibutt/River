@@ -1,4 +1,4 @@
-import type { ClientRoomCommand, ServerMessage } from '@river/server/wire'
+import type { ClientRoomCommand, ClientSocialCommand, ServerMessage } from '@river/server/wire'
 
 interface SocketEventMap {
   open: Event
@@ -117,6 +117,10 @@ export class RiverSocket {
 
   command(command: ClientRoomCommand): string {
     return this.send({ kind: 'command', requestId: this.requestId(), command })
+  }
+
+  social(command: ClientSocialCommand): string {
+    return this.send({ kind: 'social', requestId: this.requestId(), command })
   }
 
   resync(): string {
