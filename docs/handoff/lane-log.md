@@ -20,8 +20,8 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 4V verify panel | Claude | `ca259f3` | Client-side WebCrypto recomputation. Also fixed repo-wide CRLF via .gitattributes |
 | 2026-08-24 | 4G turn timers | Codex | `55c8136` | Accepted. Budgets 15/20/20/25 from config, timeout is check-else-fold, late client actions coerced |
 | 2026-08-24 | 4R preset actions | Claude | `744dc68` | Local half. Arm/commit/invalidate, clears on street change |
-| 2026-08-24 | 4J chat and emote transport | Codex | `530b371` | Accepted. Emotes blocked during your own decision window, social never enters room state, shared rate limit. **Landed inside Claude's art commit - see the note below** |
-| 2026-08-24 | 5C rooftop skyline | Claude | `530b371` | Skyline, mountains, palms. Repaired the camera gate, which was silently passing everything, then used it to find three mis-placed venue elements |
+| 2026-08-24 | 4J chat and emote transport | Codex | `25ba2e0` | Accepted. Emotes blocked during your own decision window, social never enters room state, shared rate limit |
+| 2026-08-24 | 5C rooftop skyline | Claude | `5c24ab0` | Skyline, mountains, palms. Repaired the camera gate, which was silently passing everything, then used it to find three mis-placed venue elements |
 
 ## In flight
 
@@ -29,15 +29,31 @@ Format: one row per completed packet, newest last.
 |---|---|---|---|
 | 4H economy wiring | DeepSeek | 2026-08-24 | **Stalled mid-work.** `economy-service.ts` and a migration sit uncommitted and fail typecheck at line 204 plus formatting. Watch for it adding a state table instead of deriving from ledger refs |
 
-## Open record issue
+| 2026-08-24 | 4H economy wiring | DeepSeek | `f885911` | Accepted. Derives eligibility by parsing ledger refs rather than adding a state table, seated gating present, no hardcoded economy numbers. 15 tests |
 
-`530b371` carries two packets: Claude's Rooftop skyline and Codex's 4J social
-wire. The commit message describes only the art. Codex's files were staged in
-the index when Claude committed, and `git commit` commits the whole index rather
-than only what was just added.
+## The shared-index incident, 2026-08-24
 
-**Rule from this:** run `git diff --cached --name-only` before every commit while
-more than one model is live. Staging is shared state between agents.
+Three agents committing into one working copy collided twice in one hour.
+
+1. Codex's 4J files were staged when Claude committed the Rooftop skyline, so
+   one commit carried two packets under an art-only message.
+2. While Claude was splitting that commit, DeepSeek committed the entire shared
+   index - Claude's art, Codex's 4J, Claude's lane log and its own 4H - as a
+   single commit titled "Wire economy grants into the server".
+
+Nothing was lost. History was rebuilt into four honest commits by reconstructing
+each packet from committed blobs rather than from the working tree, which was the
+only safe route while DeepSeek was still writing to it. The rebuilt tree was
+proved byte-identical to the contaminated one before anything was discarded.
+
+**Rules from this:**
+
+- Run `git diff --cached --name-only` before every commit while more than one
+  model is live. **The git index is shared state between agents.**
+- Never stage with `git add -A` or `git add .` in a multi-agent repo.
+- When reconstructing history while another agent is writing, stage from commit
+  blobs (`git restore --source=<commit> --staged`), never from the working tree.
+- Prove a rebuild with `git diff <old> <new>` before trusting it.
 
 ## Standing review notes
 
