@@ -36,6 +36,7 @@ const DEFAULT_TURN_BUDGETS_MS: Record<Street, number> = {
   turn: 20_000,
   river: 25_000,
 }
+const DEFAULT_SOCIAL_RATE_LIMIT = { maxActions: 6, windowMs: 10_000 }
 
 interface PlayerState {
   name: string
@@ -88,6 +89,7 @@ export function defaultRoomConfig(overrides: Partial<RoomConfig> & { seed: strin
     seedCollectionMs: overrides.seedCollectionMs ?? 1_500,
     randomBytes: randomSource ?? randomBytes,
     turnBudgetsMs: overrides.turnBudgetsMs ?? DEFAULT_TURN_BUDGETS_MS,
+    socialRateLimit: overrides.socialRateLimit ?? DEFAULT_SOCIAL_RATE_LIMIT,
   }
 }
 
@@ -139,6 +141,14 @@ export class Room implements RoomHandle {
       if (!Number.isFinite(budget) || budget <= 0) {
         throw new Error(`turn budget for ${street} must be positive`)
       }
+    }
+    if (
+      !Number.isSafeInteger(config.socialRateLimit.maxActions) ||
+      config.socialRateLimit.maxActions <= 0 ||
+      !Number.isFinite(config.socialRateLimit.windowMs) ||
+      config.socialRateLimit.windowMs <= 0
+    ) {
+      throw new Error('social rate limit must be positive')
     }
     this.id = id
     this.config = config

@@ -21,10 +21,23 @@ export type ClientRoomCommand =
   | { kind: 'act'; action: TurnAction }
   | { kind: 'rebuy'; amount: number }
 
+export type ClientSocialCommand =
+  | { kind: 'chat'; text: string }
+  | { kind: 'emote'; emote: Emote }
+  | { kind: 'speaking'; speaking: boolean }
+
+export type SocialEvent =
+  | { kind: 'chat'; playerId: string; text: string; sentAtMs: number }
+  | { kind: 'emote'; playerId: string; emote: Emote; sentAtMs: number }
+  | { kind: 'emoteInterrupted'; playerId: string }
+  | { kind: 'avatarVo'; playerId: string; trigger: 'allIn' | 'win' | 'loss'; sentAtMs: number }
+  | { kind: 'speaking'; playerId: string; speaking: boolean }
+
 export type ClientMessage =
   | { kind: 'authenticate'; accessToken: string }
   | { kind: 'enter'; requestId: string; roomId: string; name: string; inviteCode?: string }
   | { kind: 'command'; requestId: string; command: ClientRoomCommand }
+  | { kind: 'social'; requestId: string; command: ClientSocialCommand }
   | { kind: 'resync'; requestId: string }
 
 export type ServerMessage =
@@ -38,6 +51,7 @@ export type ServerMessage =
       events: RoomEvent[]
     }
   | { kind: 'error'; requestId: string | null; code: string; message: string }
+  | { kind: 'social'; roomId: string; requestId: string | null; event: SocialEvent }
 
 interface ConnectionState {
   peer: ClientPeer
@@ -54,6 +68,9 @@ interface RoomState {
   reconnectTimers: Map<string, ReturnType<typeof setTimeout>>
   seedTimer: ReturnType<typeof setTimeout> | null
   turnTimer: ReturnType<typeof setTimeout> | null
+  socialActions: Map<string, number[]>
+  speakingPlayers: Set<string>
+  activeEmotes: Set<string>
 }
 
 export interface RoomHubOptions {
@@ -65,6 +82,18 @@ export interface RoomHubOptions {
 const ROOM_ID = /^[a-z0-9][a-z0-9-]{2,31}$/
 const REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/
 const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+const EMOTES: readonly Emote[] = [
+  'wave',
+  'laugh',
+  'facepalm',
+  'fistPump',
+  'throatSlit',
+  'chipTrick',
+  'dance',
+  'confetti',
+  'tableKnock',
+]
+const MAX_CHAT_LENGTH = 500
 
 function newInviteCode(): string {
   return Array.from(randomBytes(6), (byte) => INVITE_ALPHABET[byte & 31] ?? 'R').join('')
@@ -118,6 +147,25 @@ function roomCommand(value: unknown): ClientRoomCommand | null {
   }
 }
 
+function socialCommand(value: unknown): ClientSocialCommand | null {
+  if (!isObject(value) || typeof value.kind !== 'string') return null
+  if (value.kind === 'chat' && typeof value.text === 'string') {
+    const text = value.text.trim()
+    return text.length > 0 && text.length <= MAX_CHAT_LENGTH ? { kind: 'chat', text } : null
+  }
+  if (
+    value.kind === 'emote' &&
+    typeof value.emote === 'string' &&
+    EMOTES.includes(value.emote as Emote)
+  ) {
+    return { kind: 'emote', emote: value.emote as Emote }
+  }
+  if (value.kind === 'speaking' && typeof value.speaking === 'boolean') {
+    return { kind: 'speaking', speaking: value.speaking }
+  }
+  return null
+}
+
 export function parseClientMessage(raw: string): ClientMessage | null {
   let value: unknown
   try {
@@ -148,6 +196,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (value.kind === 'command') {
     const command = roomCommand(value.command)
     return command === null ? null : { kind: 'command', requestId, command }
+  }
+  if (value.kind === 'social') {
+    const command = socialCommand(value.command)
+    return command === null ? null : { kind: 'social', requestId, command }
   }
   if (value.kind === 'resync') return { kind: 'resync', requestId }
   return null
@@ -220,7 +272,9 @@ export class RoomHub {
     await this.enqueue(room, async () => {
       if (message.kind === 'resync') {
         this.snapshot(connection, room, message.requestId, [])
-      } else {
+      } else if (message.kind === 'social') {
+        await this.social(connection, room, message)
+      } else if (message.kind === 'command') {
         await this.command(connection, room, message.requestId, message.command)
       }
     })
@@ -406,6 +460,66 @@ export class RoomHub {
     }
   }
 
+  private async social(
+    connection: ConnectionState,
+    state: RoomState,
+    message: Extract<ClientMessage, { kind: 'social' }>,
+  ): Promise<void> {
+    const player = connection.player
+    if (player === null || connection.roomId === null) return
+    const { command } = message
+    if (
+      command.kind === 'emote' &&
+      state.room.viewFor(player.playerId).currentActor?.playerId === player.playerId
+    ) {
+      this.error(
+        connection,
+        message.requestId,
+        'emote_unavailable',
+        'Emotes are unavailable during your turn',
+      )
+      return
+    }
+    if (command.kind === 'speaking') {
+      const wasSpeaking = state.speakingPlayers.has(player.playerId)
+      if (wasSpeaking === command.speaking) return
+      if (command.speaking) state.speakingPlayers.add(player.playerId)
+      else state.speakingPlayers.delete(player.playerId)
+      this.broadcastSocial(state, message.requestId, {
+        kind: 'speaking',
+        playerId: player.playerId,
+        speaking: command.speaking,
+      })
+      return
+    }
+    if (!this.consumeSocialAction(state, player.playerId)) {
+      this.error(
+        connection,
+        message.requestId,
+        'rate_limited',
+        'Slow down before sending another chat or emote',
+      )
+      return
+    }
+    const sentAtMs = state.room.config.nowMs()
+    if (command.kind === 'chat') {
+      this.broadcastSocial(state, message.requestId, {
+        kind: 'chat',
+        playerId: player.playerId,
+        text: command.text,
+        sentAtMs,
+      })
+      return
+    }
+    this.broadcastSocial(state, message.requestId, {
+      kind: 'emote',
+      playerId: player.playerId,
+      emote: command.emote,
+      sentAtMs,
+    })
+    state.activeEmotes.add(player.playerId)
+  }
+
   private async kickThenCredit(
     connection: ConnectionState,
     state: RoomState,
@@ -565,6 +679,13 @@ export class RoomHub {
     const state = this.rooms.get(connection.roomId)
     if (state === undefined) return
     await this.enqueue(state, async () => {
+      if (state.speakingPlayers.delete(player.playerId)) {
+        this.broadcastSocial(state, null, {
+          kind: 'speaking',
+          playerId: player.playerId,
+          speaking: false,
+        })
+      }
       state.connections.delete(connection)
       const result = state.room.submit({ kind: 'disconnect', playerId: player.playerId })
       if (result.ok) {
@@ -584,6 +705,9 @@ export class RoomHub {
       reconnectTimers: new Map(),
       seedTimer: null,
       turnTimer: null,
+      socialActions: new Map(),
+      speakingPlayers: new Set(),
+      activeEmotes: new Set(),
     }
     this.rooms.set(roomId, created)
     return created
@@ -678,6 +802,89 @@ export class RoomHub {
       this.snapshot(connection, state, connection === requester ? requestId : null, events)
     }
     this.scheduleTurnTimeout(state)
+    this.interruptEmotes(state, events)
+    this.broadcastAvatarVo(state, events)
+  }
+
+  private interruptEmotes(state: RoomState, events: RoomEvent[]): void {
+    if (
+      !events.some(
+        (event) =>
+          event.kind === 'handStarted' ||
+          event.kind === 'blinds' ||
+          event.kind === 'street' ||
+          event.kind === 'acted' ||
+          event.kind === 'timedOut' ||
+          event.kind === 'awayPlayed' ||
+          event.kind === 'uncontested' ||
+          event.kind === 'showdown',
+      )
+    ) {
+      return
+    }
+    for (const playerId of state.activeEmotes) {
+      this.broadcastSocial(state, null, { kind: 'emoteInterrupted', playerId })
+    }
+    state.activeEmotes.clear()
+  }
+
+  private consumeSocialAction(state: RoomState, playerId: string): boolean {
+    const now = state.room.config.nowMs()
+    const { maxActions, windowMs } = state.room.config.socialRateLimit
+    const recent = (state.socialActions.get(playerId) ?? []).filter((at) => at > now - windowMs)
+    if (recent.length >= maxActions) {
+      state.socialActions.set(playerId, recent)
+      return false
+    }
+    recent.push(now)
+    state.socialActions.set(playerId, recent)
+    return true
+  }
+
+  private broadcastSocial(state: RoomState, requestId: string | null, event: SocialEvent): void {
+    for (const connection of state.connections) {
+      if (connection.roomId === null) continue
+      this.send(connection, {
+        kind: 'social',
+        roomId: connection.roomId,
+        requestId: connection === this.activePlayers.get(event.playerId) ? requestId : null,
+        event,
+      })
+    }
+  }
+
+  private broadcastAvatarVo(state: RoomState, events: RoomEvent[]): void {
+    const sentAtMs = state.room.config.nowMs()
+    for (const event of events) {
+      if (event.kind === 'acted' && event.action.kind === 'allIn') {
+        this.broadcastSocial(state, null, {
+          kind: 'avatarVo',
+          playerId: event.playerId,
+          trigger: 'allIn',
+          sentAtMs,
+        })
+      }
+      if (event.kind === 'uncontested') {
+        this.broadcastSocial(state, null, {
+          kind: 'avatarVo',
+          playerId: event.playerId,
+          trigger: 'win',
+          sentAtMs,
+        })
+      }
+      if (event.kind === 'showdown') {
+        const winnerIds = new Set(event.awards.map((award) => award.playerId))
+        for (const seat of state.room.viewFor('').seats) {
+          if (seat.playerId === null || seat.folded) continue
+          this.broadcastSocial(state, null, {
+            kind: 'avatarVo',
+            playerId: seat.playerId,
+            trigger: winnerIds.has(seat.playerId) ? 'win' : 'loss',
+            sentAtMs,
+          })
+        }
+      }
+    }
   }
 
   private snapshot(

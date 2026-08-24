@@ -59,6 +59,7 @@ function setup(
   reconnectGraceMs = 30_000,
   seedCollectionMs = 0,
   turnBudgetsMs?: { preflop: number; flop: number; turn: number; river: number },
+  socialRateLimit?: { maxActions: number; windowMs: number },
 ) {
   const ledger = new MemoryLedger()
   const players: Record<string, AuthenticatedPlayer> = {
@@ -82,6 +83,7 @@ function setup(
           reconnectGraceMs,
           seedCollectionMs,
           ...(turnBudgetsMs === undefined ? {} : { turnBudgetsMs }),
+          ...(socialRateLimit === undefined ? {} : { socialRateLimit }),
         }),
       ),
   })
@@ -139,9 +141,157 @@ describe('wire protocol parsing', () => {
       ),
     ).toBeNull()
   })
+
+  it('parses bounded social commands and rejects unknown emotes', () => {
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          kind: 'social',
+          requestId: 'social-one',
+          command: { kind: 'chat', text: '  good hand  ' },
+        }),
+      ),
+    ).toMatchObject({ kind: 'social', command: { kind: 'chat', text: 'good hand' } })
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          kind: 'social',
+          requestId: 'social-two',
+          command: { kind: 'emote', emote: 'unknown' },
+        }),
+      ),
+    ).toBeNull()
+  })
 })
 
 describe('room hub', () => {
+  it('relays social systems without sending a poker snapshot', async () => {
+    const { hub } = setup()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    const snapshotsBefore = alice.peer.messages.filter(
+      (message) => message.kind === 'snapshot',
+    ).length
+    await alice.connection.receive(
+      JSON.stringify({
+        kind: 'social',
+        requestId: 'chat',
+        command: { kind: 'chat', text: 'good hand' },
+      }),
+    )
+    expect(alice.peer.last('social')).toEqual({
+      kind: 'social',
+      roomId: 'river-one',
+      requestId: 'chat',
+      event: expect.objectContaining({ kind: 'chat', playerId: ALICE, text: 'good hand' }),
+    })
+    expect(bob.peer.last('social')).toEqual({
+      kind: 'social',
+      roomId: 'river-one',
+      requestId: null,
+      event: expect.objectContaining({ kind: 'chat', playerId: ALICE, text: 'good hand' }),
+    })
+    expect(alice.peer.messages.filter((message) => message.kind === 'snapshot')).toHaveLength(
+      snapshotsBefore,
+    )
+    await alice.connection.receive(
+      JSON.stringify({
+        kind: 'social',
+        requestId: 'speak',
+        command: { kind: 'speaking', speaking: true },
+      }),
+    )
+    await alice.connection.close()
+    expect(bob.peer.last('social')).toMatchObject({
+      event: { kind: 'speaking', playerId: ALICE, speaking: false },
+    })
+  })
+
+  it('shares the chat and emote throttle and blocks emotes on your turn', async () => {
+    const { hub } = setup(30_000, 0, undefined, { maxActions: 1, windowMs: 10_000 })
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    await alice.connection.receive(
+      JSON.stringify({
+        kind: 'social',
+        requestId: 'chat',
+        command: { kind: 'chat', text: 'hello' },
+      }),
+    )
+    await alice.connection.receive(
+      JSON.stringify({
+        kind: 'social',
+        requestId: 'emote-rate',
+        command: { kind: 'emote', emote: 'wave' },
+      }),
+    )
+    expect(alice.peer.last('error')).toMatchObject({
+      requestId: 'emote-rate',
+      code: 'rate_limited',
+    })
+    for (const [client, seat, requestId] of [
+      [alice, 0, 'alice-sit'],
+      [bob, 1, 'bob-sit'],
+    ] as const) {
+      await client.connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId,
+          command: { kind: 'sit', seat, buyIn: 50_000 },
+        }),
+      )
+    }
+    await alice.connection.receive(
+      JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+    )
+    const actor = alice.peer.last('snapshot')
+    expect(actor?.kind).toBe('snapshot')
+    if (actor?.kind !== 'snapshot') return
+    const actorClient = actor.view.currentActor?.playerId === ALICE ? alice : bob
+    await actorClient.connection.receive(
+      JSON.stringify({
+        kind: 'social',
+        requestId: 'turn-emote',
+        command: { kind: 'emote', emote: 'wave' },
+      }),
+    )
+    expect(actorClient.peer.last('error')).toMatchObject({
+      requestId: 'turn-emote',
+      code: 'emote_unavailable',
+    })
+  })
+
+  it('interrupts active emotes when poker-critical progression begins', async () => {
+    const { hub } = setup()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    await alice.connection.receive(
+      JSON.stringify({
+        kind: 'social',
+        requestId: 'wave',
+        command: { kind: 'emote', emote: 'wave' },
+      }),
+    )
+    for (const [client, seat, requestId] of [
+      [alice, 0, 'alice-sit'],
+      [bob, 1, 'bob-sit'],
+    ] as const) {
+      await client.connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId,
+          command: { kind: 'sit', seat, buyIn: 50_000 },
+        }),
+      )
+    }
+    await alice.connection.receive(
+      JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+    )
+    expect(bob.peer.last('social')).toMatchObject({
+      event: { kind: 'emoteInterrupted', playerId: ALICE },
+    })
+  })
+
   it('enforces a turn timeout without a client action', async () => {
     vi.useFakeTimers()
     const { hub } = setup(30_000, 0, { preflop: 20, flop: 20, turn: 20, river: 20 })

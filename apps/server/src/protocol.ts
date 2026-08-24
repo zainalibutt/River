@@ -3,6 +3,21 @@ import type { FairnessClientSeed } from './fairness.js'
 
 export type AwayPolicy = 'check-or-fold'
 export type KickReason = 'host' | 'idle' | 'duplicate-session'
+export type Emote =
+  | 'wave'
+  | 'laugh'
+  | 'facepalm'
+  | 'fistPump'
+  | 'throatSlit'
+  | 'chipTrick'
+  | 'dance'
+  | 'confetti'
+  | 'tableKnock'
+
+export interface SocialRateLimit {
+  maxActions: number
+  windowMs: number
+}
 
 export interface RoomConfig {
   maxSeats: number
@@ -17,6 +32,7 @@ export interface RoomConfig {
   seedCollectionMs: number
   randomBytes: (size: number) => Uint8Array
   turnBudgetsMs: Record<Street, number>
+  socialRateLimit: SocialRateLimit
 }
 
 export type RoomCommand =
