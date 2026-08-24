@@ -71,6 +71,24 @@ Braziers with flames in them, string lights ringing inside the parapet at 2.62m
 where they clear the sight line, short potted palms, and every emissive under
 the clip point.
 
+## The three venues, as they stand
+
+Every frame below is a Blender render from committed pipeline code. The full set
+with per-image notes is in `progress/README.md`.
+
+![The Executive Suite from the play camera](progress/14-suite-play.png)
+
+The Suite is the strongest of the three: warm chandelier key, a balustrade with
+turned balusters and a handrail, dining chairs with crest rails. The balusters
+blowing out to white pillars is the one thing spoiling it.
+
+![The Laundromat from the play camera](progress/12-laundromat-play.png)
+
+The Laundromat reads clearly - machine banks along the wall, counter, cool
+fluorescent strips against a single soft shadow caster. It is also the frame
+that shows the character work most honestly: no faces, hair as jagged stringy
+geometry, and arms sitting close to a T-pose rather than resting on the table.
+
 ## Still open
 
 - Characters read as figures in barrels; the head and hair geometry needs work.
