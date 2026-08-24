@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type { TurnAction } from '@river/engine'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
+import { isFairnessSeed } from './fairness.js'
 import type { Ledger } from './ledger.js'
 import type { RoomCommand, RoomEvent, RoomResult, RoomView } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
@@ -15,6 +16,7 @@ export type ClientRoomCommand =
   | { kind: 'stand' }
   | { kind: 'leave' }
   | { kind: 'startHand' }
+  | { kind: 'submitSeed'; seed: string }
   | { kind: 'kick'; targetPlayerId: string; reason: 'host' }
   | { kind: 'act'; action: TurnAction }
   | { kind: 'rebuy'; amount: number }
@@ -50,6 +52,7 @@ interface RoomState {
   connections: Set<ConnectionState>
   queue: Promise<void>
   reconnectTimers: Map<string, ReturnType<typeof setTimeout>>
+  seedTimer: ReturnType<typeof setTimeout> | null
 }
 
 export interface RoomHubOptions {
@@ -93,6 +96,10 @@ function roomCommand(value: unknown): ClientRoomCommand | null {
     case 'leave':
     case 'startHand':
       return { kind: value.kind }
+    case 'submitSeed':
+      return typeof value.seed === 'string' && isFairnessSeed(value.seed)
+        ? { kind: 'submitSeed', seed: value.seed.toLowerCase() }
+        : null
     case 'kick':
       return typeof value.targetPlayerId === 'string' && value.reason === 'host'
         ? { kind: 'kick', targetPlayerId: value.targetPlayerId, reason: value.reason }
@@ -374,6 +381,11 @@ export class RoomHub {
       return
     }
     this.broadcast(state, requestId, result.events, connection)
+    if (result.events.some((event) => event.kind === 'handStarted')) {
+      this.clearSeedFinalization(state)
+    } else if (result.events.some((event) => event.kind === 'seedCommitted')) {
+      this.scheduleSeedFinalization(state)
+    }
     const reply: ServerMessage = {
       kind: 'snapshot',
       roomId: connection.roomId,
@@ -531,6 +543,8 @@ export class RoomHub {
         return { kind: command.kind, playerId }
       case 'startHand':
         return command
+      case 'submitSeed':
+        return { ...command, playerId }
       case 'kick':
         return { ...command, byPlayerId: playerId }
       case 'act':
@@ -567,6 +581,7 @@ export class RoomHub {
       connections: new Set(),
       queue: Promise.resolve(),
       reconnectTimers: new Map(),
+      seedTimer: null,
     }
     this.rooms.set(roomId, created)
     return created
@@ -602,6 +617,22 @@ export class RoomHub {
       })
     }, state.room.config.reconnectGraceMs)
     state.reconnectTimers.set(playerId, timer)
+  }
+
+  private scheduleSeedFinalization(state: RoomState): void {
+    this.clearSeedFinalization(state)
+    state.seedTimer = setTimeout(() => {
+      void this.enqueue(state, async () => {
+        const result = state.room.submit({ kind: 'finalizeSeeds' })
+        if (result.ok) this.broadcast(state, null, result.events)
+        state.seedTimer = null
+      })
+    }, state.room.config.seedCollectionMs)
+  }
+
+  private clearSeedFinalization(state: RoomState): void {
+    if (state.seedTimer !== null) clearTimeout(state.seedTimer)
+    state.seedTimer = null
   }
 
   private async enqueue(state: RoomState, task: () => Promise<void>): Promise<void> {

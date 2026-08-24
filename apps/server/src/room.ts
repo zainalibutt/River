@@ -1,17 +1,21 @@
+import { randomBytes } from 'node:crypto'
 import type { Card, LegalActions, SidePot, Street, TurnAction } from '@river/engine'
 import {
   BettingError,
   BettingHand,
-  commitSeed,
   compareRanks,
   DEFAULT_STAKE,
   evaluateBest,
   makeDeck,
-  mulberry32,
   SEATS_PER_SHAPE,
-  seedFromString,
-  shuffle,
 } from '@river/engine'
+import {
+  type FairnessClientSeed,
+  fairDeck,
+  fairnessCommit,
+  freshFairnessSeed,
+  isFairnessSeed,
+} from './fairness.js'
 import type {
   AwayPolicy,
   KickReason,
@@ -64,6 +68,7 @@ function emptyLegal(): LegalActions {
 }
 
 export function defaultRoomConfig(overrides: Partial<RoomConfig> & { seed: string }): RoomConfig {
+  const randomSource = overrides.randomBytes
   return {
     maxSeats: overrides.maxSeats ?? DEFAULT_MAX_SEATS,
     stake: overrides.stake ?? DEFAULT_STAKE,
@@ -71,20 +76,20 @@ export function defaultRoomConfig(overrides: Partial<RoomConfig> & { seed: strin
     countdownMs: overrides.countdownMs ?? 3000,
     nowMs: overrides.nowMs ?? (() => 0),
     awayPolicy: overrides.awayPolicy ?? ('check-or-fold' satisfies AwayPolicy),
-    inviteCode: overrides.inviteCode ?? inviteCodeFor(overrides.seed),
+    inviteCode: overrides.inviteCode ?? newInviteCode(randomSource),
     hostPlayerId: overrides.hostPlayerId ?? '',
     reconnectGraceMs: overrides.reconnectGraceMs ?? 30_000,
+    seedCollectionMs: overrides.seedCollectionMs ?? 1_500,
+    randomBytes: randomSource ?? randomBytes,
   }
 }
 
 const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
-function inviteCodeFor(seed: string): string {
-  let value = seedFromString(seed)
-  return Array.from({ length: 6 }, () => {
-    value = Math.imul(value ^ (value >>> 15), 1 | value)
-    return INVITE_ALPHABET[Math.abs(value) % INVITE_ALPHABET.length] ?? 'R'
-  }).join('')
+function newInviteCode(source?: (size: number) => Uint8Array): string {
+  const bytes = source === undefined ? randomBytes(6) : source(6)
+  if (bytes.length < 6) throw new Error('invite random source must return at least 6 bytes')
+  return Array.from(bytes.slice(0, 6), (byte) => INVITE_ALPHABET[byte & 31] ?? 'R').join('')
 }
 
 function sameInvite(received: string | undefined, expected: string): boolean {
@@ -98,7 +103,7 @@ export class Room implements RoomHandle {
   private readonly seats: SeatState[]
   private readonly fixedDeck: Card[] | null
   private handNumber = 0
-  private phase: 'open' | 'hand' | 'between' = 'open'
+  private phase: 'open' | 'seeding' | 'hand' | 'between' = 'open'
   private dealerSeat = -1
   private betting: BettingHand | null = null
   private board: Card[] = []
@@ -109,6 +114,11 @@ export class Room implements RoomHandle {
   private readonly revealedPlayerIds = new Set<string>()
   private drawPile: DrawPile | null = null
   private currentCommit: string | null = null
+  private pendingServerSeed: string | null = null
+  private currentServerSeed: string | null = null
+  private revealedSeed: string | null = null
+  private pendingClientSeeds = new Map<string, string>()
+  private settledClientSeeds: FairnessClientSeed[] | null = null
   private status: string | null = null
   private readonly eventLog: RoomEvent[] = []
 
@@ -179,6 +189,11 @@ export class Room implements RoomHandle {
       currentActor,
       legal: this.pendingPlayerId === playerId ? this.legalFor(playerId) : null,
       commit: this.currentCommit,
+      revealedSeed: this.revealedSeed,
+      clientSeeds:
+        this.revealedSeed === null || this.settledClientSeeds === null
+          ? null
+          : this.settledClientSeeds.map((seed) => ({ ...seed })),
       message: this.status ?? null,
       revealed: this.revealed,
       selfId: playerId,
@@ -206,6 +221,10 @@ export class Room implements RoomHandle {
         return this.stand(command.playerId)
       case 'startHand':
         return this.startHand()
+      case 'submitSeed':
+        return this.submitSeed(command.playerId, command.seed)
+      case 'finalizeSeeds':
+        return this.finalizeSeeds()
       case 'act':
         return this.act(command.playerId, command.action)
       case 'rebuy':
@@ -249,7 +268,7 @@ export class Room implements RoomHandle {
     if (player === undefined) {
       return this.reject(playerId, 'not joined')
     }
-    if (this.phase === 'hand') {
+    if (this.phase === 'hand' || this.phase === 'seeding') {
       return this.reject(playerId, 'cannot leave mid-hand')
     }
     this.releaseSeat(player)
@@ -273,7 +292,7 @@ export class Room implements RoomHandle {
     if (seat.playerId !== null) {
       return this.reject(playerId, 'seat occupied')
     }
-    if (this.phase === 'hand') {
+    if (this.phase === 'hand' || this.phase === 'seeding') {
       return this.reject(playerId, 'cannot sit mid-hand')
     }
     if (
@@ -302,7 +321,7 @@ export class Room implements RoomHandle {
     if (player.seat === null) {
       return this.reject(playerId, 'not seated')
     }
-    if (this.phase === 'hand') {
+    if (this.phase === 'hand' || this.phase === 'seeding') {
       return this.reject(playerId, 'cannot stand mid-hand')
     }
     const seatIndex = player.seat
@@ -313,7 +332,7 @@ export class Room implements RoomHandle {
   }
 
   private startHand(): RoomResult {
-    if (this.phase === 'hand') {
+    if (this.phase === 'hand' || this.phase === 'seeding') {
       return this.reject(null, 'hand already in progress')
     }
     const active = this.activeSeats()
@@ -323,6 +342,8 @@ export class Room implements RoomHandle {
     this.dealerSeat = this.findNextDealer(this.dealerSeat === -1)
     this.handNumber++
     this.revealed = false
+    this.revealedSeed = null
+    this.settledClientSeeds = null
     this.revealedPlayerIds.clear()
     this.board = []
     this.betweenSince = 0
@@ -331,11 +352,71 @@ export class Room implements RoomHandle {
     for (const seat of this.seats) {
       seat.hole = []
     }
-    const handSeed = `${this.config.seed}|h${this.handNumber}`
-    this.currentCommit = commitSeed(handSeed)
+    this.pendingClientSeeds.clear()
+    this.pendingServerSeed = freshFairnessSeed(this.config.randomBytes)
+    this.currentServerSeed = null
+    this.currentCommit = fairnessCommit(this.pendingServerSeed)
+    this.phase = 'seeding'
+    const events: RoomEvent[] = [
+      { kind: 'seedCommitted', handNumber: this.handNumber, commit: this.currentCommit },
+    ]
+    if (this.config.seedCollectionMs === 0) this.finalizeSeedsInto(events)
+    this.log(events)
+    return { ok: true, events }
+  }
+
+  private submitSeed(playerId: string, seed: string): RoomResult {
+    if (this.phase !== 'seeding') return this.reject(playerId, 'seed collection is not active')
+    const player = this.players.get(playerId)
+    if (player === undefined || player.seat === null || !isFairnessSeed(seed)) {
+      return this.reject(playerId, 'invalid client seed')
+    }
+    const seat = this.seatAt(player.seat)
+    if (seat.stack <= 0 || seat.playerId !== playerId) return this.reject(playerId, 'not active')
+    this.pendingClientSeeds.set(playerId, seed.toLowerCase())
+    const events: RoomEvent[] = [{ kind: 'seedSubmitted', playerId, seat: player.seat }]
+    if (
+      this.activeSeats().every(
+        (activeSeat) =>
+          activeSeat.playerId !== null && this.pendingClientSeeds.has(activeSeat.playerId),
+      )
+    ) {
+      this.finalizeSeedsInto(events)
+    }
+    this.log(events)
+    return { ok: true, events }
+  }
+
+  private finalizeSeeds(): RoomResult {
+    if (this.phase !== 'seeding') return this.reject(null, 'seed collection is not active')
+    const events: RoomEvent[] = []
+    this.finalizeSeedsInto(events)
+    this.log(events)
+    return { ok: true, events }
+  }
+
+  private finalizeSeedsInto(events: RoomEvent[]): void {
+    const serverSeed = this.pendingServerSeed
+    const commit = this.currentCommit
+    if (serverSeed === null || commit === null) throw new Error('fairness commitment missing')
+    const active = this.activeSeats()
+    const clientSeeds: FairnessClientSeed[] = active.map((seat) => {
+      const playerId = seat.playerId
+      if (playerId === null) throw new Error('active seat missing player')
+      const submitted = this.pendingClientSeeds.get(playerId)
+      return {
+        playerId,
+        seat: this.seatOfPlayer(playerId),
+        seed: submitted ?? freshFairnessSeed(this.config.randomBytes),
+        defaulted: submitted === undefined,
+      }
+    })
+    this.currentServerSeed = serverSeed
+    this.pendingServerSeed = null
+    this.settledClientSeeds = clientSeeds
     this.drawPile =
       this.fixedDeck === null
-        ? new DrawPile(shuffle(makeDeck(), mulberry32(seedFromString(`${handSeed}|deck`))))
+        ? new DrawPile(fairDeck(makeDeck(), serverSeed, clientSeeds))
         : new DrawPile([...this.fixedDeck])
     const dealerActive = active.findIndex(
       (seat) => seat.playerId === this.playerAt(this.dealerSeat),
@@ -360,14 +441,12 @@ export class Room implements RoomHandle {
     }
     this.lastStreet = this.betting.street
     this.phase = 'hand'
-    const events: RoomEvent[] = [
-      {
-        kind: 'handStarted',
-        handNumber: this.handNumber,
-        dealerSeat: this.dealerSeat,
-        commit: this.currentCommit,
-      },
-    ]
+    events.push({
+      kind: 'handStarted',
+      handNumber: this.handNumber,
+      dealerSeat: this.dealerSeat,
+      commit,
+    })
     const posts: { seat: number; amount: number }[] = []
     for (const player of this.betting.players) {
       if (player.betThisHand > 0) {
@@ -377,9 +456,7 @@ export class Room implements RoomHandle {
     if (posts.length > 0) {
       events.push({ kind: 'blinds', posts })
     }
-    this.log(events)
     this.drive(events)
-    return { ok: true, events }
   }
 
   private act(playerId: string, action: TurnAction): RoomResult {
@@ -404,7 +481,7 @@ export class Room implements RoomHandle {
     if (player.seat === null) {
       return this.reject(playerId, 'not seated')
     }
-    if (this.phase === 'hand') {
+    if (this.phase === 'hand' || this.phase === 'seeding') {
       return this.reject(playerId, 'cannot rebuy mid-hand')
     }
     const seat = this.seatAt(player.seat)
@@ -455,6 +532,9 @@ export class Room implements RoomHandle {
     if (target === undefined) return this.reject(byPlayerId, 'not joined')
     if (reason === 'host' && targetPlayerId === byPlayerId) {
       return this.reject(byPlayerId, 'cannot remove yourself')
+    }
+    if (this.phase === 'seeding') {
+      return this.reject(byPlayerId, 'cannot remove a player during seed collection')
     }
     const events: RoomEvent[] = []
     if (this.phase === 'hand' && this.betting !== null) {
@@ -606,6 +686,16 @@ export class Room implements RoomHandle {
       this.syncStacks(betting)
       events.push({ kind: 'showdown', awards })
     }
+    if (this.currentServerSeed === null || this.settledClientSeeds === null) {
+      throw new Error('fairness reveal missing')
+    }
+    this.revealedSeed = this.currentServerSeed
+    events.push({
+      kind: 'seedRevealed',
+      handNumber: this.handNumber,
+      serverSeed: this.revealedSeed,
+      clientSeeds: this.settledClientSeeds.map((seed) => ({ ...seed })),
+    })
     for (const seat of this.seats) {
       if (seat.stack <= 0 && seat.playerId !== null && !seat.busted) {
         seat.busted = true

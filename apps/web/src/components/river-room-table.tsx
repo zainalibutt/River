@@ -87,6 +87,8 @@ function emptyView(selfId = 'pending'): RoomView {
     currentActor: null,
     legal: null,
     commit: null,
+    revealedSeed: null,
+    clientSeeds: null,
     message: null,
     revealed: false,
     selfId,
@@ -123,6 +125,11 @@ function joinUrl(roomId: string, inviteCode: string): string {
   const url = new URL(window.location.href)
   url.search = new URLSearchParams({ room: roomId, code: inviteCode }).toString()
   return url.toString()
+}
+
+function browserFairnessSeed(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32))
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 export function RiverRoomTable() {
@@ -178,6 +185,18 @@ export function RiverRoomTable() {
           }
           if (message.kind !== 'snapshot') return
           setView(message.view)
+          if (
+            message.events.some((event) => event.kind === 'seedCommitted') &&
+            message.view.seats.some(
+              (seat) => seat.playerId === message.view.selfId && seat.stack > 0,
+            )
+          ) {
+            try {
+              socket.command({ kind: 'submitSeed', seed: browserFairnessSeed() })
+            } catch {
+              setNotice('Reconnecting…')
+            }
+          }
           const ownKick = message.events.find(
             (event) => event.kind === 'kicked' && event.playerId === message.view.selfId,
           )
@@ -464,6 +483,7 @@ export function RiverRoomTable() {
 }
 
 function waitingCopy(view: RoomView, seatedCount: number, isHost: boolean): string | null {
+  if (view.phase === 'seeding') return 'Securing the deck…'
   if (view.phase !== 'open') return null
   if (seatedCount === 0) return 'Take an open seat to join the table.'
   if (seatedCount < 2) return 'Waiting for one more player.'

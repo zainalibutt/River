@@ -12,7 +12,21 @@ function deckOf(text: string): Card[] {
 }
 
 function makeRoom(seed: string, deck?: Card[]): Room {
-  return new Room(`room-${seed}`, defaultRoomConfig({ seed }), deck)
+  let value = [...seed].reduce((total, character) => total + character.charCodeAt(0), 0)
+  return new Room(
+    `room-${seed}`,
+    defaultRoomConfig({
+      seed,
+      inviteCode: 'RIVER2',
+      seedCollectionMs: 0,
+      randomBytes: (size) =>
+        Uint8Array.from({ length: size }, () => {
+          value = (value + 29) & 255
+          return value
+        }),
+    }),
+    deck,
+  )
 }
 
 function seatTwo(room: RoomHandle): void {
@@ -169,7 +183,9 @@ describe('room hand play', () => {
     seatThree(room)
     const started = room.submit({ kind: 'startHand' })
     expect(started.ok).toBe(true)
-    expect(started.events[0]).toMatchObject({ kind: 'handStarted', dealerSeat: 0 })
+    expect(started.events).toContainEqual(
+      expect.objectContaining({ kind: 'handStarted', dealerSeat: 0 }),
+    )
     const blinds = started.events.findLast((e) => e.kind === 'blinds')
     expect(blinds).toEqual({
       kind: 'blinds',

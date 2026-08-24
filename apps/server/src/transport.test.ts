@@ -55,7 +55,7 @@ class TestPeer implements ClientPeer {
   }
 }
 
-function setup(reconnectGraceMs = 30_000) {
+function setup(reconnectGraceMs = 30_000, seedCollectionMs = 0) {
   const ledger = new MemoryLedger()
   const players: Record<string, AuthenticatedPlayer> = {
     alice: { playerId: ALICE, anonymous: true },
@@ -70,7 +70,15 @@ function setup(reconnectGraceMs = 30_000) {
       return player
     },
     createRoom: (roomId) =>
-      new Room(roomId, defaultRoomConfig({ seed: roomId, inviteCode: 'RIVER2', reconnectGraceMs })),
+      new Room(
+        roomId,
+        defaultRoomConfig({
+          seed: roomId,
+          inviteCode: 'RIVER2',
+          reconnectGraceMs,
+          seedCollectionMs,
+        }),
+      ),
   })
   return { hub, ledger }
 }
@@ -105,9 +113,65 @@ describe('wire protocol parsing', () => {
       ),
     ).toBeNull()
   })
+
+  it('accepts only 32-byte client seed submissions', () => {
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          kind: 'command',
+          requestId: 'seed',
+          command: { kind: 'submitSeed', seed: 'ab'.repeat(32) },
+        }),
+      ),
+    ).toMatchObject({ kind: 'command', command: { kind: 'submitSeed', seed: 'ab'.repeat(32) } })
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          kind: 'command',
+          requestId: 'bad-seed',
+          command: { kind: 'submitSeed', seed: 'bad' },
+        }),
+      ),
+    ).toBeNull()
+  })
 })
 
 describe('room hub', () => {
+  it('defaults missing client entropy only after the commit has been broadcast', async () => {
+    vi.useFakeTimers()
+    const { hub } = setup(30_000, 20)
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    await alice.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'alice-sit',
+        command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+      }),
+    )
+    await bob.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'bob-sit',
+        command: { kind: 'sit', seat: 1, buyIn: 50_000 },
+      }),
+    )
+    await alice.connection.receive(
+      JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+    )
+    const committed = alice.peer.last('snapshot')
+    expect(committed).toMatchObject({
+      view: { phase: 'seeding' },
+      events: [{ kind: 'seedCommitted' }],
+    })
+    await vi.advanceTimersByTimeAsync(20)
+    const started = alice.peer.last('snapshot')
+    expect(started).toMatchObject({
+      view: { phase: 'hand' },
+      events: expect.arrayContaining([expect.objectContaining({ kind: 'handStarted' })]),
+    })
+  })
+
   it('requires the room invite code after the host has created the table', async () => {
     const { hub } = setup()
     await connectAndEnter(hub, 'alice', 'Alice')

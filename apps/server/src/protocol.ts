@@ -1,4 +1,5 @@
 import type { Card, LegalActions, StakeConfig, Street, TurnAction } from '@river/engine'
+import type { FairnessClientSeed } from './fairness.js'
 
 export type AwayPolicy = 'check-or-fold'
 export type KickReason = 'host' | 'idle' | 'duplicate-session'
@@ -13,6 +14,8 @@ export interface RoomConfig {
   inviteCode: string
   hostPlayerId: string
   reconnectGraceMs: number
+  seedCollectionMs: number
+  randomBytes: (size: number) => Uint8Array
 }
 
 export type RoomCommand =
@@ -21,6 +24,8 @@ export type RoomCommand =
   | { kind: 'sit'; playerId: string; seat: number; buyIn: number }
   | { kind: 'stand'; playerId: string }
   | { kind: 'startHand' }
+  | { kind: 'submitSeed'; playerId: string; seed: string }
+  | { kind: 'finalizeSeeds' }
   | { kind: 'act'; playerId: string; action: TurnAction }
   | { kind: 'rebuy'; playerId: string; amount: number }
   | { kind: 'disconnect'; playerId: string }
@@ -35,6 +40,14 @@ export type RoomEvent =
   | { kind: 'stood'; playerId: string; seat: number; stack: number }
   | { kind: 'rejected'; playerId: string | null; message: string }
   | { kind: 'handStarted'; handNumber: number; dealerSeat: number; commit: string }
+  | { kind: 'seedCommitted'; handNumber: number; commit: string }
+  | { kind: 'seedSubmitted'; playerId: string; seat: number }
+  | {
+      kind: 'seedRevealed'
+      handNumber: number
+      serverSeed: string
+      clientSeeds: FairnessClientSeed[]
+    }
   | { kind: 'blinds'; posts: { seat: number; amount: number }[] }
   | { kind: 'street'; street: Street; cards: Card[] }
   | { kind: 'awaiting'; playerId: string; seat: number; legal: LegalActions }
@@ -68,7 +81,7 @@ export interface RoomSeatView {
 
 export interface RoomView {
   handNumber: number
-  phase: 'open' | 'hand' | 'between'
+  phase: 'open' | 'seeding' | 'hand' | 'between'
   street: Street
   board: Card[]
   pot: number
@@ -78,6 +91,8 @@ export interface RoomView {
   currentActor: { playerId: string; seat: number } | null
   legal: LegalActions | null
   commit: string | null
+  revealedSeed: string | null
+  clientSeeds: FairnessClientSeed[] | null
   message: string | null
   revealed: boolean
   selfId: string
