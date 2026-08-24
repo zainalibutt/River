@@ -1,6 +1,7 @@
 import type { Card, LegalActions, StakeConfig, Street, TurnAction } from '@river/engine'
 
 export type AwayPolicy = 'check-or-fold'
+export type KickReason = 'host' | 'idle' | 'duplicate-session'
 
 export interface RoomConfig {
   maxSeats: number
@@ -9,10 +10,13 @@ export interface RoomConfig {
   countdownMs: number
   nowMs: () => number
   awayPolicy: AwayPolicy
+  inviteCode: string
+  hostPlayerId: string
+  reconnectGraceMs: number
 }
 
 export type RoomCommand =
-  | { kind: 'join'; playerId: string; name: string }
+  | { kind: 'join'; playerId: string; name: string; inviteCode?: string }
   | { kind: 'leave'; playerId: string }
   | { kind: 'sit'; playerId: string; seat: number; buyIn: number }
   | { kind: 'stand'; playerId: string }
@@ -21,6 +25,8 @@ export type RoomCommand =
   | { kind: 'rebuy'; playerId: string; amount: number }
   | { kind: 'disconnect'; playerId: string }
   | { kind: 'reconnect'; playerId: string }
+  | { kind: 'kick'; byPlayerId: string; targetPlayerId: string; reason: KickReason }
+  | { kind: 'expireReconnect'; playerId: string }
 
 export type RoomEvent =
   | { kind: 'joined'; playerId: string; name: string }
@@ -40,6 +46,8 @@ export type RoomEvent =
   | { kind: 'between'; handNumber: number; countdownMs: number }
   | { kind: 'disconnected'; playerId: string }
   | { kind: 'reconnected'; playerId: string }
+  | { kind: 'kicked'; playerId: string; reason: KickReason }
+  | { kind: 'identityUpgraded'; playerId: string }
 
 export interface RoomSeatView {
   seat: number
@@ -73,6 +81,8 @@ export interface RoomView {
   message: string | null
   revealed: boolean
   selfId: string
+  hostPlayerId: string
+  inviteCode: string
 }
 
 export interface RoomResult {

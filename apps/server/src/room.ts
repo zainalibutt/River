@@ -14,6 +14,7 @@ import {
 } from '@river/engine'
 import type {
   AwayPolicy,
+  KickReason,
   RoomCommand,
   RoomConfig,
   RoomEvent,
@@ -70,7 +71,24 @@ export function defaultRoomConfig(overrides: Partial<RoomConfig> & { seed: strin
     countdownMs: overrides.countdownMs ?? 3000,
     nowMs: overrides.nowMs ?? (() => 0),
     awayPolicy: overrides.awayPolicy ?? ('check-or-fold' satisfies AwayPolicy),
+    inviteCode: overrides.inviteCode ?? inviteCodeFor(overrides.seed),
+    hostPlayerId: overrides.hostPlayerId ?? '',
+    reconnectGraceMs: overrides.reconnectGraceMs ?? 30_000,
   }
+}
+
+const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+function inviteCodeFor(seed: string): string {
+  let value = seedFromString(seed)
+  return Array.from({ length: 6 }, () => {
+    value = Math.imul(value ^ (value >>> 15), 1 | value)
+    return INVITE_ALPHABET[Math.abs(value) % INVITE_ALPHABET.length] ?? 'R'
+  }).join('')
+}
+
+function sameInvite(received: string | undefined, expected: string): boolean {
+  return received?.trim().toUpperCase() === expected.toUpperCase()
 }
 
 export class Room implements RoomHandle {
@@ -164,6 +182,8 @@ export class Room implements RoomHandle {
       message: this.status ?? null,
       revealed: this.revealed,
       selfId: playerId,
+      hostPlayerId: this.config.hostPlayerId,
+      inviteCode: this.config.inviteCode,
     }
   }
 
@@ -177,7 +197,7 @@ export class Room implements RoomHandle {
   submit(command: RoomCommand): RoomResult {
     switch (command.kind) {
       case 'join':
-        return this.join(command.playerId, command.name)
+        return this.join(command.playerId, command.name, command.inviteCode)
       case 'leave':
         return this.leave(command.playerId)
       case 'sit':
@@ -194,10 +214,14 @@ export class Room implements RoomHandle {
         return this.disconnect(command.playerId)
       case 'reconnect':
         return this.reconnect(command.playerId)
+      case 'kick':
+        return this.kick(command.byPlayerId, command.targetPlayerId, command.reason)
+      case 'expireReconnect':
+        return this.expireReconnect(command.playerId)
     }
   }
 
-  private join(playerId: string, name: string): RoomResult {
+  private join(playerId: string, name: string, inviteCode?: string): RoomResult {
     if (this.players.has(playerId)) {
       return this.reject(playerId, 'already joined')
     }
@@ -205,7 +229,18 @@ export class Room implements RoomHandle {
     if (trimmed === '') {
       return this.reject(playerId, 'name required')
     }
+    if (
+      this.config.hostPlayerId !== '' &&
+      inviteCode !== undefined &&
+      !sameInvite(inviteCode, this.config.inviteCode)
+    ) {
+      return this.reject(playerId, 'That code does not match a table.')
+    }
+    if (this.config.hostPlayerId !== '' && this.players.size >= this.config.maxSeats) {
+      return this.reject(playerId, 'That table is full.')
+    }
     this.players.set(playerId, { name: trimmed, seat: null, disconnected: false })
+    if (this.config.hostPlayerId === '') this.config.hostPlayerId = playerId
     return this.result({ kind: 'joined', playerId, name: trimmed })
   }
 
@@ -219,6 +254,7 @@ export class Room implements RoomHandle {
     }
     this.releaseSeat(player)
     this.players.delete(playerId)
+    this.migrateHost(playerId)
     return this.result({ kind: 'left', playerId })
   }
 
@@ -409,6 +445,39 @@ export class Room implements RoomHandle {
     }
     player.disconnected = false
     return this.result({ kind: 'reconnected', playerId })
+  }
+
+  private kick(byPlayerId: string, targetPlayerId: string, reason: KickReason): RoomResult {
+    if (reason === 'host' && byPlayerId !== this.config.hostPlayerId) {
+      return this.reject(byPlayerId, 'only the host can remove a player')
+    }
+    const target = this.players.get(targetPlayerId)
+    if (target === undefined) return this.reject(byPlayerId, 'not joined')
+    if (reason === 'host' && targetPlayerId === byPlayerId) {
+      return this.reject(byPlayerId, 'cannot remove yourself')
+    }
+    const events: RoomEvent[] = []
+    if (this.phase === 'hand' && this.betting !== null) {
+      const player = this.betting.players.find((item) => item.id === targetPlayerId)
+      if (player !== undefined && !player.folded && !player.allIn) {
+        this.apply(targetPlayerId, { kind: 'fold' }, events, 'awayPlayed')
+        this.pendingPlayerId = null
+        this.drive(events)
+      }
+    }
+    this.releaseSeat(target)
+    this.players.delete(targetPlayerId)
+    this.migrateHost(targetPlayerId)
+    events.push({ kind: 'kicked', playerId: targetPlayerId, reason })
+    this.log(events)
+    return { ok: true, events }
+  }
+
+  private expireReconnect(playerId: string): RoomResult {
+    const player = this.players.get(playerId)
+    if (player === undefined || !player.disconnected)
+      return this.reject(playerId, 'not disconnected')
+    return this.kick(this.config.hostPlayerId, playerId, 'idle')
   }
 
   private reject(playerId: string | null, message: string): RoomResult {
@@ -693,6 +762,11 @@ export class Room implements RoomHandle {
     seat.hole = []
     seat.busted = false
     player.seat = null
+  }
+
+  private migrateHost(removedPlayerId: string): void {
+    if (this.config.hostPlayerId !== removedPlayerId) return
+    this.config.hostPlayerId = this.players.keys().next().value ?? ''
   }
 
   private syncStacks(betting: BettingHand): void {

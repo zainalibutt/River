@@ -60,6 +60,41 @@ function snapshot(view: RoomView): string {
 }
 
 describe('room lifecycle', () => {
+  it('assigns the first joiner as host and migrates the role when they leave', () => {
+    const room = makeRoom('host')
+    room.submit({ kind: 'join', playerId: 'alice', name: 'Alice' })
+    room.submit({ kind: 'join', playerId: 'bob', name: 'Bob' })
+    expect(room.viewFor('alice').hostPlayerId).toBe('alice')
+    room.submit({ kind: 'leave', playerId: 'alice' })
+    expect(room.viewFor('bob').hostPlayerId).toBe('bob')
+  })
+
+  it('rejects a supplied invite code that is not the room code', () => {
+    const room = makeRoom('invite')
+    room.submit({ kind: 'join', playerId: 'alice', name: 'Alice' })
+    const result = room.submit({ kind: 'join', playerId: 'bob', name: 'Bob', inviteCode: 'wrong' })
+    expect(result).toMatchObject({
+      ok: false,
+      events: [{ message: 'That code does not match a table.' }],
+    })
+  })
+
+  it('lets only the host remove a player and records the supplied reason', () => {
+    const room = makeRoom('kick')
+    seatThree(room)
+    expect(
+      room.submit({ kind: 'kick', byPlayerId: 'bob', targetPlayerId: 'cara', reason: 'host' }).ok,
+    ).toBe(false)
+    const result = room.submit({
+      kind: 'kick',
+      byPlayerId: 'alice',
+      targetPlayerId: 'cara',
+      reason: 'host',
+    })
+    expect(result.events).toContainEqual({ kind: 'kicked', playerId: 'cara', reason: 'host' })
+    expect(room.viewFor('alice').seats[2]?.playerId).toBeNull()
+  })
+
   it('joins players and rejects duplicates and empty names', () => {
     const room = makeRoom('join')
     expect(room.submit({ kind: 'join', playerId: 'alice', name: 'Alice' }).ok).toBe(true)

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import type { TurnAction } from '@river/engine'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
 import type { Ledger } from './ledger.js'
@@ -14,12 +15,13 @@ export type ClientRoomCommand =
   | { kind: 'stand' }
   | { kind: 'leave' }
   | { kind: 'startHand' }
+  | { kind: 'kick'; targetPlayerId: string; reason: 'host' }
   | { kind: 'act'; action: TurnAction }
   | { kind: 'rebuy'; amount: number }
 
 export type ClientMessage =
   | { kind: 'authenticate'; accessToken: string }
-  | { kind: 'enter'; requestId: string; roomId: string; name: string }
+  | { kind: 'enter'; requestId: string; roomId: string; name: string; inviteCode?: string }
   | { kind: 'command'; requestId: string; command: ClientRoomCommand }
   | { kind: 'resync'; requestId: string }
 
@@ -40,12 +42,14 @@ interface ConnectionState {
   player: AuthenticatedPlayer | null
   roomId: string | null
   balance: number
+  identityUpgraded: boolean
 }
 
 interface RoomState {
   room: Room
   connections: Set<ConnectionState>
   queue: Promise<void>
+  reconnectTimers: Map<string, ReturnType<typeof setTimeout>>
 }
 
 export interface RoomHubOptions {
@@ -56,6 +60,11 @@ export interface RoomHubOptions {
 
 const ROOM_ID = /^[a-z0-9][a-z0-9-]{2,31}$/
 const REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/
+const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+function newInviteCode(): string {
+  return Array.from(randomBytes(6), (byte) => INVITE_ALPHABET[byte & 31] ?? 'R').join('')
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -84,6 +93,10 @@ function roomCommand(value: unknown): ClientRoomCommand | null {
     case 'leave':
     case 'startHand':
       return { kind: value.kind }
+    case 'kick':
+      return typeof value.targetPlayerId === 'string' && value.reason === 'host'
+        ? { kind: 'kick', targetPlayerId: value.targetPlayerId, reason: value.reason }
+        : null
     case 'act': {
       const action = turnAction(value.action)
       return action === null ? null : { kind: 'act', action }
@@ -115,7 +128,14 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     typeof value.roomId === 'string' &&
     typeof value.name === 'string'
   ) {
-    return { kind: 'enter', requestId, roomId: value.roomId, name: value.name }
+    const inviteCode = typeof value.inviteCode === 'string' ? value.inviteCode : undefined
+    return {
+      kind: 'enter',
+      requestId,
+      roomId: value.roomId,
+      name: value.name,
+      ...(inviteCode === undefined ? {} : { inviteCode }),
+    }
   }
   if (value.kind === 'command') {
     const command = roomCommand(value.command)
@@ -138,7 +158,11 @@ export class RoomHub {
     this.ledger = options.ledger
     this.createRoom =
       options.createRoom ??
-      ((roomId) => new Room(roomId, defaultRoomConfig({ seed: `river:${roomId}` })))
+      ((roomId) =>
+        new Room(
+          roomId,
+          defaultRoomConfig({ seed: `river:${roomId}`, inviteCode: newInviteCode() }),
+        ))
   }
 
   connect(peer: ClientPeer): {
@@ -150,6 +174,7 @@ export class RoomHub {
       player: null,
       roomId: null,
       balance: 0,
+      identityUpgraded: false,
     }
     return {
       receive: (raw) => this.receive(connection, raw),
@@ -202,8 +227,17 @@ export class RoomHub {
       const player = await this.verifyToken(accessToken)
       const previous = this.activePlayers.get(player.playerId)
       if (previous !== undefined) {
+        if (previous.roomId !== null) {
+          const state = this.rooms.get(previous.roomId)
+          if (state !== undefined) {
+            this.snapshot(previous, state, null, [
+              { kind: 'kicked', playerId: player.playerId, reason: 'duplicate-session' },
+            ])
+          }
+        }
         previous.peer.close(4001, 'Replaced by a newer connection')
         await this.disconnect(previous)
+        connection.identityUpgraded = previous.player?.anonymous === true && !player.anonymous
       }
       connection.player = player
       connection.balance = await this.ledger.balance(player.playerId)
@@ -232,8 +266,21 @@ export class RoomHub {
       this.error(connection, message.requestId, 'already_in_room', 'Leave the current room first')
       return
     }
+    const exists = this.rooms.has(message.roomId)
     const room = this.room(message.roomId)
     await this.enqueue(room, async () => {
+      if (
+        exists &&
+        message.inviteCode?.trim().toUpperCase() !== room.room.config.inviteCode.toUpperCase()
+      ) {
+        this.error(
+          connection,
+          message.requestId,
+          'join_rejected',
+          'That code does not match a table.',
+        )
+        return
+      }
       let events: RoomEvent[] = []
       const reconnect = room.room.submit({ kind: 'reconnect', playerId: player.playerId })
       if (reconnect.ok) {
@@ -243,6 +290,7 @@ export class RoomHub {
           kind: 'join',
           playerId: player.playerId,
           name: message.name.trim(),
+          ...(message.inviteCode === undefined ? {} : { inviteCode: message.inviteCode }),
         })
         if (!result.ok) {
           this.error(
@@ -255,8 +303,17 @@ export class RoomHub {
         }
         events = result.events
       }
+      if (connection.identityUpgraded) {
+        events = [...events, { kind: 'identityUpgraded', playerId: player.playerId }]
+        connection.identityUpgraded = false
+      }
       connection.roomId = message.roomId
       room.connections.add(connection)
+      const reconnectTimer = room.reconnectTimers.get(player.playerId)
+      if (reconnectTimer !== undefined) {
+        clearTimeout(reconnectTimer)
+        room.reconnectTimers.delete(player.playerId)
+      }
       this.broadcast(room, message.requestId, events, connection)
     })
   }
@@ -281,8 +338,28 @@ export class RoomHub {
       result = await this.debitThenApply(connection, state, requestId, serverCommand, command)
     } else if (command.kind === 'stand' || command.kind === 'leave') {
       result = await this.applyThenCredit(connection, state, requestId, serverCommand)
+    } else if (command.kind === 'kick') {
+      if (serverCommand.kind !== 'kick') throw new Error('kick command lost its server identity')
+      result = await this.kickThenCredit(connection, state, requestId, serverCommand)
     } else {
-      result = state.room.submit(serverCommand)
+      if (
+        command.kind === 'startHand' &&
+        state.room.viewFor(player.playerId).handNumber === 0 &&
+        state.room.config.hostPlayerId !== player.playerId
+      ) {
+        result = {
+          ok: false,
+          events: [
+            {
+              kind: 'rejected',
+              playerId: player.playerId,
+              message: 'only the host can deal first',
+            },
+          ],
+        }
+      } else {
+        result = state.room.submit(serverCommand)
+      }
     }
     if (!result.ok) {
       const rejected = result.events.find((event) => event.kind === 'rejected')
@@ -314,6 +391,49 @@ export class RoomHub {
       state.connections.delete(connection)
       connection.roomId = null
     }
+  }
+
+  private async kickThenCredit(
+    connection: ConnectionState,
+    state: RoomState,
+    requestId: string,
+    serverCommand: Extract<RoomCommand, { kind: 'kick' }>,
+  ): Promise<RoomResult> {
+    const targetSeat = state.room
+      .viewFor(serverCommand.byPlayerId)
+      .seats.find((seat) => seat.playerId === serverCommand.targetPlayerId)
+    const stack = targetSeat?.stack ?? 0
+    if (stack > 0) {
+      try {
+        await this.ledger.apply({
+          playerId: serverCommand.targetPlayerId,
+          delta: stack,
+          reason: 'table_kick_cash_out',
+          ref: `${connection.roomId}:${requestId}:credit`,
+        })
+      } catch (error) {
+        return {
+          ok: false,
+          events: [
+            {
+              kind: 'rejected',
+              playerId: serverCommand.byPlayerId,
+              message: error instanceof Error ? error.message : 'Ledger credit failed',
+            },
+          ],
+        }
+      }
+    }
+    const result = state.room.submit(serverCommand)
+    if (!result.ok && stack > 0) {
+      await this.ledger.apply({
+        playerId: serverCommand.targetPlayerId,
+        delta: -stack,
+        reason: 'table_kick_cash_out_refund',
+        ref: `${connection.roomId}:${requestId}:refund`,
+      })
+    }
+    return result
   }
 
   private async debitThenApply(
@@ -411,6 +531,8 @@ export class RoomHub {
         return { kind: command.kind, playerId }
       case 'startHand':
         return command
+      case 'kick':
+        return { ...command, byPlayerId: playerId }
       case 'act':
         return { ...command, playerId }
       case 'rebuy':
@@ -430,7 +552,10 @@ export class RoomHub {
     await this.enqueue(state, async () => {
       state.connections.delete(connection)
       const result = state.room.submit({ kind: 'disconnect', playerId: player.playerId })
-      if (result.ok) this.broadcast(state, null, result.events)
+      if (result.ok) {
+        this.broadcast(state, null, result.events)
+        this.scheduleReconnectExpiry(state, player.playerId)
+      }
     })
   }
 
@@ -441,9 +566,42 @@ export class RoomHub {
       room: this.createRoom(roomId),
       connections: new Set(),
       queue: Promise.resolve(),
+      reconnectTimers: new Map(),
     }
     this.rooms.set(roomId, created)
     return created
+  }
+
+  private scheduleReconnectExpiry(state: RoomState, playerId: string): void {
+    const existing = state.reconnectTimers.get(playerId)
+    if (existing !== undefined) clearTimeout(existing)
+    const timer = setTimeout(() => {
+      void this.enqueue(state, async () => {
+        const view = state.room.viewFor(playerId)
+        const seat = view.seats.find((item) => item.playerId === playerId)
+        const stack = seat?.stack ?? 0
+        if (stack > 0) {
+          await this.ledger.apply({
+            playerId,
+            delta: stack,
+            reason: 'table_reconnect_expiry_cash_out',
+            ref: `${state.room.id}:reconnect-expiry:${playerId}:${view.handNumber}`,
+          })
+        }
+        const result = state.room.submit({ kind: 'expireReconnect', playerId })
+        if (!result.ok && stack > 0) {
+          await this.ledger.apply({
+            playerId,
+            delta: -stack,
+            reason: 'table_reconnect_expiry_cash_out_refund',
+            ref: `${state.room.id}:reconnect-expiry-refund:${playerId}:${view.handNumber}`,
+          })
+        }
+        if (result.ok) this.broadcast(state, null, result.events)
+        state.reconnectTimers.delete(playerId)
+      })
+    }, state.room.config.reconnectGraceMs)
+    state.reconnectTimers.set(playerId, timer)
   }
 
   private async enqueue(state: RoomState, task: () => Promise<void>): Promise<void> {
