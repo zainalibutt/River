@@ -27,8 +27,11 @@ Format: one row per completed packet, newest last.
 
 | Packet | Owner | Dispatched | Notes |
 |---|---|---|---|
+| 5D Basement and Suite detail | Codex | 2026-08-24 | art/pipeline only. Merge repeated props; draw calls are the binding budget |
+| 4K REP module | DeepSeek | 2026-08-24 | First packet under `deepseek-laws.md`. Pure engine module, three named files |
 | 4H economy wiring | DeepSeek | 2026-08-24 | **Stalled mid-work.** `economy-service.ts` and a migration sit uncommitted and fail typecheck at line 204 plus formatting. Watch for it adding a state table instead of deriving from ledger refs |
 
+| 2026-08-24 | 4L chat and emote panel | Claude | `89a27e8` | Feed, nine-emote rail, speaking indicator, message entry. Shortcut keys proven inert while the chat input has focus, and proven still live outside it |
 | 2026-08-24 | 4H economy wiring | DeepSeek | `f885911` | Accepted. Derives eligibility by parsing ledger refs rather than adding a state table, seated gating present, no hardcoded economy numbers. 15 tests |
 
 ## The shared-index incident, 2026-08-24
