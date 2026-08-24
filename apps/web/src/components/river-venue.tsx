@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import type { RefObject } from 'react'
+import type { VenueId } from '@/lib/venue'
 
 const RiverScene = dynamic(
   () => import('./river-venue-scene').then((module) => module.RiverScene),
@@ -13,8 +14,9 @@ const RiverScene = dynamic(
 type RiverVenueProps = {
   seatIds: string[]
   seatRefs: RefObject<Map<string, HTMLElement>>
+  venueId: VenueId
 }
 
-export function RiverVenue({ seatIds, seatRefs }: RiverVenueProps) {
-  return <RiverScene seatIds={seatIds} seatRefs={seatRefs} />
+export function RiverVenue({ seatIds, seatRefs, venueId }: RiverVenueProps) {
+  return <RiverScene seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
 }

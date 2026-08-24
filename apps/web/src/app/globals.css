@@ -1734,3 +1734,44 @@ input:focus-visible {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Venue picker. Shown only before the first hand - changing rooms mid-hand
+   would move the table out from under a live decision. */
+.venue-picker {
+  position: absolute;
+  top: 130px;
+  left: 96px;
+  z-index: 22;
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: auto;
+}
+
+.venue-picker button {
+  padding: 10px 18px;
+  border: 1px solid var(--river-room-edge);
+  border-radius: 12px;
+  background: rgb(27 35 32 / 82%);
+  color: var(--river-cream-faint);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.venue-picker button:hover {
+  color: var(--river-cream-dim);
+}
+
+.venue-picker button.chosen {
+  border-color: var(--river-amber);
+  color: var(--river-amber);
+}
+
+.venue-picker button:focus-visible {
+  outline: 2px solid var(--river-amber-bright);
+  outline-offset: 3px;
+}

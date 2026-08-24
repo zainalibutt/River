@@ -41,6 +41,7 @@ import {
   type SocialFeedEntry,
 } from '@/lib/social'
 import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib/socket'
+import { DEFAULT_VENUE, VENUE_ORDER, type VenueId, venueFromParams, venueOf } from '@/lib/venue'
 import { type VerifyResult, verifyHand } from '@/lib/verify'
 
 const boardSlots = ['flop-one', 'flop-two', 'flop-three', 'turn', 'river'] as const
@@ -60,8 +61,14 @@ type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'offline'
 type UpgradeState = 'idle' | 'editing' | 'sent' | 'expired' | 'error' | 'complete'
 type KickState = { reason: 'host' | 'idle' | 'duplicate-session' } | null
 
-function initialRoomTarget(): { roomId: string; inviteCode?: string; expired: boolean } {
-  if (typeof window === 'undefined') return { roomId: 'river-table', expired: false }
+function initialRoomTarget(): {
+  roomId: string
+  inviteCode?: string
+  expired: boolean
+  venueId: VenueId
+} {
+  if (typeof window === 'undefined')
+    return { roomId: 'river-table', expired: false, venueId: DEFAULT_VENUE }
   const params = new URLSearchParams(window.location.search)
   const roomId = params.get('room')?.trim() || `river-${crypto.randomUUID().slice(0, 8)}`
   const inviteCode = params.get('code')?.trim() || undefined
@@ -69,6 +76,7 @@ function initialRoomTarget(): { roomId: string; inviteCode?: string; expired: bo
     roomId,
     ...(inviteCode === undefined ? {} : { inviteCode }),
     expired: params.has('error') || params.has('error_code'),
+    venueId: venueFromParams(params),
   }
 }
 
@@ -174,10 +182,10 @@ function eventNotice(events: RoomEvent[], selfId: string): string | null {
   return null
 }
 
-function joinUrl(roomId: string, inviteCode: string): string {
+function joinUrl(roomId: string, inviteCode: string, venueId: VenueId): string {
   if (typeof window === 'undefined') return ''
   const url = new URL(window.location.href)
-  url.search = new URLSearchParams({ room: roomId, code: inviteCode }).toString()
+  url.search = new URLSearchParams({ room: roomId, code: inviteCode, venue: venueId }).toString()
   return url.toString()
 }
 
@@ -199,7 +207,8 @@ function useTurnRemaining(deadline: number | null): number | null {
 }
 
 export function RiverRoomTable() {
-  const [{ roomId, inviteCode, expired }] = useState(initialRoomTarget)
+  const [{ roomId, inviteCode, expired, venueId: initialVenue }] = useState(initialRoomTarget)
+  const [venueId, setVenueId] = useState<VenueId>(initialVenue)
   const [view, setView] = useState<RoomView>(() => emptyView())
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [notice, setNotice] = useState<string | null>(null)
@@ -457,7 +466,7 @@ export function RiverRoomTable() {
   }
 
   const share = async () => {
-    const url = joinUrl(roomId, view.inviteCode)
+    const url = joinUrl(roomId, view.inviteCode, venueId)
     await navigator.clipboard?.writeText(url).catch(() => undefined)
     setNotice('Invite link copied.')
   }
@@ -484,6 +493,7 @@ export function RiverRoomTable() {
         >
           {graphicsMode === 'three' ? (
             <RiverVenue
+              venueId={venueId}
               seatIds={seats.map((seat) => seat.playerId ?? `seat-${seat.seat}`)}
               seatRefs={seatRefs}
             />
@@ -581,6 +591,22 @@ export function RiverRoomTable() {
                   </p>
                 </section>
               </div>
+            ) : null}
+            {view.handNumber === 0 ? (
+              <fieldset className="venue-picker" aria-label="Choose a venue">
+                {VENUE_ORDER.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={id === venueId ? 'chosen' : ''}
+                    aria-pressed={id === venueId}
+                    title={venueOf(id).tagline}
+                    onClick={() => setVenueId(id)}
+                  >
+                    {venueOf(id).name}
+                  </button>
+                ))}
+              </fieldset>
             ) : null}
             <section className="invite-strip" aria-label="Private table invite">
               <span>TABLE CODE</span>

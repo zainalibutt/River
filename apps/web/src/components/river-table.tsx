@@ -22,6 +22,7 @@ import {
 } from 'react'
 import { RiverVenue } from '@/components/river-venue'
 import { cloneView, dwellFor, formatAmount, orderedSeats, reduceStep } from '@/lib/presentation'
+import { DEFAULT_VENUE } from '@/lib/venue'
 
 const seatPositions: Record<number, { x: number; y: number }[]> = {
   2: [
@@ -283,7 +284,11 @@ export function RiverTable() {
           aria-label="River poker table"
           style={{ transform: `scale(${stageScale})` }}
         >
-          <RiverVenue seatIds={orderedSeats(view).map((seat) => seat.id)} seatRefs={seatRefs} />
+          <RiverVenue
+            venueId={DEFAULT_VENUE}
+            seatIds={orderedSeats(view).map((seat) => seat.id)}
+            seatRefs={seatRefs}
+          />
           <div className="hud-layer">
             <nav className="menu-cluster" aria-label="Table menu">
               <HoldButton

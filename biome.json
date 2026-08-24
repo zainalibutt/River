@@ -22,5 +22,8 @@
       "quoteStyle": "single",
       "semicolons": "asNeeded"
     }
+  },
+  "files": {
+    "includes": ["**", "!**/apps/web/public/assets", "!**/art/out"]
   }
 }

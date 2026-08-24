@@ -5,17 +5,17 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { type RefObject, Suspense, useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
-import { rooftopCamera, worldSeats } from '@/lib/venue'
+import { VENUE_ORDER, type VenueId, venueOf, worldSeats } from '@/lib/venue'
 
 type SceneProps = {
   seatIds: string[]
   seatRefs: RefObject<Map<string, HTMLElement>>
+  venueId: VenueId
 }
 
-const tableCaster = /^(river_rooftop_wood|river_rooftop_felt|river_rooftop_rail)$/
-
-function Seats({ seatIds, seatRefs }: SceneProps) {
-  const seats = useMemo(() => worldSeats(seatIds), [seatIds])
+function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
+  const venue = venueOf(venueId)
+  const seats = useMemo(() => worldSeats(seatIds, venue.seatRadius), [seatIds, venue.seatRadius])
   const { camera } = useThree()
   const point = useMemo(() => new THREE.Vector3(), [])
 
@@ -32,16 +32,17 @@ function Seats({ seatIds, seatRefs }: SceneProps) {
   return <group />
 }
 
-function RooftopAsset() {
-  const asset = useGLTF('/assets/rooftop_assets.glb')
+function VenueAsset({ venueId }: { venueId: VenueId }) {
+  const venue = venueOf(venueId)
+  const asset = useGLTF(venue.asset)
 
   useLayoutEffect(() => {
     asset.scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return
-      object.castShadow = tableCaster.test(object.name)
+      object.castShadow = venue.shadowCasters.test(object.name)
       object.receiveShadow = object.name !== 'river_card'
     })
-  }, [asset.scene])
+  }, [asset.scene, venue.shadowCasters])
 
   return <primitive object={asset.scene} />
 }
@@ -83,7 +84,8 @@ function InstancedTablePieces() {
   )
 }
 
-function CameraOrbit() {
+function CameraOrbit({ venueId }: { venueId: VenueId }) {
+  const venue = venueOf(venueId)
   const controls = useRef<OrbitControlsImpl>(null)
 
   useFrame((_, delta) => {
@@ -110,8 +112,8 @@ function CameraOrbit() {
       ref={controls}
       enablePan={false}
       enableZoom={false}
-      minDistance={Math.hypot(rooftopCamera.radius, rooftopCamera.height)}
-      maxDistance={Math.hypot(rooftopCamera.radius, rooftopCamera.height)}
+      minDistance={Math.hypot(venue.camera.radius, venue.camera.height)}
+      maxDistance={Math.hypot(venue.camera.radius, venue.camera.height)}
       minPolarAngle={THREE.MathUtils.degToRad(50)}
       maxPolarAngle={THREE.MathUtils.degToRad(70)}
       target={[0, 0.55, 0]}
@@ -119,7 +121,7 @@ function CameraOrbit() {
   )
 }
 
-function Scene({ seatIds, seatRefs }: SceneProps) {
+function Scene({ seatIds, seatRefs, venueId }: SceneProps) {
   return (
     <>
       <color attach="background" args={['#7ca8ba']} />
@@ -131,30 +133,32 @@ function Scene({ seatIds, seatRefs }: SceneProps) {
         shadow-mapSize={[1024, 1024]}
       />
       <Suspense fallback={null}>
-        <RooftopAsset />
+        <VenueAsset venueId={venueId} />
       </Suspense>
       <InstancedTablePieces />
-      <Seats seatIds={seatIds} seatRefs={seatRefs} />
-      <CameraOrbit />
+      <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
+      <CameraOrbit venueId={venueId} />
     </>
   )
 }
 
-export function RiverScene({ seatIds, seatRefs }: SceneProps) {
+export function RiverScene({ seatIds, seatRefs, venueId }: SceneProps) {
+  const venue = venueOf(venueId)
   return (
     <Canvas
+      key={venueId}
       className="river-venue"
       camera={{
-        fov: rooftopCamera.fov,
-        position: [0, rooftopCamera.height, -rooftopCamera.radius],
+        fov: venue.camera.fov,
+        position: [0, venue.camera.height, -venue.camera.radius],
       }}
       dpr={[1, 1.5]}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       shadows
     >
-      <Scene seatIds={seatIds} seatRefs={seatRefs} />
+      <Scene seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
     </Canvas>
   )
 }
 
-useGLTF.preload('/assets/rooftop_assets.glb')
+for (const id of VENUE_ORDER) useGLTF.preload(venueOf(id).asset)

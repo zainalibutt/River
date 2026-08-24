@@ -514,8 +514,12 @@ def lighting_sidecar():
             ]
         out[venue_id] = entry
     path = os.path.join(OUT_DIR, 'lighting.json')
-    with open(path, 'w') as handle:
+    # newline='' keeps LF on Windows. Biome lints this file once it is published
+    # into the web app, and CRLF fails the shared lint gate.
+    with open(path, 'w', newline='') as handle:
         json.dump(out, handle, indent=2)
+        handle.write('
+')
     return path
 
 
