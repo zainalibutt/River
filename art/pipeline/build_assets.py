@@ -22,6 +22,11 @@ from buildkit import (
     shared_variant,
 )
 from geo import (
+    concat,
+    mountain_range,
+    palm,
+    skyline_towers,
+    translate_geo,
     balustrade,
     bar_back,
     card_body,
@@ -151,6 +156,41 @@ def build_rooftop(venue):
     strand = build_mesh_from_geo('rooftop_string_lights', string_light_run())
     strand.materials.append(strand_mat)
     object_at('rooftop_string_lights', strand, (0.0, 0.0, 0.0))
+    # The skyline is the venue's identity - a rooftop without a city is a patio.
+    # Built as merged meshes: 27 towers and their windows cost two draw calls
+    # rather than fifty-four, which matters against a budget of 120.
+    mountain_mat = add_material('rooftop_mountain', venue['mountain'])
+    mountains = build_mesh_from_geo('rooftop_mountains', mountain_range())
+    mountains.materials.append(mountain_mat)
+    object_at('rooftop_mountains', mountains, (0.0, 0.0, 0.0))
+
+    skyline_mat = add_material('rooftop_skyline', venue['skyline'])
+    tower_geo, window_geo = skyline_towers()
+    towers = build_mesh_from_geo('rooftop_skyline', tower_geo)
+    towers.materials.append(skyline_mat)
+    object_at('rooftop_skyline', towers, (0.0, 0.0, 0.0))
+
+    # Windows reuse the parapet emissive rather than adding a material.
+    windows = build_mesh_from_geo('rooftop_skyline_windows', window_geo)
+    windows.materials.append(lit_mat)
+    object_at('rooftop_skyline_windows', windows, (0.0, 0.0, 0.0))
+
+    foliage_mat = add_material('rooftop_foliage', venue['foliage'])
+    palms = []
+    for index in range(6):
+        angle = 2.0 * math.pi * index / 6 + 0.4
+        palms.append(
+            translate_geo(
+                palm(2.6 + 0.35 * (index % 3), seed=41 + index * 7),
+                9.9 * math.cos(angle),
+                9.9 * math.sin(angle),
+                0.0,
+            )
+        )
+    palm_mesh = build_mesh_from_geo('rooftop_palms', concat(palms))
+    palm_mesh.materials.append(foliage_mat)
+    object_at('rooftop_palms', palm_mesh, (0.0, 0.0, 0.0))
+
     water_mat = add_material('rooftop_water', venue['water'])
     water = build_mesh_from_geo('rooftop_pool', terrace_disc(1.4, 24))
     water.materials.append(water_mat)
@@ -168,10 +208,10 @@ def build_basement(venue):
     wall_mat = add_material('basement_wall', venue['wall'])
     wall1 = build_mesh_from_geo('basement_wall_1', wall_panel())
     wall1.materials.append(wall_mat)
-    object_at('basement_wall_1', wall1, (0.0, 2.0, 0.0))
+    object_at('basement_wall_1', wall1, (-2.0, 5.0, 0.0))
     wall2 = build_mesh_from_geo('basement_wall_2', wall_panel())
     wall2.materials.append(wall_mat)
-    object_at('basement_wall_2', wall2, (2.0, 0.0, 0.0), (0.0, 0.0, math.pi / 2))
+    object_at('basement_wall_2', wall2, (-2.0, -4.6, 0.0))
     machine_mat = add_material('basement_machine', venue['machine'])
     for index in range(3):
         machine = build_mesh_from_geo('basement_machine_%d' % index, machine_unit())
@@ -196,18 +236,18 @@ def build_suite(venue):
     wall_mat = add_material('suite_wall', venue['wall'])
     wall1 = build_mesh_from_geo('suite_wall_1', wall_panel())
     wall1.materials.append(wall_mat)
-    object_at('suite_wall_1', wall1, (0.0, 2.5, 0.0))
+    object_at('suite_wall_1', wall1, (-2.0, 7.6, 0.0))
     wall2 = build_mesh_from_geo('suite_wall_2', wall_panel())
     wall2.materials.append(wall_mat)
-    object_at('suite_wall_2', wall2, (2.5, 0.0, 0.0), (0.0, 0.0, math.pi / 2))
+    object_at('suite_wall_2', wall2, (7.6, -2.0, 0.0), (0.0, 0.0, math.pi / 2))
     bar_mat = add_material('suite_bar', venue['bar_wood'])
     bar = build_mesh_from_geo('suite_bar', bar_back())
     bar.materials.append(bar_mat)
-    object_at('suite_bar', bar, (-2.4, -0.4, 0.0), (0.0, 0.0, math.pi / 2))
+    object_at('suite_bar', bar, (6.6, -1.0, 0.0), (0.0, 0.0, math.pi / 2))
     bar_light = add_emissive_material('suite_bar_lit', venue['bar_lit'], 2.0)
     shelf = build_mesh_from_geo('suite_bar_lit', bar_back())
     shelf.materials.append(bar_light)
-    object_at('suite_bar_lit', shelf, (-2.4, -0.4, 1.2), (0.0, 0.0, math.pi / 2))
+    object_at('suite_bar_lit', shelf, (6.6, -1.0, 1.2), (0.0, 0.0, math.pi / 2))
     sconce_mat = add_emissive_material('suite_sconce', venue['sconce'], 1.2)
     for index in range(2):
         sconce = build_mesh_from_geo('suite_sconce_%d' % index, wall_sconce())
@@ -289,30 +329,76 @@ def build_lighting(venue_id):
     return created
 
 
-def clear_radius_violations(venue_id, min_height=2.0):
-    """Props over min_height must stay outside the orbit annulus.
+def clear_radius_violations(venue_id):
+    """Flag geometry that would ruin the orbit camera.
 
-    A Rooftop palm at 6.0m against a 6.1m orbit put the camera inside the
-    foliage, and the fronds read convincingly as shadow artifacts.
+    Two distinct hazards, both drawn from things that actually went wrong:
+
+    1. Orbit intrusion - geometry sitting on the camera's circular path and tall
+       enough to reach it. A Rooftop palm at 6.0m against a 6.1m orbit put the
+       camera inside the foliage, and the fronds read convincingly as shadow
+       artifacts across three diagnostic passes.
+    2. Occlusion - geometry inside the orbit that rises above the sight line
+       from the camera down to the table, putting a wall between the player and
+       the felt.
+
+    Measured per vertex, not from the bounding box. An axis-aligned box around a
+    ring has its corners at R*sqrt(2), so bound_box reports a 4.1m parapet as
+    5.8m and a 45m skyline as 64m. The parapet is exactly the case a blunt
+    height rule condemns wrongly - it is 2.2m tall but the camera looks well
+    over it.
     """
     import math
+
     from mathutils import Vector
 
     camera = VENUE_CAMERA.get(venue_id)
     if camera is None:
         return []
-    clear = camera['clear_radius']
+
+    # bound_box and matrix_world are stale until the dependency graph catches
+    # up. Without this the gate reads zeros and silently passes everything.
+    bpy.context.view_layer.update()
+
+    orbit = camera['radius']
+    height = camera['height']
+    table_top = 0.76
+    # The camera is a point plus near-plane clearance, not a two-metre band.
+    # A room wall outside the orbit is correct architecture, not an intrusion.
+    tube_inner = orbit - 0.4
+    tube_outer = orbit + 0.4
+    tube_floor = height - 1.5
+
     offenders = []
     for obj in bpy.data.objects:
-        if obj.type != 'MESH':
+        if obj.type != 'MESH' or obj.data is None:
             continue
-        corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]
-        top = max(v.z for v in corners)
-        if top < min_height:
-            continue
-        radius = min(math.hypot(v.x, v.y) for v in corners)
-        if 0.4 < radius < clear:
-            offenders.append('%s at r=%.2f inside clear radius %.2f' % (obj.name, radius, clear))
+        matrix = obj.matrix_world
+        worst_tube = None
+        worst_occlude = None
+        for vertex in obj.data.vertices:
+            point = matrix @ Vector(vertex.co)
+            radius = math.hypot(point.x, point.y)
+            if radius < 0.35:
+                continue
+            if tube_inner <= radius <= tube_outer and point.z >= tube_floor:
+                if worst_tube is None or point.z > worst_tube[1]:
+                    worst_tube = (radius, point.z)
+            elif radius < tube_inner:
+                sight = table_top + (height - table_top) * (radius / orbit)
+                if point.z > sight and (worst_occlude is None or point.z - sight > worst_occlude[2]):
+                    worst_occlude = (radius, point.z, point.z - sight)
+
+        if worst_tube is not None:
+            offenders.append(
+                '%s crosses the camera orbit at r=%.2f z=%.2f (orbit %.2f, camera height %.2f)'
+                % (obj.name, worst_tube[0], worst_tube[1], orbit, height)
+            )
+        if worst_occlude is not None:
+            offenders.append(
+                '%s blocks the table view at r=%.2f z=%.2f, %.2fm above the sight line'
+                % (obj.name, worst_occlude[0], worst_occlude[1], worst_occlude[2])
+            )
     return offenders
 
 
@@ -327,7 +413,7 @@ def lighting_sidecar():
     out = {}
     for venue_id, spec in VENUE_LIGHTS.items():
         world_hex, world_strength = spec['world']
-        out[venue_id] = {
+        entry = {
             'world': {'colour': '#' + world_hex, 'strength': world_strength},
             'camera': VENUE_CAMERA[venue_id],
             'lights': [
@@ -344,6 +430,12 @@ def lighting_sidecar():
                 for name, kind, colour, energy, size, shadow, loc, rot in spec['lights']
             ],
         }
+        gradient = spec.get('world_gradient')
+        if gradient:
+            entry['world']['gradient'] = [
+                {'position': position, 'colour': '#' + colour} for position, colour in gradient
+            ]
+        out[venue_id] = entry
     path = os.path.join(OUT_DIR, 'lighting.json')
     with open(path, 'w') as handle:
         json.dump(out, handle, indent=2)

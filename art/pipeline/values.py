@@ -69,6 +69,8 @@ ROOFTOP = {
     'foliage': '16241C',
     'fire': 'FF7A3C',
     'water': '2A4A6A',
+    'skyline': '1B2230',
+    'mountain': '141A26',
 }
 
 BASEMENT = {

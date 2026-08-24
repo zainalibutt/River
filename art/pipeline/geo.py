@@ -322,13 +322,23 @@ def parapet_ring():
     return concat(parts)
 
 
-def string_light_run():
+def string_light_run(count=48, radius=8.4):
+    """A ring of bulbs around the terrace edge.
+
+    This previously ran a line of eight bulbs from the centre out to x=-6 at
+    head height, straight across the table and through the camera orbit. The
+    spec is a ring at 8.40m, outside the 8.40m clear radius, swagging between
+    3.00 and 3.30.
+    """
     parts = []
-    for i in range(8):
-        angle = math.pi * i / 7
-        x = 3.0 * math.cos(angle) - 3.0
-        z = 2.6 + 0.25 * math.sin(angle * 2)
-        parts.append(sphere(0.03, x, 0.0, z, 6, 4))
+    for i in range(count):
+        angle = 2.0 * math.pi * i / count
+        # Swag between posts: bulbs dip midway along each span of six.
+        swag = 0.30 * abs(math.sin(math.pi * (i % 6) / 6.0))
+        z = 3.30 - swag
+        parts.append(
+            sphere(0.035, radius * math.cos(angle), radius * math.sin(angle), z, 6, 4)
+        )
     return concat(parts)
 
 
@@ -400,3 +410,101 @@ def chandelier():
 
 def checkerboard_plane():
     return [(-2.0, -2.0, 0.0), (2.0, -2.0, 0.0), (2.0, 2.0, 0.0), (-2.0, 2.0, 0.0)], [(0, 1, 2), (0, 2, 3)]
+
+def _lcg(seed):
+    """Deterministic pseudo-random source.
+
+    The pipeline must produce the same skyline on every run, so the scatter
+    below is seeded rather than drawn from `random`.
+    """
+    state = seed & 0xFFFFFFFF
+
+    def next_float():
+        nonlocal state
+        state = (1103515245 * state + 12345) & 0x7FFFFFFF
+        return state / float(0x7FFFFFFF)
+
+    return next_float
+
+
+def skyline_towers(count=27, inner_radius=20.8, outer_radius=45.4, seed=20260824):
+    """A ring of towers seen over the parapet, plus their lit windows.
+
+    Returns (mass, windows) as two merged geometries so the whole skyline costs
+    two draw calls rather than fifty-four. Bases sit below the parapet line so
+    only the upper storeys read, which is what makes them look distant.
+    """
+    rand = _lcg(seed)
+    mass = []
+    windows = []
+    for index in range(count):
+        angle = 2.0 * math.pi * index / count + rand() * 0.06
+        radius = inner_radius + (outer_radius - inner_radius) * rand()
+        base_z = -5.9 + 3.9 * rand()
+        width = 2.4 + 5.2 * rand()
+        depth = 2.4 + 4.4 * rand()
+        height = 7.0 + 21.0 * rand()
+        x = radius * math.cos(angle) - width * 0.5
+        y = radius * math.sin(angle) - depth * 0.5
+        mass.append(box((x, y, base_z), (width, depth, height)))
+
+        # A stepped setback on the taller towers reads as a skyline rather than
+        # a row of slabs.
+        if height > 18.0:
+            inset = width * 0.22
+            mass.append(
+                box(
+                    (x + inset, y + inset, base_z + height),
+                    (width - inset * 2.0, depth - inset * 2.0, 2.0 + 4.0 * rand()),
+                )
+            )
+
+        rows = int(4 + 9 * rand())
+        for row in range(rows):
+            wz = base_z + height * (0.25 + 0.68 * (row / max(rows - 1, 1)))
+            inward = 1.0 if math.cos(angle) < 0 else -1.0
+            wy = y + (depth + 0.06 if inward < 0 else -0.06)
+            windows.append(box((x + width * 0.18, wy, wz), (width * 0.64, 0.06, 0.30)))
+    return concat(mass), concat(windows)
+
+
+def mountain_range(count=9, inner_radius=88.0, outer_radius=142.0, seed=770511):
+    """Low-poly peaks on the far horizon.
+
+    Deliberately coarse - they sit past 88m and exist to close the horizon, not
+    to be looked at.
+    """
+    rand = _lcg(seed)
+    peaks = []
+    for index in range(count):
+        angle = 2.0 * math.pi * index / count + rand() * 0.18
+        radius = inner_radius + (outer_radius - inner_radius) * rand()
+        height = 16.0 + 26.0 * rand()
+        spread = 22.0 + 26.0 * rand()
+        peak = cone(spread, spread * 0.06, height, -8.0, 7)
+        peaks.append(
+            translate_geo(peak, radius * math.cos(angle), radius * math.sin(angle), 0.0)
+        )
+    return concat(peaks)
+
+
+def palm(height=3.0, fronds=7, seed=41):
+    """Trunk plus a crown of fronds, merged into one geometry."""
+    rand = _lcg(seed)
+    parts = [cone(0.10, 0.06, height, 0.0, 6)]
+    for index in range(fronds):
+        angle = 2.0 * math.pi * index / fronds + rand() * 0.3
+        length = 0.85 + 0.5 * rand()
+        droop = -0.32 - 0.28 * rand()
+        tip_x = length * math.cos(angle)
+        tip_y = length * math.sin(angle)
+        wx = -math.sin(angle) * 0.11
+        wy = math.cos(angle) * 0.11
+        verts = [
+            (0.0, 0.0, height),
+            (wx, wy, height - 0.04),
+            (tip_x, tip_y, height + droop),
+            (-wx, -wy, height - 0.04),
+        ]
+        parts.append((verts, [(0, 1, 2), (0, 2, 3)]))
+    return concat(parts)
