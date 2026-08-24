@@ -35,6 +35,7 @@ This directory is the design equivalent of `docs/spec.md`: it is canonical. Wher
 | [`11-character-pipeline.md`](11-character-pipeline.md) | Character process contract, gates, customisation model, MPFB stages 1-3 executed | 2026-08-24 |
 | [`12-multiplayer-ux.md`](12-multiplayer-ux.md) | Invite, waiting, reconnect, kick, expired-link, account upgrade. Packet 3C | 2026-08-24 |
 | [`13-animation-set.md`](13-animation-set.md) | Nine clips, procedural authoring, reaction pools, transitions. Resolves Q10 | 2026-08-24 |
+| [`15-acceptance-5br.md`](15-acceptance-5br.md) | Visual acceptance review of the R3F renderer. One P0 | 2026-08-24 |
 | [`14-venue-build-spec.md`](14-venue-build-spec.md) | Exact numeric recipe for all three venues, chairs and materials. Makes the lookdev reproducible | 2026-08-24 |
 | [`data/venue-build-values.json`](data/venue-build-values.json) | Machine-readable extraction of every light, world and prop ring from the lookdev builds | 2026-08-24 |
 
