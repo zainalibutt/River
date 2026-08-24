@@ -1899,3 +1899,16 @@ input:focus-visible {
 .challenge.complete .challenge-bar i {
   background: var(--river-win);
 }
+
+/* A game HUD should not select like a document. Dragging across the table was
+   highlighting every label in blue. */
+.hud-layer {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hud-layer input,
+.hud-layer textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}

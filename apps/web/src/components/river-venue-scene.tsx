@@ -154,7 +154,7 @@ function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
             angle={0.9}
             color={light.colour}
             distance={0}
-            intensity={light.intensity * 12}
+            intensity={light.intensity * 3.5}
             penumbra={0.85}
             position={light.position}
             shadow-mapSize={[2048, 2048]}
@@ -216,7 +216,12 @@ export function RiverScene({ seatIds, seatRefs, venueId }: SceneProps) {
         position: [0, venue.camera.height, -venue.camera.radius],
       }}
       dpr={[1, 1.5]}
-      gl={{ antialias: true, powerPreference: 'high-performance' }}
+      gl={{
+        antialias: true,
+        powerPreference: 'high-performance',
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 0.9,
+      }}
       shadows
     >
       <Scene seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
