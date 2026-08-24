@@ -23,10 +23,17 @@ do not decide it.
   plus a manifest that reports per-asset and total triangles, props/environment
   buckets, material count, object (draw-call) count, texture dimensions and
   memory, and the budget verdict.
+- `build_characters.py` — character generation via MPFB, following the
+  documented stage order (create_human → add_standard_rig BEFORE reduction →
+  bake_shapekeys/clear residual → UNSUBDIV decimate → bmesh cull below 0.34).
+  Has a hard MPFB-availability guard that fails fast with a clear message if the
+  extension is not enabled.
 - `check_assets.py` — reads exported GLBs and fails loudly (exit 1) on any
   scene/props/environment triangle, material, draw-call, texture-dimension or
-  texture-memory budget violation.
-- `test_checker.py` — negative tests proving every budget axis fails loudly.
+  texture-memory budget violation. Also validates `char_*` skeletons: triangle
+  budget, armature binding (skin + weight attributes), and bone count.
+- `test_checker.py` / `test_checker_chars.py` — negative tests proving every
+  budget axis (including character axes) fails loudly.
 
 Output goes to `art/out/` (gitignored). Use `RIVER_OUT` to redirect.
 
@@ -41,6 +48,10 @@ python art/pipeline/check_assets.py art/out/*_assets.glb
 
 # prove the checker fails loudly on every budget axis
 python art/pipeline/test_checker.py
+python art/pipeline/test_checker_chars.py
+
+# generate characters (requires MPFB extension enabled)
+"/d/Blender/Blender 5.2/blender.exe" --background --python art/pipeline/build_characters.py
 ```
 
 ## Contract notes
@@ -57,3 +68,13 @@ python art/pipeline/test_checker.py
 - Measured result (2026-08-24): rooftop 4,038 triangles / 20 materials / 46
   objects; basement 1,368 / 18 / 43 (one 128x128 checker texture); suite 2,614 /
   20 / 42. All comfortably inside the budget table.
+- Character validation (triangles, armature binding, bone count) is exercised
+  against a synthetic rigged GLB fixture produced deterministically; it passes a
+  valid skinned mesh and fails loudly on missing skin/weights or insufficient
+  bones. Quad % and vertex-group count are validated at build time inside
+  `build_characters.py`, since glTF output is triangulated and loses them.
+- NOTE (2026-08-24): MPFB is **not installed** in the current Blender profile
+  (no extension on disk, not in prefs.addons, phantom `bpy.ops.mpfb` with no
+  operators). `build_characters.py` therefore fails fast with a clear BLOCKED
+  message and has not been run. It is written against the documented stage order
+  and is unverified pending MPFB availability.

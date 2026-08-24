@@ -4,7 +4,7 @@ import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from values import BUDGET
+from values import BUDGET, CHARACTER_MESH_PREFIX
 
 GLB_MAGIC = b'glTF'
 JSON_TYPE = 0x4E4F534A
@@ -77,17 +77,22 @@ class Report:
         self.total_triangles = 0
         self.props_triangles = 0
         self.environment_triangles = 0
+        self.character_triangles = 0
         self.materials = 0
         self.draw_calls = 0
         self.images = 0
         self.texture_bytes = 0
         self.max_texture_dim = 0
         self.texture_dims = []
+        self.characters = []
         self.failures = []
         self.notes = []
 
     def fail(self, message):
         self.failures.append(message)
+
+    def add_character(self, entry):
+        self.characters.append(entry)
 
     def to_dict(self, path):
         return {
@@ -96,6 +101,8 @@ class Report:
             'total_triangles': self.total_triangles,
             'props_triangles': self.props_triangles,
             'environment_triangles': self.environment_triangles,
+            'character_triangles': self.character_triangles,
+            'characters': self.characters,
             'materials': self.materials,
             'draw_calls': self.draw_calls,
             'objects': self.draw_calls,
@@ -113,6 +120,87 @@ PROPS_PREFIX = 'river_'
 CHAR_PREFIX = 'chair_'
 
 
+def mesh_triangles_for(gltf, accessors, mesh):
+    mesh_total = 0
+    for primitive in mesh.get('primitives', []):
+        indices = primitive.get('indices')
+        if indices is None:
+            attributes = primitive.get('attributes', {})
+            position = attributes.get('POSITION')
+            if position is None:
+                continue
+            count = accessors[position].get('count', 0)
+            mesh_total += count // 3
+        else:
+            count = accessors[indices].get('count', 0)
+            mesh_total += count // 3
+    return mesh_total
+
+
+def character_bone_summary(gltf):
+    meshes = gltf.get('meshes', [])
+    skins = gltf.get('skins', [])
+    summary = {}
+    for node in gltf.get('nodes', []):
+        if 'mesh' not in node or 'skin' not in node:
+            continue
+        mesh_index = node['mesh']
+        mesh_name = meshes[mesh_index].get('name', '') if 0 <= mesh_index < len(meshes) else ''
+        if not mesh_name.startswith(CHARACTER_MESH_PREFIX):
+            continue
+        skin = skins[node['skin']]
+        summaries = summary.setdefault(mesh_name, {'bones': 0, 'skinned': True})
+        summaries['bones'] = max(summaries['bones'], len(skin.get('joints', [])))
+    return summary
+
+
+def check_characters(gltf, report):
+    accessors = gltf.get('accessors', [])
+    nodes = gltf.get('nodes', [])
+    mesh_by_name = character_meshes(gltf)
+    if not mesh_by_name:
+        return report
+    bone_summary = character_bone_summary(gltf)
+    for mesh_name, mesh in mesh_by_name.items():
+        tris = mesh_triangles_for(gltf, accessors, mesh)
+        primitives = mesh.get('primitives', [])
+        has_weights = False
+        skinned = False
+        for primitive in primitives:
+            attributes = primitive.get('attributes', {})
+            if 'JOINTS_0' in attributes and 'WEIGHTS_0' in attributes:
+                has_weights = True
+            if 'JOINTS_0' in attributes:
+                skinned = True
+        summary = bone_summary.get(mesh_name)
+        bones = summary['bones'] if summary else 0
+        node_skinned = summary is not None
+        entry = {
+            'mesh': mesh_name,
+            'triangles': tris,
+            'skinned': skinned or node_skinned,
+            'has_weights': has_weights,
+            'bones': bones,
+        }
+        report.add_character(entry)
+    for entry in report.characters:
+        if entry['triangles'] > BUDGET['character_triangles']:
+            report.fail(
+                '{}: triangle budget exceeded {} > {}'.format(
+                    entry['mesh'], entry['triangles'], BUDGET['character_triangles']
+                )
+            )
+        if not (entry['skinned'] and entry['has_weights']):
+            report.fail(entry['mesh'] + ': no armature binding (skin/weights missing)')
+        if entry['bones'] < BUDGET['character_bones_min']:
+            report.fail(
+                '{}: bone count {} below minimum {}'.format(
+                    entry['mesh'], entry['bones'], BUDGET['character_bones_min']
+                )
+            )
+    return report
+
+
 def compute_counts(gltf, binary, report):
     accessors = gltf.get('accessors', [])
     buffer_views = gltf.get('bufferViews', [])
@@ -120,25 +208,13 @@ def compute_counts(gltf, binary, report):
     mesh_triangles = {}
     for mesh in gltf.get('meshes', []):
         name = mesh.get('name', 'mesh_%d' % len(mesh_triangles))
-        mesh_total = 0
-        for primitive in mesh.get('primitives', []):
-            indices = primitive.get('indices')
-            if indices is None:
-                attributes = primitive.get('attributes', {})
-                position = attributes.get('POSITION')
-                if position is None:
-                    continue
-                count = accessors[position].get('count', 0)
-                mesh_total += count // 3
-            else:
-                count = accessors[indices].get('count', 0)
-                mesh_total += count // 3
+        mesh_total = mesh_triangles_for(gltf, accessors, mesh)
         mesh_triangles[name] = mesh_total
         report.total_triangles += mesh_total
         if name.startswith(PROPS_PREFIX):
             report.props_triangles += mesh_total
-        elif name.startswith(CHAR_PREFIX):
-            pass
+        elif name.startswith(CHARACTER_MESH_PREFIX):
+            report.character_triangles += mesh_total
         else:
             report.environment_triangles += mesh_total
     node_meshes = []
@@ -171,6 +247,62 @@ def compute_counts(gltf, binary, report):
         if size is not None:
             report.max_texture_dim = max(report.max_texture_dim, size[0], size[1])
     report.per_asset = [(name, count) for name, count in mesh_triangles.items()]
+    check_characters(gltf, report)
+    return report
+
+
+def character_meshes(gltf):
+    names = {}
+    for mesh in gltf.get('meshes', []):
+        name = mesh.get('name', '')
+        if name.startswith(CHARACTER_MESH_PREFIX):
+            names[name] = mesh
+    return names
+
+
+def check_characters(gltf, report):
+    accessors = gltf.get('accessors', [])
+    mesh_by_name = character_meshes(gltf)
+    if not mesh_by_name:
+        return report
+    bone_summary = character_bone_summary(gltf)
+    for mesh_name, mesh in mesh_by_name.items():
+        tris = mesh_triangles_for(gltf, accessors, mesh)
+        primitives = mesh.get('primitives', [])
+        has_weights = False
+        skinned = False
+        for primitive in primitives:
+            attributes = primitive.get('attributes', {})
+            if 'JOINTS_0' in attributes and 'WEIGHTS_0' in attributes:
+                has_weights = True
+            if 'JOINTS_0' in attributes:
+                skinned = True
+        summary = bone_summary.get(mesh_name)
+        bones = summary['bones'] if summary else 0
+        node_skinned = summary is not None
+        entry = {
+            'mesh': mesh_name,
+            'triangles': tris,
+            'skinned': skinned or node_skinned,
+            'has_weights': has_weights,
+            'bones': bones,
+        }
+        report.add_character(entry)
+    for entry in report.characters:
+        if entry['triangles'] > BUDGET['character_triangles']:
+            report.fail(
+                '{}: triangle budget exceeded {} > {}'.format(
+                    entry['mesh'], entry['triangles'], BUDGET['character_triangles']
+                )
+            )
+        if not (entry['skinned'] and entry['has_weights']):
+            report.fail(entry['mesh'] + ': no armature binding (skin/weights missing)')
+        if entry['bones'] < BUDGET['character_bones_min']:
+            report.fail(
+                '{}: bone count {} below minimum {}'.format(
+                    entry['mesh'], entry['bones'], BUDGET['character_bones_min']
+                )
+            )
     return report
 
 
@@ -226,8 +358,20 @@ def check(path):
     print('  total        %5d / %d tris' % (report.total_triangles, BUDGET['scene_triangles']))
     print('  props        %5d / %d tris' % (report.props_triangles, BUDGET['props_triangles']))
     print('  environment  %5d / %d tris' % (report.environment_triangles, 80000))
+    if report.character_triangles:
+        print('  character    %5d tris' % report.character_triangles)
     print('  materials    %3d / %d' % (report.materials, BUDGET['max_materials']))
     print('  draw calls   %3d / %d (objects)' % (report.draw_calls, BUDGET['max_draw_calls']))
+    for character in report.characters:
+        print(
+            '  char %-24s %5d tris  bones %3d  skin=%s  weights=%s' % (
+                character['mesh'],
+                character['triangles'],
+                character['bones'],
+                character['skinned'],
+                character['has_weights'],
+            )
+        )
     for dim in report.texture_dims:
         if dim is not None:
             print('  texture      %dx%d' % dim)

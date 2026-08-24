@@ -6,7 +6,14 @@ BUDGET = {
     'max_texture_dim': 2048,
     'max_materials': 24,
     'max_draw_calls': 120,
+    'character_triangles': 15000,
+    'character_quad_min': 0.85,
+    'character_groups_min': 100,
+    'character_bones_min': 60,
 }
+
+CHARACTER_CULL_FRACTION = 0.34
+CHARACTER_MESH_PREFIX = 'char_'
 
 FELT_RX = 1.24
 FELT_RY = 0.72
