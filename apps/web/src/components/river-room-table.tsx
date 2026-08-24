@@ -221,7 +221,9 @@ export function RiverRoomTable() {
   const [raiseTo, setRaiseTo] = useState(0)
   const [dialBand, setDialBand] = useState(0)
   const [stageScale, setStageScale] = useState(2 / 3)
-  const [graphicsMode, setGraphicsMode] = useState<'two' | 'three'>('two')
+  // River is a 3D game. The DOM table is a fallback for a machine that cannot
+  // run the venue, not the thing being built, so it is no longer the default.
+  const [graphicsMode, setGraphicsMode] = useState<'two' | 'three'>('three')
   const [preset, setPreset] = useState<PresetKind | null>(null)
   const presetFiredFor = useRef<string | null>(null)
   const [presetNotice, setPresetNotice] = useState<string | null>(null)
