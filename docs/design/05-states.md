@@ -214,3 +214,69 @@ Phase 2 is a local solo session, so there is no network. These states are specif
 - [ ] Empty-table notice
 - [ ] Nine-seat, six-seat and heads-up shapes
 - [ ] Title-safe overlay clean in every state above
+
+
+---
+
+# Revision — behavioural states (2026-08-24)
+
+Added from `docs/behaviour-reference.md`. The engine at `9717339` does not yet expose these; they are Phase 3/4 states specified now so the HUD reserves space and 5B-R does not have to be redesigned around them.
+
+## Turn indication
+
+| Condition | Remote seat | Local |
+|---|---|---|
+| Not their turn | no indicator | RAM inert, wedges at 40% |
+| Turn active, >50% remaining | overhead timer above the avatar, world-space | RAM actionable, **no countdown shown** |
+| Turn active, <=50% remaining | overhead timer continues | urgency ring appears around the RAM outer edge |
+| Timeout | timer completes, action auto-resolves | auto check if legal, otherwise fold |
+
+There is no single global marker that moves between seats. Each active seat owns its own.
+
+## Preset action states
+
+| State | Private HUD | Public world |
+|---|---|---|
+| No preset | RAM resting | avatar neutral |
+| Preset selected | icon shown **transparent, without the enclosing wedge circle** | avatar reaches toward chips or cards |
+| Preset cancelled | icon cleared | avatar returns to neutral |
+| Turn arrives, preset still legal | commits immediately | action animation plays |
+| Turn arrives, preset now illegal | preset invalidated, normal RAM opens | avatar returns to neutral |
+
+Other players never see the preset icon. They always see the gesture.
+
+## Hole-card peek
+
+| Input | Local | Remote |
+|---|---|---|
+| Held | HUD hole cards emphasised and fully readable | avatar plays card-peek animation |
+| Released | HUD returns to resting | avatar exits peek |
+
+Remote clients receive the animation only. Card values are never transmitted.
+
+## Muck selection
+
+Offered at showdown where rules allow, and to players who folded on the river.
+
+| Option | Result |
+|---|---|
+| Show neither | cards muck unrevealed |
+| Show one | player chooses which card |
+| Show both | full reveal |
+| Auto-muck on | selection skipped, cards muck automatically |
+
+**Camera orbit remains enabled during muck selection.** This is called out explicitly in the reference and is easy to get wrong by treating the selector as a modal.
+
+## Cinematic states
+
+| State | Camera | Restores? |
+|---|---|---|
+| Ordinary action | player orbit, untouched | n/a |
+| Qualifying all-in | temporary authored shot | yes, to previous orbit |
+| Qualifying winner | temporary authored shot | yes, to previous orbit |
+| Venue intro | authored shot, never while a hand is pending | yes |
+| New hand start | **no recentre** | n/a |
+
+## REP feedback
+
+Floating text above the REP meter at end of hand. Never a modal, never blocks the next deal, never delays the between-hands countdown.

@@ -39,7 +39,10 @@ The hardware spike (Packet 5A) is **deferred, not cancelled**. It runs the momen
 - Variant: Texas Hold'em only, deep. 2 hole cards + 5 community, best 5-card hand wins.
 - Format: **cash tables**. Standard buy-in, leave/cash out anytime, rebuy on bust while seated.
 - Table size: **9-max** default (heads-up and 6-max supported). Seat-fill/deal moments animated.
-- Speed knobs (config-driven, tunable without redeploy): action timer (default 15s), auto check-fold on timeout, auto-muck losing hands at showdown, 3s next-deal countdown, instant rebuy button.
+- Speed knobs (config-driven, tunable without redeploy): **per-street action budgets — 15s preflop, 20s flop, 20s turn, 25s river** (matching the reference's published windows), auto check-fold on timeout, configurable auto-muck, 3s next-deal countdown, instant rebuy button.
+- **Two pacing modes:** *cinematic* (full authored cadence) and *fast* (all animations retained, dead air removed). Fast never removes an animation, only the gaps between them.
+- **Preset actions:** players may select an action before their turn. The preset UI is private; the avatar gesture that accompanies it is public. This is deliberate poker body language, not a leak (Aug 2026).
+- **Muck selection:** show neither, one, or both cards, offered at showdown and to river folders. Auto-muck is a persisted setting.
 - Bots: optional fill, three skills — **Rookie / Novice / OG**.
 
 ## Economy (server-authoritative, append-only ledger, config-driven)
@@ -54,8 +57,8 @@ The hardware spike (Packet 5A) is **deferred, not cancelled**. It runs the momen
 
 - **3D main**, 2D graphics-saver mode. Same engine, two renderers (React Three Fiber / DOM).
 - **Player bodies v1, basic**: low-poly seated characters, rigs via Mixamo-style pipeline; idle breathe/sway, card peek, chip toss, win/lose react, plus **stand-up on all-in** (signature moment, the reference-style). No facial work.
-- Camera: fixed cinematic angles + dramatic auto-zoom on all-ins/showdowns.
-- Launch venues (3): **Rooftop bar**, **Underground basement**, **High-end suite**. Varied mood/lighting per the reference tradition.
+- **Camera: third-person, seat-relative orbit under player control** (Aug 2026, revised). Right stick or mouse-drag rotates around the table from your seat. No zoom, no first-person, no top-down — the reference's model cloned exactly. Qualifying all-ins and winners temporarily take the camera for a short authored shot and then **restore the player's previous orbit**. Ordinary actions never move the camera.
+- **Launch venues (3)** (Aug 2026, settled at three after briefly expanding to five): **The Rooftop**, **Laundromat**, **Executive Suite**. the reference's full venue set — Biker Bar and Casino included — remains **general law for the look**: its staging, lighting language, dealer conventions and venue-identity approach govern River's art direction. River simply ships three rooms rather than five. Biker Bar and Casino are parked as post-launch venues, not cancelled. Venues change environment art, lighting, background life, ambient SFX, music, dealer presentation and theme identity — **never poker rules**. Dealer presentation differs by venue: a dedicated croupier NPC in casino-style rooms, rotating player-dealer elsewhere.
 - Art production: agent-driven procedural Blender (bpy) + AI textures + asset packs where quality demands. After the engine core, establish the visual direction and test the asset pipeline with table, chips, cards, and one seated rig. This is a feasibility proof, not a renderer commitment. Production 3D work previously waited on the real-PS5 hardware gate; per Q9 it now proceeds against the conservative self-imposed budget, with the console test deferred to whenever hardware exists.
 - Cosmetics v1: basic set proving the system (felts / card backs / chip sets); full wearables (rings, hats, outfits) arrive with richer character models later.
 - Music/audio: licensed ambient loops at launch + selective original pieces later.
@@ -69,7 +72,9 @@ The hardware spike (Packet 5A) is **deferred, not cancelled**. It runs the momen
 ## Social & accounts
 
 - Private invite-code tables first; public matchmaking later.
-- Chat: typed general chat in side panel + emote wheel (quips/emoticons, gamepad-friendly). Voice = Discord, never us.
+- **Four separate social systems** (Aug 2026): **emotes** (3D avatar animations, throttled, interruptible by poker-critical animation), **avatar reaction VO** (short automatic vocalisations), **player voice chat** (Discord, never us), and **full typed text chat** in a side panel. Text chat is a deliberate River divergence — the reference has emotes and voice but no typed chat.
+- **REP progression**, layered over the table and kept entirely separate from bankroll and from any ranked rating. Earned from play, challenges, table items and events. A displayed percentage such as `120%` is an **earning-rate modifier**, not level progress, and derives from an inspectable breakdown.
+- **Table items**: props beside each seat with three roles — visual identity, ambient interaction animation, and a REP boost. Purchasable with chips, which serves the chip sink. They never affect poker odds.
 - Auth (Supabase, decided Aug 2026): every visitor gets an **anonymous session** on load — guest-play default with zero friction. Upgrading to a permanent account links an email magic link (OAuth later) and keeps bankroll/streaks/cosmetics intact: same player row, no migration.
 - Game server trusts nothing client-side: verifies Supabase JWTs against the project JWKS on WebSocket connect; `service_role` key never leaves the server; Postgres RLS locks player rows; chip-ledger writes are server-only and append-only.
 

@@ -1,5 +1,8 @@
 # 07 — Motion grammar
 
+**Revised 2026-08-24** against `docs/behaviour-reference.md`. The step-queue mechanism, animation catalogue and reduced-motion rules below still hold. Three new sections supersede parts of them: the hand presentation state machine, the animation priority tiers, and the pacing modes. Read those first.
+
+
 Motion in River exists to make money movement legible and to give big moments weight. It never exists to decorate a transition. If an animation does not answer "whose chips moved where" or "this hand just mattered", it should not ship.
 
 All durations and easings reference tokens from `02-tokens.md` and belong in configuration, not in component bodies.
@@ -135,3 +138,104 @@ A player using reduced motion must be able to play at the same table as a player
 - No celebratory bursts, confetti, coin showers or screen shake on a win. The pot travelling and the stack counting up is the celebration.
 - No animated advertisement of any kind, since there is nothing to sell.
 - No spinner anywhere. Loading is a skeleton at final dimensions (`05-states.md`); progress arcs mean "keep holding" and nothing else.
+
+
+---
+
+# Revision — behaviour-reference alignment (2026-08-24)
+
+## Hand presentation state machine
+
+The reference is explicit that these are **distinct user-perceived beats** and must not collapse into one `handEnded` animation.
+
+```ts
+type HandPresentationPhase =
+  | "betweenHands" | "prepareHand" | "moveButtonAndBlinds" | "dealHoleCards"
+  | "preFlop" | "dealFlop" | "flopBetting" | "dealTurn" | "turnBetting"
+  | "dealRiver" | "riverBetting" | "showdown" | "muckSelection"
+  | "awardPot" | "winnerReaction" | "repRewards" | "cleanup"
+```
+
+Between-hands order, per the reference and Zain's choreography notes:
+
+1. Engine resolves winners, pots, reveals, muck eligibility, elimination.
+2. Muck or reveal selection where applicable — **orbit stays enabled**.
+3. Winner and loser reactions from a varied pool.
+4. Pot transfer — chips slide toward the winner with a gathering animation; **numeric stack updates after movement**.
+5. REP notification — floating text, non-blocking.
+6. Cleanup — clear world hole cards, board, bet piles; return avatars to neutral. Forcing an empty hole-card state on new hand is required to prevent stale-card leaks.
+7. Advance dealer button.
+8. Post blinds.
+9. Deal hole cards — world flight synchronised per card with the HUD reveal.
+
+## Animation priority tiers
+
+**This is the most important rule in this document.** the reference spent years patching out blocking cinematics; River must not reintroduce them.
+
+| Tier | Category | Can be interrupted by |
+|---|---|---|
+| 0 | Authoritative hand progression and card state | nothing |
+| 1 | Required action animation — fold, bet, deal, all-in | tier 0 |
+| 2 | Outcome reaction and cinematic | tiers 0-1 |
+| 3 | Social emote | tiers 0-2 |
+| 4 | Idle and table-item flourish | everything |
+
+A higher tier number is always interruptible by a lower one.
+
+```text
+avatar is mid dance emote
+  -> action becomes theirs
+  -> emote cancels or fast-exits
+  -> RAM activates
+  -> the action timer was never delayed by the dance
+```
+
+**Never make animation completion authoritative for poker correctness.** Presentation consumes engine events and acknowledges completion; a failed animation must not be able to corrupt hand state or stall the turn timer.
+
+## Pacing modes
+
+Zain chose option C: ship both.
+
+| Mode | Behaviour |
+|---|---|
+| **Cinematic** | Full authored cadence. Winner and all-in cinematics per policy, full reaction beats, unhurried between-hands |
+| **Fast** | All animations retained, dead air removed. Dwells cut to their floor, cinematics gated to all-ins only, between-hands countdown shortened |
+
+Fast mode never removes an animation — it shortens the gaps between them. A player in fast mode must still see every action represented.
+
+## Cinematic policy
+
+Delegated to Claude by Zain, expressed as data:
+
+```ts
+const CINEMATIC_POLICY = {
+  allIn:   "firstPerHand",  // repeats within one hand are boring - Zain
+  winner:  "closeBeats",    // flush over straight, boat over flush, river suck-outs
+  knockout: "never",
+}
+```
+
+Heads-up behaves identically. The camera **always restores the player's previous orbit** after a cinematic; it never recentres at the start of a new hand.
+
+## Turn timers are independent of motion
+
+Action budgets are 15s preflop, 20s flop, 20s turn, 25s river. **No animation may extend them.** The local urgency ring appears at 50% remaining, not from the start of the turn — the reference deliberately delays the local urgency treatment and it reads far better.
+
+## Emote policy
+
+```ts
+type EmoteDefinition = {
+  id: string
+  animation: string
+  durationMs: number
+  interruptPolicy: "interruptible" | "nonInterruptible"
+  cooldownMs: number
+  allowedDuringOwnDecision: boolean
+}
+```
+
+Emotes are **3D avatar animations**, not speech bubbles. Throttled to prevent spam. Disallowed during the player's own decision window by default. Poker-critical animation always wins.
+
+River's set, per Zain: wave, laugh, facepalm, fist-pump, throat-slit, chip trick, dance, confetti, table knock, plus voice quips — snide, quirky and sneaky in character. Simple gestures are animation-only; larger ones carry SFX or voice.
+
+Player voice chat, avatar reaction VO, emotes and **text chat** are four separate systems. Text chat is a River addition and is not part of the the reference baseline.

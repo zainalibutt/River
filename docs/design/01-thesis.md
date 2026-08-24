@@ -1,94 +1,105 @@
-# 01 — Visual thesis
+# 01 — Visual and behavioural thesis
+
+Rewritten 2026-08-24 against `docs/behaviour-reference.md` and the reference frames in `docs/images/`. The previous thesis — "the room is dark, the felt is lit, the interface is furniture" — was authored before either existed and was wrong in its core claim. It is superseded entirely. Where any other design document still reflects it, this file wins.
 
 ## The one idea
 
-**The room is dark. The felt is lit. The interface is furniture.**
+**A social 3D poker room, not a poker UI with 3D decoration.**
 
-River is a poker room photographed, not a poker app designed. A single warm practical light hangs over the table; everything falls off into charcoal-green shadow at the edges of the screen. Chips, cards and the rail catch that light. Interface elements do not float above the scene as a HUD — they sit on the rail, in the light, made of the same materials as the table.
+River is a place you sit in. The poker state is authoritative and invisible; everything the player experiences is a room with people in it, where every action has a physical representation and the interface supplements the scene rather than covering it.
 
-Every later decision in this contract resolves back to that sentence. When a choice is unclear, ask which option looks more like a photograph of a real table under one warm lamp, and take that one.
+The behaviour reference states the failure mode precisely, and it is the one River is most at risk of:
 
-This also carries the 2D renderer forward into 3D without redesign. The 2D mode is the same room with the camera locked and the geometry flattened, not a different product. See `03-layout.md`.
+> The biggest mistake would be to build a standard browser-poker HUD and merely put a 3D table behind it.
+
+That is what River's 2D renderer currently is, and it was the correct thing to build for Phase 2. It is not the target.
+
+## What that means concretely
+
+1. **The poker engine is authoritative and deterministic.** Presentation consumes events. A failed animation can never corrupt hand state.
+2. **Every action has an avatar and table-world representation.** Bets move chips. Peeking at cards is an animation other players can see. Folding is a gesture.
+3. **The camera belongs to the player** — a third-person, seat-relative orbit — and is only borrowed for short authored moments.
+4. **The HUD is readable and radial**, anchored to the player and the world, not a rail of web buttons across the bottom of the screen.
+5. **Information leaks on purpose.** Preset actions broadcast through avatar gesture. Card peeks are visible. This is poker body language and it is a feature.
+6. **The room is part of the product.** Venue, background life and ambience are not decoration; the reference is explicit that a tight crop of felt and hands is the wrong composition.
+7. **Theatre without blocking.** the reference spent years patching out cinematic delay. Keep the drama, never let presentation stall the state machine.
 
 ## Inherited from the reference
 
-- **Venue identity over casino identity.** The place has a character. Rooftop bar, underground basement and high-end suite are different rooms, not different colour themes over the same table.
-- **Lived-in materials.** Worn leather rail, scuffed wood, felt with visible nap. Surfaces have history.
-- **Warm practical lighting.** Light comes from fixtures that exist in the room, not from a uniform ambient wash.
-- **Dramatic moments get real weight.** An all-in is an event that changes the frame, not a toast notification.
+The benchmark, and the intent is a close match with justified reinterpretation rather than a loose homage.
+
+- **Venue identity.** Five rooms with distinct art, lighting, music, background life and dealer presentation.
+- **Seat-relative orbit camera** with selective cinematic takeover.
+- **Radial action menu and betting dial** as the primary interaction surface.
+- **Preset actions with public gestures** — the most distinctive mechanic in the game.
+- **Muck and show as personality**, not just a rules step.
+- **Physical chip stacks that read as magnitude** at a glance.
+- **Emotes as avatar animations** in the scene, not chat bubbles.
+- **REP progression** layered over the table without hijacking it.
 
 ## Inherited from Blackjackist
 
-- **Pace, and zero friction between hands.** The gap between one hand ending and the next beginning is a designed 3-second beat, not dead air.
-- **Instant legibility of money.** Stack, pot and bet are always readable without hunting. Chips are denominated by colour and readable at a glance.
-- **Generous, unambiguous action targets.** The thing you press is large, obvious and never adjacent to something destructive.
-- **Immediate recovery.** Bust, rebuy, back in. No modal chain, no ceremony.
+- Pace between hands, and instant recovery from a bust.
+- Money legibility — you always know your stack and the pot without hunting.
+- Generous, unambiguous action targets.
+
+## Where River deliberately diverges
+
+Recorded as decisions rather than gaps, so nobody "fixes" them back toward the reference.
+
+| River | the reference | Why |
+|---|---|---|
+| **Full text chat** | Emotes plus voice chat only, no typed chat | Zain's decision. Friend-group product; typed chat is how friends actually talk |
+| **Winner cinematic always** | Conditional on the hand being "interesting enough" | Zain's decision |
+| **Cinematic and fast pacing modes** | One authored cadence | Zain's decision. Keeps the theatre optional |
+| **Desktop browser v1** | Console and PC native | No PS5 available to test against. PS5 remains a standing commitment, see `docs/spec.md` |
+| **No real money, ever** | Free-to-play with purchasable chips | Spec pillar 5. Chips are unbuyable and uncashoutable |
 
 ## Refused, deliberately
 
 | Refused | Reason |
 |---|---|
-| the reference's grime-as-texture overload — heavy noise, grunge overlays, filth on every surface | Wrecks 10-foot legibility and dates instantly. River is dim and warm, not dirty |
-| Any the reference branding, character likeness, logo, typeface or venue name | Mechanics are not protectable; identity is. River ships its own room |
-| Blackjackist's social-casino surface — gold gradients, neon rims, glow bursts, slot-machine celebration | Reads as monetised. River has nothing to sell and should not look like it does |
-| Any buy-chips affordance, price, currency symbol, timer-pressure upsell or "top up" merchandising | Spec pillar 5. Chips are unpurchasable. No surface may imply otherwise, even decoratively |
-| Pure black `#000` and pure white `#FFF` | Both read as flat and harsh on OLED TVs at distance. River's darkest is a green-black, its lightest a warm cream |
-| Colour as the only carrier of meaning | Controller-first, TV-first, and colour-blind-safe all demand a second channel. See `02-tokens.md` |
-
-## What makes River distinct
-
-1. **One lamp.** A single warm pool of light centred on the felt, falling off to the frame edge. No other product in this space lights the table this way; most light everything evenly.
-2. **The rail is the UI.** Action controls sit on a leather rail at the bottom of the frame, in the same material language as the table. They are not a floating panel.
-3. **Money is typographic, not decorative.** Amounts are set in tabular figures at a size that reads across a room. No embossed numerals, no coin icons stacked into the numbers.
-4. **Trust is visible but quiet.** The fairness commit hash is on screen every hand as a small verify affordance, never a badge that shouts. Trust shown by being available, not by being advertised.
+| Any the reference branding, character likeness, logo, typeface or venue name | Mechanics are not protectable; identity is. River ships its own rooms |
+| A bottom-of-screen button rail as the primary action surface | The reference is explicit that this is the defining mistake |
+| Blocking animation — presentation that can stall the hand | the reference's own patch history is a decade of undoing this |
+| Any buy-chips affordance, price, currency symbol or top-up merchandising | Spec pillar 5, decoratively included |
+| Typed-chat bubbles over avatars as a substitute for emotes | Emotes are 3D animations. Text chat is a separate panel |
+| Pure black `#000` and pure white `#FFF` | Both read harsh at distance on OLED |
+| Colour as the only carrier of meaning | Controller-first, TV-first, colour-blind-safe |
 
 ## Approved product decisions
 
-Zain approved all four decisions on 2026-08-23. The alternatives remain documented so later usability testing can distinguish an intentional change from drift.
+Taken by Zain, recorded so they are not re-litigated.
 
-### Decision 1 — Deck colour system
+| Decision | Value |
+|---|---|
+| Deck colour | Four-colour, two-colour available as a setting. Validated by render — suit reads from colour alone well before rank is legible |
+| Amount formatting | Hybrid: exact for your own stack, pot and action controls; abbreviated on opponent seats |
+| Bot pacing | Considered — Rookie 400-800ms, Novice 600-1200ms, OG 800-1600ms with an extra beat before aggression |
+| Display typeface | Warm editorial serif |
+| Minimum viewport | 1280x720 |
+| All-in run-out | Automatic once no further betting is possible |
+| Venue count | **Five**, see `10-art-direction.md` |
+| Camera | Clone the reference exactly — orbit only, no zoom, no first-person, no top-down |
+| Preset tells | Exact the reference behaviour |
+| Pacing | Offer both cinematic and fast modes |
 
-- **A. Two-colour (traditional).** Red hearts and diamonds, black clubs and spades. Authentic, what a real table looks like.
-- **B. Four-colour.** Red hearts, blue diamonds, green clubs, black spades. Suits are distinguishable at a glance and at distance.
+## Cinematic policy
 
-At 10 feet on a 55-inch panel, distinguishing a heart from a diamond is genuinely hard, and misreading your own flush draw is the worst possible failure. Four-colour solves it outright. Two-colour is what poker looks like.
+Delegated to Claude's judgement by Zain, expressed as configuration rather than embedded in animation code:
 
-**Decision: B, four-colour, with A available as a setting.** Tokens for both are in `02-tokens.md`.
+```ts
+type CinematicPolicy = {
+  allIn: "firstPerHand";   // first all-in of a hand only - repeats are boring
+  winner: "closeBeats";    // flush over straight, full house over flush, river suck-outs
+  knockout: "never";
+};
+```
 
-### Decision 2 — Chip amount formatting
+Heads-up behaves identically to a full table. Both policies are overridable per table by the pacing mode setting.
 
-Default buy-in is 100,000 and the big blind is 500, so six-digit numbers appear constantly.
+## Where the visual direction now sits
 
-- **A. Exact.** `100,000` / `2,500` / `87,250`. Precise, feels like real money, wide.
-- **B. Abbreviated.** `100K` / `2.5K` / `87.3K`. Compact and instantly scannable, loses precision.
-- **C. Hybrid.** Abbreviated on opponent seats, exact on your own stack, the pot and the action rail.
+the reference staging with a River grade, per Zain: take the composition — round or oval table, seated bodies, floating per-seat HUD, venue backdrop, mid-height camera — and let each venue carry its own light. The Rooftop is bright and open. The Basement is dim and fluorescent. They are not variations on one grade; the range across venues is the point.
 
-**Decision: C.** You always know your own number exactly; opponents are read at a glance.
-
-### Decision 3 — Bot pacing
-
-The engine resolves every bot turn instantly (see `08-handoff-2c.md`, gap 3), so the renderer owns the entire feel of pace. Q2 established that reaction delays are presentation configuration, not strategy.
-
-- **A. Snappy.** 350-700ms per bot action. Blackjackist-fast, hands fly by.
-- **B. Considered.** 600-1400ms, weighted by decision difficulty and skill tier.
-- **C. Theatrical.** 900-2200ms, OG pauses longest before big decisions.
-
-**Decision: B**, with per-tier ranges in `07-motion.md`. This remains the single largest tuning lever on how the game feels and should be refined by playing.
-
-### Decision 4 — Display typeface direction
-
-UI text is a neutral, tabular-figure grotesque either way. The question is the display face used for the River wordmark, venue names and hand results.
-
-- **A. Warm editorial serif** (Fraunces, Instrument Serif). Cinematic, filmic titles, reads as a film about a poker room.
-- **B. Condensed signage sans** (Oswald, Archivo Narrow). Dive-bar signage, painted-on-glass, closer to the reference.
-
-**Decision: A.** It supports "cinematic rather than casino-neon" more directly and differentiates River from competitors that use condensed sans.
-
-## Non-forks
-
-These follow from the spec and are not open:
-
-- Dark charcoal-green room, deep green felt, warm cream type, restrained amber and copper accents. Confirmed direction.
-- No real-money surface of any kind.
-- TV and controller are first-class; phone is secondary.
-- 2D is permanent, not scaffolding, and must stand on its own as a finished mode.
+Full venue and table specifications are in `10-art-direction.md`.

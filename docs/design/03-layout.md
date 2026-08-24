@@ -1,5 +1,7 @@
 # 03 — Layout, viewports and geometry
 
+> **Revised 2026-08-24.** The uniform-scale rule, safe areas, seat geometry, minimum viewport and TV Mode below all still hold for the **2D graphics-saver renderer**. They do not describe the 3D presentation: River's 3D camera is a seat-relative orbit under player control, specified in `06-interaction.md`. The region map here describes a 2D composition; the 3D HUD is radial and world-anchored per `04-anatomy.md`.
+
 ## Base canvas
 
 **All layout is authored once at 1920x1080 and scaled uniformly.** There are no per-breakpoint table layouts. A poker table is a fixed composition; reflowing it produces a different game, not a responsive one.

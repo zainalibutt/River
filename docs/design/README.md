@@ -1,42 +1,51 @@
 # River — design contract
 
-Implementation-ready visual and interaction contract for River's permanent 2D DOM renderer (the graphics-saver mode), and the rules that keep it coherent with the later 3D venue renderer.
+Implementation-ready visual, behavioural and interaction contract for River.
 
-This directory is the design equivalent of `docs/spec.md`: it is canonical. Where an implementation detail and this contract disagree, fix the disagreement rather than silently choosing one. Where this contract and `docs/spec.md` disagree, the spec wins on product behaviour and this contract is corrected.
+This directory is the design equivalent of `docs/spec.md`: it is canonical. Where an implementation and this contract disagree, fix the disagreement rather than silently choosing one. Where this contract and `docs/spec.md` disagree, the spec wins on product behaviour and this contract is corrected.
+
+## Source of truth for behaviour
+
+`docs/behaviour-reference.md` is the **behavioural source of truth** — 1,592 lines of researched the reference behaviour with Zain's inline decisions. Every document here was revised against it on 2026-08-24. Where any of these files still contradicts it, the reference wins and the file is stale.
 
 ## Status
 
 | Field | Value |
 |---|---|
-| Packet | 2B |
 | Author | Claude (Opus tier) |
-| Reviewers | Zain and Codex |
-| Engine baseline | `9717339` — 81 tests, typecheck and lint green |
-| Implements against | `SoloTableView`, `SessionStep`, `LegalActions`, `ViewSeat` from `packages/engine/src/session.ts` |
-| Fixtures covered | all five exported from `packages/engine/src/scenarios.ts` |
-| Consumer | Packet 2C (Codex) |
+| Reviewer | Zain |
+| Behaviour baseline | `docs/behaviour-reference.md` |
+| Engine baseline | `9717339` and later |
+| Consumer | Packet 5B-R (Codex), 5B-P2 (DeepSeek) |
 
 ## Documents
 
-| File | Contents |
-|---|---|
-| [`01-thesis.md`](01-thesis.md) | What River inherits from the reference and Blackjackist, what it refuses, and the one idea the whole look hangs on |
-| [`02-tokens.md`](02-tokens.md) | Colour, typography, spacing, radii, borders, elevation, materials, focus. Concrete values, ready to become CSS custom properties |
-| [`03-layout.md`](03-layout.md) | 1920x1080 base canvas, TV safe area, uniform scaling rule, minimum viewport, exact seat coordinates for 9-max, 6-max and heads-up |
-| [`04-anatomy.md`](04-anatomy.md) | Seat, cards, pot, dealer button, action rail, bet sizing, timer housing, status line, menu. Dimensions in base-canvas pixels |
-| [`05-states.md`](05-states.md) | Every renderable state derived from the real view contract and the five fixtures, as state tables with acceptance criteria |
-| [`06-interaction.md`](06-interaction.md) | Focus order, DualSense and keyboard maps, hold-to-confirm, destructive action rules |
-| [`07-motion.md`](07-motion.md) | Motion grammar with durations and easings, step-log playback pacing, reduced-motion equivalents |
-| [`08-handoff-2c.md`](08-handoff-2c.md) | Binding constraints for Codex in 2C, plus the nine contract gaps found during fixture validation and how to handle each |
+| File | Contents | Revised |
+|---|---|---|
+| [`01-thesis.md`](01-thesis.md) | Visual and behavioural thesis. **Fully rewritten** — the old "dark room, lit felt" thesis is dead | 2026-08-24 |
+| [`02-tokens.md`](02-tokens.md) | Colour, typography, spacing, radii, elevation, materials, focus. Verified contrast ratios | — |
+| [`03-layout.md`](03-layout.md) | 2D renderer layout, safe areas, seat geometry, minimum viewport, TV Mode. **2D only** — 3D camera is in `06` | 2026-08-24 |
+| [`04-anatomy.md`](04-anatomy.md) | Component anatomy. **Rewritten** — radial action menu, world/HUD split, chip magnitude, nameplates, muck UI | 2026-08-24 |
+| [`05-states.md`](05-states.md) | State tables from real fixtures, plus turn indication, preset, peek, muck and cinematic states | 2026-08-24 |
+| [`06-interaction.md`](06-interaction.md) | **Rewritten** — orbit camera, RAM, betting dial, presets, peek, timers, input maps | 2026-08-24 |
+| [`07-motion.md`](07-motion.md) | Motion grammar, step queue, **animation priority tiers**, pacing modes, cinematic policy | 2026-08-24 |
+| [`08-handoff-2c.md`](08-handoff-2c.md) | Binding constraints and contract gaps for the 2D renderer | — |
+| [`09-acceptance-2d.md`](09-acceptance-2d.md) | 2D visual acceptance punch list (Codex fallback pass) | — |
+| [`10-art-direction.md`](10-art-direction.md) | Venues, tables, budgets, lighting studies, measured findings. **Five venues** | 2026-08-24 |
+| [`11-character-pipeline.md`](11-character-pipeline.md) | Character process contract, gates, customisation model, MPFB stages 1-3 executed | 2026-08-24 |
+| [`12-multiplayer-ux.md`](12-multiplayer-ux.md) | Invite, waiting, reconnect, kick, expired-link, account upgrade. Packet 3C | 2026-08-24 |
+| [`13-animation-set.md`](13-animation-set.md) | Nine clips, procedural authoring, reaction pools, transitions. Resolves Q10 | 2026-08-24 |
 
-## How to use this in 2C
+## The one rule
 
-1. Tokens in `02-tokens.md` become one CSS custom property file. No component carries a raw hex value.
-2. Layout in `03-layout.md` is authored once at 1920x1080 and scaled uniformly. Do not write per-breakpoint table layouts.
-3. Every state in `05-states.md` must have a rendered result before 2C exits. The state tables are the acceptance checklist.
-4. Motion values in `07-motion.md` are defaults, and belong in configuration, not in component bodies.
-5. Constraints in `08-handoff-2c.md` are binding. Where 2C needs to depart from them, document the implementation constraint and route the decision back rather than reinterpreting the contract.
+From the behaviour reference, and it is the failure mode River is most at risk of:
 
-## Approved taste decisions
+> The biggest mistake would be to build a standard browser-poker HUD and merely put a 3D table behind it.
 
-Zain approved four-colour cards, hybrid money formatting, considered bot pacing, and a warm editorial serif. The traditional two-colour deck remains an accessibility/preference setting. The supported laptop floor is 1280x720, and automatic all-in run-outs landed in `9717339`.
+The 2D renderer shipped in Phase 2 is exactly that, and it was the right thing to build then. It is not the target.
+
+## Open questions
+
+- ~~**Q10**~~ — resolved. Clips are procedurally authored; see `13-animation-set.md`.
+- ~~**Parametric human generator**~~ — resolved. MPFB installed from the official Blender repo.
+- **Verify panel** cannot show the revealed seed — the view exposes `commit` but no seed.

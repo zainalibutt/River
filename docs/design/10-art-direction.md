@@ -2,7 +2,9 @@
 
 Art direction for River's 3D presentation, starting with venue one. Extends `01-thesis.md` and reuses the token system in `02-tokens.md`; where this document gives a value, it is the 3D value and the 2D token stays unchanged.
 
-**Mandate: the reference staging, River grade.** Take the composition from the reference — round table, seated bodies, per-seat HUD floating over the scene, venue as backdrop, mid-height camera looking across the felt — and light it the way River lights things: dim room, one warm practical over the table, no neon rims, no glow bursts.
+> **READ THE REVISIONS FIRST.** This document grew by accretion across one working session. The sections below the first horizontal rule — the reference-derived revision, the lighting study, the card study, the venue build study, the orbit study and the material study — **supersede the original text above them wherever they disagree.** The original header described a dark single-lamp room with a fixed cinematic camera; both were wrong and are corrected further down.
+
+**Mandate: the reference staging, River grade.** Take the composition from the reference — oval table, seated bodies, per-seat HUD floating over the scene, venue as backdrop — and give each venue its own light. The Rooftop is bright and open; the Basement is dim and fluorescent. The range across venues is the point, not a single global grade.
 
 ## Ordering, and why it is not negotiable
 
@@ -16,7 +18,7 @@ Conservative by policy, per the Q9 retarget in `docs/spec.md`. Desktop can excee
 |---|---|---|
 | Scene triangles, total | 250,000 | Everything visible at once |
 | Table, rail, chips, cards | 60,000 | Chips instanced, never modelled per-chip |
-| One seated character | 12,000 | Nine seated = 108,000 worst case |
+| One seated character | **15,000** (revised 2026-08-24 from a guessed 12,000, against a measured 14,114) | Nine seated = 135,000 worst case |
 | Environment and backdrop | 80,000 | Skyline is a card, not geometry |
 | Texture memory | 128 MB | Compressed where supported |
 | Max texture dimension | 2048 | 1024 preferred; characters share one atlas |
@@ -60,7 +62,9 @@ Four lights, one of them realtime.
 | String lights | Baked points | `#FFC07A` | Very low | Overhead sparkle, visible in frame, lighting almost nothing |
 | Sky ambient | Baked hemisphere | `#1A2030` | Floor | Cool, minimal. Keeps shadows blue rather than black |
 
-The practical is the only caster. Its cone is tuned so the felt centre reads at roughly the `--river-felt-lit` value from `02-tokens.md` and the rail edge falls to `--river-felt-shadow`. **The 2D radial gradient and the 3D light must produce the same felt read** — that is the mechanism that makes the two renderers feel like one game.
+The practical is the only caster. Measured working values are in the lighting study at the end of this document, not here — the first-pass intensities in this table were wrong by an order of magnitude and the study supersedes them.
+
+**The two renderers must agree on the felt read, but 2D follows 3D rather than the reverse.** A warm key light cannot reproduce the blue-leaning `--river-felt-lit` token; see Finding 2.
 
 ### Materials
 
@@ -77,9 +81,9 @@ The practical is the only caster. Its cone is tuned so the felt centre reads at 
 
 Refused outright: emissive table rims, LED strips, animated neon, glass with heavy refraction, chrome, anything that reads as a casino floor.
 
-## Camera language
+## Camera language — SUPERSEDED
 
-Fixed cinematic angles with automatic drama, per `docs/spec.md`. No free orbit in v1.
+> The fixed-angle table below is **wrong** and is retained only to show what changed. River's camera is a seat-relative orbit under player control, specified in `06-interaction.md`, with measured per-venue orbit parameters in the orbit study at the end of this document. Do not implement from this table.
 
 | State | Height above table | Distance from centre | Pitch | FOV | Transition |
 |---|---|---|---|---|---|
@@ -160,7 +164,7 @@ All three share the same table, chips, cards, characters and HUD. **Only the roo
 ## Acceptance criteria
 
 - [ ] Scene triangle count, texture memory, draw calls and material count all measured under the budget table, on the default camera with nine seated characters
-- [ ] Felt centre and rail edge in 3D read within perceptual tolerance of the 2D `--river-felt-lit` and `--river-felt-shadow` values, side by side
+- [ ] Felt centre and edge in 3D match the measured values in the lighting study below, and the 2D tokens have been re-tuned to agree with them
 - [ ] No emissive rim, LED strip or neon element anywhere in the scene
 - [ ] Character silhouette test: greyscale the frame to pure black shapes at 1280x720 and confirm every seat is distinguishable
 - [ ] Camera does not move during any betting round
@@ -178,3 +182,406 @@ All three share the same table, chips, cards, characters and HUD. **Only the roo
 **Codex — renderer.** R3F scene, resource lifecycle, instancing, DOM HUD projection, 2D/3D parity, profiling, graceful fallback. Does not reinterpret the lighting rig or camera table; departures route back here.
 
 **Both.** The budget ceilings are policy, not guidance. Exceeding them because a desktop machine copes defeats the entire reason the Q9 retarget was acceptable.
+
+
+## Lighting study — measured findings
+
+Built and rendered in Blender 5.2 on 2026-08-23 through the MCP bridge: felt, rail, table body and denominational chips under the four-light rig, camera at the contract position (1.05m above table, 2.60m back, -22 degrees, 38 degrees FOV). Renders in `D:/River-art/`.
+
+Three findings, all of which change this document.
+
+### Finding 1 — the original light levels were badly wrong
+
+The practical at the first-pass intensity blew the felt to a pale sage and crushed everything outside the pool to pure black. The room read as a void with a table floating in it, not as a room. Corrected values, verified by render:
+
+| Light | Corrected | Was |
+|---|---|---|
+| Table practical | 18W, cone 105 degrees, blend 0.85, soft size 0.25 | 220W, cone 78 degrees, blend 0.55 |
+| Bar backlight | 40W area | 26W |
+| String lights | 8W each | 3W |
+| World ambient | `#101613` at strength 1.0 | `#10131F` at 0.35 |
+
+A floor plane is required. Without one the falloff terminates in nothing and the venue cannot read.
+
+### Finding 2 — a warm key light cannot produce the token felt colour
+
+**This invalidates the original acceptance criterion.** The contract required the 3D felt to read within tolerance of `--river-felt-lit` (`#2A5B45`), a blue-leaning green. Measured across three view transforms:
+
+| View transform | Felt centre | Felt edge |
+|---|---|---|
+| Standard | `#63735C` | `#5D6C53` |
+| Filmic | `#63775C` | `#5D6E53` |
+| AgX | `#58694F` | `#516045` |
+| **Target** | **`#2A5B45`** | **`#122C21`** |
+
+Every transform lands on olive, with red and green near-equal. Pre-correcting the felt base colour cooler (`#1C4232` to `#0B3A33`) moved it in the right direction but nowhere near.
+
+This is not a render setting, it is physics. A warm practical (`#FFD9A0`) multiplied against a green base lifts red disproportionately and produces olive. The only ways to hit a blue-leaning green are to cool the key light toward neutral — which destroys the warm-room thesis this whole document rests on — or to abandon the target.
+
+**Resolution: the 2D tokens follow the 3D render, not the reverse.** 3D is the primary presentation per `docs/spec.md`; the 2D DOM mode is the graphics-saver. Re-tune `--river-felt-lit`, `--river-felt` and `--river-felt-shadow` in `02-tokens.md` to the measured 3D values once the rig is final, so both renderers agree. Do not cool the lamp to chase a token.
+
+### Finding 3 — chip denominations are not readable at the contract camera
+
+At 39mm diameter, 2.60m distance and 38 degrees FOV, chips resolve to a few pixels. Colour is distinguishable; value is not, at any texture resolution.
+
+This is not a defect. It confirms the decision in this document to keep the HUD in the DOM — every amount a player must read is typographic and lives in the HUD layer, never on the 3D chips. Physical chips are **decorative volume only**, and their denomination colours exist to sell the table, not to convey information. Any future proposal to read chip values off the 3D scene should be refused on this evidence.
+
+### Still open
+
+The study covers the table under its lamp. It does not yet cover the venue: no sky, skyline, bar, planters or string-light geometry exist, so the current renders read as a table in darkness rather than a rooftop. Environment is the next study.
+
+
+## Card legibility study — cards do not work at physical scale
+
+Rendered the four-colour deck as real geometry at 63.5 x 88.9mm — true poker card dimensions — on the felt, at all three contract camera states.
+
+### Finding 4 — physically-scaled cards are illegible
+
+At the default camera (1.05m above table, 2.60m back, 38 degrees FOV) a real-sized card resolves to a smudge. Suit colour is faintly detectable; rank and pip are not readable at 1280x720, and would be worse on a TV at distance.
+
+This is the same class of problem as the chips, but with the opposite conclusion. Chips carry no information, so illegibility is fine. **Cards are the single most information-dense object in the game.** A player who cannot read the board cannot play.
+
+Measured minimum scales, rendered and compared:
+
+| Card scale | Physical width | Result |
+|---|---|---|
+| 1.0x | 63.5mm | Illegible. Suit colour barely detectable, rank unreadable |
+| 1.8x | 114mm | **Minimum viable.** Suit instant, rank readable with rank-dominant typography |
+| 2.4x | 152mm | Comfortable. Recommended for board cards |
+| 3.0x | 190mm | Legible but the table starts reading as a toy |
+
+**Cards render at a cheat scale of 1.8x to 2.4x physical.** River's cards are not physically accurate objects and should never be modelled as such. the reference does the same thing — its cards are visibly oversized relative to its chips and hands, for exactly this reason.
+
+### Finding 5 — the traditional card face is wrong for 10-foot reading
+
+A real playing card puts a small rank in the corner and a large pip in the centre. That is correct for a card held in the hand at 30cm and wrong for a card read across a room.
+
+Invert it. Measured working layout:
+
+| Element | Size | Position |
+|---|---|---|
+| Rank glyph | 46% of card width | Centred, upper third |
+| Suit pip | 34% of card width | Centred, lower third |
+| Corner repeats | none | Removed — they read as noise at distance and cost texture space |
+
+With rank-dominant typography, 1.8x is as readable as 2.4x was with a traditional face. **Good face design buys roughly a 25% reduction in the cheat scale**, which is worth having because a smaller cheat keeps the table believable.
+
+### Finding 6 — four-colour deck empirically validated
+
+This is the strongest result in the study. At every scale tested, including 1.0x where ranks were completely unreadable, **suit was identified instantly from colour alone**. Spade black, heart red, diamond blue, club green separate cleanly under the warm practical without the rank being legible at all.
+
+Decision 1 was taken on reasoning. It is now evidence. A two-colour deck at these scales would require reading pip shape, which fails well before rank does.
+
+### Consequence for the renderer
+
+Hero hole cards should live in the **DOM HUD layer**, not as felt geometry — rendered at whatever size the HUD needs, exactly as the reference draws them large at the bottom of frame. Board cards stay in the 3D scene at 2.4x. This keeps every readable surface in the layer that is already solved for typography, focus and reduced motion, and leaves the 3D scene carrying only what it is good at: material, light and volume.
+
+
+---
+
+# REVISION — reference-derived direction (2026-08-24)
+
+Zain supplied the reference reference for all three venues (`docs/images/`). **This section supersedes the thesis-derived direction above where they conflict.** The measured findings — light levels, card scale, four-colour validation, budgets — all still hold. What changes is the target.
+
+## What the references establish
+
+Three decisions, taken by Zain after seeing the thesis rendered:
+
+1. **Bright, like the reference.** The Rooftop is a lit place, not a dark room with a lamp in it. "The room is dark, the felt is lit" survives only in the Basement.
+2. **A different table per venue.** Not one table in three rooms.
+3. **Wide camera, venue clearly visible.** The environment is part of the shot, not peripheral atmosphere.
+
+### Cards are never readable in 3D — confirmed by Zain
+
+In the reference you cannot peek under a card. Your hole cards exist only as the 2D HUD hand; the felt carries backs and, at showdown, generic faces. **This retires Findings 4 and 5 as production requirements** — no cheat scale, no rank-dominant face design, no readable card geometry at all.
+
+3D cards are backs plus low-detail showdown faces. Every readable surface stays in the DOM HUD, which is what the renderer contract already required for other reasons. Finding 6 still stands and moves to the HUD: the four-colour deck is validated and applies to the 2D card components.
+
+**Parked, noted:** real readable 3D card generation is a later step if River ever wants a closer camera or a card-inspection interaction. Not v1.
+
+## Venue one — Rooftop Bar
+
+Night, not dusk. A high terrace above a city.
+
+| Element | Specification |
+|---|---|
+| Sky | Deep magenta-to-violet gradient at the horizon falling to near-black at zenith. Night, with colour |
+| City | Skyline **below and around** the parapet — you are looking down at lit windows, not across at a wall. Distant mountain range on the horizon behind the towers |
+| Vegetation | Palm silhouettes, backlit, framing the top of frame. Dark against the sky, not lit |
+| Fire | Fire bowl and a linear fire feature along the pool edge. **A primary warm light source**, not decoration |
+| Water | Reflective pool, cool blue, frame left. Second light source by reflection |
+| Floor | Light marble or tile in a geometric radial pattern. Pale, which is a large part of why the venue reads bright |
+| Parapet | Curved wall with a lit top edge |
+| Signage | Venue wordmark in warm neon, frame edge |
+| Extras | Distant fireworks. Cheap to fake, sells the height and the occasion |
+
+**Lighting balance:** ambient from sky and city, warm key from the fire features, cool fill from the pool, soft overhead from string lights. No single dominant practical. Characters take visible rim light.
+
+### Rooftop table
+
+| Property | Specification |
+|---|---|
+| Shape | **Oval / racetrack**, long axis across frame |
+| Felt | Near-black navy with an **ornate gold filigree pattern** — scrollwork across the whole playing surface. Not plain felt |
+| Rail | Thick padded leather, black-navy, generously rounded |
+| Base | Modern dark pedestal |
+| Chairs | Black modern swivel chairs, chrome bases, high backed |
+
+## Venue two — Underground Basement
+
+A laundromat back room. The one venue where the original dark thesis holds.
+
+| Element | Specification |
+|---|---|
+| Grade | Cool green-cyan cast over everything. Industrial fluorescent, not warm |
+| Room | Washing machines and dryers along the walls, stacked crates, a stepladder, pipework, posters |
+| Floor | Blue and white checkerboard tile, worn |
+| Light | Overhead fluorescent, flat and unflattering. Slight haze |
+| Mood | Cheap, cramped, improvised. The opposite of the Rooftop in every respect |
+
+### Basement table
+
+| Property | Specification |
+|---|---|
+| Shape | Oval, smaller |
+| Felt | Worn grey-green, stained, no pattern |
+| Rail | Plain timber edge, scuffed |
+| Base | Wooden barrels or crates. Improvised, not furniture |
+| Chairs | Cheap folding metal chairs, mismatched |
+
+## Venue three — High-end Suite
+
+A private club room. Warm, red and gold, expensive without being a casino floor.
+
+| Element | Specification |
+|---|---|
+| Grade | Deep reds and golds, warm throughout |
+| Walls | Red panelling and patterned fabric |
+| Feature | Gold rod chandelier over the table; back bar with lit bottle shelves |
+| Foreground | **Ornate gold scrollwork balustrade** partially framing the bottom of shot. Strong depth cue and the venue's signature |
+| Light | Layered warm practicals — chandelier, wall sconces, bar backlight |
+| Extras | Bar staff and standing patrons in the background. The room is populated beyond the table |
+
+### Suite table
+
+| Property | Specification |
+|---|---|
+| Shape | Oval |
+| Felt | Bright olive-gold green, clean, no pattern |
+| Rail | Dark padded leather |
+| Base | Solid dark pedestal |
+| Chairs | Upholstered dining chairs in tan and mustard |
+
+## Characters
+
+Required, and the largest single reason those frames read as places rather than rooms. Confirmed by Zain.
+
+| Property | Specification |
+|---|---|
+| Base meshes | **One male, one female.** Everything else is customisation on top |
+| Customisable | Face, hair, plus the standard seated-character axes — skin, outfit, accessories |
+| Headwear | Bowler hats, fedoras, caps, headbands. **The primary silhouette differentiator** — visible in every reference frame and doing most of the work of making seats distinguishable |
+| Style | Stylised-realistic with slightly exaggerated proportions. Not cartoon, not photoreal |
+| Framing | Seated, visible from roughly the waist up. Below-waist geometry is occluded in every camera |
+| Faces | Simple. Textured features, no facial rig |
+
+This changes `11-character-pipeline.md`: the pipeline produces **two rigged base meshes plus a customisation layer**, rather than a fixed cast. Parametric generation is still the right route — it is exactly how you get two consistent bases that share one rig and one animation set.
+
+## Camera
+
+Wide enough that the terrace, skyline and chairs are all in shot. In the reference the whole table, every seat and a substantial amount of venue are visible, with the hero seen from behind at the bottom of frame.
+
+The camera-state table earlier in this document was authored for a tight table-first framing and needs re-deriving against this. Superseded pending a new study.
+
+## What survives from the original direction
+
+- Every budget ceiling.
+- The corrected light *levels* as a technique, though not the single-practical rig.
+- Instancing requirements for chips.
+- HUD stays in the DOM — now reinforced rather than weakened, since cards are HUD-only.
+- Four-colour deck, validated, applied to the HUD cards.
+- No purchase surface, no real-money affordance, ever.
+
+
+## Venue build study — Rooftop and Basement (2026-08-24)
+
+Both venues built and rendered from the reference. Files: `D:/River-art/blend/rooftop_lookdev.blend`, `basement_lookdev.blend`.
+
+### Finding 7 — the venue system works, and it is cheap
+
+The same table assembly, characters and chips were reused across both venues. Only the room, the lighting and the material tints changed, and the two frames read as completely different places. That is the venue system in `01-thesis.md` proven rather than asserted.
+
+| Venue | Triangles | Materials | Read |
+|---|---|---|---|
+| Rooftop | 63,984 | 19 | Night terrace, city below, warm fire pools against cool sky |
+| Basement | 42,640 | 24 | Laundromat, cool green fluorescent, checkerboard tile |
+| Budget | 250,000 | 24 | |
+
+**Environment is not where the budget goes.** Both venues sit at a quarter of the ceiling with everything visible. Nine production characters at 12,000 each is 108,000 — nearly half the total budget on its own. Any future budget pressure will come from the cast, never the room, so venue detail can be spent freely and character count cannot.
+
+### Finding 8 — measured seating geometry
+
+Players were initially placed at 1.72x / 1.95x the felt radii and their arms had to reach absurdly far. Corrected and verified by render:
+
+| Property | Value |
+|---|---|
+| Felt radii | 1.24m x 0.72m (2.48 x 1.44m oval) |
+| Seat ring radii | **1.42x / 1.58x** the felt radii |
+| Rail contact radii | 1.05x / 1.09x the felt radii |
+| Seat height | 0.46m, table surface 0.76m |
+| Shoulder height seated | 0.99m, head centre 1.22m |
+
+### Finding 9 — primitive characters hit a hard ceiling
+
+Nine seated figures were assembled from cylinders and spheres with varied headwear, hair, skin and outfits. They successfully prove composition, silhouette spacing and how much the table needs to be occupied — the frames are transformed by their presence, which confirms Zain's judgement that characters matter most.
+
+They also look like robots, and no amount of further primitive work fixes that. Arms in particular read as plumbing. **This is the evidence for the parametric route in `11-character-pipeline.md`** — primitives are a blocking tool, not a fallback. At 1,076 triangles each they are also nowhere near the 12,000 budget, so the constraint on real characters is authoring effort, not polygons.
+
+### Two pipeline notes for DeepSeek
+
+**Do not build tiled surfaces as object grids.** The basement checkerboard was built as 304 separate plane objects. It should be one plane with a checker texture. Triangle count barely moved but object count exploded, and object count is what drives draw calls — the budget table caps those at 120.
+
+**Textured materials cannot be retinted through the BSDF.** Once a material drives Base Color from a ColorRamp, setting `Principled BSDF.Base Color` silently does nothing. Venue tinting must edit the ramp stops. This will bite anyone writing a "swap the palette per venue" script.
+
+
+---
+
+# Revision — behaviour reference (2026-08-24)
+
+`docs/behaviour-reference.md` supersedes three things in this document.
+
+## Three venues at launch, the reference's set as general law
+
+**Settled 2026-08-24: three launch venues, not five.** the reference's wider venue set stays authoritative as *reference law* — its staging, lighting language, dealer conventions and identity-per-room approach govern River's art direction. River ships three rooms. Biker Bar and Casino are parked as post-launch, not cancelled, and the venue system is deliberately built so adding one is a room and a light rig rather than a new product.
+
+Shipping at launch:
+
+| Venue | Identity | Dealer |
+|---|---|---|
+| **The Rooftop** | High-roller terrace, night city, fire and pool | rotating player |
+| **Laundromat** | Cheap back room, cool fluorescent, checkerboard tile | rotating player |
+| **Executive Suite** | Red and gold private club, chandelier, gold balustrade | rotating player |
+
+Venues change art, lighting, background life, ambient SFX, music, dealer presentation and theme. They **never** change poker rules, hand ranking, betting or timers. Treat venue as presentation configuration, not a rules variant.
+
+Rooftop and Laundromat lookdev builds exist (`D:/River-art/blend/`). Executive Suite is fully specced from reference and unbuilt.
+
+**Parked, post-launch:** Biker Bar (rough, warm, cluttered, rotating player-dealer) and Casino (formal floor, other tables and patrons visible, **dedicated croupier NPC** — the only venue needing that presentation path). The croupier variant still belongs in the dealer-presentation contract so the system stays ready for it.
+
+## Correction to Finding 3 — chips are not decorative
+
+Finding 3 concluded that because chip denominations are unreadable at the play camera, physical chips are "decorative volume only". That was half right and the wrong half was load-bearing.
+
+The reference is explicit: **physical chip stack height must represent the player's actual table stack at a glance.** A rich stack must visibly dwarf a short one.
+
+| Property | Correct position |
+|---|---|
+| Denomination colour readable at camera | No, and not required |
+| Stack height tracks magnitude | **Yes, required** |
+| One mesh per literal chip | No — denomination stacks and pooled instances |
+| Numeric value | HUD nameplate, never read off the chips |
+
+Chips carry magnitude; the HUD carries value.
+
+## The camera table is superseded
+
+The fixed default / showdown / all-in camera table earlier in this document described a locked cinematic camera. River's camera is a **seat-relative orbit under player control** with temporary cinematic takeover — see `06-interaction.md`, which is now canonical for camera behaviour.
+
+What survives from the camera study: the venue must be clearly visible in the default framing, and a tight crop of felt and hands is explicitly the wrong composition.
+
+## Findings 4 and 5 remain retired
+
+Card cheat scale and rank-dominant face design were retired when Zain confirmed cards are never readable in 3D. That still holds for **hole** cards. Community cards are readable in-world *and* mirrored in the HUD, so the felt board does need legible faces — but the HUD mirror carries the reading, so no cheat scale is required.
+
+Finding 6 — four-colour deck validation — stands and applies to the HUD cards.
+
+
+## Orbit camera study — Rooftop (2026-08-24)
+
+Eight-angle turnaround at 45-degree intervals, orbit radius 6.1m, height 4.05m, pitch 62 degrees, FOV 64. Contact sheets in `D:/River-art/orbit/`. This was the first test of the venues against the orbit camera the behaviour reference requires, and it found two structural failures that a single fixed camera angle had completely hidden.
+
+### Finding 10 — the venue was a one-sided stage set
+
+Yaw 0 through 135 had the pool, fire, palms and string lights. Yaw 180 through 315 were a bare terrace against a flat magenta band. Every previous render in this document was shot from the dressed side.
+
+**With an orbit camera, every angle is somebody's default angle.** A venue must be dressed through a full 360 degrees or it collapses the moment a player rotates.
+
+Fixed by distributing features around the whole terrace: second bar and stools at 45 degrees, entrance stairhead and venue signage at 135, lounge cluster and second fire bowl at 180, planters with palms at 225/270/315, glass balustrade viewpoint at 250-290, and the string-light run rebuilt as a full ring of 48 bulbs rather than a single span.
+
+**This applies to all five venues.** Any venue built and judged from one angle is unbuilt.
+
+### Finding 11 — the orbit path must be kept physically clear
+
+The back-quarter palms were placed at radius 6.0m. The camera orbits at 6.1m. At yaw 225 the camera was **inside a palm tree**, and the fronds filled the lower frame as large black shapes that read convincingly as shadow artifacts.
+
+This is exactly the camera-bounds rule already written in `06-interaction.md` — do not let the orbit clip through venue geometry — but it had never been measured. Now it is:
+
+| Property | Value |
+|---|---|
+| Orbit radius | 6.1m |
+| Camera height | 4.05m |
+| **Minimum prop clear radius** | **8.4m** for anything above 2m tall |
+| Terrace radius | scaled to 1.62x to keep props on deck |
+
+159 props were pushed outside the clear radius. Venue kit generation must respect this annulus.
+
+### Finding 12 — only table-level geometry may cast shadows
+
+Raising the overhead table light above the palm canopy made the canopy cast knife-edged shadows across the entire terrace. Shadow casting is now restricted to the table, chairs, characters, chips and cards; 493 decorative objects were excluded via `visible_shadow = False`.
+
+The overhead light was also only 1.84m above the felt, producing long hard chair shadows. Corrected to 3.14m above the felt at size 5.5, which is the single realtime caster the budget allows.
+
+### Diagnostic technique worth reusing
+
+When an artifact appears, isolate the layer before guessing:
+
+| Render | Isolates |
+|---|---|
+| Workbench, flat shading | geometry only - if the artifact persists it is a mesh, not lighting |
+| EEVEE with all lights `hide_render` | world lighting only - separates lamp shadows from environment |
+| Per-object bounding-box scan against the floor plane | geometry punching through surfaces |
+
+The wedges survived both light-muting passes, which is what finally pointed at geometry occluding the camera rather than shadows being cast onto it.
+
+
+## Material study and Basement orbit (2026-08-24)
+
+### Finding 13 — the Basement had the same one-sided failure
+
+Confirmed that Finding 10 generalises. The Basement's washing machines were on a single wall; the other three were bare. Dressed out with a second machine bank on the west wall, folding counter and laundry carts east, door / notice board / vending south, ceiling pipework running the full width, and clutter distributed so no quarter is empty.
+
+Indoor venues need a tighter orbit than the terrace: **radius 3.6m, height 2.45m, pitch 72 degrees** against the Rooftop's 6.1m / 4.05m / 62 degrees. Orbit parameters are per-venue; the interaction model is not.
+
+### Finding 14 — procedural wave textures are the wrong tool for stone and ornament
+
+Three failed passes, recorded so nobody repeats them.
+
+| Attempt | Result |
+|---|---|
+| Wave texture for marble veining | Corduroy, then zebra stripes. Stone does not ripple |
+| Crossed wave textures thresholded for gold scrollwork | Dense confetti, then sparse blobs. Never read as line work |
+| Lowering frequencies to fix both | Made the marble worse and the filigree no better |
+
+What worked:
+
+| Surface | Correct tool |
+|---|---|
+| Stone, concrete, plaster | **Noise** at low contrast with a tight colour ramp. Mottle, not pattern |
+| Fabric nap | Noise at very high scale with a shallow bump |
+| Ornament and line work | **Geometry or a real texture map.** Not procedural |
+
+The Rooftop table now uses a plain navy nap with **two clean concentric gold border rings** — 2 objects replacing the 31-torus ring chain that read as a bicycle chain. A clean table beats a badly patterned one, and it dropped object count at the same time.
+
+### Finding 15 — object count is the budget that is actually in trouble
+
+Measured on the finished Rooftop:
+
+| Metric | Value | Budget | Status |
+|---|---|---|---|
+| Triangles | 85,454 | 250,000 | comfortable |
+| Materials | 55 | 24 | **over** |
+| Objects | 879 | 120 draw calls | **far over** |
+
+Triangles were never the risk. **Object and material count are.** Most of the 879 are individual chips and string-light bulbs which must become instanced meshes sharing one draw call, and the 55 materials are largely per-character palette variants that must become one atlas.
+
+This is a production requirement for the venue kit and character pipeline, not a lookdev concern — but it needs recording now because the lookdev builds will otherwise be used as a reference for object structure.
