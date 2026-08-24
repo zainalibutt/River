@@ -68,6 +68,8 @@ from values import (
     VENUE_LIGHTS,
     CHIP_DENOMS,
     CHIP_THICK,
+    FELT_RX,
+    FELT_RY,
     SEAT_H,
     VENUES,
     WOOD_HEX,
@@ -81,6 +83,10 @@ VENUE_CHAIR = {
     'basement': chair_folding,
     'suite': chair_dining,
 }
+
+CHARACTER_SCALE = 0.73
+CHARACTER_SEAT_Z = 0.05
+CHARACTER_VARIANTS = ('male', 'female')
 
 
 def build_chip_meshes():
@@ -151,6 +157,113 @@ def build_chairs(venue, chair_fn, chair_mat, count=9):
             (x, y, 0.0),
             (0.0, 0.0, angle + math.pi),
         )
+
+
+def character_seat_positions(venue, count=9):
+    if venue['id'] == 'suite':
+        return seat_positions(count, FELT_RX * 1.30, FELT_RY * 1.44)
+    return seat_positions(count, FELT_RX * 1.42, FELT_RY * 1.58)
+
+
+def build_character_atlas():
+    image = bpy.data.images.new('river_character_atlas', width=1024, height=1024, alpha=True)
+    image.generated_color = (0.52, 0.38, 0.30, 1.0)
+    image.filepath_raw = os.path.join(TEX_DIR, 'character_atlas.png')
+    image.file_format = 'PNG'
+    image.save_render(image.filepath_raw)
+    material = bpy.data.materials.new('river_character_atlas_material')
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    texture = nodes.new('ShaderNodeTexImage')
+    texture.name = 'river_character_atlas'
+    texture.image = image
+    bsdf = nodes.get('Principled BSDF')
+    if bsdf is not None:
+        links.new(texture.outputs['Color'], bsdf.inputs['Base Color'])
+        bsdf.inputs['Roughness'].default_value = 0.62
+    material['atlasSchema'] = 'skin garment hat accessories plus tint masks'
+    material['paletteProperty'] = 'paletteIndex'
+    return material
+
+
+def import_character_templates():
+    templates = {}
+    for variant in CHARACTER_VARIANTS:
+        path = os.path.join(OUT_DIR, 'char_' + variant + '.glb')
+        if not os.path.exists(path):
+            raise SystemExit('FAIL: missing character asset ' + path)
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=path)
+        imported_all = [obj for obj in bpy.data.objects if obj not in before]
+        imported = [
+            obj for obj in bpy.data.objects
+            if obj not in before and (
+                obj.type == 'ARMATURE'
+                or (obj.type == 'MESH' and (obj.data is not None and (
+                    obj.data.name.startswith('base') or obj.name.startswith('garment_')
+                )))
+            )
+        ]
+        if not imported:
+            raise SystemExit('FAIL: character asset imported no renderable objects ' + path)
+        for obj in imported_all:
+            if obj not in imported:
+                bpy.data.objects.remove(obj, do_unlink=True)
+        templates[variant] = imported
+    return templates
+
+
+def duplicate_character(template, seat_index, variant, x, y, angle, atlas_material):
+    mapping = {}
+    for source in template:
+        clone = source.copy()
+        if source.data is not None:
+            clone.data = source.data
+        bpy.context.scene.collection.objects.link(clone)
+        mapping[source] = clone
+    for source, clone in mapping.items():
+        clone.parent = mapping.get(source.parent)
+        for modifier in clone.modifiers:
+            if modifier.type == 'ARMATURE' and modifier.object in mapping:
+                modifier.object = mapping[modifier.object]
+        if clone.type == 'MESH':
+            if clone.data.uv_layers:
+                clone.data.uv_layers[0].name = 'UVMap'
+            if source.name.startswith('char_') or source.data.name.startswith('base'):
+                clone.data.name = 'char_' + variant + '_body'
+            else:
+                clone.data.name = 'char_' + variant + '_garment'
+            clone.data.materials.clear()
+            clone.data.materials.append(atlas_material)
+            clone['paletteIndex'] = seat_index % 9
+            clone['atlasMaterial'] = atlas_material.name
+    root = bpy.data.objects.new('river_character_%02d' % seat_index, None)
+    bpy.context.scene.collection.objects.link(root)
+    for source, clone in mapping.items():
+        if source.parent is None:
+            clone.parent = root
+    root.location = (x, y, CHARACTER_SEAT_Z)
+    root.rotation_euler = (0.0, 0.0, angle)
+    root.scale = (CHARACTER_SCALE, CHARACTER_SCALE, CHARACTER_SCALE)
+    root['seatIndex'] = seat_index
+    root['variant'] = variant
+    root['paletteIndex'] = seat_index % 9
+    root['atlasMaterial'] = atlas_material.name
+    return root
+
+
+def build_venue_characters(venue):
+    atlas_material = build_character_atlas()
+    templates = import_character_templates()
+    positions = character_seat_positions(venue)
+    for seat_index, (x, y) in enumerate(positions):
+        variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]
+        angle = math.atan2(-y, -x) + math.pi
+        duplicate_character(templates[variant], seat_index, variant, x, y, angle, atlas_material)
+    for template in templates.values():
+        for obj in template:
+            bpy.data.objects.remove(obj, do_unlink=True)
 
 
 def build_rooftop(venue):
@@ -605,6 +718,67 @@ def append_gpu_instances(glb, pools):
         handle.write(output)
 
 
+def dedupe_materials(glb):
+    with open(glb, 'rb') as handle:
+        raw = handle.read()
+    offset = 12
+    json_chunk = None
+    binary = b''
+    while offset < len(raw):
+        chunk_length, chunk_type = struct.unpack_from('<II', raw, offset)
+        offset += 8
+        chunk = raw[offset:offset + chunk_length]
+        offset += chunk_length
+        if chunk_type == 0x4E4F534A:
+            json_chunk = chunk
+        elif chunk_type == 0x004E4942:
+            binary += chunk
+    if json_chunk is None:
+        raise SystemExit('FAIL: exported GLB has no JSON chunk')
+    gltf = json.loads(json_chunk.decode('utf-8'))
+
+    def normalise(value):
+        if isinstance(value, dict):
+            return {
+                key: normalise(item)
+                for key, item in value.items()
+                if not (key == 'texCoord' and item == -1)
+            }
+        if isinstance(value, list):
+            return [normalise(item) for item in value]
+        return value
+
+    materials = gltf.get('materials', [])
+    canonical = []
+    mapping = {}
+    seen = {}
+    for index, material in enumerate(materials):
+        key = json.dumps(normalise(material), sort_keys=True, separators=(',', ':'))
+        target = seen.get(key)
+        if target is None:
+            target = len(canonical)
+            seen[key] = target
+            canonical.append(material)
+        mapping[index] = target
+    if len(canonical) == len(materials):
+        return
+    gltf['materials'] = canonical
+    for mesh in gltf.get('meshes', []):
+        for primitive in mesh.get('primitives', []):
+            if 'material' in primitive:
+                primitive['material'] = mapping[primitive['material']]
+    json_bytes = json.dumps(gltf, separators=(',', ':')).encode('utf-8')
+    json_bytes += b' ' * ((-len(json_bytes)) % 4)
+    total_length = 12 + 8 + len(json_bytes) + 8 + len(binary)
+    output = bytearray(struct.pack('<4sII', b'glTF', 2, total_length))
+    output.extend(struct.pack('<II', len(json_bytes), 0x4E4F534A))
+    output.extend(json_bytes)
+    output.extend(struct.pack('<II', len(binary), 0x004E4942))
+    output.extend(binary)
+    with open(glb, 'wb') as handle:
+        handle.write(output)
+
+
 def build_venue(venue, chip_meshes, card_mesh):
     shared_meshes = list(chip_meshes.values()) + [card_mesh]
     keep_names = {mesh.name for mesh in shared_meshes}
@@ -615,6 +789,7 @@ def build_venue(venue, chip_meshes, card_mesh):
     chair_mat = colorramp_material(venue['id'] + '_chair', [(0.0, venue['chair']), (1.0, venue['chair'])])[0]
     build_table(venue, rail_mat, wood_mat)
     build_chairs(venue, chair_fn, chair_mat)
+    build_venue_characters(venue)
     chip_instances = {}
     for index in range(4):
         denom = list(CHIP_DENOMS)[index % len(CHIP_DENOMS)][0]
@@ -655,8 +830,10 @@ def build_venue(venue, chip_meshes, card_mesh):
         export_yup=True,
         export_materials='EXPORT',
         export_lights=True,
+        export_extras=True,
     )
     append_gpu_instances(glb, pools)
+    dedupe_materials(glb)
     report = checker.Report()
     gltf, binary = checker.read_glb(glb)
     checker.compute_counts(gltf, binary, report)
