@@ -7,6 +7,8 @@ import { isFairnessSeed } from './fairness.js'
 import type { Ledger } from './ledger.js'
 import type { Emote, RoomCommand, RoomEvent, RoomResult, RoomView } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
+import type { EquipOutcome, PurchaseOutcome, TableItemStore } from './table-item-service.js'
+import { equipItem, purchaseItem } from './table-item-service.js'
 
 export interface ClientPeer {
   send(message: string): void
@@ -41,6 +43,8 @@ export type ClientMessage =
   | { kind: 'command'; requestId: string; command: ClientRoomCommand }
   | { kind: 'social'; requestId: string; command: ClientSocialCommand }
   | { kind: 'resync'; requestId: string }
+  | { kind: 'buyTableItem'; requestId: string; itemId: string }
+  | { kind: 'equipTableItem'; requestId: string; itemId: string }
   | { kind: 'claimDaily'; requestId: string }
   | { kind: 'claimRescue'; requestId: string }
 
@@ -56,6 +60,7 @@ export type ServerMessage =
     }
   | { kind: 'social'; roomId: string; requestId: string | null; event: SocialEvent }
   | { kind: 'grant'; requestId: string; outcome: GrantOutcome }
+  | { kind: 'tableItem'; requestId: string; outcome: PurchaseOutcome | EquipOutcome }
   | { kind: 'error'; requestId: string | null; code: string; message: string }
 
 interface ConnectionState {
@@ -82,6 +87,7 @@ export interface RoomHubOptions {
   verifyToken: TokenVerifier
   ledger: Ledger
   economy?: SupabaseEconomy
+  tableItems?: TableItemStore
   createRoom?: (roomId: string) => Room
 }
 
@@ -208,6 +214,14 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     return command === null ? null : { kind: 'social', requestId, command }
   }
   if (value.kind === 'resync') return { kind: 'resync', requestId }
+  if (
+    (value.kind === 'buyTableItem' || value.kind === 'equipTableItem') &&
+    typeof value.itemId === 'string' &&
+    value.itemId.length > 0 &&
+    value.itemId.length <= 64
+  ) {
+    return { kind: value.kind, requestId, itemId: value.itemId }
+  }
   if (value.kind === 'claimDaily') return { kind: 'claimDaily', requestId }
   if (value.kind === 'claimRescue') return { kind: 'claimRescue', requestId }
   return null
@@ -217,6 +231,7 @@ export class RoomHub {
   private readonly verifyToken: TokenVerifier
   private readonly ledger: Ledger
   private readonly economy: SupabaseEconomy | null
+  private readonly tableItems: TableItemStore | undefined
   private readonly createRoom: (roomId: string) => Room
   private readonly rooms = new Map<string, RoomState>()
   private readonly activePlayers = new Map<string, ConnectionState>()
@@ -227,6 +242,7 @@ export class RoomHub {
     this.verifyToken = options.verifyToken
     this.ledger = options.ledger
     this.economy = options.economy ?? null
+    this.tableItems = options.tableItems
     this.createRoom =
       options.createRoom ??
       ((roomId) =>
@@ -273,6 +289,10 @@ export class RoomHub {
     }
     if (message.kind === 'claimDaily' || message.kind === 'claimRescue') {
       await this.grant(connection, message)
+      return
+    }
+    if (message.kind === 'buyTableItem' || message.kind === 'equipTableItem') {
+      await this.tableItem(connection, message)
       return
     }
     if (connection.roomId === null) {
@@ -426,6 +446,47 @@ export class RoomHub {
       this.send(connection, { kind: 'grant', requestId: message.requestId, outcome })
     } catch {
       this.error(connection, message.requestId, 'grant_failed', 'Grant could not be processed')
+    } finally {
+      this.grantInFlight.delete(player.playerId)
+    }
+  }
+
+  /**
+   * Buy or equip a table item.
+   *
+   * Serialised per player like grants are: two purchases racing would read the
+   * same balance and both pass the affordability check. The ledger ref would
+   * still stop a double debit, but the second would fail confusingly rather
+   * than being refused cleanly.
+   */
+  private async tableItem(
+    connection: ConnectionState,
+    message: Extract<ClientMessage, { kind: 'buyTableItem' | 'equipTableItem' }>,
+  ): Promise<void> {
+    const player = connection.player
+    if (player === null) {
+      this.error(connection, message.requestId, 'not_authenticated', 'Authenticate first')
+      return
+    }
+    if (this.tableItems === undefined) {
+      this.error(connection, message.requestId, 'items_unavailable', 'Table items are unavailable')
+      return
+    }
+    if (this.grantInFlight.has(player.playerId)) {
+      this.error(connection, message.requestId, 'grant_in_flight', 'A purchase is already running')
+      return
+    }
+    this.grantInFlight.add(player.playerId)
+    try {
+      const store = this.tableItems
+      const outcome =
+        message.kind === 'buyTableItem'
+          ? await purchaseItem(player.playerId, message.itemId, { ledger: this.ledger, store })
+          : await equipItem(player.playerId, message.itemId, { store })
+      if (outcome.kind === 'purchased') connection.balance = outcome.balance
+      this.send(connection, { kind: 'tableItem', requestId: message.requestId, outcome })
+    } catch {
+      this.error(connection, message.requestId, 'item_failed', 'That could not be processed')
     } finally {
       this.grantInFlight.delete(player.playerId)
     }

@@ -7,6 +7,7 @@ import { createSupabaseTokenVerifier } from './auth.js'
 import { readServerConfig } from './config.js'
 import { createSupabaseEconomy } from './economy-service.js'
 import { SupabaseLedger } from './ledger.js'
+import { SupabaseTableItemStore } from './table-item-store.js'
 import { RoomHub } from './transport.js'
 import { attachRiverWebSocketServer } from './websocket.js'
 
@@ -49,6 +50,10 @@ async function start(): Promise<void> {
       supabaseUrl: config.supabaseUrl,
       serviceRoleKey: config.serviceRoleKey,
       ledger,
+    }),
+    tableItems: new SupabaseTableItemStore({
+      supabaseUrl: config.supabaseUrl,
+      serviceRoleKey: config.serviceRoleKey,
     }),
   })
   const sockets = attachRiverWebSocketServer(server, hub)
