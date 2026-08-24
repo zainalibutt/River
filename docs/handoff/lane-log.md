@@ -20,16 +20,35 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 4V verify panel | Claude | `ca259f3` | Client-side WebCrypto recomputation. Also fixed repo-wide CRLF via .gitattributes |
 | 2026-08-24 | 4G turn timers | Codex | `55c8136` | Accepted. Budgets 15/20/20/25 from config, timeout is check-else-fold, late client actions coerced |
 | 2026-08-24 | 4R preset actions | Claude | `744dc68` | Local half. Arm/commit/invalidate, clears on street change |
+| 2026-08-24 | 4J chat and emote transport | Codex | `530b371` | Accepted. Emotes blocked during your own decision window, social never enters room state, shared rate limit. **Landed inside Claude's art commit - see the note below** |
+| 2026-08-24 | 5C rooftop skyline | Claude | `530b371` | Skyline, mountains, palms. Repaired the camera gate, which was silently passing everything, then used it to find three mis-placed venue elements |
 
 ## In flight
 
 | Packet | Owner | Dispatched | Notes |
 |---|---|---|---|
 | 4H economy wiring | DeepSeek | 2026-08-24 | **Stalled mid-work.** `economy-service.ts` and a migration sit uncommitted and fail typecheck at line 204 plus formatting. Watch for it adding a state table instead of deriving from ledger refs |
-| 4J chat and emote transport | Codex | 2026-08-24 | Re-dispatched after 4G. Closes the last Phase 4 item |
+
+## Open record issue
+
+`530b371` carries two packets: Claude's Rooftop skyline and Codex's 4J social
+wire. The commit message describes only the art. Codex's files were staged in
+the index when Claude committed, and `git commit` commits the whole index rather
+than only what was just added.
+
+**Rule from this:** run `git diff --cached --name-only` before every commit while
+more than one model is live. Staging is shared state between agents.
 
 ## Standing review notes
 
+- **A gate that never fires is worse than no gate.** `clear_radius_violations`
+  read `bound_box` before the depsgraph updated, so it measured stale data and
+  passed everything. It only ever fired in a hand-written test that called
+  `view_layer.update()`. Test a gate against a known-bad input **in the real
+  build path**, not in a bespoke script.
+- **Bounding boxes lie about rings.** An axis-aligned box around a ring has its
+  corners at R*sqrt(2), so a 4.1m parapet measures 5.8m and a 45m skyline
+  measures 64m. Measure per vertex when the mesh is merged or annular.
 - **Instrument before observation.** Four false defects this project came from a
   faulty instrument, not faulty code: a hot-reloading tree, an incomplete scene
   reset before a GLB import, a `--factory-startup` launch that hid every add-on,
