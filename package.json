@@ -10,12 +10,14 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
-    "dev": "npm run dev --workspace @river/web",
-    "dev:server": "tsx watch apps/server/src/index.ts",
-    "build": "npm run build --workspace @river/web",
+    "dev": "npm run dev --workspace @river/server",
+    "dev:web": "npm run dev --workspace @river/web",
+    "dev:server": "npm run dev --workspace @river/server",
+    "build": "npm run build --workspace @river/web && npm run build --workspace @river/server",
+    "start": "npm run start --workspace @river/server",
     "demo": "tsx packages/engine/src/cli/demo.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
     "lint": "biome check .",

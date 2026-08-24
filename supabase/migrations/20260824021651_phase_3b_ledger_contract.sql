@@ -1,23 +1,25 @@
-create table public.players (
-  id uuid primary key references auth.users (id) on delete restrict,
-  display_name text not null default 'Player',
-  created_at timestamptz not null default now()
-);
+alter table public.players
+  drop constraint if exists players_id_fkey,
+  add constraint players_id_fkey foreign key (id) references auth.users (id) on delete restrict;
 
-create table public.chip_ledger (
-  id bigint generated always as identity primary key,
-  player_id uuid not null references public.players (id) on delete restrict,
-  delta bigint not null,
-  reason text not null check (char_length(reason) between 1 and 64),
-  ref text not null check (char_length(ref) between 1 and 128),
-  created_at timestamptz not null default now()
-);
+alter table public.chip_ledger
+  drop constraint if exists chip_ledger_player_id_fkey,
+  add constraint chip_ledger_player_id_fkey foreign key (player_id) references public.players (id) on delete restrict;
 
-create index chip_ledger_player_idx on public.chip_ledger (player_id, id);
+update public.chip_ledger
+set ref = 'legacy:' || id::text
+where ref is null;
+
+alter table public.chip_ledger
+  alter column ref set not null;
+
+alter table public.chip_ledger
+  add constraint chip_ledger_ref_length check (char_length(ref) between 1 and 128);
+
 create unique index chip_ledger_player_ref_idx on public.chip_ledger (player_id, ref);
 
-alter table public.players enable row level security;
-alter table public.chip_ledger enable row level security;
+drop policy if exists players_select_own on public.players;
+drop policy if exists players_update_own on public.players;
 
 revoke all on table public.players from anon, authenticated;
 revoke delete, truncate on table public.players from service_role;
@@ -34,22 +36,13 @@ revoke all on table public.chip_ledger from anon, authenticated;
 revoke update, delete, truncate on table public.chip_ledger from service_role;
 grant select, insert on table public.chip_ledger to service_role;
 
-create view public.player_balances
-with (security_invoker = true) as
-select
-  player_id,
-  sum(delta)::bigint as balance
-from public.chip_ledger
-group by player_id;
-
 revoke all on table public.player_balances from anon, authenticated;
 grant select on table public.player_balances to service_role;
 
 create schema if not exists private;
-
 revoke all on schema private from public;
 
-create table private.economy_config (
+create table if not exists private.economy_config (
   key text primary key,
   value bigint not null check (value >= 0)
 );
@@ -57,7 +50,8 @@ create table private.economy_config (
 revoke all on table private.economy_config from public, anon, authenticated;
 
 insert into private.economy_config (key, value)
-values ('signup_bankroll', 100000);
+values ('signup_bankroll', 100000)
+on conflict (key) do nothing;
 
 create or replace function private.handle_new_user()
 returns trigger
@@ -86,9 +80,16 @@ $$;
 
 revoke all on function private.handle_new_user() from public;
 
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function private.handle_new_user();
+insert into public.chip_ledger (player_id, delta, reason, ref)
+select
+  players.id,
+  (select value from private.economy_config where key = 'signup_bankroll'),
+  'signup',
+  'signup'
+from public.players
+where not exists (
+  select 1 from public.chip_ledger where chip_ledger.player_id = players.id
+);
 
 create or replace function public.apply_ledger_entry(
   p_player_id uuid,

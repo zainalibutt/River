@@ -5,10 +5,27 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js"
+  },
   "dependencies": {
-    "@river/engine": "0.1.0"
+    "@river/engine": "0.1.0",
+    "dotenv": "17.4.2",
+    "jose": "6.2.10",
+    "next": "16.3.2",
+    "ws": "8.21.3"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./wire": {
+      "types": "./src/transport.ts",
+      "import": "./dist/transport.js",
+      "default": "./dist/transport.js"
+    }
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1"
   }
 }
