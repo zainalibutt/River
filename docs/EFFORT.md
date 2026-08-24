@@ -60,9 +60,17 @@ noted; Codex and DeepSeek report their own.
 | Metric | Value |
 |---|---|
 | Role | Transport, fairness rework, timers, social wire, asset pipeline, migrations |
-| Model tier | 5.6 Terra High for security and architecture, Terra/Luna Medium for specified work |
-| Tokens | to be filled |
+| Tokens | not reported by the interface |
+| Sessions | not reported by the interface |
+| Wall-clock time | not reported by the interface |
+| Model tiers | 5.6 Terra High for security and architecture; Terra/Luna Medium for specified work |
+| Approximate tier share | not reported by the interface |
 | Notes | Tier was deliberately dropped after 4F: top tier for novel security reasoning, cheaper tier for anything already specified to an acceptance list |
+
+In practice, Terra/Luna Medium handled packets with precise contracts and
+acceptance lists without an observed quality regression. The top tier remained
+valuable for novel security and architecture reasoning and for ambiguous
+diagnosis. The interface does not report a reliable percentage split.
 
 ### DeepSeek — bounded deterministic engine modules
 
