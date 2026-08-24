@@ -102,3 +102,52 @@ SUITE = {
 }
 
 VENUES = [ROOFTOP, BASEMENT, SUITE]
+
+# Measured light rigs, extracted from the lookdev builds and recorded in
+# docs/design/14-venue-build-spec.md. Geometry alone renders flat - these are
+# what make a venue read as its room. Energies are Blender area-light watts.
+# type, colour, energy, size, shadow, (x, y, z), (rot_x_deg, rot_y_deg, rot_z_deg)
+VENUE_LIGHTS = {
+    'rooftop': {
+        'world': ('101613', 1.5),
+        'lights': [
+            ('table',     'AREA', 'FFE2BC', 240.0,  5.5, True,  (0.0, 0.0, 3.9),  (0, 0, 0)),
+            ('sky_fill',  'AREA', '5C74B8', 300.0, 14.0, False, (0.0, 1.0, 7.0),  (0, 0, 0)),
+            ('fire_key',  'AREA', 'FF7A22', 320.0,  6.0, False, (-4.2, 3.0, 1.6), (64, 0, -58)),
+            ('pool',      'AREA', '3F9BFF', 190.0,  5.0, False, (-5.0, 5.6, 0.9), (20, 0, 0)),
+            ('back_fill', 'AREA', '6E5C9E', 130.0,  7.0, False, (0.0, 6.5, 3.2),  (-58, 0, 0)),
+        ],
+    },
+    'basement': {
+        'world': ('0E1614', 0.35),
+        'lights': [
+            ('fluoro_0', 'AREA', 'CFEDE2',  90.0, 2.2, True, (-2.6,  2.2, 2.92), (0, 0, 0)),
+            ('fluoro_1', 'AREA', 'CFEDE2',  90.0, 2.2, True, ( 2.6,  2.2, 2.92), (0, 0, 0)),
+            ('fluoro_2', 'AREA', 'CFEDE2',  90.0, 2.2, True, (-2.6, -1.6, 2.92), (0, 0, 0)),
+            ('fluoro_3', 'AREA', 'CFEDE2',  90.0, 2.2, True, ( 2.6, -1.6, 2.92), (0, 0, 0)),
+            ('ambient',  'AREA', '7FA89A',  70.0, 9.0, False, (0.0,  0.0, 2.70), (0, 0, 0)),
+        ],
+    },
+    'suite': {
+        'world': ('1A0A0E', 0.6),
+        'lights': [
+            ('chandelier', 'AREA', 'FFD9A0', 260.0,  2.2, True,  (0.0, 0.0, 3.3), (0, 0, 0)),
+            ('sconce_0',   'AREA', 'FFC98A',  90.0,  1.6, False, ( 3.31,  6.06, 2.5), (72, 0, -28)),
+            ('sconce_1',   'AREA', 'FFC98A',  90.0,  1.6, False, ( 6.06, -3.31, 2.5), (72, 0, -118)),
+            ('sconce_2',   'AREA', 'FFC98A',  90.0,  1.6, False, (-3.31, -6.06, 2.5), (72, 0, -208)),
+            ('sconce_3',   'AREA', 'FFC98A',  90.0,  1.6, False, (-6.06,  3.31, 2.5), (72, 0, -298)),
+            ('bar',        'AREA', '9FE8D0', 120.0,  4.5, False, (0.0, 6.0, 1.9), (-70, 0, 0)),
+            ('ambient',    'AREA', '7A3E44',  80.0, 10.0, False, (0.0, 0.0, 3.9), (0, 0, 0)),
+        ],
+    },
+}
+
+# Orbit camera per venue, from docs/design/06-interaction.md. The interaction
+# model is common; these numbers are not. clear_radius is the annulus that must
+# stay free of anything over 2m tall - the Rooftop camera once rendered from
+# inside a palm tree because a prop sat at 6.0m against a 6.1m orbit.
+VENUE_CAMERA = {
+    'rooftop':  {'radius': 6.1, 'height': 4.05, 'pitch': 62.0, 'fov': 64.0, 'clear_radius': 8.4},
+    'basement': {'radius': 3.6, 'height': 2.45, 'pitch': 72.0, 'fov': 66.0, 'clear_radius': 6.0},
+    'suite':    {'radius': 3.9, 'height': 2.85, 'pitch': 68.0, 'fov': 66.0, 'clear_radius': 5.4},
+}

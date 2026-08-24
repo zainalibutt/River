@@ -46,6 +46,8 @@ from geo import (
     wood_pedestal,
 )
 from values import (
+    VENUE_CAMERA,
+    VENUE_LIGHTS,
     CHIP_DENOMS,
     CHIP_THICK,
     SEAT_H,
@@ -221,6 +223,113 @@ def build_suite(venue):
     object_at('suite_chandelier_lit', chandy_lit, (0.0, 0.0, 2.4))
 
 
+def hex_to_linear(hex_rgb):
+    out = []
+    for i in (0, 2, 4):
+        c = int(hex_rgb[i:i + 2], 16) / 255.0
+        out.append(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4)
+    return tuple(out)
+
+
+def build_lighting(venue_id):
+    """Add the measured light rig and world for a venue.
+
+    The pipeline previously exported geometry and emissive materials only, with
+    no lights at all, so every venue rendered flat. These values are measured
+    from the lookdev builds - see docs/design/14-venue-build-spec.md.
+    """
+    import math
+
+    spec = VENUE_LIGHTS.get(venue_id)
+    if spec is None:
+        return []
+
+    world_hex, world_strength = spec['world']
+    world = bpy.data.worlds.new('world_' + venue_id)
+    world.use_nodes = True
+    background = world.node_tree.nodes.get('Background')
+    if background is not None:
+        background.inputs[0].default_value = hex_to_linear(world_hex) + (1.0,)
+        background.inputs[1].default_value = world_strength
+    bpy.context.scene.world = world
+
+    created = []
+    for name, kind, colour, energy, size, shadow, loc, rot in spec['lights']:
+        data = bpy.data.lights.new('lgt_%s_%s' % (venue_id, name), type=kind)
+        data.color = hex_to_linear(colour)
+        data.energy = energy
+        if hasattr(data, 'size'):
+            data.size = size
+        data.use_shadow = shadow
+        obj = bpy.data.objects.new('lgt_%s_%s' % (venue_id, name), data)
+        obj.location = loc
+        obj.rotation_euler = tuple(math.radians(a) for a in rot)
+        bpy.context.scene.collection.objects.link(obj)
+        created.append(obj.name)
+    return created
+
+
+def clear_radius_violations(venue_id, min_height=2.0):
+    """Props over min_height must stay outside the orbit annulus.
+
+    A Rooftop palm at 6.0m against a 6.1m orbit put the camera inside the
+    foliage, and the fronds read convincingly as shadow artifacts.
+    """
+    import math
+    from mathutils import Vector
+
+    camera = VENUE_CAMERA.get(venue_id)
+    if camera is None:
+        return []
+    clear = camera['clear_radius']
+    offenders = []
+    for obj in bpy.data.objects:
+        if obj.type != 'MESH':
+            continue
+        corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]
+        top = max(v.z for v in corners)
+        if top < min_height:
+            continue
+        radius = min(math.hypot(v.x, v.y) for v in corners)
+        if 0.4 < radius < clear:
+            offenders.append('%s at r=%.2f inside clear radius %.2f' % (obj.name, radius, clear))
+    return offenders
+
+
+def lighting_sidecar():
+    """Emit the light rigs as JSON beside the GLBs.
+
+    glTF carries only KHR_lights_punctual - point, spot and directional - so the
+    exporter drops every area light with 'Unsupported light source AREA'. three.js
+    has RectAreaLight, which is what these actually are, so the rig travels as a
+    sidecar rather than being degraded to point lights on the way out.
+    """
+    out = {}
+    for venue_id, spec in VENUE_LIGHTS.items():
+        world_hex, world_strength = spec['world']
+        out[venue_id] = {
+            'world': {'colour': '#' + world_hex, 'strength': world_strength},
+            'camera': VENUE_CAMERA[venue_id],
+            'lights': [
+                {
+                    'name': name,
+                    'type': kind.lower(),
+                    'colour': '#' + colour,
+                    'energy': energy,
+                    'size': size,
+                    'shadow': shadow,
+                    'position': list(loc),
+                    'rotation_deg': list(rot),
+                }
+                for name, kind, colour, energy, size, shadow, loc, rot in spec['lights']
+            ],
+        }
+    path = os.path.join(OUT_DIR, 'lighting.json')
+    with open(path, 'w') as handle:
+        json.dump(out, handle, indent=2)
+    return path
+
+
 def build_venue(venue, face_lookup, rim_lookup, card_mesh):
     shared_meshes = list(face_lookup.values()) + list(rim_lookup.values()) + [card_mesh]
     keep_names = {mesh.name for mesh in shared_meshes}
@@ -246,6 +355,8 @@ def build_venue(venue, face_lookup, rim_lookup, card_mesh):
         build_basement(venue)
     else:
         build_suite(venue)
+    lights = build_lighting(venue['id'])
+    intrusions = clear_radius_violations(venue['id'])
     glb = os.path.join(OUT_DIR, venue['id'] + '_assets.glb')
     bpy.ops.export_scene.gltf(
         filepath=glb,
@@ -255,12 +366,17 @@ def build_venue(venue, face_lookup, rim_lookup, card_mesh):
         export_apply=False,
         export_yup=True,
         export_materials='EXPORT',
+        export_lights=True,
     )
     report = checker.Report()
     gltf, binary = checker.read_glb(glb)
     checker.compute_counts(gltf, binary, report)
     failures = []
     checker_check_fail(venue['id'], report, failures)
+    if not lights:
+        failures.append('no light rig built for ' + venue['id'])
+    for intrusion in intrusions:
+        failures.append('orbit clear radius: ' + intrusion)
     return glb, report, failures
 
 
@@ -293,6 +409,7 @@ def main():
         print('VENUE %s triangles=%d materials=%d draw_calls=%d' % (
             venue['id'], report.total_triangles, report.materials, report.draw_calls
         ))
+    manifest['lighting'] = lighting_sidecar()
     manifest['verdict'] = 'PASS' if not overall_failures else 'FAIL'
     manifest['failures'] = overall_failures
     with open(os.path.join(OUT_DIR, 'manifest.json'), 'w') as handle:
