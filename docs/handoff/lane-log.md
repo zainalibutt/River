@@ -36,6 +36,7 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 5E chip instancing | Codex | `5b8008c` | Accepted. GPU instancing with stable per-instance ids. Draw calls 50/42/47 to 34/26/31 |
 | 2026-08-24 | 4M table items | DeepSeek | `f0ce29f` | Accepted. Zero imports, so it cannot touch poker odds by construction |
 | 2026-08-24 | 4N REP progression | DeepSeek | `1bfea54` | Accepted. 14 tests, pure, no clock |
+| 2026-08-24 | 5F characters in venues | Codex | `9a7d5f6` | Accepted on craft. Linked mesh instancing, shared 1024 atlas, no material copies, gates untouched. **But the download went 185KB to 12MB and nothing measured it** |
 | 2026-08-24 | 4P daily challenges | DeepSeek | `8b8e78f` | Accepted. 14 tests, deterministic set, no clock or randomness. It hit the progressFor collision itself and resolved it the same way |
 | 2026-08-24 | 4S challenge tally and strip | Claude | `d3f5f3a` | Server tallies metrics per UTC day at settle; client shows ambient progress |
 | 2026-08-24 | 4K REP calculation | Claude | `cb69582` | **Never landed from DeepSeek.** Logged as in flight and never reconciled while 4M and 4N landed around it. Built to the original brief |
@@ -82,6 +83,13 @@ is the same resolution Claude had applied by hand. Closed.
 rewrote it for its challenges export and removed Claude's `export * from
 './rep.js'` line in the process, which broke the server build with
 "computeRep is not a function". Check that file after any packet that touches it.
+
+## Open
+
+- **Venue download is 12MB per room, 37MB for three.** 5F added 162,738 character
+  triangles per venue. Triangles, materials and draw calls were all gated; file
+  size was not, so the number a player actually waits for grew unnoticed. The
+  build now prints it. A budget and a seated LOD are the next art packet.
 
 ## Open
 
