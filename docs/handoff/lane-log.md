@@ -36,6 +36,8 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 5E chip instancing | Codex | `5b8008c` | Accepted. GPU instancing with stable per-instance ids. Draw calls 50/42/47 to 34/26/31 |
 | 2026-08-24 | 4M table items | DeepSeek | `f0ce29f` | Accepted. Zero imports, so it cannot touch poker odds by construction |
 | 2026-08-24 | 4N REP progression | DeepSeek | `1bfea54` | Accepted. 14 tests, pure, no clock |
+| 2026-08-24 | 4K REP calculation | Claude | `cb69582` | **Never landed from DeepSeek.** Logged as in flight and never reconciled while 4M and 4N landed around it. Built to the original brief |
+| 2026-08-24 | 4R REP award and feedback | Claude | `cb69582` | Server credits at settle, protocol carries it, client shows a self-dismissing flash |
 | 2026-08-24 | 5L venue lighting | Claude | `a133b21` | Reads the measured rig in the browser. Blender Z-up to three.js Y-up, one shared energy scalar |
 | 2026-08-24 | 5V venue selection | Claude | `f18cd71` | Venue registry, picker, invite URL carries the venue. Also found the web app serving a 206K stale Rooftop against a 535K build - every skyline change had been invisible in the browser |
 | 2026-08-24 | 4L chat and emote panel | Claude | `89a27e8` | Feed, nine-emote rail, speaking indicator, message entry. Shortcut keys proven inert while the chat input has focus, and proven still live outside it |
@@ -64,6 +66,23 @@ proved byte-identical to the contaminated one before anything was discarded.
 - When reconstructing history while another agent is writing, stage from commit
   blobs (`git restore --source=<commit> --staged`), never from the working tree.
 - Prove a rebuild with `git diff <old> <new>` before trusting it.
+
+## For DeepSeek to fix in 4P
+
+`challenges.ts` exports `progressFor`, and `rep-progression.ts` already exported
+one with a completely different signature. `export * from` both is ambiguous and
+**fails the engine build outright** with TS2308 - it took the whole repo down
+until the barrel was disambiguated by hand.
+
+Rename the challenges one to `challengeProgressFor` in `challenges.ts` itself,
+then `index.ts` can go back to a plain `export *`.
+
+## Contention note
+
+`packages/engine/src/index.ts` is the one file more than one lane edits. DeepSeek
+rewrote it for its challenges export and removed Claude's `export * from
+'./rep.js'` line in the process, which broke the server build with
+"computeRep is not a function". Check that file after any packet that touches it.
 
 ## Open
 
