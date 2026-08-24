@@ -36,6 +36,8 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 5E chip instancing | Codex | `5b8008c` | Accepted. GPU instancing with stable per-instance ids. Draw calls 50/42/47 to 34/26/31 |
 | 2026-08-24 | 4M table items | DeepSeek | `f0ce29f` | Accepted. Zero imports, so it cannot touch poker odds by construction |
 | 2026-08-24 | 4N REP progression | DeepSeek | `1bfea54` | Accepted. 14 tests, pure, no clock |
+| 2026-08-25 | 5H leaked venue light | Codex | `ae41583` | **Solved the empty venue.** A stray gltf point light at intensity 54,351, leaked from an older character import, washed every room out. Export now excludes punctual lights and the build fails if one appears |
+| 2026-08-25 | 5P publish clean venues | Claude | `28b9acd` | Republished all three without the leak. Verified zero punctual lights and the extension undeclared |
 | 2026-08-25 | 4R bot personalities | DeepSeek | `0c07236` | Accepted. 14 tests, imports only the BotSkill type, deterministic picks, tilt blending clamped |
 | 2026-08-25 | 4U hidden information proof | Claude | `8128ce9`, `fb9962a` | Nine adversarial cases across every transition, plus a vacuity check. Found and fixed a vacuous case of my own |
 | 2026-08-25 | 4V resync coverage | Claude | `99a41e3` | Reconnect proven to send a full view, not an event replay |
@@ -91,7 +93,23 @@ rewrote it for its challenges export and removed Claude's `export * from
 './rep.js'` line in the process, which broke the server build with
 "computeRep is not a function". Check that file after any packet that touches it.
 
-## Open — the venue renders empty and I do not know why
+## Closed — the venue rendered empty because of a leaked light
+
+Codex found it in 5H: every published GLB carried a gltf point light named
+`Light` at **intensity 54,351**, leaked from an older character import. The
+table, chairs and characters were rendering correctly with correct depth the
+whole time; they were simply blown far past white, which reads as missing
+geometry.
+
+Geometry, instancing, normals, terrace topology and the seated LOD were all
+innocent. The measured light rigs were innocent. My camera values were
+innocent, and I was right not to tune them.
+
+The export now excludes punctual lights and the build fails if
+`KHR_lights_punctual` appears in an asset, so the sidecar stays the only
+lighting authority. Verified clean across all three venues.
+
+## Superseded investigation
 
 The Rooftop geometry is verified correct and correctly placed:
 
