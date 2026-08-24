@@ -194,6 +194,35 @@ describe('room hand play', () => {
     expect(turn?.cards.length).toBe(1)
     expect(river?.cards.length).toBe(1)
   })
+
+  it('emits an acted event before the resulting turn or street events', () => {
+    const room = makeRoom('acted', deckOf(DECK_11))
+    seatThree(room)
+    room.submit({ kind: 'startHand' })
+    const result = room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'call' } })
+    expect(result.events[0]).toEqual({
+      kind: 'acted',
+      playerId: 'alice',
+      action: { kind: 'call' },
+    })
+  })
+
+  it('does not mark a live all-in player as sitting out', () => {
+    const room = makeRoom('allin-view', deckOf(DECK_11))
+    for (const playerId of ['alice', 'bob', 'cara']) {
+      room.submit({ kind: 'join', playerId, name: playerId })
+    }
+    room.submit({ kind: 'sit', playerId: 'alice', seat: 0, buyIn: 50_000 })
+    room.submit({ kind: 'sit', playerId: 'bob', seat: 1, buyIn: 50_000 })
+    room.submit({ kind: 'sit', playerId: 'cara', seat: 2, buyIn: 50_000 })
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'allIn' } })
+    expect(room.viewFor('alice').seats[0]).toMatchObject({
+      stack: 0,
+      allIn: true,
+      sittingOut: false,
+    })
+  })
 })
 
 describe('room disconnect and reconnect', () => {
@@ -247,6 +276,16 @@ describe('room disconnect and reconnect', () => {
     expect(room.viewFor('cara').seats[2]?.disconnected).toBe(false)
   })
 
+  it('does not repeat the current turn when another player disconnects', () => {
+    const room = makeRoom('disconnect-waiting', deckOf(DECK_11))
+    seatThree(room)
+    room.submit({ kind: 'startHand' })
+    expect(room.viewFor('alice').currentActor?.playerId).toBe('alice')
+    expect(room.submit({ kind: 'disconnect', playerId: 'cara' }).events).toEqual([
+      { kind: 'disconnected', playerId: 'cara' },
+    ])
+  })
+
   it('rejects duplicate disconnect and unknown ids', () => {
     const room = makeRoom('disc')
     seatThree(room)
@@ -269,6 +308,18 @@ describe('per-player projection and adversarial hidden information', () => {
     expect(room.viewFor('bob').seats[0]?.hole).toBeNull()
     playToPhase(room, 'between')
     expect(room.viewFor('alice').revealed).toBe(true)
+  })
+
+  it('keeps folded hole cards hidden at showdown', () => {
+    const room = makeRoom('mucked', deckOf(DECK_11))
+    seatThree(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'fold' } })
+    playToPhase(room, 'between')
+    const bob = room.viewFor('bob')
+    expect(bob.revealed).toBe(true)
+    expect(bob.seats[0]?.hole).toBeNull()
+    expect(bob.seats[2]?.hole).toHaveLength(2)
   })
 
   it('is indistinguishable to a viewer across differing hidden hole assignments', () => {

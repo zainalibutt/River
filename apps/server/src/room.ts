@@ -88,6 +88,7 @@ export class Room implements RoomHandle {
   private pendingPlayerId: string | null = null
   private betweenSince = 0
   private revealed = false
+  private readonly revealedPlayerIds = new Set<string>()
   private drawPile: DrawPile | null = null
   private currentCommit: string | null = null
   private status: string | null = null
@@ -117,7 +118,10 @@ export class Room implements RoomHandle {
           ? null
           : (betting?.players.find((p) => p.id === seat.playerId) ?? null)
       const visible =
-        seat.playerId === playerId || this.revealed ? seat.hole.map((card) => ({ ...card })) : null
+        seat.playerId === playerId ||
+        (seat.playerId !== null && this.revealedPlayerIds.has(seat.playerId))
+          ? seat.hole.map((card) => ({ ...card }))
+          : null
       return {
         seat: index,
         playerId: seat.playerId,
@@ -129,7 +133,7 @@ export class Room implements RoomHandle {
         allIn: bettingPlayer?.allIn ?? false,
         hole: visible,
         hasHole: seat.hole.length > 0,
-        sittingOut: this.handNumber > 0 && seat.stack <= 0,
+        sittingOut: this.phase !== 'hand' && this.handNumber > 0 && seat.stack <= 0,
         busted: seat.busted,
         disconnected: player?.disconnected ?? false,
         dealer: index === this.dealerSeat,
@@ -283,6 +287,7 @@ export class Room implements RoomHandle {
     this.dealerSeat = this.findNextDealer(this.dealerSeat === -1)
     this.handNumber++
     this.revealed = false
+    this.revealedPlayerIds.clear()
     this.board = []
     this.betweenSince = 0
     this.status = null
@@ -347,7 +352,7 @@ export class Room implements RoomHandle {
     }
     const events: RoomEvent[] = []
     this.status = null
-    if (!this.apply(playerId, action, events)) {
+    if (!this.apply(playerId, action, events, 'acted')) {
       return this.reject(playerId, this.status ?? 'invalid action')
     }
     this.pendingPlayerId = null
@@ -388,7 +393,7 @@ export class Room implements RoomHandle {
     }
     player.disconnected = true
     const events: RoomEvent[] = [{ kind: 'disconnected', playerId }]
-    if (this.phase === 'hand') {
+    if (this.phase === 'hand' && this.pendingPlayerId === playerId) {
       this.drive(events)
     }
     return { ok: true, events }
@@ -423,7 +428,12 @@ export class Room implements RoomHandle {
     }
   }
 
-  private apply(playerId: string, action: TurnAction, events: RoomEvent[]): boolean {
+  private apply(
+    playerId: string,
+    action: TurnAction,
+    events: RoomEvent[],
+    eventKind: 'acted' | 'awayPlayed',
+  ): boolean {
     const betting = this.betting
     if (betting === null) {
       return false
@@ -454,6 +464,7 @@ export class Room implements RoomHandle {
       throw error
     }
     this.syncStacks(betting)
+    events.push({ kind: eventKind, playerId, action })
     this.advanceBoard(betting.street, events)
     return true
   }
@@ -497,9 +508,7 @@ export class Room implements RoomHandle {
       this.config.awayPolicy === 'check-or-fold' && betting.betToCall(playerId) === 0
         ? { kind: 'check' }
         : { kind: 'fold' }
-    if (this.apply(playerId, action, events)) {
-      events.push({ kind: 'awayPlayed', playerId, action })
-    }
+    this.apply(playerId, action, events, 'awayPlayed')
   }
 
   private settle(events: RoomEvent[]): void {
@@ -516,6 +525,11 @@ export class Room implements RoomHandle {
       events.push({ kind: 'uncontested', playerId: winnerId, amount })
     } else {
       this.revealed = true
+      for (const player of betting.players) {
+        if (!player.folded) {
+          this.revealedPlayerIds.add(player.id)
+        }
+      }
       const awards: { playerId: string; amount: number }[] = []
       for (const pot of betting.sidePots()) {
         this.awardPot(betting, pot, awards)
