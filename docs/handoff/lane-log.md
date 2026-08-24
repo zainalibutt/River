@@ -18,15 +18,15 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 4E economy engine | DeepSeek | `74c0bd1` | Pure module. Rescue tops up rather than adding flat, streak resets correctly |
 | 2026-08-24 | 4F fairness | Codex | `d1fc23f` | Security defect closed. Per-hand seeds, rejection-sampled shuffle, million-shuffle bias test |
 | 2026-08-24 | 4V verify panel | Claude | `ca259f3` | Client-side WebCrypto recomputation. Also fixed repo-wide CRLF via .gitattributes |
-| 2026-08-24 | 4G turn timers | Codex | `55c8136` | Server owns the clock. Late client actions coerced to the timeout action |
+| 2026-08-24 | 4G turn timers | Codex | `55c8136` | Accepted. Budgets 15/20/20/25 from config, timeout is check-else-fold, late client actions coerced |
+| 2026-08-24 | 4R preset actions | Claude | `744dc68` | Local half. Arm/commit/invalidate, clears on street change |
 
 ## In flight
 
 | Packet | Owner | Dispatched | Notes |
 |---|---|---|---|
-| 4H economy wiring | DeepSeek | 2026-08-24 | Struggling, may need a re-dispatch. Watch for it adding a state table instead of deriving from ledger refs |
-| 4J chat and emote transport | Codex | 2026-08-24 | Closes the last Phase 4 item |
-| 4R preset actions | Claude | 2026-08-24 | Local half only; the public gesture needs a protocol event and waits for 4J |
+| 4H economy wiring | DeepSeek | 2026-08-24 | **Stalled mid-work.** `economy-service.ts` and a migration sit uncommitted and fail typecheck at line 204 plus formatting. Watch for it adding a state table instead of deriving from ledger refs |
+| 4J chat and emote transport | Codex | 2026-08-24 | Re-dispatched after 4G. Closes the last Phase 4 item |
 
 ## Standing review notes
 
