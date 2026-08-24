@@ -4,8 +4,11 @@ import {
   BettingError,
   BettingHand,
   compareRanks,
+  computeRep,
   DEFAULT_STAKE,
+  earningRatePercent,
   evaluateBest,
+  levelTable,
   makeDeck,
   SEATS_PER_SHAPE,
 } from '@river/engine'
@@ -44,11 +47,28 @@ interface PlayerState {
   disconnected: boolean
 }
 
+/**
+ * Level for a REP total.
+ *
+ * Deliberately not `progressFor` from the barrel: challenges.ts and
+ * rep-progression.ts both export a `progressFor`, so `export *` resolves to
+ * whichever loads last. The server only needs the level number.
+ */
+function levelAt(totalRep: number): number {
+  let level = 1
+  for (const entry of levelTable()) {
+    if (totalRep >= entry.repRequired) level = entry.level
+  }
+  return level
+}
+
 interface SeatState {
   playerId: string | null
   stack: number
   hole: Card[]
   busted: boolean
+  /** Reputation, not chips. Never spendable, never through the ledger. */
+  totalRep: number
 }
 
 class DrawPile {
@@ -157,6 +177,7 @@ export class Room implements RoomHandle {
       stack: 0,
       hole: [],
       busted: false,
+      totalRep: 0,
     }))
     this.fixedDeck = fixedDeck ?? null
   }
@@ -723,17 +744,71 @@ export class Room implements RoomHandle {
     this.apply(playerId, action, events, 'awayPlayed')
   }
 
+  /**
+   * Credit REP to everyone dealt into the hand.
+   *
+   * REP is not chips. It never touches the ledger and is not spendable - it is
+   * reputation, and it is kept deliberately separate from bankroll so the two
+   * can sit near each other in the UI without sharing state.
+   *
+   * The scale comes from the table stake rather than a player's stack, so a
+   * short stack at a big table earns the same as a deep one.
+   */
+  private awardRep(winners: ReadonlySet<string>, events: RoomEvent[]): void {
+    const betting = this.betting
+    if (betting === null) return
+
+    const awards: {
+      playerId: string
+      totalRep: number
+      earningRatePercent: number
+      levelBefore: number
+      levelAfter: number
+    }[] = []
+
+    for (const player of betting.players) {
+      const seat = this.seats.find((one) => one.playerId === player.id)
+      if (seat === undefined) continue
+      const breakdown = computeRep({
+        wonHand: winners.has(player.id),
+        reachedShowdown: this.revealed && !player.folded,
+        // Scale from the table stake, not the player's stack, so a short stack
+        // at a big table earns the same as a deep one.
+        buyIn: this.config.stake.defaultBuyIn,
+        tableItemModifiers: [],
+        eventModifiers: [],
+        challengeModifiers: [],
+        otherModifiers: [],
+      })
+      const before = seat.totalRep
+      seat.totalRep = before + breakdown.totalRep
+      awards.push({
+        playerId: player.id,
+        totalRep: breakdown.totalRep,
+        earningRatePercent: earningRatePercent(breakdown),
+        levelBefore: levelAt(before),
+        levelAfter: levelAt(seat.totalRep),
+      })
+    }
+
+    if (awards.length > 0) {
+      events.push({ kind: 'repAwarded', handNumber: this.handNumber, awards })
+    }
+  }
+
   private settle(events: RoomEvent[]): void {
     const betting = this.betting
     if (betting === null) {
       return
     }
+    const winners = new Set<string>()
     this.advanceBoard(betting.street, events)
     const winnerId = betting.uncontestedWinnerId
     if (winnerId !== undefined) {
       const amount = betting.pot()
       betting.award(winnerId, amount)
       this.syncStacks(betting)
+      winners.add(winnerId)
       events.push({ kind: 'uncontested', playerId: winnerId, amount })
     } else {
       this.revealed = true
@@ -747,11 +822,13 @@ export class Room implements RoomHandle {
         this.awardPot(betting, pot, awards)
       }
       this.syncStacks(betting)
+      for (const award of awards) winners.add(award.playerId)
       events.push({ kind: 'showdown', awards })
     }
     if (this.currentServerSeed === null || this.settledClientSeeds === null) {
       throw new Error('fairness reveal missing')
     }
+    this.awardRep(winners, events)
     this.revealedSeed = this.currentServerSeed
     events.push({
       kind: 'seedRevealed',

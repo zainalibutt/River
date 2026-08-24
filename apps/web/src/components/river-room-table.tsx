@@ -30,6 +30,7 @@ import {
   resolvePreset,
   shouldClearPreset,
 } from '@/lib/preset'
+import { type RepFlash, repFlashFor, shouldShowRate } from '@/lib/rep-feedback'
 import {
   appendSocialEvent,
   applySpeaking,
@@ -232,6 +233,7 @@ export function RiverRoomTable() {
   const [speaking, setSpeaking] = useState<ReadonlySet<string>>(() => new Set())
   const [chatDraft, setChatDraft] = useState('')
   const [socialOpen, setSocialOpen] = useState(false)
+  const [repFlash, setRepFlash] = useState<RepFlash | null>(null)
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [verify, setVerify] = useState<VerifyResult>({
     status: 'idle',
@@ -319,6 +321,8 @@ export function RiverRoomTable() {
             setKick(nextKick)
             if (ownKick.reason === 'duplicate-session') socket.close()
           }
+          const flash = repFlashFor(message.events, message.view.selfId)
+          if (flash !== null) setRepFlash(flash)
           const nextNotice = eventNotice(message.events, message.view.selfId)
           if (nextNotice !== null) setNotice(nextNotice)
           if (
@@ -406,6 +410,12 @@ export function RiverRoomTable() {
   useEffect(() => {
     viewRef.current = view
   }, [view])
+
+  useEffect(() => {
+    if (repFlash === null) return
+    const timer = window.setTimeout(() => setRepFlash(null), 4200)
+    return () => window.clearTimeout(timer)
+  }, [repFlash])
 
   const localTurn = view.currentActor?.playerId === view.selfId
 
@@ -610,6 +620,19 @@ export function RiverRoomTable() {
                 ))}
               </fieldset>
             ) : null}
+            {repFlash === null ? null : (
+              <output className="rep-flash" key={repFlash.id}>
+                <strong>+{repFlash.totalRep.toLocaleString()} REP</strong>
+                {shouldShowRate(repFlash.earningRatePercent) ? (
+                  <span className="rep-rate">{repFlash.earningRatePercent}% EARNING</span>
+                ) : null}
+                {repFlash.levelUp > 0 ? (
+                  <span className="rep-level">
+                    LEVEL UP{repFlash.levelUp > 1 ? ` x${repFlash.levelUp}` : ''}
+                  </span>
+                ) : null}
+              </output>
+            )}
             <section className="invite-strip" aria-label="Private table invite">
               <span>TABLE CODE</span>
               <strong>{view.inviteCode || '------'}</strong>

@@ -1775,3 +1775,65 @@ input:focus-visible {
   outline: 2px solid var(--river-amber-bright);
   outline-offset: 3px;
 }
+
+/* REP feedback. Lightweight and self-dismissing - it never waits for input and
+   never gates the next deal, per the motion contract. */
+.rep-flash {
+  position: absolute;
+  top: 210px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 23;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  animation: rep-rise 4.2s var(--ease-out) forwards;
+}
+
+.rep-flash strong {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--river-amber-bright);
+  letter-spacing: 0.02em;
+}
+
+.rep-rate {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--river-cream-dim);
+}
+
+.rep-level {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--river-win);
+}
+
+@keyframes rep-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  76% {
+    opacity: 1;
+    transform: translate(-50%, -10px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -26px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rep-flash {
+    animation: none;
+  }
+}

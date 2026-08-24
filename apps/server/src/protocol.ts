@@ -74,6 +74,17 @@ export type RoomEvent =
   | { kind: 'awayPlayed'; playerId: string; action: TurnAction }
   | { kind: 'uncontested'; playerId: string; amount: number }
   | { kind: 'showdown'; awards: { playerId: string; amount: number }[] }
+  | {
+      kind: 'repAwarded'
+      handNumber: number
+      awards: {
+        playerId: string
+        totalRep: number
+        earningRatePercent: number
+        levelBefore: number
+        levelAfter: number
+      }[]
+    }
   | { kind: 'bust'; playerId: string }
   | { kind: 'between'; handNumber: number; countdownMs: number }
   | { kind: 'disconnected'; playerId: string }
