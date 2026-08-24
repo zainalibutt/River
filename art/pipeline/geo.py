@@ -58,7 +58,7 @@ def polygon_disc(vertices_ring):
     return verts, faces
 
 
-def cylinder(radius, z_top, z_bottom, segments, closed_bottom=True):
+def cylinder(radius, z_top, z_bottom, segments, closed_bottom=True, closed_top=True):
     bottom = ring(radius, radius, z_bottom, segments)
     top = ring(radius, radius, z_top, segments)
     verts = []
@@ -81,14 +81,15 @@ def cylinder(radius, z_top, z_bottom, segments, closed_bottom=True):
         d = side_top + i
         faces.append((a, b, c))
         faces.append((a, c, d))
-    centre_top = len(verts)
-    verts.append((0.0, 0.0, z_top))
-    top_base = len(verts)
-    verts.extend(top)
-    for i in range(segments):
-        a = top_base + i
-        b = top_base + (i + 1) % segments
-        faces.append((centre_top, a, b))
+    if closed_top:
+        centre_top = len(verts)
+        verts.append((0.0, 0.0, z_top))
+        top_base = len(verts)
+        verts.extend(top)
+        for i in range(segments):
+            a = top_base + i
+            b = top_base + (i + 1) % segments
+            faces.append((centre_top, a, b))
     return verts, faces
 
 
@@ -325,8 +326,8 @@ def terrace_disc(radius=4.0, segments=32):
 
 def parapet_ring():
     parts = [
-        cylinder(3.9, 1.1, 0.0, 40, closed_bottom=False),
-        cylinder(4.1, 1.12, 1.1, 40, closed_bottom=False),
+        cylinder(3.9, 1.1, 0.0, 40, closed_bottom=False, closed_top=False),
+        cylinder(4.1, 1.12, 1.1, 40, closed_bottom=False, closed_top=False),
     ]
     return concat(parts)
 
@@ -411,7 +412,7 @@ def wall_sconce():
 def chandelier():
     parts = [
         cylinder(0.02, 0.6, 0.35, 6),
-        cylinder(0.02, 0.35, 0.35, 12, closed_bottom=False),
+        cylinder(0.02, 0.35, 0.35, 12, closed_bottom=False, closed_top=False),
     ]
     for i in range(6):
         angle = 2.0 * math.pi * i / 6
@@ -445,7 +446,7 @@ def ceiling_pipes(count=4, length=11.5, radius=0.055):
     pipes = []
     for index in range(count):
         x = -4.5 + index * 3.0
-        pipes.append(transform_geo(cylinder(radius, length, 0.0, 8, closed_bottom=False), x, -4.55, 3.02, -math.pi / 2.0))
+        pipes.append(transform_geo(cylinder(radius, length, 0.0, 8, closed_bottom=False, closed_top=False), x, -4.55, 3.02, -math.pi / 2.0))
     return concat(pipes)
 
 
