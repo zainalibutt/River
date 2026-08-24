@@ -78,6 +78,9 @@ python art/pipeline/test_checker_chars.py
 - Venue materials are built from ColorRamp-driven shaders; `retint()` changes the
   ramp stops, so a shared material can be re-paletted per venue without the
   silent-no-op BSDF trap.
+- Venue GLBs intentionally contain no `KHR_lights_punctual` lights. The measured
+  lighting rig is sidecar-only because it uses area lights; a leaked point or
+  spot light would wash out the renderer and now fails the build.
 - Exports are deterministic: identical GLB bytes across runs (verified by
   SHA-256). The `.blend` file embeds Blender save metadata and is not byte-stable,
   but geometry is.

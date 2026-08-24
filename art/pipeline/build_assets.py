@@ -856,7 +856,7 @@ def build_venue(venue, chip_meshes, card_mesh):
         export_apply=False,
         export_yup=True,
         export_materials='EXPORT',
-        export_lights=True,
+        export_lights=False,
         export_extras=True,
         export_animations=False,
     )
@@ -871,7 +871,7 @@ def build_venue(venue, chip_meshes, card_mesh):
     gltf, binary = checker.read_glb(glb)
     checker.compute_counts(gltf, binary, report)
     failures = []
-    checker_check_fail(venue['id'], report, failures)
+    checker_check_fail(venue['id'], report, failures, gltf)
     if not lights:
         failures.append('no light rig built for ' + venue['id'])
     for intrusion in intrusions:
@@ -879,7 +879,11 @@ def build_venue(venue, chip_meshes, card_mesh):
     return glb, report, failures
 
 
-def checker_check_fail(venue_id, report, failures):
+def checker_check_fail(venue_id, report, failures, gltf):
+    punctual = gltf.get('extensions', {}).get('KHR_lights_punctual', {}).get('lights', [])
+    if punctual or 'KHR_lights_punctual' in gltf.get('extensionsUsed', []):
+        names = ', '.join(light.get('name', 'unnamed') for light in punctual)
+        failures.append('punctual light export prohibited: ' + (names or 'KHR_lights_punctual'))
     if report.glb_kb > DOWNLOAD_BUDGET_KB:
         failures.append('download budget exceeded: %.0fKB > %dKB' % (report.glb_kb, DOWNLOAD_BUDGET_KB))
     if report.total_triangles > 250000:
