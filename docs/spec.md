@@ -84,6 +84,8 @@ The hardware spike (Packet 5A) is **deferred, not cancelled**. It runs the momen
 - Hosting: Railway Hobby (already paid) runs server + web (single origin, simplest WebSockets). Supabase free tier for persistence.
 - Domain: free Railway subdomain at launch (`*.up.railway.app`, HTTPS included); custom domain (Porkbun / Cloudflare Registrar, at-cost) parked as post-launch polish. Vercel not needed.
 - Definition of done: **both** — friends playing weekly AND polished playable + trailer for zain.org.uk.
+- **Ordering, decided Aug 2026: multiplayer leads.** Phases 3 and 4 reach playable before art is pushed to trailer standard. The trailer then shows a real game being played rather than a rendered still. Art work continues only where it is cheap or where it unblocks something.
+- **The 2D renderer is rebuilt to the current contract** (Aug 2026). The design rewrite made the HUD radial and the camera a seat-relative orbit; the 2D mode shipped in Phase 2 has a button rail and no orbit. Both renderers share one interaction model — that is what makes the graphics-saver promise honest rather than a second, lesser game.
 
 ## Milestone spine
 

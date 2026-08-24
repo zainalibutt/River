@@ -585,3 +585,92 @@ Measured on the finished Rooftop:
 Triangles were never the risk. **Object and material count are.** Most of the 879 are individual chips and string-light bulbs which must become instanced meshes sharing one draw call, and the 55 materials are largely per-character palette variants that must become one atlas.
 
 This is a production requirement for the venue kit and character pipeline, not a lookdev concern — but it needs recording now because the lookdev builds will otherwise be used as a reference for object structure.
+
+
+## Executive Suite built — launch venue set complete (2026-08-24)
+
+Third and final launch venue. `D:/River-art/blend/suite_lookdev.blend`, turnaround at `D:/River-art/orbit/suite_turnaround.png`.
+
+Built from `docs/images/suite2.webp`: deep red walls and carpet, olive-gold felt, dark padded rail, tan and mustard upholstered dining chairs, gold rod chandelier over the table, back bar with lit bottle shelves, wall sconces ringed so every orbit angle catches one, standing patrons beyond the rail, and the ornate gold balustrade encircling the pit — the venue's signature element.
+
+### Finding 16 — applying the earlier findings up front is worth roughly 3x
+
+Every prior finding was applied before the first render rather than discovered again: dressed through 360 degrees from the start (10), props outside the orbit annulus (11), table-level shadow casting only (12), per-venue orbit parameters (13), noise textures rather than wave (14), and object count treated as the real budget (15).
+
+**It landed correct on the first render** — no black wedges, no bare quarter, no corduroy stone, no camera inside geometry.
+
+| Venue | Triangles | Objects | Materials | Notes |
+|---|---|---|---|---|
+| Rooftop | 85,454 | 879 | 55 | built before the findings existed |
+| Basement | 44,444 | 822 | 48 | built before Finding 15 |
+| **Suite** | **21,812** | **306** | **10** | built with all findings applied |
+
+Object count is where it shows: 306 against 879 for a room of comparable visual density, and 10 materials against 55. Both are inside the draw-call and material budgets that the other two blow.
+
+**The Rooftop and Basement should be rebuilt to the Suite's structure** before production. They are correct as lookdev and wrong as a template — and they are the two most likely to be copied by whoever writes the production venue kit.
+
+### Launch set complete
+
+Three venues, three legible identities, from one table assembly and one character set:
+
+- **Rooftop** — night terrace, magenta sky, city below, fire and pool, pale stone
+- **Laundromat** — cool green fluorescent, checkerboard tile, machine banks
+- **Executive Suite** — warm red and gold, chandelier, balustrade, bar
+
+The venue system claim in `01-thesis.md` is now demonstrated across the full shipping set rather than asserted from two examples.
+
+
+## Chair variants built (2026-08-24)
+
+Chairs appear in every frame of every venue and were box-on-a-stick placeholders until now. Three variants modelled, one per venue, at `D:/River-art/blend/chairs.blend`.
+
+| Venue | Design | Triangles | Parts |
+|---|---|---|---|
+| **Rooftop** | Modern swivel: contoured leather seat and back, side wings, chrome column, five-star castor base | 1,432 | 16 |
+| **Laundromat** | Cheap folding metal: thin tubular frame where the rear legs continue up to form the backrest, X-braces, cross rails | 396 | 13 |
+| **Executive Suite** | Upholstered dining: padded seat and tall back, timber crest rail, turned legs with stretchers | 760 | 14 |
+
+All three are trivial against budget — nine Rooftop chairs cost 12,888 triangles, roughly one character.
+
+### Note for the venue kit
+
+These belong in `art/pipeline/geo.py` as parameterised variants rather than living only in a lookdev file. They share a common structure — seat, back, legs, connectors — and differ in profile, material and leg system, which is exactly the shape a single parameterised generator wants.
+
+### Two modelling notes
+
+**A folding chair's back is not a separate object.** The first attempt floated a back panel above the seat with a visible gap. On a real folding chair the rear legs continue upward to become the backrest frame. Modelling it as one continuous element fixed it and removed a part.
+
+**Bevel every hard edge.** A 12-25mm bevel at 2-3 segments on seats, backs and rails is what stops furniture reading as primitives. It costs almost nothing and it is most of the difference between these and the boxes they replace.
+
+
+## Full table assembled — Executive Suite populated (2026-08-24)
+
+First complete River scene: venue, real chairs, nine distinct characters, chip stacks and board. `D:/River-art/blend/suite_populated.blend`.
+
+| Component | Contribution |
+|---|---|
+| Venue shell, balustrade, bar, chandelier | 21,812 |
+| Nine dining chairs | 6,840 |
+| Nine dressed characters | ~108,000 |
+| Chip stacks and board | ~14,000 |
+| **Total** | **150,902 / 250,000** |
+
+**40% headroom with everything visible.** The revised 15,000-per-character budget holds under a real full table, which is the first time that number has been tested against nine of them rather than extrapolated from one.
+
+### Character variation is per-instance material, not per-mesh
+
+Nine seats share one mesh, one rig and one animation set. Variation comes from copying the material datablock per instance and retinting skin, garment and hat. Nine visibly different people from one asset.
+
+That is also where the material count comes from — 91 materials in this scene, well past the budget of 24. **The production path is one shared atlas with per-instance colour driven by a vertex attribute or instance property, not 91 material datablocks.** Recorded here because the lookdev approach is the obvious thing to copy and it is the wrong thing to copy.
+
+### Chip stack magnitude reads
+
+Stacks were generated at deliberately different depths per seat — 4, 6, 9, 13 and 18 chips. At the play camera the difference in stack height is legible without any number being readable, which is exactly what the behaviour reference requires and what an earlier finding wrongly dismissed as decorative.
+
+### Object count remains the real problem
+
+684 objects against a 120 draw-call ceiling. Chips are again the bulk. Instancing is not an optimisation here, it is a requirement, and it applies before any production venue work.
+
+### Known gaps in this frame
+
+Garment collar and sleeve boundaries still jagged. Faces are untextured. Chairs slightly oversized relative to the characters. No dealer, no dealer button, no bet piles in front of seats.
