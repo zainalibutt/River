@@ -36,6 +36,9 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 5E chip instancing | Codex | `5b8008c` | Accepted. GPU instancing with stable per-instance ids. Draw calls 50/42/47 to 34/26/31 |
 | 2026-08-24 | 4M table items | DeepSeek | `f0ce29f` | Accepted. Zero imports, so it cannot touch poker odds by construction |
 | 2026-08-24 | 4N REP progression | DeepSeek | `1bfea54` | Accepted. 14 tests, pure, no clock |
+| 2026-08-25 | 4R bot personalities | DeepSeek | `0c07236` | Accepted. 14 tests, imports only the BotSkill type, deterministic picks, tilt blending clamped |
+| 2026-08-25 | 4U hidden information proof | Claude | `8128ce9`, `fb9962a` | Nine adversarial cases across every transition, plus a vacuity check. Found and fixed a vacuous case of my own |
+| 2026-08-25 | 4V resync coverage | Claude | `99a41e3` | Reconnect proven to send a full view, not an event replay |
 | 2026-08-25 | 5G download gate and seated LOD | Codex | `832cc78` | Accepted. Hard 6144KB gate, weighted LOD. Rooftop 172,440 to 41,125 tris, 12.4MB to 2.98MB |
 | 2026-08-25 | 4Q hand history | DeepSeek | `fbe0d81` | Accepted. 13 tests, chip conservation check, every export line preserved |
 | 2026-08-25 | 4T table item purchase | Claude | `0c15bf7` | Bought through the ledger with a deterministic ref, slot rule enforced by a partial unique index, equipped modifiers reach the REP award |
@@ -143,6 +146,18 @@ between packets is where work quietly dies when several lanes run in parallel.
 
 **Ask "does anything actually call this?" as the first review question, not the
 last.**
+
+## A test can be green and prove nothing
+
+The kick case in the leak suite submitted `playerId` where the command wants
+`byPlayerId`. The command was rejected, so the case asserted nothing about
+kicks - and it passed. **Vitest transpiles without typechecking**, so a
+malformed command in a test is invisible to the test run; only
+`npm run typecheck` caught it.
+
+Two habits from this: run typecheck before trusting a new suite, and make
+adversarial tests assert that the thing they are testing actually happened
+before asserting the property holds.
 
 ## Standing review notes
 
