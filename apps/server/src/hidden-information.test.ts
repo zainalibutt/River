@@ -1,5 +1,4 @@
 import type { Card } from '@river/engine'
-import { parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import type { RoomHandle, RoomView } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
