@@ -332,20 +332,21 @@ def parapet_ring():
     return concat(parts)
 
 
-def string_light_run(count=48, radius=8.4):
+def string_light_run(count=48, radius=3.82):
     """A ring of bulbs around the terrace edge.
 
     This previously ran a line of eight bulbs from the centre out to x=-6 at
-    head height, straight across the table and through the camera orbit. The
-    spec is a ring at 8.40m, outside the 8.40m clear radius, swagging between
-    3.00 and 3.30.
+    head height, straight across the table and through the camera orbit, and
+    then briefly sat at the spec's 8.40m - which assumes a terrace scaled 1.62x
+    that the pipeline does not apply, leaving the strand hanging in open air
+    beyond the parapet. It rings just inside the parapet instead.
     """
     parts = []
     for i in range(count):
         angle = 2.0 * math.pi * i / count
         # Swag between posts: bulbs dip midway along each span of six.
-        swag = 0.30 * abs(math.sin(math.pi * (i % 6) / 6.0))
-        z = 3.30 - swag
+        swag = 0.22 * abs(math.sin(math.pi * (i % 6) / 6.0))
+        z = 2.62 - swag
         parts.append(
             sphere(0.035, radius * math.cos(angle), radius * math.sin(angle), z, 6, 4)
         )
@@ -631,3 +632,17 @@ def palm(height=3.0, fronds=7, seed=41):
         ]
         parts.append((verts, [(0, 1, 2), (0, 2, 3)]))
     return concat(parts)
+
+
+def fire_bowl(radius=0.26, height=0.42):
+    """A brazier with a flame sitting in it.
+
+    Returns (bowl, flame) so the two can take different materials: the bowl is
+    ordinary metal and only the flame is emissive.
+    """
+    bowl = concat([
+        cone(radius, radius * 0.45, height, 0.0, 12),
+        cylinder(radius * 0.16, 0.06, 0.0, 6),
+    ])
+    flame = sphere(0.15, 0.0, 0.0, height + 0.07, 12, 8)
+    return bowl, flame

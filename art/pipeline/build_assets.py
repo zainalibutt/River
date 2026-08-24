@@ -24,6 +24,7 @@ from buildkit import (
 from geo import (
     concat,
     mountain_range,
+    fire_bowl,
     palm,
     skyline_towers,
     translate_geo,
@@ -302,7 +303,7 @@ def build_rooftop(venue):
     parapet = build_mesh_from_geo('rooftop_parapet', parapet_ring())
     parapet.materials.append(parapet_mat)
     object_at('rooftop_parapet', parapet, (0.0, 0.0, 0.0))
-    lit_mat = add_emissive_material('rooftop_lit_edge', venue['parapet_lit'], 0.8)
+    lit_mat = add_emissive_material('rooftop_lit_edge', venue['parapet_lit'], 0.35)
     lit = build_mesh_from_geo('rooftop_lit_edge', parapet_ring())
     lit.materials.append(lit_mat)
     object_at('rooftop_lit_edge', lit, (0.0, 0.0, 1.1))
@@ -314,12 +315,22 @@ def build_rooftop(venue):
         planter_mesh = build_mesh_from_geo('rooftop_planter_%d' % index, planter())
         planter_mesh.materials.append(planter_mat)
         object_at('rooftop_planter_%d' % index, planter_mesh, (x, y, 0.0), (0.0, 0.0, -angle))
-    fire_mat = add_emissive_material('rooftop_fire', venue['fire'], 3.0)
+    # Strength 3 clipped these to pure white and six segments made them
+    # hexagons, so the first honest venue render showed two floating white
+    # blobs at head height that read as characters with no faces.
+    fire_mat = add_emissive_material('rooftop_fire', venue['fire'], 0.55)
+    bowl_geo, flame_geo = fire_bowl()
     for index in range(2):
-        fire_mesh = build_mesh_from_geo('rooftop_fire_%d' % index, sphere(0.18, 0.0, 0.0, 0.5, 6, 4))
-        fire_mesh.materials.append(fire_mat)
-        object_at('rooftop_fire_%d' % index, fire_mesh, (1.6 + index * 0.8, 2.4, 0.0))
-    strand_mat = add_emissive_material('rooftop_string', venue['parapet_lit'], 1.5)
+        angle = -0.55 + index * 1.1
+        x = 3.15 * math.cos(angle)
+        y = 3.15 * math.sin(angle)
+        bowl_mesh = build_mesh_from_geo('rooftop_brazier_%d' % index, bowl_geo)
+        bowl_mesh.materials.append(parapet_mat)
+        object_at('rooftop_brazier_%d' % index, bowl_mesh, (x, y, 0.0))
+        flame_mesh = build_mesh_from_geo('rooftop_fire_%d' % index, flame_geo)
+        flame_mesh.materials.append(fire_mat)
+        object_at('rooftop_fire_%d' % index, flame_mesh, (x, y, 0.0))
+    strand_mat = add_emissive_material('rooftop_string', venue['parapet_lit'], 0.42)
     strand = build_mesh_from_geo('rooftop_string_lights', string_light_run())
     strand.materials.append(strand_mat)
     object_at('rooftop_string_lights', strand, (0.0, 0.0, 0.0))
@@ -348,9 +359,9 @@ def build_rooftop(venue):
         angle = 2.0 * math.pi * index / 6 + 0.4
         palms.append(
             translate_geo(
-                palm(2.6 + 0.35 * (index % 3), seed=41 + index * 7),
-                9.9 * math.cos(angle),
-                9.9 * math.sin(angle),
+                palm(1.45 + 0.15 * (index % 3), fronds=6, seed=41 + index * 7),
+                4.28 * math.cos(angle),
+                4.28 * math.sin(angle),
                 0.0,
             )
         )
