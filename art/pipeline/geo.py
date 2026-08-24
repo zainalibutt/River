@@ -150,6 +150,15 @@ def translate_geo(geo, dx, dy, dz):
     return [(x + dx, y + dy, z + dz) for (x, y, z) in verts], faces
 
 
+def transform_geo(geo, dx=0.0, dy=0.0, dz=0.0, angle=0.0):
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    vertices = []
+    for x, y, z in geo[0]:
+        vertices.append((x * cosine - y * sine + dx, x * sine + y * cosine + dy, z + dz))
+    return vertices, geo[1]
+
+
 def concat(geometries):
     verts = []
     faces = []
@@ -343,9 +352,11 @@ def string_light_run(count=48, radius=8.4):
 
 
 def machine_unit():
-    body = box((0.1, 0.1, 0.0), (0.6, 0.6, 0.8))
-    door = box((0.56, 0.2, 0.2), (0.1, 0.4, 0.5))
-    return concat([body, door])
+    body = box((0.0, 0.0, 0.0), (0.78, 0.72, 0.88))
+    door = box((0.70, 0.14, 0.20), (0.08, 0.44, 0.48))
+    control = box((0.12, 0.08, 0.73), (0.52, 0.12, 0.08))
+    handle = cylinder(0.018, 0.36, 0.0, 6)
+    return concat([body, door, control, transform_geo(handle, 0.77, 0.36, 0.38, math.pi / 2.0)])
 
 
 def crate_stack():
@@ -408,8 +419,119 @@ def chandelier():
     return concat(parts)
 
 
-def checkerboard_plane():
-    return [(-2.0, -2.0, 0.0), (2.0, -2.0, 0.0), (2.0, 2.0, 0.0), (-2.0, 2.0, 0.0)], [(0, 1, 2), (0, 2, 3)]
+def checkerboard_plane(width=12.0, depth=9.6):
+    half_width = width / 2.0
+    half_depth = depth / 2.0
+    return [
+        (-half_width, -half_depth, 0.0),
+        (half_width, -half_depth, 0.0),
+        (half_width, half_depth, 0.0),
+        (-half_width, half_depth, 0.0),
+    ], [(0, 1, 2), (0, 2, 3)]
+
+
+def room_walls(width, depth, height, thickness=0.12):
+    half_width = width / 2.0
+    half_depth = depth / 2.0
+    return concat([
+        box((-half_width, -half_depth, 0.0), (thickness, depth, height)),
+        box((half_width - thickness, -half_depth, 0.0), (thickness, depth, height)),
+        box((-half_width, -half_depth, 0.0), (width, thickness, height)),
+        box((-half_width, half_depth - thickness, 0.0), (width, thickness, height)),
+    ])
+
+
+def ceiling_pipes(count=4, length=11.5, radius=0.055):
+    pipes = []
+    for index in range(count):
+        x = -4.5 + index * 3.0
+        pipes.append(transform_geo(cylinder(radius, length, 0.0, 8, closed_bottom=False), x, -4.55, 3.02, -math.pi / 2.0))
+    return concat(pipes)
+
+
+def basement_counter():
+    return concat([
+        box((3.9, -2.8, 0.0), (1.5, 5.0, 0.95)),
+        box((3.75, -2.8, 0.95), (1.8, 5.0, 0.12)),
+        box((3.9, -2.55, 1.07), (1.5, 0.08, 1.15)),
+    ])
+
+
+def laundry_cart():
+    return concat([
+        box((-0.35, -0.28, 0.55), (0.7, 0.56, 0.06)),
+        box((-0.3, -0.23, 0.0), (0.05, 0.05, 0.55)),
+        box((0.25, -0.23, 0.0), (0.05, 0.05, 0.55)),
+        box((-0.3, 0.18, 0.0), (0.05, 0.05, 0.55)),
+        box((0.25, 0.18, 0.0), (0.05, 0.05, 0.55)),
+    ])
+
+
+def suite_baluster():
+    return cylinder(0.028, 0.52, 0.0, 8)
+
+
+def torus(major, minor, major_segments=16, minor_segments=6):
+    vertices = []
+    faces = []
+    for i in range(major_segments):
+        major_angle = 2.0 * math.pi * i / major_segments
+        for j in range(minor_segments):
+            minor_angle = 2.0 * math.pi * j / minor_segments
+            radius = major + minor * math.cos(minor_angle)
+            vertices.append((radius * math.cos(major_angle), radius * math.sin(major_angle), minor * math.sin(minor_angle)))
+    for i in range(major_segments):
+        for j in range(minor_segments):
+            a = i * minor_segments + j
+            b = ((i + 1) % major_segments) * minor_segments + j
+            c = ((i + 1) % major_segments) * minor_segments + (j + 1) % minor_segments
+            d = i * minor_segments + (j + 1) % minor_segments
+            faces.extend(((a, b, c), (a, c, d)))
+    return vertices, faces
+
+
+def suite_scroll():
+    return concat([torus(0.12, 0.018, 10, 4), cylinder(0.018, 0.72, 0.52, 6)])
+
+
+def suite_handrail(radius=5.4, z=1.06):
+    return translate_geo(torus(radius, 0.045, 56, 6), 0.0, 0.0, z)
+
+
+def chandelier_rods(count=34):
+    rods = []
+    for index in range(count):
+        angle = 2.0 * math.pi * index / count
+        radius = 0.55 + 0.44 * (index % 5) / 4.0
+        rods.append(transform_geo(cylinder(0.012, 0.35, 0.0, 6), radius * math.cos(angle), radius * math.sin(angle), 3.05))
+    return concat(rods)
+
+
+def bar_bottle(count=66):
+    bottles = []
+    for index in range(count):
+        angle = 2.0 * math.pi * index / count
+        radius = 7.15 + 0.33 * (index % 4) / 3.0
+        height = 1.7 + 1.1 * (index % 6) / 5.0
+        bottle = concat([cylinder(0.07, height - 0.16, 0.0, 8), cone(0.07, 0.035, height, height - 0.16, 8)])
+        bottles.append(transform_geo(bottle, radius * math.cos(angle), radius * math.sin(angle), 0.0))
+    return concat(bottles)
+
+
+def suite_sconces(count=8, radius=7.7, z=2.35):
+    sconces = []
+    for index in range(count):
+        angle = 2.0 * math.pi * index / count
+        sconces.append(transform_geo(wall_sconce(), radius * math.cos(angle), radius * math.sin(angle), z, angle))
+    return concat(sconces)
+
+
+def standing_patron():
+    return concat([
+        cylinder(0.18, 1.3, 0.0, 8),
+        box((-0.24, -0.14, 1.18), (0.48, 0.28, 0.48)),
+        sphere(0.14, 0.0, 0.0, 1.72, 8, 5),
+    ])
 
 def _lcg(seed):
     """Deterministic pseudo-random source.

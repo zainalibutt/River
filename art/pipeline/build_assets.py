@@ -27,9 +27,13 @@ from geo import (
     palm,
     skyline_towers,
     translate_geo,
+    transform_geo,
     balustrade,
     bar_back,
     card_body,
+    checkerboard_plane,
+    bar_bottle,
+    basement_counter,
     chair_dining,
     chair_folding,
     chair_swivel,
@@ -39,6 +43,15 @@ from geo import (
     crate_stack,
     felt_oval,
     machine_unit,
+    ceiling_pipes,
+    room_walls,
+    laundry_cart,
+    suite_baluster,
+    suite_handrail,
+    suite_scroll,
+    chandelier_rods,
+    suite_sconces,
+    standing_patron,
     parapet_ring,
     planter,
     rail_ring_oval,
@@ -201,45 +214,83 @@ def build_basement(venue):
     checker_mat, _image, _path = make_checker_material(
         'basement_checker', 128, venue['checker_a'], venue['checker_b'], TEX_DIR
     )
-    from geo import checkerboard_plane
-    plane = build_mesh_from_geo('basement_floor', checkerboard_plane())
+    plane = build_mesh_from_geo('basement_floor', checkerboard_plane(12.0, 9.6))
     plane.materials.append(checker_mat)
     object_at('basement_floor', plane, (0.0, 0.0, -0.02))
     wall_mat = add_material('basement_wall', venue['wall'])
-    wall1 = build_mesh_from_geo('basement_wall_1', wall_panel())
-    wall1.materials.append(wall_mat)
-    object_at('basement_wall_1', wall1, (-2.0, 5.0, 0.0))
-    wall2 = build_mesh_from_geo('basement_wall_2', wall_panel())
-    wall2.materials.append(wall_mat)
-    object_at('basement_wall_2', wall2, (-2.0, -4.6, 0.0))
+    walls = build_mesh_from_geo('basement_room_walls', room_walls(12.0, 9.6, 3.1))
+    walls.materials.append(wall_mat)
+    object_at('basement_room_walls', walls, (0.0, 0.2, 0.0))
+    ceiling_surface = build_mesh_from_geo('basement_ceiling', checkerboard_plane(12.0, 9.6))
+    ceiling_surface.materials.append(wall_mat)
+    object_at('basement_ceiling', ceiling_surface, (0.0, 0.2, 3.35))
+    ceiling = build_mesh_from_geo('basement_ceiling_pipes', ceiling_pipes())
+    ceiling.materials.append(wall_mat)
+    object_at('basement_ceiling_pipes', ceiling, (0.0, 0.0, 0.0))
     machine_mat = add_material('basement_machine', venue['machine'])
-    for index in range(3):
-        machine = build_mesh_from_geo('basement_machine_%d' % index, machine_unit())
-        machine.materials.append(machine_mat)
-        object_at('basement_machine_%d' % index, machine, (-1.5, 1.0 + index * 0.8, 0.0), (0.0, 0.0, index * 0.3))
+    machines = []
+    for row in range(2):
+        z = 0.42 + row * 0.94
+        for index in range(7):
+            x = -5.55 + index * 1.70
+            machines.append(transform_geo(machine_unit(), x, 4.05, z))
+            y = -3.95 + index * 1.18
+            machines.append(transform_geo(machine_unit(), -5.72, y, z, math.pi / 2.0))
+    machine_mesh = build_mesh_from_geo('basement_machine_bank', concat(machines))
+    machine_mesh.materials.append(machine_mat)
+    object_at('basement_machine_bank', machine_mesh, (0.0, 0.0, 0.0))
+    counter_mat = add_material('basement_counter', venue['wood'])
+    counter = build_mesh_from_geo('basement_counter', basement_counter())
+    counter.materials.append(counter_mat)
+    object_at('basement_counter', counter, (0.0, 0.0, 0.0))
+    carts = build_mesh_from_geo(
+        'basement_carts',
+        concat([transform_geo(laundry_cart(), 2.9, -3.1, 0.0), transform_geo(laundry_cart(), 2.9, 2.35, 0.0)]),
+    )
+    carts.materials.append(machine_mat)
+    object_at('basement_carts', carts, (0.0, 0.0, 0.0))
     crate_mat = add_material('basement_crate', venue['crate'])
-    for index in range(3):
-        crates = build_mesh_from_geo('basement_crate_%d' % index, crate_stack())
-        crates.materials.append(crate_mat)
-        object_at('basement_crate_%d' % index, crates, (1.4, 1.6, 0.0), (0.0, 0.0, index * 0.2))
+    crates = build_mesh_from_geo(
+        'basement_crates',
+        concat([transform_geo(crate_stack(), 3.5, 2.7, 0.0), transform_geo(crate_stack(), 4.1, 2.7, 0.0, 0.2)]),
+    )
+    crates.materials.append(crate_mat)
+    object_at('basement_crates', crates, (0.0, 0.0, 0.0))
     ladder_mat = add_material('basement_ladder', venue['ladder'])
     ladder = build_mesh_from_geo('basement_ladder', stepladder())
     ladder.materials.append(ladder_mat)
-    object_at('basement_ladder', ladder, (0.8, 1.7, 0.0))
+    object_at('basement_ladder', ladder, (2.3, -3.8, 0.0))
 
 
 def build_suite(venue):
     bal_mat = add_material('suite_balustrade', venue['balustrade'])
-    balustrade_mesh = build_mesh_from_geo('suite_balustrade', balustrade())
-    balustrade_mesh.materials.append(bal_mat)
-    object_at('suite_balustrade', balustrade_mesh, (0.0, -1.6, 0.0))
     wall_mat = add_material('suite_wall', venue['wall'])
-    wall1 = build_mesh_from_geo('suite_wall_1', wall_panel())
-    wall1.materials.append(wall_mat)
-    object_at('suite_wall_1', wall1, (-2.0, 7.6, 0.0))
-    wall2 = build_mesh_from_geo('suite_wall_2', wall_panel())
-    wall2.materials.append(wall_mat)
-    object_at('suite_wall_2', wall2, (7.6, -2.0, 0.0), (0.0, 0.0, math.pi / 2))
+    floor = build_mesh_from_geo('suite_floor', terrace_disc(8.2, 64))
+    floor.materials.append(wall_mat)
+    object_at('suite_floor', floor, (0.0, 0.0, -0.02))
+    walls = build_mesh_from_geo('suite_room_walls', room_walls(16.4, 16.4, 4.4))
+    walls.materials.append(wall_mat)
+    object_at('suite_room_walls', walls, (0.0, 0.0, 0.0))
+    ceiling = build_mesh_from_geo('suite_ceiling', checkerboard_plane(16.4, 16.4))
+    ceiling.materials.append(wall_mat)
+    object_at('suite_ceiling', ceiling, (0.0, 0.0, 4.4))
+    balusters = []
+    scrolls = []
+    for index in range(56):
+        angle = 2.0 * math.pi * index / 56.0
+        x = 5.4 * math.cos(angle)
+        y = 5.4 * math.sin(angle)
+        balusters.append(transform_geo(suite_baluster(), x, y, 0.0))
+        scrolls.append(transform_geo(suite_scroll(), x, y, 0.0, angle))
+    baluster_mesh = build_mesh_from_geo('suite_balusters', concat(balusters))
+    baluster_mesh.materials.append(bal_mat)
+    object_at('suite_balusters', baluster_mesh, (0.0, 0.0, 0.0))
+    scroll_mesh = build_mesh_from_geo('suite_scroll_ornaments', concat(scrolls))
+    scroll_mesh.materials.append(bal_mat)
+    object_at('suite_scroll_ornaments', scroll_mesh, (0.0, 0.0, 0.0))
+    handrail = build_mesh_from_geo('suite_handrail', suite_handrail())
+    handrail.materials.append(bal_mat)
+    object_at('suite_handrail', handrail, (0.0, 0.0, 0.0))
     bar_mat = add_material('suite_bar', venue['bar_wood'])
     bar = build_mesh_from_geo('suite_bar', bar_back())
     bar.materials.append(bar_mat)
@@ -248,19 +299,31 @@ def build_suite(venue):
     shelf = build_mesh_from_geo('suite_bar_lit', bar_back())
     shelf.materials.append(bar_light)
     object_at('suite_bar_lit', shelf, (6.6, -1.0, 1.2), (0.0, 0.0, math.pi / 2))
+    bottles = build_mesh_from_geo('suite_bar_bottles', bar_bottle())
+    bottles.materials.append(bar_light)
+    object_at('suite_bar_bottles', bottles, (0.0, 0.0, 0.0))
     sconce_mat = add_emissive_material('suite_sconce', venue['sconce'], 1.2)
-    for index in range(2):
-        sconce = build_mesh_from_geo('suite_sconce_%d' % index, wall_sconce())
-        sconce.materials.append(sconce_mat)
-        object_at('suite_sconce_%d' % index, sconce, (1.6 + index * 0.6, 2.5, 0.7))
+    sconces = build_mesh_from_geo('suite_wall_sconces', suite_sconces())
+    sconces.materials.append(sconce_mat)
+    object_at('suite_wall_sconces', sconces, (0.0, 0.0, 0.0))
     chandelier_mat = add_material('suite_chandelier', venue['chandelier'])
     chandelier_lit = add_emissive_material('suite_chandelier_lit', venue['sconce'], 1.5)
+    rods = build_mesh_from_geo('suite_chandelier_rods', chandelier_rods())
+    rods.materials.append(chandelier_mat)
+    object_at('suite_chandelier_rods', rods, (6.0, 0.0, 0.0))
     chandy = build_mesh_from_geo('suite_chandelier', chandelier())
     chandy.materials.append(chandelier_mat)
-    object_at('suite_chandelier', chandy, (0.0, 0.0, 2.4))
+    object_at('suite_chandelier', chandy, (6.0, 0.0, 2.4))
     chandy_lit = build_mesh_from_geo('suite_chandelier_lit', chandelier())
     chandy_lit.materials.append(chandelier_lit)
-    object_at('suite_chandelier_lit', chandy_lit, (0.0, 0.0, 2.4))
+    object_at('suite_chandelier_lit', chandy_lit, (6.0, 0.0, 2.4))
+    patrons = []
+    for degrees in (40, 95, 150, 215, 300):
+        angle = math.radians(degrees)
+        patrons.append(transform_geo(standing_patron(), 6.9 * math.cos(angle), 6.9 * math.sin(angle), 0.0, angle + math.pi))
+    patron_mesh = build_mesh_from_geo('suite_standing_patrons', concat(patrons))
+    patron_mesh.materials.append(wall_mat)
+    object_at('suite_standing_patrons', patron_mesh, (0.0, 0.0, 0.0))
 
 
 def hex_to_linear(hex_rgb):
