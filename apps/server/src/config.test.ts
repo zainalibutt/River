@@ -8,6 +8,7 @@ describe('server config', () => {
         SUPABASE_URL: 'https://river.supabase.co/',
         SUPABASE_SERVICE_ROLE_KEY: 'server-only',
         PORT: '8080',
+        HOSTNAME: 'container-generated-hostname',
       }),
     ).toEqual({
       hostname: '0.0.0.0',

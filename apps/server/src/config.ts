@@ -20,7 +20,7 @@ export function readServerConfig(env: Readonly<Record<string, string | undefined
     throw new Error('PORT must be a valid TCP port')
   }
   return {
-    hostname: env.HOSTNAME ?? '0.0.0.0',
+    hostname: '0.0.0.0',
     port,
     supabaseUrl: url.toString().replace(/\/$/, ''),
     serviceRoleKey,
