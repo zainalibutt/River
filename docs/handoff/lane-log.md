@@ -40,6 +40,10 @@ Format: one row per completed packet, newest last.
 | 2026-08-25 | Migration applied | Codex | n/a | `player_table_items` live on River Production. RLS on, unique equipped-slot index, owner-only SELECT, public INSERT denied |
 | 2026-08-25 | 4W table item store and wire | Claude | `647bae3` | Supabase-backed store plus buy and equip client messages. The purchase path had been written against an interface with no implementation |
 | 2026-08-25 | 5H leaked venue light | Codex | `ae41583` | **Solved the empty venue.** A stray gltf point light at intensity 54,351, leaked from an older character import, washed every room out. Export now excludes punctual lights and the build fails if one appears |
+| 2026-08-25 | 5L the lid | Claude | `19683bb` | `cylinder()` always capped its top, so the parapet sealed a solid 3.9m disc over every venue. This, not the leaked light, is why the rooms looked empty |
+| 2026-08-25 | 5M rooftop prop pass | Claude | `13318ce` | Braziers replace clipped white spheres, string lights and palms brought in from spec radii that assume a terrace 1.62x larger than the pipeline builds |
+| 2026-08-25 | 4U showdown order | DeepSeek | `d4eb60f` | Accepted. Folded seats filtered first, so the hidden-information proof holds |
+| 2026-08-25 | 5J migration drift | Codex | `1c124cb` | Wrote it up and stopped. **Economy grants are absent from production** |
 | 2026-08-25 | 5P publish clean venues | Claude | `28b9acd` | Republished all three without the leak. Verified zero punctual lights and the extension undeclared |
 | 2026-08-25 | 4R bot personalities | DeepSeek | `0c07236` | Accepted. 14 tests, imports only the BotSkill type, deterministic picks, tilt blending clamped |
 | 2026-08-25 | 4U hidden information proof | Claude | `8128ce9`, `fb9962a` | Nine adversarial cases across every transition, plus a vacuity check. Found and fixed a vacuous case of my own |
@@ -137,6 +141,22 @@ lying (a fourth instrument failure), or something occludes the scene in both
 Blender and three.js. Do not act on the camera values until this is settled -
 tuning framing against a render that may not reflect the scene is guessing
 twice.
+
+## Open — production economy is not deployed
+
+`private.economy_config` holds only `signup_bankroll`. Missing `rescue_floor`,
+`rescue_threshold`, `rescue_daily_cap`, `daily_base`. The streak bonus table and
+both 4H views do not exist. **Daily grants and bust rescues fail for every
+player.** Codex documented it in `migration-state.md` and correctly refused to
+push at a live database; 5K is the reviewed fix.
+
+## Open — the venue is built at 62 percent of its designed scale
+
+The terrace is 4.0m where the spec's decor radii assume 6.48m. Every prop
+radius in `14-venue-build-spec.md` is therefore wrong for the pipeline, and
+following the spec put lights and palms outside the venue. Props are now placed
+against the terrace that exists. Either scale the venue up or amend the spec -
+having two sources of truth for radii is how this happened.
 
 ## Open
 
