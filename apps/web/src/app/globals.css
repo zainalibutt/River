@@ -1502,3 +1502,70 @@ input:focus-visible {
   left: 360px;
   right: auto;
 }
+
+/* Preset actions. Private to the player, so they sit outside the RAM wedge
+   circle and read at reduced emphasis - the public half of this mechanic is the
+   avatar gesture, not the HUD. */
+.preset-rail {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: auto;
+  position: absolute;
+  bottom: 300px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 22;
+  display: flex;
+  gap: 12px;
+}
+
+.preset-chip {
+  padding: 10px 18px;
+  border: 1px dashed var(--river-room-edge);
+  border-radius: 999px;
+  background: rgb(27 35 32 / 62%);
+  color: var(--river-cream-faint);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  opacity: 0.72;
+  transition:
+    opacity 140ms var(--ease-out),
+    color 140ms var(--ease-out);
+}
+
+.preset-chip:hover {
+  opacity: 0.92;
+  color: var(--river-cream-dim);
+}
+
+.preset-chip.armed {
+  opacity: 1;
+  border-style: solid;
+  border-color: var(--river-amber);
+  color: var(--river-amber);
+}
+
+.preset-chip:focus-visible {
+  outline: 2px solid var(--river-amber-bright);
+  outline-offset: 3px;
+}
+
+.preset-notice {
+  position: absolute;
+  bottom: 356px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 22;
+  color: var(--river-amber);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preset-chip {
+    transition: none;
+  }
+}

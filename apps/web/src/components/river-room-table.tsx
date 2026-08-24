@@ -22,6 +22,14 @@ import {
   upgradeRiverSession,
 } from '@/lib/auth'
 import { formatAmount } from '@/lib/presentation'
+import {
+  canArmPreset,
+  PRESET_KINDS,
+  PRESET_LABELS,
+  type PresetKind,
+  resolvePreset,
+  shouldClearPreset,
+} from '@/lib/preset'
 import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib/socket'
 import { type VerifyResult, verifyHand } from '@/lib/verify'
 
@@ -195,6 +203,9 @@ export function RiverRoomTable() {
   const [dialBand, setDialBand] = useState(0)
   const [stageScale, setStageScale] = useState(2 / 3)
   const [graphicsMode, setGraphicsMode] = useState<'two' | 'three'>('two')
+  const [preset, setPreset] = useState<PresetKind | null>(null)
+  const presetFiredFor = useRef<string | null>(null)
+  const [presetNotice, setPresetNotice] = useState<string | null>(null)
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [verify, setVerify] = useState<VerifyResult>({
     status: 'idle',
@@ -354,6 +365,45 @@ export function RiverRoomTable() {
   const seatedCount = view.seats.filter((seat) => seat.playerId !== null && seat.stack > 0).length
   const isHost = view.hostPlayerId === view.selfId
   const localTurn = view.currentActor?.playerId === view.selfId
+
+  const handLive = view.phase === 'hand'
+  const seatedHere = view.seats.some((seat) => seat.playerId === view.selfId && !seat.folded)
+  const presetArmable = canArmPreset(localTurn, seatedHere, handLive)
+
+  // A preset is armed for one decision. Clearing on a street change stops CALL
+  // ANY armed pre-flop from silently calling a river shove.
+  const streetKey = handLive ? `${view.handNumber}:${view.street}` : null
+  const lastStreetKey = useRef<string | null>(null)
+  useEffect(() => {
+    if (shouldClearPreset(lastStreetKey.current, streetKey, handLive)) {
+      setPreset(null)
+      presetFiredFor.current = null
+    }
+    lastStreetKey.current = streetKey
+  }, [streetKey, handLive])
+
+  // When the turn opens, an armed preset commits immediately if it still means
+  // what the player chose. If it does not, it is discarded rather than quietly
+  // becoming a different action, and the normal RAM opens.
+  useEffect(() => {
+    if (preset === null || !localTurn || view.legal === null) return
+    const turnKey = `${view.handNumber}:${view.street}:${view.selfId}`
+    if (presetFiredFor.current === turnKey) return
+    presetFiredFor.current = turnKey
+    const outcome = resolvePreset(preset, view.legal)
+    setPreset(null)
+    if (outcome.kind === 'commit') {
+      command({ kind: 'act', action: outcome.action })
+    } else {
+      setPresetNotice('Preset no longer applies.')
+    }
+  }, [preset, localTurn, view.legal, view.handNumber, view.street, view.selfId, command])
+
+  useEffect(() => {
+    if (presetNotice === null) return
+    const timer = window.setTimeout(() => setPresetNotice(null), 2600)
+    return () => window.clearTimeout(timer)
+  }, [presetNotice])
   const turnRemaining = useTurnRemaining(view.turnDeadlineMs)
   const urgency =
     localTurn &&
@@ -556,6 +606,26 @@ export function RiverRoomTable() {
               </HoldAction>
             ) : null}
             {connection !== 'connected' ? <div className="network-bar">Reconnecting…</div> : null}
+            {presetArmable ? (
+              <fieldset className="preset-rail" aria-label="Preset actions">
+                {PRESET_KINDS.map((kind) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    className={`preset-chip${preset === kind ? ' armed' : ''}`}
+                    aria-pressed={preset === kind}
+                    onClick={() => setPreset((current) => (current === kind ? null : kind))}
+                  >
+                    {PRESET_LABELS[kind]}
+                  </button>
+                ))}
+              </fieldset>
+            ) : null}
+            {presetNotice === null ? null : (
+              <div className="preset-notice" role="status">
+                {presetNotice}
+              </div>
+            )}
             <RadialActionMenu
               view={view}
               localTurn={localTurn}
