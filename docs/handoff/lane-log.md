@@ -36,6 +36,9 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 5E chip instancing | Codex | `5b8008c` | Accepted. GPU instancing with stable per-instance ids. Draw calls 50/42/47 to 34/26/31 |
 | 2026-08-24 | 4M table items | DeepSeek | `f0ce29f` | Accepted. Zero imports, so it cannot touch poker odds by construction |
 | 2026-08-24 | 4N REP progression | DeepSeek | `1bfea54` | Accepted. 14 tests, pure, no clock |
+| 2026-08-25 | 4S seat presentation | DeepSeek | `5e05e38` | Accepted. 2,048 exhaustive combinations, total function. It ran typecheck first and caught a malformed object in its own draft |
+| 2026-08-25 | Migration applied | Codex | n/a | `player_table_items` live on River Production. RLS on, unique equipped-slot index, owner-only SELECT, public INSERT denied |
+| 2026-08-25 | 4W table item store and wire | Claude | `647bae3` | Supabase-backed store plus buy and equip client messages. The purchase path had been written against an interface with no implementation |
 | 2026-08-25 | 5H leaked venue light | Codex | `ae41583` | **Solved the empty venue.** A stray gltf point light at intensity 54,351, leaked from an older character import, washed every room out. Export now excludes punctual lights and the build fails if one appears |
 | 2026-08-25 | 5P publish clean venues | Claude | `28b9acd` | Republished all three without the leak. Verified zero punctual lights and the extension undeclared |
 | 2026-08-25 | 4R bot personalities | DeepSeek | `0c07236` | Accepted. 14 tests, imports only the BotSkill type, deterministic picks, tilt blending clamped |
