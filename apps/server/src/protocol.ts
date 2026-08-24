@@ -38,7 +38,18 @@ export interface RoomConfig {
 export type RoomCommand =
   | { kind: 'join'; playerId: string; name: string; inviteCode?: string }
   | { kind: 'leave'; playerId: string }
-  | { kind: 'sit'; playerId: string; seat: number; buyIn: number }
+  | {
+      kind: 'sit'
+      playerId: string
+      seat: number
+      buyIn: number
+      /**
+       * REP earning modifiers from the player's equipped table items, supplied
+       * by the transport from server-side inventory. Never taken from the
+       * client, which could otherwise claim any rate it liked.
+       */
+      repModifiers?: number[]
+    }
   | { kind: 'stand'; playerId: string }
   | { kind: 'startHand' }
   | { kind: 'submitSeed'; playerId: string; seed: string }

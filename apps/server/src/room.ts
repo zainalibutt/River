@@ -73,6 +73,8 @@ interface SeatState {
   busted: boolean
   /** Reputation, not chips. Never spendable, never through the ledger. */
   totalRep: number
+  /** REP rates from equipped table items. Server-supplied, never client-sent. */
+  repModifiers: number[]
   /** Challenge metrics for the current UTC day, reset when the day turns. */
   tally: MetricTally
   tallyDay: string
@@ -185,6 +187,7 @@ export class Room implements RoomHandle {
       hole: [],
       busted: false,
       totalRep: 0,
+      repModifiers: [],
       tally: {},
       tallyDay: '',
     }))
@@ -276,7 +279,7 @@ export class Room implements RoomHandle {
       case 'leave':
         return this.leave(command.playerId)
       case 'sit':
-        return this.sit(command.playerId, command.seat, command.buyIn)
+        return this.sit(command.playerId, command.seat, command.buyIn, command.repModifiers ?? [])
       case 'stand':
         return this.stand(command.playerId)
       case 'startHand':
@@ -339,7 +342,12 @@ export class Room implements RoomHandle {
     return this.result({ kind: 'left', playerId })
   }
 
-  private sit(playerId: string, seatIndex: number, buyIn: number): RoomResult {
+  private sit(
+    playerId: string,
+    seatIndex: number,
+    buyIn: number,
+    repModifiers: number[],
+  ): RoomResult {
     const player = this.players.get(playerId)
     if (player === undefined) {
       return this.reject(playerId, 'not joined')
@@ -369,6 +377,7 @@ export class Room implements RoomHandle {
     }
     seat.playerId = playerId
     seat.stack = buyIn
+    seat.repModifiers = repModifiers
     seat.hole = []
     seat.busted = false
     player.seat = seatIndex
@@ -843,7 +852,7 @@ export class Room implements RoomHandle {
         // Scale from the table stake, not the player's stack, so a short stack
         // at a big table earns the same as a deep one.
         buyIn: this.config.stake.defaultBuyIn,
-        tableItemModifiers: [],
+        tableItemModifiers: seat.repModifiers,
         eventModifiers: [],
         challengeModifiers: [],
         otherModifiers: [],
