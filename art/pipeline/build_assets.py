@@ -518,8 +518,7 @@ def lighting_sidecar():
     # into the web app, and CRLF fails the shared lint gate.
     with open(path, 'w', newline='') as handle:
         json.dump(out, handle, indent=2)
-        handle.write('
-')
+        handle.write(chr(10))
     return path
 
 
