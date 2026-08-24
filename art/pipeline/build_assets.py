@@ -835,6 +835,10 @@ def build_venue(venue, chip_meshes, card_mesh):
     append_gpu_instances(glb, pools)
     dedupe_materials(glb)
     report = checker.Report()
+    # File size is a budget too. Triangles, materials and draw calls were all
+    # gated while the download grew from 185KB to 12MB unnoticed, because
+    # nothing measured the thing a player actually waits for.
+    glb_kb = os.path.getsize(glb) / 1024.0
     gltf, binary = checker.read_glb(glb)
     checker.compute_counts(gltf, binary, report)
     failures = []
@@ -843,6 +847,7 @@ def build_venue(venue, chip_meshes, card_mesh):
         failures.append('no light rig built for ' + venue['id'])
     for intrusion in intrusions:
         failures.append('orbit clear radius: ' + intrusion)
+    report.glb_kb = glb_kb
     return glb, report, failures
 
 
@@ -872,8 +877,12 @@ def main():
         manifest[venue['id']] = report.to_dict(glb)
         if failures:
             overall_failures.append(venue['id'] + ': ' + '; '.join(failures))
-        print('VENUE %s triangles=%d materials=%d draw_calls=%d' % (
-            venue['id'], report.total_triangles, report.materials, report.draw_calls
+        print('VENUE %s triangles=%d materials=%d draw_calls=%d download=%.0fKB' % (
+            venue['id'],
+            report.total_triangles,
+            report.materials,
+            report.draw_calls,
+            getattr(report, 'glb_kb', 0.0),
         ))
     manifest['lighting'] = lighting_sidecar()
     manifest['verdict'] = 'PASS' if not overall_failures else 'FAIL'
