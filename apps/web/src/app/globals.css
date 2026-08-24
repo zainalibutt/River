@@ -1401,3 +1401,104 @@ input:focus-visible {
     animation-duration: var(--hold-duration);
   }
 }
+
+/* Verify panel — the fairness commit is only a claim until the player can
+   recompute it. Status colour is semantic, not decorative: amber while the
+   seed is still sealed, cream on a match, danger on a mismatch. */
+.verify-pill.verify-live strong {
+  color: var(--river-amber);
+}
+
+.verify-pill.verify-match strong {
+  color: var(--river-cream);
+}
+
+.verify-pill.verify-mismatch {
+  border-color: var(--river-danger);
+}
+
+.verify-pill.verify-mismatch strong {
+  color: var(--river-danger);
+}
+
+.verify-modal .verify-rows {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 20px;
+  align-items: baseline;
+  margin: 20px 0 0;
+}
+
+.verify-modal .verify-rows dt {
+  color: var(--river-cream-faint);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.verify-modal .verify-rows dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.verify-modal .verify-rows code {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--river-cream-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.verify-modal .verify-seeds {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.verify-modal .verify-seeds li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+}
+
+.verify-modal .verify-seeds span {
+  color: var(--river-cream-faint);
+  font-weight: 700;
+  min-width: 64px;
+}
+
+.verify-modal .verify-seeds code {
+  color: var(--river-cream-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.verify-modal .verify-seeds em {
+  color: var(--river-amber);
+  font-style: normal;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.verify-modal .verify-verdict {
+  margin: 24px 0 0;
+  line-height: 1.6;
+  color: var(--river-cream-dim);
+}
+
+.verify-modal .verify-verdict.verify-mismatch {
+  color: var(--river-danger);
+  font-weight: 700;
+}
+
+/* The room HUD gives the top-right corner to the invite strip, so the verify
+   pill sits beside the menu cluster instead. Without this it lands on top of
+   the table code. */
+.verify-pill-room {
+  left: 360px;
+  right: auto;
+}

@@ -23,6 +23,7 @@ import {
 } from '@/lib/auth'
 import { formatAmount } from '@/lib/presentation'
 import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib/socket'
+import { type VerifyResult, verifyHand } from '@/lib/verify'
 
 const boardSlots = ['flop-one', 'flop-two', 'flop-three', 'turn', 'river'] as const
 const turnBudgets: Record<Street, number> = {
@@ -97,6 +98,45 @@ function emptyView(selfId = 'pending'): RoomView {
   }
 }
 
+function verifyStatusLabel(status: VerifyResult['status']): string {
+  switch (status) {
+    case 'match':
+      return 'Fairness verified, commit matches the revealed seed'
+    case 'mismatch':
+      return 'Fairness check failed, commit does not match'
+    case 'live':
+      return 'Fairness commit published, seed still hidden'
+    default:
+      return 'Fairness commit not yet published'
+  }
+}
+
+function verifyHeadline(status: VerifyResult['status']): string {
+  switch (status) {
+    case 'match':
+      return 'This hand checks out.'
+    case 'mismatch':
+      return 'This hand does not check out.'
+    case 'live':
+      return 'The deck was locked before the deal.'
+    default:
+      return 'No hand committed yet.'
+  }
+}
+
+function verifyCopy(status: VerifyResult['status']): string {
+  switch (status) {
+    case 'match':
+      return 'Recomputed in your browser: the revealed seed hashes to the commit published before the deal. Nobody could have chosen this deck after seeing a card.'
+    case 'mismatch':
+      return 'The revealed seed does not hash to the published commit. Do not keep playing at this table.'
+    case 'live':
+      return 'The commit is published and the server seed stays hidden until the hand settles. Your own seed is mixed in, so the deck is not the server’s alone.'
+    default:
+      return 'A commit appears when the next hand begins.'
+  }
+}
+
 function orderedSeats(view: RoomView): RoomSeatView[] {
   const heroIndex = view.seats.findIndex((seat) => seat.playerId === view.selfId)
   if (heroIndex < 0) return view.seats
@@ -148,6 +188,22 @@ export function RiverRoomTable() {
   const [dialBand, setDialBand] = useState(0)
   const [stageScale, setStageScale] = useState(2 / 3)
   const [graphicsMode, setGraphicsMode] = useState<'two' | 'three'>('two')
+  const [verifyOpen, setVerifyOpen] = useState(false)
+  const [verify, setVerify] = useState<VerifyResult>({
+    status: 'idle',
+    recomputedCommit: null,
+    deckEntropy: null,
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    void verifyHand(view.commit, view.revealedSeed, view.clientSeeds).then((result) => {
+      if (!cancelled) setVerify(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [view.commit, view.revealedSeed, view.clientSeeds])
   const socketRef = useRef<RiverSocket | null>(null)
   const authRef = useRef<SupabaseClient | null>(null)
   const kickRef = useRef<KickState>(null)
@@ -373,6 +429,77 @@ export function RiverRoomTable() {
                 {connection === 'connected' ? 'LIVE' : 'LINK'}
               </span>
             </nav>
+            <button
+              type="button"
+              className={`verify-pill verify-pill-room verify-${verify.status}`}
+              disabled={view.commit === null}
+              aria-label={verifyStatusLabel(verify.status)}
+              onClick={() => setVerifyOpen(true)}
+            >
+              <span>VERIFY</span>
+              <strong>{view.commit?.slice(0, 8) ?? '--------'}</strong>
+            </button>
+            {verifyOpen ? (
+              <div className="modal-backdrop" role="presentation">
+                <section
+                  className="modal verify-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="verify-title"
+                >
+                  <button
+                    className="modal-close"
+                    type="button"
+                    onClick={() => setVerifyOpen(false)}
+                  >
+                    CLOSE
+                  </button>
+                  <p className="eyebrow">FAIRNESS</p>
+                  <h2 id="verify-title">{verifyHeadline(verify.status)}</h2>
+
+                  <dl className="verify-rows">
+                    <dt>COMMIT</dt>
+                    <dd>
+                      <code>{view.commit ?? '--'}</code>
+                    </dd>
+                    {view.revealedSeed === null ? null : (
+                      <>
+                        <dt>REVEALED SERVER SEED</dt>
+                        <dd>
+                          <code>{view.revealedSeed}</code>
+                        </dd>
+                        <dt>RECOMPUTED</dt>
+                        <dd>
+                          <code>{verify.recomputedCommit ?? '--'}</code>
+                        </dd>
+                        <dt>DECK ENTROPY</dt>
+                        <dd>
+                          <code>{verify.deckEntropy ?? '--'}</code>
+                        </dd>
+                      </>
+                    )}
+                  </dl>
+
+                  {view.clientSeeds === null ? null : (
+                    <ul className="verify-seeds">
+                      {[...view.clientSeeds]
+                        .sort((left, right) => left.seat - right.seat)
+                        .map((entry) => (
+                          <li key={entry.playerId}>
+                            <span>SEAT {entry.seat + 1}</span>
+                            <code>{entry.seed.slice(0, 16)}</code>
+                            {entry.defaulted ? <em>SERVER DEFAULT</em> : null}
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+
+                  <p role="status" className={`verify-verdict verify-${verify.status}`}>
+                    {verifyCopy(verify.status)}
+                  </p>
+                </section>
+              </div>
+            ) : null}
             <section className="invite-strip" aria-label="Private table invite">
               <span>TABLE CODE</span>
               <strong>{view.inviteCode || '------'}</strong>
