@@ -86,8 +86,20 @@ rendering from inside a palm tree — the fronds read convincingly as shadow
 artifacts and cost three diagnostic passes. It is a gate, not a note: verified
 to fire at r=4.80 against an 8.40 clear radius and to stay silent at r=12.0.
 
-## Not done here
+## Closed since first write
 
-- The Rooftop vertical gradient world is flat in the sidecar.
-- Laundromat has four shadow casters and should have one.
+- **Rooftop gradient world.** Built as the specified
+  `TexCoord > SeparateXYZ > ColorRamp > Background` chain with stops at 0.46
+  `#8E3A6B`, 0.55 `#4A2352`, 0.68 `#0E0A18`. Verified present with those three
+  positions. `world_gradient` in the sidecar carries the stops; `world` remains
+  the flat fallback for renderers that cannot build a ramp.
+- **One shadow caster per venue.** The Laundromat had four fluoros casting
+  against a one-caster budget. `fluoro_2` is nearest the table centre and keeps
+  the shadow; the other three are now fill. Verified: rooftop 1, basement 1,
+  suite 1.
+
+## Still open
+
 - Energy calibration between Blender watts and three.js intensity is unmeasured.
+  Do this once per venue against a lookdev frame and record the scalar in the
+  loader. Hand-tuning per light is how the two renderers drifted apart before.

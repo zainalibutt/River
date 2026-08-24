@@ -251,6 +251,26 @@ def build_lighting(venue_id):
     if background is not None:
         background.inputs[0].default_value = hex_to_linear(world_hex) + (1.0,)
         background.inputs[1].default_value = world_strength
+
+    stops = spec.get('world_gradient')
+    if stops and background is not None:
+        # TexCoord > SeparateXYZ > ColorRamp > Background. The Rooftop sky is a
+        # vertical gradient; a flat colour reads as a grey lid over the skyline.
+        tree = world.node_tree
+        coord = tree.nodes.new('ShaderNodeTexCoord')
+        separate = tree.nodes.new('ShaderNodeSeparateXYZ')
+        ramp = tree.nodes.new('ShaderNodeValToRGB')
+        tree.links.new(coord.outputs['Generated'], separate.inputs[0])
+        tree.links.new(separate.outputs['Z'], ramp.inputs['Fac'])
+        tree.links.new(ramp.outputs['Color'], background.inputs[0])
+        elements = ramp.color_ramp.elements
+        while len(elements) > 1:
+            elements.remove(elements[-1])
+        for index, (position, colour) in enumerate(stops):
+            element = elements[0] if index == 0 else elements.new(position)
+            element.position = position
+            element.color = hex_to_linear(colour) + (1.0,)
+
     bpy.context.scene.world = world
 
     created = []

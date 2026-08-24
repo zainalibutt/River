@@ -109,7 +109,10 @@ VENUES = [ROOFTOP, BASEMENT, SUITE]
 # type, colour, energy, size, shadow, (x, y, z), (rot_x_deg, rot_y_deg, rot_z_deg)
 VENUE_LIGHTS = {
     'rooftop': {
+        # Vertical gradient, not a flat colour. A flat background read gives a
+        # misleading value - see docs/design/14-venue-build-spec.md.
         'world': ('101613', 1.5),
+        'world_gradient': [(0.46, '8E3A6B'), (0.55, '4A2352'), (0.68, '0E0A18')],
         'lights': [
             ('table',     'AREA', 'FFE2BC', 240.0,  5.5, True,  (0.0, 0.0, 3.9),  (0, 0, 0)),
             ('sky_fill',  'AREA', '5C74B8', 300.0, 14.0, False, (0.0, 1.0, 7.0),  (0, 0, 0)),
@@ -121,10 +124,13 @@ VENUE_LIGHTS = {
     'basement': {
         'world': ('0E1614', 0.35),
         'lights': [
-            ('fluoro_0', 'AREA', 'CFEDE2',  90.0, 2.2, True, (-2.6,  2.2, 2.92), (0, 0, 0)),
-            ('fluoro_1', 'AREA', 'CFEDE2',  90.0, 2.2, True, ( 2.6,  2.2, 2.92), (0, 0, 0)),
-            ('fluoro_2', 'AREA', 'CFEDE2',  90.0, 2.2, True, (-2.6, -1.6, 2.92), (0, 0, 0)),
-            ('fluoro_3', 'AREA', 'CFEDE2',  90.0, 2.2, True, ( 2.6, -1.6, 2.92), (0, 0, 0)),
+            # One soft realtime caster per venue is the whole shadow budget.
+            # The lookdev had all four fluoros casting; fluoro_2 is nearest the
+            # table centre, so it keeps the shadow and the rest become fill.
+            ('fluoro_0', 'AREA', 'CFEDE2',  90.0, 2.2, False, (-2.6,  2.2, 2.92), (0, 0, 0)),
+            ('fluoro_1', 'AREA', 'CFEDE2',  90.0, 2.2, False, ( 2.6,  2.2, 2.92), (0, 0, 0)),
+            ('fluoro_2', 'AREA', 'CFEDE2',  90.0, 2.2, True,  (-2.6, -1.6, 2.92), (0, 0, 0)),
+            ('fluoro_3', 'AREA', 'CFEDE2',  90.0, 2.2, False, ( 2.6, -1.6, 2.92), (0, 0, 0)),
             ('ambient',  'AREA', '7FA89A',  70.0, 9.0, False, (0.0,  0.0, 2.70), (0, 0, 0)),
         ],
     },
