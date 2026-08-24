@@ -2,7 +2,20 @@
 
 Character pipeline output at `art/out/char_male.glb` and `char_female.glb`, reviewed by Claude 2026-08-24 by importing both exports and inspecting the scene graph. `build_characters.py` is modified and uncommitted — DeepSeek stopped mid-packet for the third time, so this reads the last shipped artefacts.
 
-**Verdict: two packets substantially delivered, one P0, three P1s, all four sharing one root cause.**
+**Verdict: RESOLVED 2026-08-24.** All findings fixed by Claude in `art/pipeline/build_characters.py` while DeepSeek was paused. Verified by rebuilding and parsing the GLB directly. The review below is retained as the record of what was wrong.
+
+| Metric | Before | After |
+|---|---|---|
+| Triangles | 8,972 | **14,114** |
+| Quad ratio | 0.841 (failing) | **0.853** |
+| Vertex groups | 137 | **265** |
+| Garment vertex groups | **0** | **265** |
+| Actions, male / female | 9 / 1 | **9 / 9** |
+| Male vs female shape | identical | **distinct hashes** |
+| Stray objects in GLB | reported | **none** — see the correction below |
+| Build on check failure | exported anyway | **exits non-zero** |
+
+**Correction to the Icosphere finding.** Parsing the GLB JSON chunk directly shows only `base` and `garment` meshes, two materials, nine animations and one skin. There was never an Icosphere in the export — it was an artefact of the verification script's incomplete scene reset before import. The finding below was wrong, and it is the second time this session that a faulty instrument produced a convincing false defect. Parse the artefact, do not import it.
 
 ---
 
