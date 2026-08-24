@@ -36,6 +36,8 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 5E chip instancing | Codex | `5b8008c` | Accepted. GPU instancing with stable per-instance ids. Draw calls 50/42/47 to 34/26/31 |
 | 2026-08-24 | 4M table items | DeepSeek | `f0ce29f` | Accepted. Zero imports, so it cannot touch poker odds by construction |
 | 2026-08-24 | 4N REP progression | DeepSeek | `1bfea54` | Accepted. 14 tests, pure, no clock |
+| 2026-08-25 | 5G download gate and seated LOD | Codex | `832cc78` | Accepted. Hard 6144KB gate, weighted LOD. Rooftop 172,440 to 41,125 tris, 12.4MB to 2.98MB |
+| 2026-08-25 | 4Q hand history | DeepSeek | `fbe0d81` | Accepted. 13 tests, chip conservation check, every export line preserved |
 | 2026-08-25 | 4T table item purchase | Claude | `0c15bf7` | Bought through the ledger with a deterministic ref, slot rule enforced by a partial unique index, equipped modifiers reach the REP award |
 | 2026-08-25 | 5T venue tone mapping | Claude | `264e08b` | The first screenshot showed a bleached white room. No tone mapping, so everything above 1.0 clipped. ACES filmic added |
 | 2026-08-24 | 5F characters in venues | Codex | `9a7d5f6` | Accepted on craft. Linked mesh instancing, shared 1024 atlas, no material copies, gates untouched. **But the download went 185KB to 12MB and nothing measured it** |
@@ -85,6 +87,32 @@ is the same resolution Claude had applied by hand. Closed.
 rewrote it for its challenges export and removed Claude's `export * from
 './rep.js'` line in the process, which broke the server build with
 "computeRep is not a function". Check that file after any packet that touches it.
+
+## Open — the venue renders empty and I do not know why
+
+The Rooftop geometry is verified correct and correctly placed:
+
+```
+river_rooftop_table_felt  x[-1.24..1.24] y[-0.72..0.72] z=0.76
+river_rooftop_table_base  z[0.00..0.76]
+rooftop_chair_0           y[0.90..1.38] z[0.00..0.96]
+char_male.001             y[0.75..1.52] z[0.45..1.28]   seated, correct
+rooftop_terrace           x[-4.00..4.00] flat at z=-0.02
+```
+
+All hide_render False, all in scene. Materials in the published GLB are right:
+felt `[0.039, 0.071, 0.118]`, floor `[0.851, 0.831, 0.776]`.
+
+Yet three Blender renders from three camera positions all show a bare cream
+disc with no table, chairs or characters - including one where the table is
+mathematically dead centre of frame at 3.74m filling 60 percent of the width.
+Zain's browser screenshot shows the same bare disc.
+
+**Two possibilities and I have not separated them:** the render harness is
+lying (a fourth instrument failure), or something occludes the scene in both
+Blender and three.js. Do not act on the camera values until this is settled -
+tuning framing against a render that may not reflect the scene is guessing
+twice.
 
 ## Open
 
