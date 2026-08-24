@@ -150,7 +150,7 @@ The second is the one most likely to be got wrong. An expired upgrade link is no
 - [ ] Host `DEAL` appears only at two-plus seated players; later hands auto-start
 - [ ] Disconnect shows `RECONNECTING` to others with cards and stack intact
 - [ ] Away policy resolves the disconnected player's turn and tags it `AWAY`
-- [ ] Reconnect performs a full view resync, not an event replay
+- [x] Reconnect performs a full view resync, not an event replay — `transport.test.ts`, three cases including a resync mid-hand
 - [ ] Grace expiry stands the player and returns chips through the ledger
 - [ ] All three kick reasons render their distinct copy
 - [ ] Kick during a live hand folds first, then removes
@@ -158,4 +158,4 @@ The second is the one most likely to be got wrong. An expired upgrade link is no
 - [ ] Upgrade preserves `playerId`, seat, stack and ledger history
 - [ ] Upgrade mid-turn does not affect the turn timer
 - [ ] No state in this document blanks the table or opens a modal
-- [ ] Adversarial test: no transition path leaks another player's `hole`
+- [x] Adversarial test: no transition path leaks another player's `hole` — `hidden-information.test.ts`, nine cases asserting after every transition, with a vacuity check

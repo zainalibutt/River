@@ -625,3 +625,75 @@ describe('economy grants over the wire', () => {
     })
   })
 })
+
+describe('resync', () => {
+  it('answers with a full view and no event replay', async () => {
+    const { hub } = setup()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    await alice.connection.receive(JSON.stringify({ kind: 'resync', requestId: 'resync-1' }))
+    const snapshot = alice.peer.messages.findLast(
+      (message) => message.kind === 'snapshot' && message.requestId === 'resync-1',
+    )
+    expect(snapshot).toBeDefined()
+    if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+    // A replay would arrive as events. The contract requires a full view.
+    expect(snapshot.events).toEqual([])
+    expect(snapshot.view.seats.length).toBeGreaterThan(0)
+  })
+
+  it('reflects state that changed while the client was not listening', async () => {
+    const { hub } = setup()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    await bob.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'sit-bob',
+        command: { kind: 'sit', seat: 2, buyIn: 100_000 },
+      }),
+    )
+    await alice.connection.receive(JSON.stringify({ kind: 'resync', requestId: 'resync-2' }))
+    const snapshot = alice.peer.messages.findLast(
+      (message) => message.kind === 'snapshot' && message.requestId === 'resync-2',
+    )
+    if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+    const seated = snapshot.view.seats.filter((seat) => seat.playerId !== null)
+    expect(seated.length).toBe(1)
+    expect(snapshot.events).toEqual([])
+  })
+
+  it('does not hand a resyncing client another player’s hole cards', async () => {
+    const { hub } = setup()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    for (const [who, seat] of [
+      [alice, 0],
+      [bob, 2],
+    ] as const) {
+      await who.connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId: `sit-${seat}`,
+          command: { kind: 'sit', seat, buyIn: 100_000 },
+        }),
+      )
+    }
+    await alice.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'deal',
+        command: { kind: 'startHand' },
+      }),
+    )
+    await alice.connection.receive(JSON.stringify({ kind: 'resync', requestId: 'resync-3' }))
+    const snapshot = alice.peer.messages.findLast(
+      (message) => message.kind === 'snapshot' && message.requestId === 'resync-3',
+    )
+    if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+    for (const seat of snapshot.view.seats) {
+      if (seat.playerId !== null && seat.playerId !== snapshot.view.selfId) {
+        expect(seat.hole).toBeNull()
+      }
+    }
+  })
+})
