@@ -33,6 +33,10 @@ Format: one row per completed packet, newest last.
 | 4H economy wiring | DeepSeek | 2026-08-24 | **Stalled mid-work.** `economy-service.ts` and a migration sit uncommitted and fail typecheck at line 204 plus formatting. Watch for it adding a state table instead of deriving from ledger refs |
 
 | 2026-08-24 | 5D Basement and Suite detail | Codex | `2ac01ec` | Accepted. Basement 1,368 to 3,218 tris, Suite 2,614 to 16,904. Gate verified untouched and still firing |
+| 2026-08-24 | 5E chip instancing | Codex | `5b8008c` | Accepted. GPU instancing with stable per-instance ids. Draw calls 50/42/47 to 34/26/31 |
+| 2026-08-24 | 4M table items | DeepSeek | `f0ce29f` | Accepted. Zero imports, so it cannot touch poker odds by construction |
+| 2026-08-24 | 4N REP progression | DeepSeek | `1bfea54` | Accepted. 14 tests, pure, no clock |
+| 2026-08-24 | 5L venue lighting | Claude | `a133b21` | Reads the measured rig in the browser. Blender Z-up to three.js Y-up, one shared energy scalar |
 | 2026-08-24 | 5V venue selection | Claude | `f18cd71` | Venue registry, picker, invite URL carries the venue. Also found the web app serving a 206K stale Rooftop against a 535K build - every skyline change had been invisible in the browser |
 | 2026-08-24 | 4L chat and emote panel | Claude | `89a27e8` | Feed, nine-emote rail, speaking indicator, message entry. Shortcut keys proven inert while the chat input has focus, and proven still live outside it |
 | 2026-08-24 | 4H economy wiring | DeepSeek | `f885911` | Accepted. Derives eligibility by parsing ledger refs rather than adding a state table, seated gating present, no hardcoded economy numbers. 15 tests |
@@ -60,6 +64,16 @@ proved byte-identical to the contaminated one before anything was discarded.
 - When reconstructing history while another agent is writing, stage from commit
   blobs (`git restore --source=<commit> --staged`), never from the working tree.
 - Prove a rebuild with `git diff <old> <new>` before trusting it.
+
+## Open
+
+- **The lighting calibration is unverified by eye.** `ENERGY_TO_INTENSITY` in
+  `apps/web/src/lib/lighting.ts` is a first guess. The conversion maths is
+  tested and the rig reaches the browser, but nobody has looked at the result.
+  Tune that one number, never the individual light energies.
+- **A visual pass still needs a compositing browser pane.** Two attempts failed
+  because the MCP tabs report `visibilityState: hidden` with rAF at zero
+  callbacks, regardless of which tab is fronted.
 
 ## Standing review notes
 
