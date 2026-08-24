@@ -4,11 +4,23 @@ R3F venue renderer, committed at `529b73d`. Reviewed by Claude 2026-08-24 agains
 
 Codex shipped this without a visual pass — its browser tooling was unavailable and it said so honestly. This is that pass, run against a live dev server at 1280x720.
 
-**Verdict: one P0. The 3D layer does not render at usable size.**
+**Verdict: WITHDRAWN pending re-review. See the correction below.**
 
 ---
 
-## P0 — the WebGL canvas is 200x100 in the top-left corner
+## CORRECTION 2026-08-24 — the P0 below is unsafe and probably wrong
+
+The measurements in this document were taken against a dev server **while Codex was actively editing the same components**. Next.js hot-reloaded underneath the measurements. Three consecutive reads of the same page returned three different DOM states: a 200x100 canvas, then no canvas and no `.river-venue` at all, then a lost page.
+
+Zain then supplied a screenshot of the running app in his own browser showing **the canvas filling the viewport and rendering the table asset correctly**. That is the authoritative observation and it contradicts the finding below.
+
+**The P0 is withdrawn.** It is retained here rather than deleted because the failure is worth recording: reviewing a running application while another agent is writing to it produces measurements of a moving target, and those measurements can look exactly like a defect. A visual pass needs a quiescent tree.
+
+Re-review when `apps/web` is not being written to. The genuine findings from this session are in the "Passing" and "P2" sections, which were read from stable DOM structure rather than layout geometry.
+
+---
+
+## P0 (WITHDRAWN) — the WebGL canvas is 200x100 in the top-left corner
 
 ### Evidence
 
