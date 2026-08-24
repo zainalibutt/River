@@ -1,4 +1,5 @@
 export * from './betting.js'
+export * from './betting-dial.js'
 export * from './bot-personality.js'
 export * from './bots.js'
 export * from './cards.js'
