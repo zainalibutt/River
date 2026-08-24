@@ -116,6 +116,7 @@ function emptyView(selfId = 'pending'): RoomView {
     message: null,
     revealed: false,
     selfId,
+    challenges: [],
     hostPlayerId: '',
     inviteCode: '',
   }
@@ -632,6 +633,31 @@ export function RiverRoomTable() {
                   </span>
                 ) : null}
               </output>
+            )}
+            {view.challenges.length === 0 ? null : (
+              <section className="challenge-strip" aria-label="Today's challenges">
+                {view.challenges.map((entry) => (
+                  <div
+                    key={entry.challenge.id}
+                    className={`challenge${entry.complete ? ' complete' : ''}`}
+                  >
+                    <span className="challenge-title">{entry.challenge.title}</span>
+                    <span className="challenge-count">
+                      {Math.min(entry.current, entry.challenge.target)}/{entry.challenge.target}
+                    </span>
+                    <div
+                      className="challenge-bar"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={entry.challenge.target}
+                      aria-valuenow={Math.min(entry.current, entry.challenge.target)}
+                      aria-label={entry.challenge.title}
+                    >
+                      <i style={{ width: `${Math.round(entry.fractionComplete * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </section>
             )}
             <section className="invite-strip" aria-label="Private table invite">
               <span>TABLE CODE</span>

@@ -1,4 +1,4 @@
-import type { Card, LegalActions, StakeConfig, Street, TurnAction } from '@river/engine'
+import type { Card, Challenge, LegalActions, StakeConfig, Street, TurnAction } from '@river/engine'
 import type { FairnessClientSeed } from './fairness.js'
 
 export type AwayPolicy = 'check-or-fold'
@@ -128,6 +128,12 @@ export interface RoomView {
   message: string | null
   revealed: boolean
   selfId: string
+  challenges: {
+    challenge: Challenge
+    current: number
+    complete: boolean
+    fractionComplete: number
+  }[]
   hostPlayerId: string
   inviteCode: string
 }

@@ -1837,3 +1837,65 @@ input:focus-visible {
     animation: none;
   }
 }
+
+/* Daily challenges. Ambient progress at the edge of the HUD - never a prompt,
+   never something to dismiss, and never in the way of a decision. */
+.challenge-strip {
+  position: absolute;
+  top: 210px;
+  right: 96px;
+  z-index: 21;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.challenge {
+  display: grid;
+  grid-template-columns: 1fr max-content;
+  gap: 4px 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--river-room-edge);
+  border-radius: 12px;
+  background: rgb(19 25 22 / 78%);
+}
+
+.challenge.complete {
+  border-color: var(--river-win);
+}
+
+.challenge-title {
+  font-size: 14px;
+  color: var(--river-cream-dim);
+}
+
+.challenge-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--river-cream-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.challenge.complete .challenge-count {
+  color: var(--river-win);
+}
+
+.challenge-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--river-felt-shadow);
+  overflow: hidden;
+}
+
+.challenge-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--river-amber);
+}
+
+.challenge.complete .challenge-bar i {
+  background: var(--river-win);
+}

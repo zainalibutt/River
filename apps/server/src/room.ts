@@ -3,12 +3,16 @@ import type { Card, LegalActions, SidePot, Street, TurnAction } from '@river/eng
 import {
   BettingError,
   BettingHand,
+  type Challenge,
+  challengeProgressFor,
   compareRanks,
   computeRep,
   DEFAULT_STAKE,
+  dailySet,
   earningRatePercent,
   evaluateBest,
   levelTable,
+  type MetricTally,
   makeDeck,
   SEATS_PER_SHAPE,
 } from '@river/engine'
@@ -69,6 +73,9 @@ interface SeatState {
   busted: boolean
   /** Reputation, not chips. Never spendable, never through the ledger. */
   totalRep: number
+  /** Challenge metrics for the current UTC day, reset when the day turns. */
+  tally: MetricTally
+  tallyDay: string
 }
 
 class DrawPile {
@@ -178,6 +185,8 @@ export class Room implements RoomHandle {
       hole: [],
       busted: false,
       totalRep: 0,
+      tally: {},
+      tallyDay: '',
     }))
     this.fixedDeck = fixedDeck ?? null
   }
@@ -247,6 +256,7 @@ export class Room implements RoomHandle {
       message: this.status ?? null,
       revealed: this.revealed,
       selfId: playerId,
+      challenges: this.challengesFor(playerId),
       hostPlayerId: this.config.hostPlayerId,
       inviteCode: this.config.inviteCode,
     }
@@ -754,6 +764,64 @@ export class Room implements RoomHandle {
    * The scale comes from the table stake rather than a player's stack, so a
    * short stack at a big table earns the same as a deep one.
    */
+  /**
+   * Accumulate this player's challenge metrics for the day.
+   *
+   * The tally is per UTC day and resets when the day turns, so a challenge set
+   * cannot be completed with yesterday's play. Metrics measure behaviour a
+   * player controls by playing, never an outcome they cannot influence.
+   */
+  /**
+   * The day's challenges with this player's progress.
+   *
+   * The set is seeded by the UTC day so every player at every table sees the
+   * same three challenges, and the same day always yields the same set.
+   */
+  private challengesFor(playerId: string): {
+    challenge: Challenge
+    current: number
+    complete: boolean
+    fractionComplete: number
+  }[] {
+    const now = new Date(this.now())
+    const day = now.toISOString().slice(0, 10)
+    const daySeed = Math.floor(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86_400_000,
+    )
+    const seat = this.seats.find((one) => one.playerId === playerId)
+    const tally = seat !== undefined && seat.tallyDay === day ? seat.tally : {}
+    return dailySet(daySeed).map((challenge) => {
+      const progress = challengeProgressFor(challenge, tally)
+      return {
+        challenge: progress.challenge,
+        current: progress.current,
+        complete: progress.complete,
+        fractionComplete: progress.fractionComplete,
+      }
+    })
+  }
+
+  private tallyHand(
+    seat: { tally: MetricTally; tallyDay: string },
+    player: { id: string; folded: boolean; allIn: boolean },
+    winners: ReadonlySet<string>,
+  ): void {
+    const day = new Date(this.now()).toISOString().slice(0, 10)
+    if (seat.tallyDay !== day) {
+      seat.tally = {}
+      seat.tallyDay = day
+    }
+    const bump = (metric: keyof MetricTally): void => {
+      seat.tally[metric] = (seat.tally[metric] ?? 0) + 1
+    }
+    bump('handsPlayed')
+    if (winners.has(player.id)) bump('handsWon')
+    if (this.revealed && !player.folded) bump('showdownsReached')
+    if (winners.has(player.id) && this.revealed) bump('potsScooped')
+    if (player.folded && this.lastStreet === 'preflop') bump('foldsPreflop')
+    if (player.allIn && !player.folded) bump('allInsSurvived')
+  }
+
   private awardRep(winners: ReadonlySet<string>, events: RoomEvent[]): void {
     const betting = this.betting
     if (betting === null) return
@@ -780,6 +848,7 @@ export class Room implements RoomHandle {
         challengeModifiers: [],
         otherModifiers: [],
       })
+      this.tallyHand(seat, player, winners)
       const before = seat.totalRep
       seat.totalRep = before + breakdown.totalRep
       awards.push({
