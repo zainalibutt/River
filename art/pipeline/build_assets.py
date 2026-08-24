@@ -8,115 +8,245 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bpy
 
-from geo import felt_disc, wood_drum, rail_ring, chip_face, chip_rim, card_body
+import check_assets as checker
+from buildkit import (
+    add_emissive_material,
+    add_material,
+    build_mesh_from_geo,
+    clear_scene,
+    colorramp_material,
+    make_checker_material,
+    object_at,
+    retint,
+    seat_positions,
+    shared_variant,
+)
+from geo import (
+    balustrade,
+    bar_back,
+    card_body,
+    chair_dining,
+    chair_folding,
+    chair_swivel,
+    chandelier,
+    chip_face,
+    chip_rim,
+    crate_stack,
+    felt_oval,
+    machine_unit,
+    parapet_ring,
+    planter,
+    rail_ring_oval,
+    sphere,
+    stepladder,
+    string_light_run,
+    terrace_disc,
+    wall_panel,
+    wall_sconce,
+    wood_pedestal,
+)
 from values import (
-    FELT_HEX,
-    RAIL_HEX,
-    WOOD_HEX,
-    CARD_FACE_HEX,
     CHIP_DENOMS,
     CHIP_THICK,
+    SEAT_H,
+    VENUES,
+    WOOD_HEX,
 )
 
+OUT_DIR = os.environ['RIVER_OUT']
+TEX_DIR = os.path.join(OUT_DIR, 'textures')
 
-def clear_scene():
-    for scene in list(bpy.data.scenes):
-        collection = scene.collection
-        for obj in list(collection.objects):
-            collection.objects.unlink(obj)
-            bpy.data.objects.remove(obj)
-    for mesh in list(bpy.data.meshes):
-        bpy.data.meshes.remove(mesh)
-    for material in list(bpy.data.materials):
-        bpy.data.materials.remove(material)
+VENUE_CHAIR = {
+    'rooftop': chair_swivel,
+    'basement': chair_folding,
+    'suite': chair_dining,
+}
 
 
-def add_material(name, hex_value):
-    material = bpy.data.materials.new(name)
-    rgb = tuple(int(hex_value[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
-    material.diffuse_color = (rgb[0], rgb[1], rgb[2], 1.0)
-    return material
-
-
-def build_mesh(name, geo, material):
-    verts, faces = geo
-    mesh = bpy.data.meshes.new(name)
-    mesh.from_pydata(verts, [], faces)
-    if material is not None:
-        mesh.materials.append(material)
-    return mesh
-
-
-def shared_mesh(source_mesh, material):
-    mesh = source_mesh.copy()
-    mesh.name = source_mesh.name + '_variant'
-    mesh.materials.clear()
-    mesh.materials.append(material)
-    return mesh
-
-
-def object_at(name, mesh, location, parent=None):
-    obj = bpy.data.objects.new(name, mesh)
-    obj.location = list(location)
-    if parent is not None:
-        obj.parent = parent
-    bpy.context.scene.collection.objects.link(obj)
-    return obj
-
-
-def write_manifest(out_dir, glb_path, stats):
-    with open(os.path.join(out_dir, 'manifest.json'), 'w') as handle:
-        json.dump({'scene': glb_path, 'stats': stats}, handle, indent=2)
-
-
-def main():
-    out_dir = os.environ['RIVER_OUT']
-    os.makedirs(out_dir, exist_ok=True)
-    clear_scene()
-    felt_mat = add_material('river_felt', FELT_HEX)
-    rail_mat = add_material('river_rail', RAIL_HEX)
-    wood_mat = add_material('river_wood', WOOD_HEX)
-    card_face_mat = add_material('river_card_face', CARD_FACE_HEX)
-    chip_matrices = {}
+def build_chip_meshes():
+    base_face = build_mesh_from_geo('chip_base_face', chip_face())
+    base_rim = build_mesh_from_geo('chip_base_rim', chip_rim())
+    face_lookup = {}
+    rim_lookup = {}
     for denom, face_hex, rim_hex in CHIP_DENOMS:
-        chip_matrices[denom] = (
-            add_material(denom + '_face', face_hex),
-            add_material(denom + '_rim', rim_hex),
+        face_mat = add_material(denom + '_face', face_hex)
+        rim_mat = add_material(denom + '_rim', rim_hex)
+        face_lookup[denom] = shared_variant(base_face, face_mat, denom + '_face_mesh')
+        rim_lookup[denom] = shared_variant(base_rim, rim_mat, denom + '_rim_mesh')
+    return face_lookup, rim_lookup
+
+
+def build_cards():
+    back_mat = add_material('river_card_back', '5A2733')
+    card = build_mesh_from_geo('river_card', card_body())
+    card.materials.append(back_mat)
+    return card
+
+
+def add_board_cards(card_mesh, count=5):
+    spacing = 0.09
+    total = (count - 1) * spacing
+    for i in range(count):
+        x = -total / 2 + i * spacing
+        object_at('card_%d' % i, card_mesh, (x, 0.0, 0.9))
+
+
+def build_table(venue, rail_mat, wood_mat):
+    felt_mat, _ramp = colorramp_material(venue['id'] + '_felt', [(0.0, venue['felt']), (1.0, venue['felt'])])
+    felt = build_mesh_from_geo('river_' + venue['id'] + '_felt', felt_oval())
+    felt.materials.append(felt_mat)
+    object_at('river_' + venue['id'] + '_table_felt', felt, (0.0, 0.0, 0.0))
+    rail = build_mesh_from_geo('river_' + venue['id'] + '_rail', rail_ring_oval())
+    rail.materials.append(rail_mat)
+    object_at('river_' + venue['id'] + '_table_rail', rail, (0.0, 0.0, 0.0))
+    pedestal = build_mesh_from_geo('river_' + venue['id'] + '_wood', wood_pedestal())
+    pedestal.materials.append(wood_mat)
+    object_at('river_' + venue['id'] + '_table_base', pedestal, (0.0, 0.0, 0.0))
+
+
+def build_chairs(venue, chair_fn, chair_mat, count=9):
+    positions = seat_positions(count)
+    for index, (x, y) in enumerate(positions):
+        chair_geo = chair_fn()
+        mesh = build_mesh_from_geo('%s_chair_%d' % (venue['id'], index), chair_geo)
+        mesh.materials.append(chair_mat)
+        angle = math.atan2(-y, -x)
+        object_at(
+            '%s_chair_%d' % (venue['id'], index),
+            mesh,
+            (x, y, 0.0),
+            (0.0, 0.0, angle + math.pi),
         )
-    felt_mesh = build_mesh('river_felt', felt_disc(), felt_mat)
-    wood_mesh = build_mesh('river_wood', wood_drum(), wood_mat)
-    rail_mesh = build_mesh('river_rail', rail_ring(), rail_mat)
-    object_at('river_felt', felt_mesh, (0.0, 0.0, 0.0))
-    object_at('river_wood', wood_mesh, (0.0, 0.0, 0.0))
-    object_at('river_rail', rail_mesh, (0.0, 0.0, 0.0))
-    base_face = build_mesh('chip_base_face', chip_face(), None)
-    base_rim = build_mesh('chip_base_rim', chip_rim(), None)
-    patron_meshes = {}
-    for denom, (face_mat, rim_mat) in chip_matrices.items():
-        face = shared_mesh(base_face, face_mat)
-        rim = shared_mesh(base_rim, rim_mat)
-        patron_meshes[denom] = (face, rim)
-    pot_positions = []
-    for stack_index in range(8):
-        angle = 2.0 * math.pi * stack_index / 8
-        pot_positions.append((0.35 * math.cos(angle), 0.35 * math.sin(angle)))
-    for index, (pot_x, pot_y) in enumerate(pot_positions):
+
+
+def build_rooftop(venue):
+    floor_mat = add_material('rooftop_floor', venue['floor'])
+    floor = build_mesh_from_geo('rooftop_terrace', terrace_disc())
+    floor.materials.append(floor_mat)
+    object_at('rooftop_terrace', floor, (0.0, 0.0, -0.02))
+    parapet_mat = add_material('rooftop_parapet', venue['parapet'])
+    parapet = build_mesh_from_geo('rooftop_parapet', parapet_ring())
+    parapet.materials.append(parapet_mat)
+    object_at('rooftop_parapet', parapet, (0.0, 0.0, 0.0))
+    lit_mat = add_emissive_material('rooftop_lit_edge', venue['parapet_lit'], 0.8)
+    lit = build_mesh_from_geo('rooftop_lit_edge', parapet_ring())
+    lit.materials.append(lit_mat)
+    object_at('rooftop_lit_edge', lit, (0.0, 0.0, 1.1))
+    planter_mat = add_material('rooftop_planter', venue['planter'])
+    for index in range(6):
+        angle = 2.0 * math.pi * index / 6
+        x = 3.2 * math.cos(angle)
+        y = 3.2 * math.sin(angle)
+        planter_mesh = build_mesh_from_geo('rooftop_planter_%d' % index, planter())
+        planter_mesh.materials.append(planter_mat)
+        object_at('rooftop_planter_%d' % index, planter_mesh, (x, y, 0.0), (0.0, 0.0, -angle))
+    fire_mat = add_emissive_material('rooftop_fire', venue['fire'], 3.0)
+    for index in range(2):
+        fire_mesh = build_mesh_from_geo('rooftop_fire_%d' % index, sphere(0.18, 0.0, 0.0, 0.5, 6, 4))
+        fire_mesh.materials.append(fire_mat)
+        object_at('rooftop_fire_%d' % index, fire_mesh, (1.6 + index * 0.8, 2.4, 0.0))
+    strand_mat = add_emissive_material('rooftop_string', venue['parapet_lit'], 1.5)
+    strand = build_mesh_from_geo('rooftop_string_lights', string_light_run())
+    strand.materials.append(strand_mat)
+    object_at('rooftop_string_lights', strand, (0.0, 0.0, 0.0))
+    water_mat = add_material('rooftop_water', venue['water'])
+    water = build_mesh_from_geo('rooftop_pool', terrace_disc(1.4, 24))
+    water.materials.append(water_mat)
+    object_at('rooftop_pool', water, (0.0, 3.4, -0.03))
+
+
+def build_basement(venue):
+    checker_mat, _image, _path = make_checker_material(
+        'basement_checker', 128, venue['checker_a'], venue['checker_b'], TEX_DIR
+    )
+    from geo import checkerboard_plane
+    plane = build_mesh_from_geo('basement_floor', checkerboard_plane())
+    plane.materials.append(checker_mat)
+    object_at('basement_floor', plane, (0.0, 0.0, -0.02))
+    wall_mat = add_material('basement_wall', venue['wall'])
+    wall1 = build_mesh_from_geo('basement_wall_1', wall_panel())
+    wall1.materials.append(wall_mat)
+    object_at('basement_wall_1', wall1, (0.0, 2.0, 0.0))
+    wall2 = build_mesh_from_geo('basement_wall_2', wall_panel())
+    wall2.materials.append(wall_mat)
+    object_at('basement_wall_2', wall2, (2.0, 0.0, 0.0), (0.0, 0.0, math.pi / 2))
+    machine_mat = add_material('basement_machine', venue['machine'])
+    for index in range(3):
+        machine = build_mesh_from_geo('basement_machine_%d' % index, machine_unit())
+        machine.materials.append(machine_mat)
+        object_at('basement_machine_%d' % index, machine, (-1.5, 1.0 + index * 0.8, 0.0), (0.0, 0.0, index * 0.3))
+    crate_mat = add_material('basement_crate', venue['crate'])
+    for index in range(3):
+        crates = build_mesh_from_geo('basement_crate_%d' % index, crate_stack())
+        crates.materials.append(crate_mat)
+        object_at('basement_crate_%d' % index, crates, (1.4, 1.6, 0.0), (0.0, 0.0, index * 0.2))
+    ladder_mat = add_material('basement_ladder', venue['ladder'])
+    ladder = build_mesh_from_geo('basement_ladder', stepladder())
+    ladder.materials.append(ladder_mat)
+    object_at('basement_ladder', ladder, (0.8, 1.7, 0.0))
+
+
+def build_suite(venue):
+    bal_mat = add_material('suite_balustrade', venue['balustrade'])
+    balustrade_mesh = build_mesh_from_geo('suite_balustrade', balustrade())
+    balustrade_mesh.materials.append(bal_mat)
+    object_at('suite_balustrade', balustrade_mesh, (0.0, -1.6, 0.0))
+    wall_mat = add_material('suite_wall', venue['wall'])
+    wall1 = build_mesh_from_geo('suite_wall_1', wall_panel())
+    wall1.materials.append(wall_mat)
+    object_at('suite_wall_1', wall1, (0.0, 2.5, 0.0))
+    wall2 = build_mesh_from_geo('suite_wall_2', wall_panel())
+    wall2.materials.append(wall_mat)
+    object_at('suite_wall_2', wall2, (2.5, 0.0, 0.0), (0.0, 0.0, math.pi / 2))
+    bar_mat = add_material('suite_bar', venue['bar_wood'])
+    bar = build_mesh_from_geo('suite_bar', bar_back())
+    bar.materials.append(bar_mat)
+    object_at('suite_bar', bar, (-2.4, -0.4, 0.0), (0.0, 0.0, math.pi / 2))
+    bar_light = add_emissive_material('suite_bar_lit', venue['bar_lit'], 2.0)
+    shelf = build_mesh_from_geo('suite_bar_lit', bar_back())
+    shelf.materials.append(bar_light)
+    object_at('suite_bar_lit', shelf, (-2.4, -0.4, 1.2), (0.0, 0.0, math.pi / 2))
+    sconce_mat = add_emissive_material('suite_sconce', venue['sconce'], 1.2)
+    for index in range(2):
+        sconce = build_mesh_from_geo('suite_sconce_%d' % index, wall_sconce())
+        sconce.materials.append(sconce_mat)
+        object_at('suite_sconce_%d' % index, sconce, (1.6 + index * 0.6, 2.5, 0.7))
+    chandelier_mat = add_material('suite_chandelier', venue['chandelier'])
+    chandelier_lit = add_emissive_material('suite_chandelier_lit', venue['sconce'], 1.5)
+    chandy = build_mesh_from_geo('suite_chandelier', chandelier())
+    chandy.materials.append(chandelier_mat)
+    object_at('suite_chandelier', chandy, (0.0, 0.0, 2.4))
+    chandy_lit = build_mesh_from_geo('suite_chandelier_lit', chandelier())
+    chandy_lit.materials.append(chandelier_lit)
+    object_at('suite_chandelier_lit', chandy_lit, (0.0, 0.0, 2.4))
+
+
+def build_venue(venue, face_lookup, rim_lookup, card_mesh):
+    shared_meshes = list(face_lookup.values()) + list(rim_lookup.values()) + [card_mesh]
+    keep_names = {mesh.name for mesh in shared_meshes}
+    clear_scene(keep_names)
+    chair_fn = VENUE_CHAIR[venue['id']]
+    rail_mat = colorramp_material(venue['id'] + '_rail', [(0.0, venue['rail']), (1.0, venue['rail'])])[0]
+    wood_mat = colorramp_material(venue['id'] + '_wood', [(0.0, venue['wood']), (1.0, venue['wood'])])[0]
+    chair_mat = colorramp_material(venue['id'] + '_chair', [(0.0, venue['chair']), (1.0, venue['chair'])])[0]
+    build_table(venue, rail_mat, wood_mat)
+    build_chairs(venue, chair_fn, chair_mat)
+    for index in range(4):
         denom = list(CHIP_DENOMS)[index % len(CHIP_DENOMS)][0]
-        face, rim = patron_meshes[denom]
-        height = (index + 1) * CHIP_THICK
-        object_at('pot_chip_' + str(index), face, (pot_x, pot_y, height))
-        object_at('pot_chip_' + str(index) + '_rim', rim, (pot_x, pot_y, height))
-    deck = build_mesh('river_card', card_body(), card_face_mat)
-    card_offsets = [
-        (0.0, 0.0, CHIP_THICK * 3),
-        (0.09, 0.0, CHIP_THICK * 3),
-        (-0.09, 0.0, CHIP_THICK * 3),
-    ]
-    for index, offset in enumerate(card_offsets):
-        object_at('river_card_' + str(index), deck, offset)
-    blend = os.path.join(out_dir, 'river_assets.blend')
-    bpy.ops.wm.save_as_mainfile(filepath=blend)
-    glb = os.path.join(out_dir, 'river_assets.glb')
+        for stack in range(2):
+            z = 0.77 + stack * CHIP_THICK
+            x = 0.3 + index * 0.1 - 0.18
+            y = 0.4
+            object_at('chip_%d_%d' % (index, stack), face_lookup[denom], (x, y, z))
+            object_at('chip_%d_%d_rim' % (index, stack), rim_lookup[denom], (x, y, z))
+    add_board_cards(card_mesh)
+    if venue['id'] == 'rooftop':
+        build_rooftop(venue)
+    elif venue['id'] == 'basement':
+        build_basement(venue)
+    else:
+        build_suite(venue)
+    glb = os.path.join(OUT_DIR, venue['id'] + '_assets.glb')
     bpy.ops.export_scene.gltf(
         filepath=glb,
         check_existing=False,
@@ -126,14 +256,52 @@ def main():
         export_yup=True,
         export_materials='EXPORT',
     )
-    stats = {
-        'objects': len(bpy.data.objects),
-        'meshes': len(bpy.data.meshes),
-        'materials': len(bpy.data.materials),
-    }
-    write_manifest(out_dir, glb, stats)
-    print('OUT ' + glb)
-    print(json.dumps(stats))
+    report = checker.Report()
+    gltf, binary = checker.read_glb(glb)
+    checker.compute_counts(gltf, binary, report)
+    failures = []
+    checker_check_fail(venue['id'], report, failures)
+    return glb, report, failures
+
+
+def checker_check_fail(venue_id, report, failures):
+    if report.total_triangles > 250000:
+        failures.append('scene triangle budget exceeded: %d' % report.total_triangles)
+    if report.materials > 24:
+        failures.append('material budget exceeded: %d' % report.materials)
+    if report.draw_calls > 120:
+        failures.append('draw-call budget exceeded: %d' % report.draw_calls)
+    if report.max_texture_dim > 2048:
+        failures.append('texture dimension exceeded: %d' % report.max_texture_dim)
+    if report.texture_bytes > 128 * 1024 * 1024:
+        failures.append('texture memory exceeded: %d' % report.texture_bytes)
+
+
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+    os.makedirs(TEX_DIR, exist_ok=True)
+    clear_scene()
+    face_lookup, rim_lookup = build_chip_meshes()
+    card_mesh = build_cards()
+    manifest = {}
+    overall_failures = []
+    for venue in VENUES:
+        glb, report, failures = build_venue(venue, face_lookup, rim_lookup, card_mesh)
+        manifest[venue['id']] = report.to_dict(glb)
+        if failures:
+            overall_failures.append(venue['id'] + ': ' + '; '.join(failures))
+        print('VENUE %s triangles=%d materials=%d draw_calls=%d' % (
+            venue['id'], report.total_triangles, report.materials, report.draw_calls
+        ))
+    manifest['verdict'] = 'PASS' if not overall_failures else 'FAIL'
+    manifest['failures'] = overall_failures
+    with open(os.path.join(OUT_DIR, 'manifest.json'), 'w') as handle:
+        json.dump(manifest, handle, indent=2)
+    if overall_failures:
+        for failure in overall_failures:
+            print('FAIL ' + failure)
+        raise SystemExit(1)
+    print('OUT ' + os.path.join(OUT_DIR, 'manifest.json'))
 
 
 main()
