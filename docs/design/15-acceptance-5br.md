@@ -4,11 +4,57 @@ R3F venue renderer, committed at `529b73d`. Reviewed by Claude 2026-08-24 agains
 
 Codex shipped this without a visual pass — its browser tooling was unavailable and it said so honestly. This is that pass, run against a live dev server at 1280x720.
 
-**Verdict: WITHDRAWN pending re-review. See the correction below.**
+**Verdict: RESOLVED 2026-08-24. The P0 was a false finding. Re-reviewed against a clean, quiescent server and the root cause is now known — see the resolution below.**
 
 ---
 
-## CORRECTION 2026-08-24 — the P0 below is unsafe and probably wrong
+## RESOLUTION 2026-08-24 — the canvas is fine; the instrument was hidden
+
+Re-ran the pass on a dedicated dev server on port 55900, with nothing else
+writing to the tree. The canvas still measured 200x100 with a 300x150
+drawing buffer, stable across repeated reads, fully hydrated, six seconds
+after mount. It looked exactly like a confirmed defect for the second time.
+
+It is not. The browser tab was backgrounded:
+
+```
+document.hidden        true
+visibilityState        hidden
+requestAnimationFrame  0 callbacks in 2 seconds
+ResizeObserver         0 callbacks on a real 10px -> 50px size change
+```
+
+R3F sizes its canvas from a ResizeObserver on the wrapper div. In a hidden
+tab the rendering lifecycle is suspended, so the observer never delivers and
+rAF never runs. **The canvas cannot size itself under observation conditions
+that suspend the very callback that sizes it.** A manually dispatched resize
+event recovered the buffer to 1280x720 immediately, which confirms the
+observer path is correct and simply starved.
+
+The container chain was correct throughout: `.river-venue` 1280x720 at
+z-index 0, `.hud-layer` 1280x720 at z-index 1, wrapper div sized, WebGL
+context alive and not lost.
+
+A `resize={{ scroll: false, debounce: 0, offsetSize: true }}` prop was
+trialled on `<Canvas>` and changed nothing, because it could not — then
+reverted. **No code change was warranted and none was kept.**
+
+### The rule this establishes
+
+Before trusting a visual measurement, prove the instrument can observe the
+thing being measured. For anything driven by ResizeObserver, rAF or IntersectionObserver,
+assert `document.visibilityState === 'visible'` and that rAF actually ticks,
+as the first step of the pass rather than the last. This is the fourth
+instrument-induced false defect in this project; the previous three were a
+hot-reloading tree, an incomplete scene reset before a GLB import, and a
+`--factory-startup` launch that hid every add-on.
+
+**A visual pass of this app requires the browser pane to be displayed.**
+That is a hard precondition, not a preference.
+
+---
+
+## Superseded correction 2026-08-24 — the P0 below is unsafe and probably wrong
 
 The measurements in this document were taken against a dev server **while Codex was actively editing the same components**. Next.js hot-reloaded underneath the measurements. Three consecutive reads of the same page returned three different DOM states: a 200x100 canvas, then no canvas and no `.river-venue` at all, then a lost page.
 
