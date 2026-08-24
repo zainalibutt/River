@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import struct
 import sys
 
 os.environ.setdefault('RIVER_OUT', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'out'))
@@ -19,7 +20,6 @@ from buildkit import (
     object_at,
     retint,
     seat_positions,
-    shared_variant,
 )
 from geo import (
     concat,
@@ -84,16 +84,23 @@ VENUE_CHAIR = {
 
 
 def build_chip_meshes():
-    base_face = build_mesh_from_geo('chip_base_face', chip_face())
-    base_rim = build_mesh_from_geo('chip_base_rim', chip_rim())
-    face_lookup = {}
-    rim_lookup = {}
+    face_geo = chip_face()
+    rim_geo = chip_rim()
+    face_faces = len(face_geo[1])
+    pooled_geo = concat([face_geo, rim_geo])
+    lookup = {}
     for denom, face_hex, rim_hex in CHIP_DENOMS:
         face_mat = add_material(denom + '_face', face_hex)
         rim_mat = add_material(denom + '_rim', rim_hex)
-        face_lookup[denom] = shared_variant(base_face, face_mat, denom + '_face_mesh')
-        rim_lookup[denom] = shared_variant(base_rim, rim_mat, denom + '_rim_mesh')
-    return face_lookup, rim_lookup
+        mesh = build_mesh_from_geo(denom + '_chip_pool', pooled_geo)
+        mesh.materials.append(face_mat)
+        mesh.materials.append(rim_mat)
+        for polygon in mesh.polygons[:face_faces]:
+            polygon.material_index = 0
+        for polygon in mesh.polygons[face_faces:]:
+            polygon.material_index = 1
+        lookup[denom] = mesh
+    return lookup
 
 
 def build_cards():
@@ -106,9 +113,16 @@ def build_cards():
 def add_board_cards(card_mesh, count=5):
     spacing = 0.09
     total = (count - 1) * spacing
+    instances = []
     for i in range(count):
         x = -total / 2 + i * spacing
-        object_at('card_%d' % i, card_mesh, (x, 0.0, 0.9))
+        instances.append({
+            'id': 'card_%d' % i,
+            'translation': [x, 0.0, 0.9],
+            'rotation': [0.0, 0.0, 0.0, 1.0],
+            'scale': [1.0, 1.0, 1.0],
+        })
+    return instances
 
 
 def build_table(venue, rail_mat, wood_mat):
@@ -505,8 +519,91 @@ def lighting_sidecar():
     return path
 
 
-def build_venue(venue, face_lookup, rim_lookup, card_mesh):
-    shared_meshes = list(face_lookup.values()) + list(rim_lookup.values()) + [card_mesh]
+def _append_accessor(gltf, binary, values, accessor_type):
+    component_count = {'VEC3': 3, 'VEC4': 4}[accessor_type]
+    payload = struct.pack('<%sf' % (len(values) * component_count), *[
+        component for value in values for component in value
+    ])
+    padding = (-len(binary)) % 4
+    binary += b'\0' * padding
+    offset = len(binary)
+    binary += payload
+    view_index = len(gltf.setdefault('bufferViews', []))
+    gltf['bufferViews'].append({
+        'buffer': 0,
+        'byteOffset': offset,
+        'byteLength': len(payload),
+        'target': 34962,
+    })
+    accessor_index = len(gltf.setdefault('accessors', []))
+    gltf['accessors'].append({
+        'bufferView': view_index,
+        'componentType': 5126,
+        'count': len(values),
+        'type': accessor_type,
+    })
+    return accessor_index, binary
+
+
+def append_gpu_instances(glb, pools):
+    with open(glb, 'rb') as handle:
+        raw = handle.read()
+    _version, _length = struct.unpack_from('<II', raw, 4)
+    offset = 12
+    json_chunk = None
+    binary = b''
+    while offset < len(raw):
+        chunk_length, chunk_type = struct.unpack_from('<II', raw, offset)
+        offset += 8
+        chunk = raw[offset:offset + chunk_length]
+        offset += chunk_length
+        if chunk_type == 0x4E4F534A:
+            json_chunk = chunk
+        elif chunk_type == 0x004E4942:
+            binary += chunk
+    if json_chunk is None:
+        raise SystemExit('FAIL: exported GLB has no JSON chunk')
+    gltf = json.loads(json_chunk.decode('utf-8'))
+    for pool in pools:
+        node = next((candidate for candidate in gltf.get('nodes', []) if candidate.get('name') == pool['node']), None)
+        if node is None:
+            raise SystemExit('FAIL: pooled node missing from export: ' + pool['node'])
+        translations = [instance['translation'] for instance in pool['instances']]
+        rotations = [instance['rotation'] for instance in pool['instances']]
+        scales = [instance['scale'] for instance in pool['instances']]
+        translation_accessor, binary = _append_accessor(gltf, binary, translations, 'VEC3')
+        rotation_accessor, binary = _append_accessor(gltf, binary, rotations, 'VEC4')
+        scale_accessor, binary = _append_accessor(gltf, binary, scales, 'VEC3')
+        node.setdefault('extensions', {})['EXT_mesh_gpu_instancing'] = {
+            'attributes': {
+                'TRANSLATION': translation_accessor,
+                'ROTATION': rotation_accessor,
+                'SCALE': scale_accessor,
+            }
+        }
+        node['extras'] = {
+            'riverInstanceIds': [instance['id'] for instance in pool['instances']],
+            'riverInstanceCount': len(pool['instances']),
+            'riverInstanceOrder': 'stable per node; update the matching instance matrix for animation',
+        }
+    gltf['extensionsUsed'] = sorted(set(gltf.get('extensionsUsed', [])) | {'EXT_mesh_gpu_instancing'})
+    gltf.setdefault('buffers', [{}])[0]['byteLength'] = len(binary)
+    json_bytes = json.dumps(gltf, separators=(',', ':')).encode('utf-8')
+    json_bytes += b' ' * ((-len(json_bytes)) % 4)
+    binary += b'\0' * ((-len(binary)) % 4)
+    total_length = 12 + 8 + len(json_bytes) + 8 + len(binary)
+    output = bytearray()
+    output.extend(struct.pack('<4sII', b'glTF', 2, total_length))
+    output.extend(struct.pack('<II', len(json_bytes), 0x4E4F534A))
+    output.extend(json_bytes)
+    output.extend(struct.pack('<II', len(binary), 0x004E4942))
+    output.extend(binary)
+    with open(glb, 'wb') as handle:
+        handle.write(output)
+
+
+def build_venue(venue, chip_meshes, card_mesh):
+    shared_meshes = list(chip_meshes.values()) + [card_mesh]
     keep_names = {mesh.name for mesh in shared_meshes}
     clear_scene(keep_names)
     chair_fn = VENUE_CHAIR[venue['id']]
@@ -515,15 +612,28 @@ def build_venue(venue, face_lookup, rim_lookup, card_mesh):
     chair_mat = colorramp_material(venue['id'] + '_chair', [(0.0, venue['chair']), (1.0, venue['chair'])])[0]
     build_table(venue, rail_mat, wood_mat)
     build_chairs(venue, chair_fn, chair_mat)
+    chip_instances = {}
     for index in range(4):
         denom = list(CHIP_DENOMS)[index % len(CHIP_DENOMS)][0]
+        chip_instances.setdefault(denom, [])
         for stack in range(2):
             z = 0.77 + stack * CHIP_THICK
             x = 0.3 + index * 0.1 - 0.18
             y = 0.4
-            object_at('chip_%d_%d' % (index, stack), face_lookup[denom], (x, y, z))
-            object_at('chip_%d_%d_rim' % (index, stack), rim_lookup[denom], (x, y, z))
-    add_board_cards(card_mesh)
+            chip_instances[denom].append({
+                'id': 'chip_%d_%d' % (index, stack),
+                'translation': [x, y, z],
+                'rotation': [0.0, 0.0, 0.0, 1.0],
+                'scale': [1.0, 1.0, 1.0],
+            })
+    pools = []
+    for denom, instances in chip_instances.items():
+        node_name = 'chip_pool_' + denom
+        object_at(node_name, chip_meshes[denom])
+        pools.append({'node': node_name, 'instances': instances})
+    card_instances = add_board_cards(card_mesh)
+    object_at('board_card_pool', card_mesh)
+    pools.append({'node': 'board_card_pool', 'instances': card_instances})
     if venue['id'] == 'rooftop':
         build_rooftop(venue)
     elif venue['id'] == 'basement':
@@ -543,6 +653,7 @@ def build_venue(venue, face_lookup, rim_lookup, card_mesh):
         export_materials='EXPORT',
         export_lights=True,
     )
+    append_gpu_instances(glb, pools)
     report = checker.Report()
     gltf, binary = checker.read_glb(glb)
     checker.compute_counts(gltf, binary, report)
@@ -572,12 +683,12 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     os.makedirs(TEX_DIR, exist_ok=True)
     clear_scene()
-    face_lookup, rim_lookup = build_chip_meshes()
+    chip_meshes = build_chip_meshes()
     card_mesh = build_cards()
     manifest = {}
     overall_failures = []
     for venue in VENUES:
-        glb, report, failures = build_venue(venue, face_lookup, rim_lookup, card_mesh)
+        glb, report, failures = build_venue(venue, chip_meshes, card_mesh)
         manifest[venue['id']] = report.to_dict(glb)
         if failures:
             overall_failures.append(venue['id'] + ': ' + '; '.join(failures))

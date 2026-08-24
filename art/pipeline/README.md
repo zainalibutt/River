@@ -56,18 +56,27 @@ python art/pipeline/test_checker_chars.py
 
 ## Contract notes
 
-- Chips and cards share one base mesh each, varied by material (instanced, never
-  modelled per-chip). Board cards sit at HUD-readable size in the 3D scene; hero
-  cards are DOM-only per the card-legibility study.
+- Chips and cards use glTF `EXT_mesh_gpu_instancing`: one pooled node per chip
+  denomination and one board-card node. Each node carries stable instance IDs in
+  `extras.riverInstanceIds` plus translation, quaternion rotation, and scale
+  accessors. Runtime animation updates one instance matrix, so a chip toss never
+  moves its stack and changing the pot size does not add draw calls. Board cards
+  follow the same addressable pool. Board cards sit at HUD-readable size in the
+  3D scene; hero cards are DOM-only per the card-legibility study.
+- Character tinting groundwork is atlas-first: one shared 1024 atlas with fixed
+  UV islands for skin, garment, hat, and accessories; neutral colour data plus
+  mask channels for each tintable region; and a palette lookup indexed by one
+  per-instance `paletteIndex` property. The renderer must apply that property in
+  the shared shader or instance buffer. It must not clone material datablocks.
 - Venue materials are built from ColorRamp-driven shaders; `retint()` changes the
   ramp stops, so a shared material can be re-paletted per venue without the
   silent-no-op BSDF trap.
 - Exports are deterministic: identical GLB bytes across runs (verified by
   SHA-256). The `.blend` file embeds Blender save metadata and is not byte-stable,
   but geometry is.
-- Measured result (2026-08-24): rooftop 4,038 triangles / 20 materials / 46
-  objects; basement 1,368 / 18 / 43 (one 128x128 checker texture); suite 2,614 /
-  20 / 42. All comfortably inside the budget table.
+- Measured result (2026-08-24): rooftop 9,702 triangles / 23 materials / 34
+  objects; basement 3,218 / 19 / 26 (one 128x128 checker texture); suite 16,904 /
+  20 / 31. All comfortably inside the budget table.
 - Character validation (triangles, armature binding, bone count) is exercised
   against a synthetic rigged GLB fixture produced deterministically; it passes a
   valid skinned mesh and fails loudly on missing skin/weights or insufficient
