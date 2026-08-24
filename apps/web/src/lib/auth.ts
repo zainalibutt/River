@@ -48,12 +48,19 @@ export async function ensureRiverSession(client: SupabaseClient): Promise<Sessio
   return anonymous.data.session
 }
 
-export async function upgradeRiverSession(client: SupabaseClient, email: string): Promise<string> {
+export async function upgradeRiverSession(
+  client: SupabaseClient,
+  email: string,
+  emailRedirectTo?: string,
+): Promise<string> {
   const current = await client.auth.getUser()
   if (current.error !== null) throw current.error
   if (current.data.user === null) throw new Error('No River user to upgrade')
   const beforeId = current.data.user.id
-  const upgraded = await client.auth.updateUser({ email })
+  const upgraded =
+    emailRedirectTo === undefined
+      ? await client.auth.updateUser({ email })
+      : await client.auth.updateUser({ email }, { emailRedirectTo })
   if (upgraded.error !== null) throw upgraded.error
   if (upgraded.data.user.id !== beforeId) {
     throw new Error('Account upgrade changed the River player id')

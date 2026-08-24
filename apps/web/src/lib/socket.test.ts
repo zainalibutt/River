@@ -52,12 +52,14 @@ describe('River browser socket', () => {
   it('authenticates before sending room commands and forwards snapshots', async () => {
     const socket = new TestSocket()
     const listener = vi.fn()
+    const stateListener = vi.fn()
     const river = new RiverSocket({
       url: 'ws://river.local/ws',
       createSocket: () => socket,
       createRequestId: () => 'request-one',
     })
     river.subscribe(listener)
+    river.subscribeState(stateListener)
     const connected = river.connect('access-token')
     socket.open()
     expect(JSON.parse(socket.sent[0] ?? '')).toEqual({
@@ -66,12 +68,15 @@ describe('River browser socket', () => {
     })
     socket.message({ kind: 'authenticated', playerId: 'player', anonymous: true })
     await connected
-    expect(river.enter('river-one', 'Alice')).toBe('request-one')
+    expect(stateListener).toHaveBeenCalledWith('connecting')
+    expect(stateListener).toHaveBeenCalledWith('connected')
+    expect(river.enter('river-one', 'Alice', 'ROOFTOP')).toBe('request-one')
     expect(JSON.parse(socket.sent[1] ?? '')).toEqual({
       kind: 'enter',
       requestId: 'request-one',
       roomId: 'river-one',
       name: 'Alice',
+      inviteCode: 'ROOFTOP',
     })
     expect(listener).toHaveBeenCalledWith({
       kind: 'authenticated',

@@ -25,6 +25,8 @@ export interface RiverSocketOptions {
 }
 
 export type RiverMessageListener = (message: ServerMessage) => void
+export type RiverSocketState = 'connecting' | 'connected' | 'closed'
+export type RiverSocketStateListener = (state: RiverSocketState) => void
 
 function parseServerMessage(value: unknown): ServerMessage | null {
   if (typeof value !== 'object' || value === null || !('kind' in value)) return null
@@ -42,6 +44,7 @@ export function defaultRiverSocketUrl(location: Pick<Location, 'protocol' | 'hos
 export class RiverSocket {
   private readonly options: RiverSocketOptions
   private readonly listeners = new Set<RiverMessageListener>()
+  private readonly stateListeners = new Set<RiverSocketStateListener>()
   private socket: SocketLike | null = null
 
   constructor(options: RiverSocketOptions) {
@@ -53,10 +56,16 @@ export class RiverSocket {
     return () => this.listeners.delete(listener)
   }
 
+  subscribeState(listener: RiverSocketStateListener): () => void {
+    this.stateListeners.add(listener)
+    return () => this.stateListeners.delete(listener)
+  }
+
   connect(accessToken: string): Promise<void> {
     if (this.socket !== null) throw new Error('River socket is already connected')
     const socket = this.options.createSocket?.(this.options.url) ?? new WebSocket(this.options.url)
     this.socket = socket
+    this.emitState('connecting')
     return new Promise((resolve, reject) => {
       let authenticated = false
       const timeout = setTimeout(() => {
@@ -78,6 +87,7 @@ export class RiverSocket {
         if (message.kind === 'authenticated') {
           authenticated = true
           clearTimeout(timeout)
+          this.emitState('connected')
           resolve()
         }
         for (const listener of this.listeners) listener(message)
@@ -89,13 +99,20 @@ export class RiverSocket {
       socket.addEventListener('close', () => {
         clearTimeout(timeout)
         if (this.socket === socket) this.socket = null
+        this.emitState('closed')
         if (!authenticated) reject(new Error('River socket closed before authentication'))
       })
     })
   }
 
-  enter(roomId: string, name: string): string {
-    return this.send({ kind: 'enter', requestId: this.requestId(), roomId, name })
+  enter(roomId: string, name: string, inviteCode?: string): string {
+    return this.send({
+      kind: 'enter',
+      requestId: this.requestId(),
+      roomId,
+      name,
+      ...(inviteCode === undefined ? {} : { inviteCode }),
+    })
   }
 
   command(command: ClientRoomCommand): string {
@@ -109,6 +126,10 @@ export class RiverSocket {
   close(): void {
     this.socket?.close(1000, 'Client closed')
     this.socket = null
+  }
+
+  private emitState(state: RiverSocketState): void {
+    for (const listener of this.stateListeners) listener(state)
   }
 
   private requestId(): string {

@@ -50,12 +50,19 @@ describe('browser auth boundary', () => {
   })
 
   it('requires an email upgrade to preserve the player id', async () => {
+    const updateUser = vi.fn().mockResolvedValue({ data: { user: { id: PLAYER_ID } }, error: null })
     const client = {
       auth: {
         getUser: vi.fn().mockResolvedValue({ data: { user: { id: PLAYER_ID } }, error: null }),
-        updateUser: vi.fn().mockResolvedValue({ data: { user: { id: PLAYER_ID } }, error: null }),
+        updateUser,
       },
     } as unknown as SupabaseClient
-    await expect(upgradeRiverSession(client, 'player@example.com')).resolves.toBe(PLAYER_ID)
+    await expect(
+      upgradeRiverSession(client, 'player@example.com', 'https://river.example'),
+    ).resolves.toBe(PLAYER_ID)
+    expect(updateUser).toHaveBeenCalledWith(
+      { email: 'player@example.com' },
+      { emailRedirectTo: 'https://river.example' },
+    )
   })
 })

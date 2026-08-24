@@ -1,5 +1,5 @@
-import { RiverTable } from '@/components/river-table'
+import { RiverRoomTable } from '@/components/river-room-table'
 
 export default function HomePage() {
-  return <RiverTable />
+  return <RiverRoomTable />
 }
