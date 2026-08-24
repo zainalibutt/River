@@ -16,6 +16,7 @@ export {
   progressFor as challengeProgressFor,
 } from './challenges.js'
 export * from './config.js'
+export * from './cosmetics.js'
 export * from './economy.js'
 export * from './evaluator.js'
 export * from './fair.js'
