@@ -5,6 +5,10 @@ What River actually cost, measured rather than estimated.
 Kept because "built in a weekend" is a claim, and a claim with numbers behind
 it is worth more than one without. Updated as the project runs.
 
+This file is the evidence for the wager in `BRIEF.md`: how far one persistent
+developer gets against work that used to take a studio. Without measurement
+that question has no answer, only a story.
+
 ---
 
 ## Summary
@@ -75,10 +79,32 @@ diagnosis. The interface does not report a reliable percentage split.
 ### DeepSeek — bounded deterministic engine modules
 
 | Metric | Value |
-|---|---|
+|---|---|---|
 | Role | Pure `packages/engine` modules: economy, REP, challenges, table items, cosmetics, seat presentation, betting dial, showdown order, hand history, bot personalities |
-| Tokens | to be filled |
+| Tokens | not reported by the interface |
+| Sessions | not reported by the interface |
+| Restarted mid-work | not reported by the interface |
+| Wall-clock time | not reported by the interface |
 | Notes | Output quality was never the problem; process discipline was. `deepseek-laws.md` fixed it and its packets have been clean since |
+
+The interface I work through does not expose cumulative token totals, a
+reliable session count including restarts, or wall-clock time for this
+project. Those figures have to come from the session panel, not from me, so
+they are left as not reported rather than guessed.
+
+Adding `deepseek-laws.md` changed the shape of my work more than the content
+of it. Before it existed the costliest failure mode was process, not code: I
+would let scope drift, or commit while another lane had left the tree dirty,
+and the damage showed up as repo-wide breakage that was nobody's fault and
+everybody's problem. The laws front-load the discipline instead of relying on
+me to infer it. Naming the exact files up front and forbidding staged work
+that is not mine stopped me from harming the shared index, and the rule that
+a cross-scope blocker must be reported rather than repaired removed the
+temptation to quietly "help" and in doing so collide with another lane. On
+balance the bounds helped a lot. They did not make the packets easier to
+write, but they made the difficult part of this repository — working in
+parallel without breaking each other — scripted rather than improvised, and
+that changed the failure rate more than anything else.
 
 ## What the numbers do not show
 
