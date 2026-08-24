@@ -16,6 +16,7 @@ export interface RoomConfig {
   reconnectGraceMs: number
   seedCollectionMs: number
   randomBytes: (size: number) => Uint8Array
+  turnBudgetsMs: Record<Street, number>
 }
 
 export type RoomCommand =
@@ -26,6 +27,7 @@ export type RoomCommand =
   | { kind: 'startHand' }
   | { kind: 'submitSeed'; playerId: string; seed: string }
   | { kind: 'finalizeSeeds' }
+  | { kind: 'timeoutTurn' }
   | { kind: 'act'; playerId: string; action: TurnAction }
   | { kind: 'rebuy'; playerId: string; amount: number }
   | { kind: 'disconnect'; playerId: string }
@@ -52,6 +54,7 @@ export type RoomEvent =
   | { kind: 'street'; street: Street; cards: Card[] }
   | { kind: 'awaiting'; playerId: string; seat: number; legal: LegalActions }
   | { kind: 'acted'; playerId: string; action: TurnAction }
+  | { kind: 'timedOut'; playerId: string; action: TurnAction }
   | { kind: 'awayPlayed'; playerId: string; action: TurnAction }
   | { kind: 'uncontested'; playerId: string; amount: number }
   | { kind: 'showdown'; awards: { playerId: string; amount: number }[] }
@@ -90,6 +93,8 @@ export interface RoomView {
   seats: RoomSeatView[]
   currentActor: { playerId: string; seat: number } | null
   legal: LegalActions | null
+  turnDeadlineMs: number | null
+  turnBudgetMs: number | null
   commit: string | null
   revealedSeed: string | null
   clientSeeds: FairnessClientSeed[] | null

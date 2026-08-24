@@ -55,7 +55,11 @@ class TestPeer implements ClientPeer {
   }
 }
 
-function setup(reconnectGraceMs = 30_000, seedCollectionMs = 0) {
+function setup(
+  reconnectGraceMs = 30_000,
+  seedCollectionMs = 0,
+  turnBudgetsMs?: { preflop: number; flop: number; turn: number; river: number },
+) {
   const ledger = new MemoryLedger()
   const players: Record<string, AuthenticatedPlayer> = {
     alice: { playerId: ALICE, anonymous: true },
@@ -77,6 +81,7 @@ function setup(reconnectGraceMs = 30_000, seedCollectionMs = 0) {
           inviteCode: 'RIVER2',
           reconnectGraceMs,
           seedCollectionMs,
+          ...(turnBudgetsMs === undefined ? {} : { turnBudgetsMs }),
         }),
       ),
   })
@@ -137,6 +142,33 @@ describe('wire protocol parsing', () => {
 })
 
 describe('room hub', () => {
+  it('enforces a turn timeout without a client action', async () => {
+    vi.useFakeTimers()
+    const { hub } = setup(30_000, 0, { preflop: 20, flop: 20, turn: 20, river: 20 })
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    for (const [client, seat, requestId] of [
+      [alice, 0, 'alice-sit'],
+      [bob, 1, 'bob-sit'],
+    ] as const) {
+      await client.connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId,
+          command: { kind: 'sit', seat, buyIn: 50_000 },
+        }),
+      )
+    }
+    await alice.connection.receive(
+      JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+    )
+    await vi.advanceTimersByTimeAsync(20)
+    expect(alice.peer.last('snapshot')).toMatchObject({
+      view: { phase: 'hand', turnDeadlineMs: expect.any(Number) },
+      events: expect.arrayContaining([expect.objectContaining({ kind: 'timedOut' })]),
+    })
+  })
+
   it('defaults missing client entropy only after the commit has been broadcast', async () => {
     vi.useFakeTimers()
     const { hub } = setup(30_000, 20)

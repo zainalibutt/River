@@ -53,6 +53,7 @@ interface RoomState {
   queue: Promise<void>
   reconnectTimers: Map<string, ReturnType<typeof setTimeout>>
   seedTimer: ReturnType<typeof setTimeout> | null
+  turnTimer: ReturnType<typeof setTimeout> | null
 }
 
 export interface RoomHubOptions {
@@ -582,6 +583,7 @@ export class RoomHub {
       queue: Promise.resolve(),
       reconnectTimers: new Map(),
       seedTimer: null,
+      turnTimer: null,
     }
     this.rooms.set(roomId, created)
     return created
@@ -630,6 +632,31 @@ export class RoomHub {
     }, state.room.config.seedCollectionMs)
   }
 
+  private scheduleTurnTimeout(state: RoomState): void {
+    this.clearTurnTimeout(state)
+    const deadline = state.room.viewFor('').turnDeadlineMs
+    if (deadline === null) return
+    state.turnTimer = setTimeout(
+      () => {
+        void this.enqueue(state, async () => {
+          state.turnTimer = null
+          const result = state.room.submit({ kind: 'timeoutTurn' })
+          if (result.ok) {
+            this.broadcast(state, null, result.events)
+          } else {
+            this.scheduleTurnTimeout(state)
+          }
+        })
+      },
+      Math.max(0, deadline - state.room.config.nowMs()),
+    )
+  }
+
+  private clearTurnTimeout(state: RoomState): void {
+    if (state.turnTimer !== null) clearTimeout(state.turnTimer)
+    state.turnTimer = null
+  }
+
   private clearSeedFinalization(state: RoomState): void {
     if (state.seedTimer !== null) clearTimeout(state.seedTimer)
     state.seedTimer = null
@@ -650,6 +677,7 @@ export class RoomHub {
     for (const connection of state.connections) {
       this.snapshot(connection, state, connection === requester ? requestId : null, events)
     }
+    this.scheduleTurnTimeout(state)
   }
 
   private snapshot(

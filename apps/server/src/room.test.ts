@@ -19,6 +19,7 @@ function makeRoom(seed: string, deck?: Card[]): Room {
       seed,
       inviteCode: 'RIVER2',
       seedCollectionMs: 0,
+      nowMs: () => 0,
       randomBytes: (size) =>
         Uint8Array.from({ length: size }, () => {
           value = (value + 29) & 255
@@ -273,6 +274,93 @@ describe('room hand play', () => {
       allIn: true,
       sittingOut: false,
     })
+  })
+})
+
+describe('server-authoritative turn timers', () => {
+  it('sets per-street deadlines and times out to check or fold without a client clock', () => {
+    let now = 10_000
+    const room = new Room(
+      'turn-timer',
+      defaultRoomConfig({
+        seed: 'turn-timer',
+        inviteCode: 'RIVER2',
+        seedCollectionMs: 0,
+        nowMs: () => now,
+      }),
+      deckOf(DECK_11),
+    )
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    expect(room.viewFor('alice')).toMatchObject({
+      turnDeadlineMs: 25_000,
+      turnBudgetMs: 15_000,
+    })
+    const firstActor = room.viewFor('alice').currentActor
+    if (firstActor === null) throw new Error('missing first actor')
+    const firstLegal = room.viewFor(firstActor.playerId).legal
+    if (firstLegal === null) throw new Error('missing first legal actions')
+    if (!firstLegal.check.enabled) {
+      const called = room.submit({
+        kind: 'act',
+        playerId: firstActor.playerId,
+        action: { kind: 'call' },
+      })
+      expect(called.ok).toBe(true)
+    }
+    const checkingActor = room.viewFor('alice').currentActor
+    if (checkingActor === null) throw new Error('missing checking actor')
+    expect(room.viewFor(checkingActor.playerId).legal?.check.enabled).toBe(true)
+    now = 25_000
+    const checked = room.submit({ kind: 'timeoutTurn' })
+    expect(checked.events).toContainEqual({
+      kind: 'timedOut',
+      playerId: checkingActor.playerId,
+      action: { kind: 'check' },
+    })
+    const closingActor = room.viewFor('alice').currentActor
+    if (closingActor === null) throw new Error('missing preflop closing actor')
+    const closing = room.submit({
+      kind: 'act',
+      playerId: closingActor.playerId,
+      action: { kind: 'call' },
+    })
+    expect(closing.ok).toBe(true)
+    expect(room.viewFor('alice')).toMatchObject({
+      street: 'flop',
+      turnDeadlineMs: 45_000,
+      turnBudgetMs: 20_000,
+    })
+    const foldRoom = new Room(
+      'turn-timeout-fold',
+      defaultRoomConfig({
+        seed: 'turn-timeout-fold',
+        inviteCode: 'RIVER2',
+        seedCollectionMs: 0,
+        nowMs: () => now,
+      }),
+      deckOf(DECK_11),
+    )
+    now = 10_000
+    seatTwo(foldRoom)
+    foldRoom.submit({ kind: 'startHand' })
+    now = 25_000
+    const overdueActor = foldRoom.viewFor('alice').currentActor
+    if (overdueActor === null) throw new Error('missing overdue actor')
+    const lateAction = foldRoom.submit({
+      kind: 'act',
+      playerId: overdueActor.playerId,
+      action: { kind: 'check' },
+    })
+    expect(lateAction.events).toContainEqual(
+      expect.objectContaining({ kind: 'timedOut', action: { kind: 'check' } }),
+    )
+    now = 40_000
+    const folded = foldRoom.submit({ kind: 'timeoutTurn' })
+    expect(folded.events).toContainEqual(
+      expect.objectContaining({ kind: 'timedOut', action: { kind: 'fold' } }),
+    )
+    expect(foldRoom.viewFor('alice').turnDeadlineMs).toBeNull()
   })
 })
 

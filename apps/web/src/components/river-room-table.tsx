@@ -26,12 +26,6 @@ import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib
 import { type VerifyResult, verifyHand } from '@/lib/verify'
 
 const boardSlots = ['flop-one', 'flop-two', 'flop-three', 'turn', 'river'] as const
-const turnBudgets: Record<Street, number> = {
-  preflop: 15_000,
-  flop: 20_000,
-  turn: 20_000,
-  river: 25_000,
-}
 const seatPositions = [
   { x: 57, y: 78 },
   { x: 23, y: 76 },
@@ -87,6 +81,8 @@ function emptyView(selfId = 'pending'): RoomView {
     })),
     currentActor: null,
     legal: null,
+    turnDeadlineMs: null,
+    turnBudgetMs: null,
     commit: null,
     revealedSeed: null,
     clientSeeds: null,
@@ -172,6 +168,18 @@ function browserFairnessSeed(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+function useTurnRemaining(deadline: number | null): number | null {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (deadline === null) return
+    const update = () => setNow(Date.now())
+    update()
+    const interval = window.setInterval(update, 100)
+    return () => window.clearInterval(interval)
+  }, [deadline])
+  return deadline === null ? null : Math.max(0, deadline - now)
+}
+
 export function RiverRoomTable() {
   const [{ roomId, inviteCode, expired }] = useState(initialRoomTarget)
   const [view, setView] = useState<RoomView>(() => emptyView())
@@ -183,7 +191,6 @@ export function RiverRoomTable() {
   const [kick, setKick] = useState<KickState>(null)
   const [peek, setPeek] = useState(false)
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
-  const [turnRemaining, setTurnRemaining] = useState(turnBudgets.preflop)
   const [raiseTo, setRaiseTo] = useState(0)
   const [dialBand, setDialBand] = useState(0)
   const [stageScale, setStageScale] = useState(2 / 3)
@@ -321,18 +328,6 @@ export function RiverRoomTable() {
   }, [view.legal?.raiseTo.min])
 
   useEffect(() => {
-    const current = view.currentActor
-    if (current === null) return
-    const budget = turnBudgets[view.street]
-    const started = Date.now()
-    const interval = window.setInterval(() => {
-      setTurnRemaining(Math.max(0, budget - (Date.now() - started)))
-    }, 100)
-    setTurnRemaining(budget)
-    return () => window.clearInterval(interval)
-  }, [view.currentActor, view.street])
-
-  useEffect(() => {
     const down = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return
@@ -359,7 +354,12 @@ export function RiverRoomTable() {
   const seatedCount = view.seats.filter((seat) => seat.playerId !== null && seat.stack > 0).length
   const isHost = view.hostPlayerId === view.selfId
   const localTurn = view.currentActor?.playerId === view.selfId
-  const urgency = localTurn && turnRemaining <= turnBudgets[view.street] / 2
+  const turnRemaining = useTurnRemaining(view.turnDeadlineMs)
+  const urgency =
+    localTurn &&
+    turnRemaining !== null &&
+    view.turnBudgetMs !== null &&
+    turnRemaining <= view.turnBudgetMs / 2
   const selected =
     selectedSeat === null ? null : view.seats.find((seat) => seat.seat === selectedSeat)
   const selectedPlayerId = selected?.playerId ?? null
@@ -531,7 +531,7 @@ export function RiverRoomTable() {
                   local={seat.playerId === view.selfId}
                   peek={peek}
                   timer={seat.playerId === view.currentActor?.playerId ? turnRemaining : null}
-                  timerTotal={turnBudgets[view.street]}
+                  timerTotal={view.turnBudgetMs ?? 1}
                   onSit={() =>
                     command({ kind: 'sit', seat: seat.seat, buyIn: DEFAULT_STAKE.defaultBuyIn })
                   }

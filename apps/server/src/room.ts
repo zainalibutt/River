@@ -30,6 +30,12 @@ import type {
 
 const STREET_ORDER: Street[] = ['preflop', 'flop', 'turn', 'river']
 const DEFAULT_MAX_SEATS = SEATS_PER_SHAPE.full
+const DEFAULT_TURN_BUDGETS_MS: Record<Street, number> = {
+  preflop: 15_000,
+  flop: 20_000,
+  turn: 20_000,
+  river: 25_000,
+}
 
 interface PlayerState {
   name: string
@@ -74,13 +80,14 @@ export function defaultRoomConfig(overrides: Partial<RoomConfig> & { seed: strin
     stake: overrides.stake ?? DEFAULT_STAKE,
     seed: overrides.seed,
     countdownMs: overrides.countdownMs ?? 3000,
-    nowMs: overrides.nowMs ?? (() => 0),
+    nowMs: overrides.nowMs ?? Date.now,
     awayPolicy: overrides.awayPolicy ?? ('check-or-fold' satisfies AwayPolicy),
     inviteCode: overrides.inviteCode ?? newInviteCode(randomSource),
     hostPlayerId: overrides.hostPlayerId ?? '',
     reconnectGraceMs: overrides.reconnectGraceMs ?? 30_000,
     seedCollectionMs: overrides.seedCollectionMs ?? 1_500,
     randomBytes: randomSource ?? randomBytes,
+    turnBudgetsMs: overrides.turnBudgetsMs ?? DEFAULT_TURN_BUDGETS_MS,
   }
 }
 
@@ -109,6 +116,7 @@ export class Room implements RoomHandle {
   private board: Card[] = []
   private lastStreet: Street = 'preflop'
   private pendingPlayerId: string | null = null
+  private turnDeadlineMs: number | null = null
   private betweenSince = 0
   private revealed = false
   private readonly revealedPlayerIds = new Set<string>()
@@ -125,6 +133,12 @@ export class Room implements RoomHandle {
   constructor(id: string, config: RoomConfig, fixedDeck?: Card[]) {
     if (config.maxSeats < 2 || config.maxSeats > DEFAULT_MAX_SEATS) {
       throw new Error(`maxSeats must be between 2 and ${DEFAULT_MAX_SEATS}`)
+    }
+    for (const street of STREET_ORDER) {
+      const budget = config.turnBudgetsMs[street]
+      if (!Number.isFinite(budget) || budget <= 0) {
+        throw new Error(`turn budget for ${street} must be positive`)
+      }
     }
     this.id = id
     this.config = config
@@ -188,6 +202,11 @@ export class Room implements RoomHandle {
       seats,
       currentActor,
       legal: this.pendingPlayerId === playerId ? this.legalFor(playerId) : null,
+      turnDeadlineMs: this.turnDeadlineMs,
+      turnBudgetMs:
+        this.phase === 'hand' && this.turnDeadlineMs !== null
+          ? this.config.turnBudgetsMs[this.lastStreet]
+          : null,
       commit: this.currentCommit,
       revealedSeed: this.revealedSeed,
       clientSeeds:
@@ -225,6 +244,8 @@ export class Room implements RoomHandle {
         return this.submitSeed(command.playerId, command.seed)
       case 'finalizeSeeds':
         return this.finalizeSeeds()
+      case 'timeoutTurn':
+        return this.timeoutTurn()
       case 'act':
         return this.act(command.playerId, command.action)
       case 'rebuy':
@@ -349,6 +370,7 @@ export class Room implements RoomHandle {
     this.betweenSince = 0
     this.status = null
     this.pendingPlayerId = null
+    this.turnDeadlineMs = null
     for (const seat of this.seats) {
       seat.hole = []
     }
@@ -463,10 +485,34 @@ export class Room implements RoomHandle {
     if (this.phase !== 'hand' || this.pendingPlayerId !== playerId || this.betting === null) {
       return this.reject(playerId, 'not your turn')
     }
+    if (this.turnDeadlineMs !== null && this.now() >= this.turnDeadlineMs) {
+      return this.timeoutTurn()
+    }
     const events: RoomEvent[] = []
     this.status = null
     if (!this.apply(playerId, action, events, 'acted')) {
       return this.reject(playerId, this.status ?? 'invalid action')
+    }
+    this.pendingPlayerId = null
+    this.turnDeadlineMs = null
+    this.drive(events)
+    return { ok: true, events }
+  }
+
+  private timeoutTurn(): RoomResult {
+    const playerId = this.pendingPlayerId
+    const deadline = this.turnDeadlineMs
+    if (this.phase !== 'hand' || this.betting === null || playerId === null || deadline === null) {
+      return this.reject(null, 'no active turn to timeout')
+    }
+    if (this.now() < deadline) return this.reject(playerId, 'turn deadline not reached')
+    const legal = this.legalFor(playerId)
+    const action: TurnAction = legal.check.enabled ? { kind: 'check' } : { kind: 'fold' }
+    const events: RoomEvent[] = []
+    this.status = null
+    this.turnDeadlineMs = null
+    if (!this.apply(playerId, action, events, 'timedOut')) {
+      return this.reject(playerId, this.status ?? 'timeout action failed')
     }
     this.pendingPlayerId = null
     this.drive(events)
@@ -581,7 +627,7 @@ export class Room implements RoomHandle {
     playerId: string,
     action: TurnAction,
     events: RoomEvent[],
-    eventKind: 'acted' | 'awayPlayed',
+    eventKind: 'acted' | 'awayPlayed' | 'timedOut',
   ): boolean {
     const betting = this.betting
     if (betting === null) {
@@ -622,19 +668,26 @@ export class Room implements RoomHandle {
     while (this.betting !== null && !this.betting.finished) {
       const actorId = this.betting.toActId
       if (actorId === undefined) {
+        this.pendingPlayerId = null
+        this.turnDeadlineMs = null
         break
       }
       const player = this.players.get(actorId)
       const seatIndex = this.seatOfPlayer(actorId)
       if (player === undefined || seatIndex === -1) {
+        this.pendingPlayerId = null
+        this.turnDeadlineMs = null
         this.applyAway(actorId, events)
         continue
       }
       if (player.disconnected) {
+        this.pendingPlayerId = null
+        this.turnDeadlineMs = null
         this.applyAway(actorId, events)
         continue
       }
       this.pendingPlayerId = actorId
+      this.turnDeadlineMs = this.now() + this.config.turnBudgetsMs[this.betting.street]
       events.push({
         kind: 'awaiting',
         playerId: actorId,
@@ -704,6 +757,7 @@ export class Room implements RoomHandle {
     }
     this.betting = null
     this.pendingPlayerId = null
+    this.turnDeadlineMs = null
     this.phase = 'between'
     this.betweenSince = this.now()
     events.push({
