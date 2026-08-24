@@ -27,10 +27,13 @@ Format: one row per completed packet, newest last.
 
 | Packet | Owner | Dispatched | Notes |
 |---|---|---|---|
-| 5D Basement and Suite detail | Codex | 2026-08-24 | art/pipeline only. Merge repeated props; draw calls are the binding budget |
-| 4K REP module | DeepSeek | 2026-08-24 | First packet under `deepseek-laws.md`. Pure engine module, three named files |
+| 5E chip and card instancing | Codex | 2026-08-24 | art/pipeline only. Chips are individual objects; 51 in the pot alone |
+| 4K REP module | DeepSeek | 2026-08-24 | First packet under `deepseek-laws.md`; it confirmed the laws and quoted law 1 correctly |
+| 4M table item catalogue | DeepSeek | 2026-08-24 | Queued behind 4K. Chip sink, never affects poker odds |
 | 4H economy wiring | DeepSeek | 2026-08-24 | **Stalled mid-work.** `economy-service.ts` and a migration sit uncommitted and fail typecheck at line 204 plus formatting. Watch for it adding a state table instead of deriving from ledger refs |
 
+| 2026-08-24 | 5D Basement and Suite detail | Codex | `2ac01ec` | Accepted. Basement 1,368 to 3,218 tris, Suite 2,614 to 16,904. Gate verified untouched and still firing |
+| 2026-08-24 | 5V venue selection | Claude | `f18cd71` | Venue registry, picker, invite URL carries the venue. Also found the web app serving a 206K stale Rooftop against a 535K build - every skyline change had been invisible in the browser |
 | 2026-08-24 | 4L chat and emote panel | Claude | `89a27e8` | Feed, nine-emote rail, speaking indicator, message entry. Shortcut keys proven inert while the chat input has focus, and proven still live outside it |
 | 2026-08-24 | 4H economy wiring | DeepSeek | `f885911` | Accepted. Derives eligibility by parsing ledger refs rather than adding a state table, seated gating present, no hardcoded economy numbers. 15 tests |
 
@@ -68,6 +71,9 @@ proved byte-identical to the contaminated one before anything was discarded.
 - **Bounding boxes lie about rings.** An axis-aligned box around a ring has its
   corners at R*sqrt(2), so a 4.1m parapet measures 5.8m and a 45m skyline
   measures 64m. Measure per vertex when the mesh is merged or annular.
+- **Build output is not source.** A generated file that lands in a linted
+  directory fails the shared gate for every lane, and any fix is clobbered on
+  the next build. Exclude it instead.
 - **Instrument before observation.** Four false defects this project came from a
   faulty instrument, not faulty code: a hot-reloading tree, an incomplete scene
   reset before a GLB import, a `--factory-startup` launch that hid every add-on,
