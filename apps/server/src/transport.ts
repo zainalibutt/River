@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto'
 import type { TurnAction } from '@river/engine'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
+import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-service.js'
+import { claimDailyFor, claimRescueFor } from './economy-service.js'
 import { isFairnessSeed } from './fairness.js'
 import type { Ledger } from './ledger.js'
-import type { RoomCommand, RoomEvent, RoomResult, RoomView } from './protocol.js'
+import type { Emote, RoomCommand, RoomEvent, RoomResult, RoomView } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
 
 export interface ClientPeer {
@@ -39,6 +41,8 @@ export type ClientMessage =
   | { kind: 'command'; requestId: string; command: ClientRoomCommand }
   | { kind: 'social'; requestId: string; command: ClientSocialCommand }
   | { kind: 'resync'; requestId: string }
+  | { kind: 'claimDaily'; requestId: string }
+  | { kind: 'claimRescue'; requestId: string }
 
 export type ServerMessage =
   | { kind: 'authenticated'; playerId: string; anonymous: boolean }
@@ -50,8 +54,9 @@ export type ServerMessage =
       balance: number
       events: RoomEvent[]
     }
-  | { kind: 'error'; requestId: string | null; code: string; message: string }
   | { kind: 'social'; roomId: string; requestId: string | null; event: SocialEvent }
+  | { kind: 'grant'; requestId: string; outcome: GrantOutcome }
+  | { kind: 'error'; requestId: string | null; code: string; message: string }
 
 interface ConnectionState {
   peer: ClientPeer
@@ -76,6 +81,7 @@ interface RoomState {
 export interface RoomHubOptions {
   verifyToken: TokenVerifier
   ledger: Ledger
+  economy?: SupabaseEconomy
   createRoom?: (roomId: string) => Room
 }
 
@@ -202,20 +208,25 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     return command === null ? null : { kind: 'social', requestId, command }
   }
   if (value.kind === 'resync') return { kind: 'resync', requestId }
+  if (value.kind === 'claimDaily') return { kind: 'claimDaily', requestId }
+  if (value.kind === 'claimRescue') return { kind: 'claimRescue', requestId }
   return null
 }
 
 export class RoomHub {
   private readonly verifyToken: TokenVerifier
   private readonly ledger: Ledger
+  private readonly economy: SupabaseEconomy | null
   private readonly createRoom: (roomId: string) => Room
   private readonly rooms = new Map<string, RoomState>()
   private readonly activePlayers = new Map<string, ConnectionState>()
   private readonly completed = new Map<string, ServerMessage>()
+  private readonly grantInFlight = new Set<string>()
 
   constructor(options: RoomHubOptions) {
     this.verifyToken = options.verifyToken
     this.ledger = options.ledger
+    this.economy = options.economy ?? null
     this.createRoom =
       options.createRoom ??
       ((roomId) =>
@@ -258,6 +269,10 @@ export class RoomHub {
     }
     if (message.kind === 'enter') {
       await this.enter(connection, message)
+      return
+    }
+    if (message.kind === 'claimDaily' || message.kind === 'claimRescue') {
+      await this.grant(connection, message)
       return
     }
     if (connection.roomId === null) {
@@ -378,6 +393,50 @@ export class RoomHub {
       }
       this.broadcast(room, message.requestId, events, connection)
     })
+  }
+
+  private async grant(
+    connection: ConnectionState,
+    message: Extract<ClientMessage, { kind: 'claimDaily' | 'claimRescue' }>,
+  ): Promise<void> {
+    const player = connection.player
+    if (player === null) return
+    if (this.economy === null) {
+      this.error(connection, message.requestId, 'grant_unavailable', 'Grants are unavailable')
+      return
+    }
+    if (this.grantInFlight.has(player.playerId)) {
+      this.error(connection, message.requestId, 'grant_in_flight', 'A grant is already in progress')
+      return
+    }
+    this.grantInFlight.add(player.playerId)
+    try {
+      const deps: EconomyDeps = {
+        ...this.economy,
+        seated: (playerId) => Promise.resolve(this.isSeated(playerId)),
+      }
+      const now = Date.now()
+      const outcome =
+        message.kind === 'claimDaily'
+          ? await claimDailyFor(player.playerId, deps, now)
+          : await claimRescueFor(player.playerId, deps, now)
+      if (outcome.kind === 'granted') {
+        connection.balance = outcome.balance
+      }
+      this.send(connection, { kind: 'grant', requestId: message.requestId, outcome })
+    } catch {
+      this.error(connection, message.requestId, 'grant_failed', 'Grant could not be processed')
+    } finally {
+      this.grantInFlight.delete(player.playerId)
+    }
+  }
+
+  private isSeated(playerId: string): boolean {
+    const connection = this.activePlayers.get(playerId)
+    if (connection === undefined || connection.roomId === null) return false
+    const state = this.rooms.get(connection.roomId)
+    if (state === undefined) return false
+    return state.room.viewFor(playerId).seats.some((seat) => seat.playerId === playerId)
   }
 
   private async command(

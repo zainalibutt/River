@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { config as loadEnv } from 'dotenv'
 import { createSupabaseTokenVerifier } from './auth.js'
 import { readServerConfig } from './config.js'
+import { createSupabaseEconomy } from './economy-service.js'
 import { SupabaseLedger } from './ledger.js'
 import { RoomHub } from './transport.js'
 import { attachRiverWebSocketServer } from './websocket.js'
@@ -37,11 +38,17 @@ async function start(): Promise<void> {
   await application.prepare()
   const handle = application.getRequestHandler()
   const server = createServer((request, response) => handle(request, response))
+  const ledger = new SupabaseLedger({
+    supabaseUrl: config.supabaseUrl,
+    serviceRoleKey: config.serviceRoleKey,
+  })
   const hub = new RoomHub({
     verifyToken: createSupabaseTokenVerifier({ supabaseUrl: config.supabaseUrl }),
-    ledger: new SupabaseLedger({
+    ledger,
+    economy: createSupabaseEconomy({
       supabaseUrl: config.supabaseUrl,
       serviceRoleKey: config.serviceRoleKey,
+      ledger,
     }),
   })
   const sockets = attachRiverWebSocketServer(server, hub)

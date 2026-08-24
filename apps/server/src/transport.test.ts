@@ -1,5 +1,7 @@
+import type { EconomyConfig } from '@river/engine'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AuthenticatedPlayer } from './auth.js'
+import type { LedgerRow, SupabaseEconomy } from './economy-service.js'
 import type { Ledger, LedgerEntry } from './ledger.js'
 import { defaultRoomConfig, Room } from './room.js'
 import type { ClientPeer, ServerMessage } from './transport.js'
@@ -60,6 +62,7 @@ function setup(
   seedCollectionMs = 0,
   turnBudgetsMs?: { preflop: number; flop: number; turn: number; river: number },
   socialRateLimit?: { maxActions: number; windowMs: number },
+  economy?: SupabaseEconomy,
 ) {
   const ledger = new MemoryLedger()
   const players: Record<string, AuthenticatedPlayer> = {
@@ -69,6 +72,7 @@ function setup(
   }
   const hub = new RoomHub({
     ledger,
+    ...(economy === undefined ? {} : { economy }),
     verifyToken: async (token) => {
       const player = players[token]
       if (player === undefined) throw new Error('invalid token')
@@ -556,5 +560,68 @@ describe('room hub', () => {
       },
     })
     expect(ledger.balances.get(ALICE)).toBe(50_000)
+  })
+})
+
+describe('economy grants over the wire', () => {
+  const CONFIG: EconomyConfig = {
+    signupBankroll: 100_000,
+    rescueFloor: 25_000,
+    rescueThreshold: 1_000,
+    rescueDailyCap: 3,
+    dailyBase: 10_000,
+    dailyStreakBonus: [0, 5_000, 10_000, 20_000, 30_000, 45_000, 90_000],
+  }
+
+  function grantEconomy(): SupabaseEconomy {
+    return {
+      async readRows(): Promise<LedgerRow[]> {
+        return []
+      },
+      async readConfig(): Promise<EconomyConfig> {
+        return CONFIG
+      },
+      async apply(): Promise<number> {
+        return 110_000
+      },
+    }
+  }
+
+  it('clears a daily claim to the client with the new balance', async () => {
+    const { hub } = setup(30_000, 0, undefined, undefined, grantEconomy())
+    const peer = new TestPeer()
+    const connection = hub.connect(peer)
+    await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'alice' }))
+    await connection.receive(JSON.stringify({ kind: 'claimDaily', requestId: 'daily-1' }))
+    expect(peer.last('grant')).toMatchObject({
+      requestId: 'daily-1',
+      outcome: { kind: 'granted', delta: 10_000, balance: 110_000 },
+    })
+  })
+
+  it('rejects a claim before authentication', async () => {
+    const { hub } = setup(30_000, 0, undefined, undefined, grantEconomy())
+    const peer = new TestPeer()
+    const connection = hub.connect(peer)
+    await connection.receive(JSON.stringify({ kind: 'claimRescue', requestId: 'rescue-1' }))
+    expect(peer.last('error')).toMatchObject({ code: 'unauthenticated' })
+  })
+
+  it('treats seated rescue claims as not-eligible without crashing', async () => {
+    const { hub } = setup(30_000, 0, undefined, undefined, grantEconomy())
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    await alice.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'sit',
+        command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+      }),
+    )
+    await alice.connection.receive(JSON.stringify({ kind: 'claimRescue', requestId: 'rescue-1' }))
+    const outcome = alice.peer.last('grant')
+    expect(outcome).toMatchObject({
+      requestId: 'rescue-1',
+      outcome: { kind: 'ineligible', reason: 'not-eligible' },
+    })
   })
 })

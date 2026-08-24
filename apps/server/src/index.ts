@@ -1,6 +1,7 @@
 export const serverName = 'river-server'
 export * from './auth.js'
 export * from './config.js'
+export * from './economy-service.js'
 export * from './fairness.js'
 export * from './ledger.js'
 export * from './protocol.js'
