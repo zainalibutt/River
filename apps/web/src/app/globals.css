@@ -94,6 +94,29 @@ input:focus-visible {
   isolation: isolate;
 }
 
+.river-stage.three-dimensional {
+  background: #7ca8ba;
+}
+
+.river-venue {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: auto;
+}
+
+.hud-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hud-layer button,
+.hud-layer input {
+  pointer-events: auto;
+}
+
 .felt {
   position: absolute;
   inset: 0;

@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { RiverVenue } from '@/components/river-venue'
 import { cloneView, dwellFor, formatAmount, orderedSeats, reduceStep } from '@/lib/presentation'
 
 const seatPositions: Record<number, { x: number; y: number }[]> = {
@@ -90,6 +91,7 @@ export function RiverTable() {
   const allInRef = useRef<HTMLButtonElement>(null)
   const raiseRef = useRef<HTMLInputElement>(null)
   const modalCloseRef = useRef<HTMLButtonElement>(null)
+  const seatRefs = useRef(new Map<string, HTMLElement>())
 
   const clearPlayback = useCallback(() => {
     for (const timer of timers.current) clearTimeout(timer)
@@ -277,165 +279,170 @@ export function RiverTable() {
     <main className={twoColour ? 'river-app deck-two-colour' : 'river-app'}>
       <div className="stage-fit">
         <section
-          className="river-stage"
+          className="river-stage three-dimensional"
           aria-label="River poker table"
           style={{ transform: `scale(${stageScale})` }}
         >
-          <div className="felt" />
-          <div className="table-rail" />
-          <nav className="menu-cluster" aria-label="Table menu">
-            <HoldButton
-              disabled={false}
-              duration={tvMode ? 1000 : 0}
-              className="tv-button"
-              ariaLabel={tvMode ? 'Hold to exit TV mode' : 'Enter TV mode'}
-              ariaPressed={tvMode}
-              onComplete={() => void enterTvMode()}
+          <RiverVenue seatIds={orderedSeats(view).map((seat) => seat.id)} seatRefs={seatRefs} />
+          <div className="hud-layer">
+            <nav className="menu-cluster" aria-label="Table menu">
+              <HoldButton
+                disabled={false}
+                duration={tvMode ? 1000 : 0}
+                className="tv-button"
+                ariaLabel={tvMode ? 'Hold to exit TV mode' : 'Enter TV mode'}
+                ariaPressed={tvMode}
+                onComplete={() => void enterTvMode()}
+              >
+                TV
+              </HoldButton>
+              <button type="button" onClick={() => setSettingsOpen(true)} aria-label="Settings">
+                SET
+              </button>
+              <button type="button" onClick={() => changeSkill(skill)} aria-label="New session">
+                NEW
+              </button>
+            </nav>
+
+            <button
+              type="button"
+              className="verify-pill"
+              disabled={view.commit === null}
+              onClick={() => setVerifyOpen(true)}
             >
-              TV
-            </HoldButton>
-            <button type="button" onClick={() => setSettingsOpen(true)} aria-label="Settings">
-              SET
+              <span>VERIFY</span>
+              <strong>{view.commit?.slice(0, 8) ?? '--------'}</strong>
             </button>
-            <button type="button" onClick={() => changeSkill(skill)} aria-label="New session">
-              NEW
-            </button>
-          </nav>
 
-          <button
-            type="button"
-            className="verify-pill"
-            disabled={view.commit === null}
-            onClick={() => setVerifyOpen(true)}
-          >
-            <span>VERIFY</span>
-            <strong>{view.commit?.slice(0, 8) ?? '--------'}</strong>
-          </button>
-
-          <div className="pot-readout" role="status" aria-label={`Pot ${view.pot}`}>
-            <span>POT</span>
-            <strong>{formatAmount(view.pot, false)}</strong>
-            <div className="pot-chips" aria-hidden="true">
-              <i />
-              <i />
-              <i />
+            <div className="pot-readout" role="status" aria-label={`Pot ${view.pot}`}>
+              <span>POT</span>
+              <strong>{formatAmount(view.pot, false)}</strong>
+              <div className="pot-chips" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </div>
             </div>
-          </div>
 
-          <Board cards={view.board} street={view.street} twoColour={twoColour} />
+            <Board cards={view.board} street={view.street} twoColour={twoColour} />
 
-          <div className={status ? 'status-line populated' : 'status-line'} aria-live="polite">
-            {view.phase === 'between' && countdown > 0 ? (
-              <span className="countdown">
-                {status === null ? '' : `${status} · `}NEXT HAND · {countdown}
-              </span>
-            ) : (
-              status
-            )}
-          </div>
-
-          <div className="seat-ring">
-            {orderedSeats(view).map((seat, index, seats) => (
-              <Seat
-                key={seat.id}
-                seat={seat}
-                index={index}
-                count={seats.length}
-                active={seat.id === view.currentActorId}
-                phase={view.phase}
-                twoColour={twoColour}
-              />
-            ))}
-          </div>
-
-          <ActionRail
-            view={view}
-            busy={busy}
-            raiseTo={raiseTo}
-            setRaiseTo={setRaiseTo}
-            callRef={callRef}
-            allInRef={allInRef}
-            raiseRef={raiseRef}
-            onStart={startHand}
-            onRebuy={rebuy}
-            onAction={act}
-          />
-
-          {busy && lastStep !== null ? (
-            <div className="playback-label" aria-live="polite">
-              {stepLabel(lastStep)}
+            <div className={status ? 'status-line populated' : 'status-line'} aria-live="polite">
+              {view.phase === 'between' && countdown > 0 ? (
+                <span className="countdown">
+                  {status === null ? '' : `${status} · `}NEXT HAND · {countdown}
+                </span>
+              ) : (
+                status
+              )}
             </div>
-          ) : null}
 
-          {settingsOpen ? (
-            <div className="modal-backdrop" role="presentation">
-              <section
-                className="modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="settings-title"
-              >
-                <button
-                  ref={modalCloseRef}
-                  className="modal-close"
-                  type="button"
-                  onClick={() => setSettingsOpen(false)}
+            <div className="seat-ring">
+              {orderedSeats(view).map((seat, index, seats) => (
+                <Seat
+                  key={seat.id}
+                  seat={seat}
+                  index={index}
+                  count={seats.length}
+                  active={seat.id === view.currentActorId}
+                  phase={view.phase}
+                  twoColour={twoColour}
+                  anchorRef={(element) => {
+                    if (element === null) seatRefs.current.delete(seat.id)
+                    else seatRefs.current.set(seat.id, element)
+                  }}
+                />
+              ))}
+            </div>
+
+            <ActionRail
+              view={view}
+              busy={busy}
+              raiseTo={raiseTo}
+              setRaiseTo={setRaiseTo}
+              callRef={callRef}
+              allInRef={allInRef}
+              raiseRef={raiseRef}
+              onStart={startHand}
+              onRebuy={rebuy}
+              onAction={act}
+            />
+
+            {busy && lastStep !== null ? (
+              <div className="playback-label" aria-live="polite">
+                {stepLabel(lastStep)}
+              </div>
+            ) : null}
+
+            {settingsOpen ? (
+              <div className="modal-backdrop" role="presentation">
+                <section
+                  className="modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="settings-title"
                 >
-                  CLOSE
-                </button>
-                <p className="eyebrow">TABLE SETTINGS</p>
-                <h2 id="settings-title">Choose your room</h2>
-                <div className="skill-grid">
-                  {(['rookie', 'novice', 'og'] as const).map((level) => (
-                    <button
-                      type="button"
-                      className={skill === level ? 'selected' : ''}
-                      key={level}
-                      onClick={() => changeSkill(level)}
-                    >
-                      <strong>{level.toUpperCase()}</strong>
-                      <span>{skillCopy(level)}</span>
-                    </button>
-                  ))}
-                </div>
-                <button
-                  className="deck-toggle"
-                  type="button"
-                  onClick={() => setTwoColour((value) => !value)}
-                >
-                  DECK · {twoColour ? 'TRADITIONAL TWO-COLOUR' : 'TV FOUR-COLOUR'}
-                </button>
-              </section>
-            </div>
-          ) : null}
+                  <button
+                    ref={modalCloseRef}
+                    className="modal-close"
+                    type="button"
+                    onClick={() => setSettingsOpen(false)}
+                  >
+                    CLOSE
+                  </button>
+                  <p className="eyebrow">TABLE SETTINGS</p>
+                  <h2 id="settings-title">Choose your room</h2>
+                  <div className="skill-grid">
+                    {(['rookie', 'novice', 'og'] as const).map((level) => (
+                      <button
+                        type="button"
+                        className={skill === level ? 'selected' : ''}
+                        key={level}
+                        onClick={() => changeSkill(level)}
+                      >
+                        <strong>{level.toUpperCase()}</strong>
+                        <span>{skillCopy(level)}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className="deck-toggle"
+                    type="button"
+                    onClick={() => setTwoColour((value) => !value)}
+                  >
+                    DECK · {twoColour ? 'TRADITIONAL TWO-COLOUR' : 'TV FOUR-COLOUR'}
+                  </button>
+                </section>
+              </div>
+            ) : null}
 
-          {verifyOpen ? (
-            <div className="modal-backdrop" role="presentation">
-              <section
-                className="modal verify-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="verify-title"
-              >
-                <button
-                  ref={modalCloseRef}
-                  className="modal-close"
-                  type="button"
-                  onClick={() => setVerifyOpen(false)}
+            {verifyOpen ? (
+              <div className="modal-backdrop" role="presentation">
+                <section
+                  className="modal verify-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="verify-title"
                 >
-                  CLOSE
-                </button>
-                <p className="eyebrow">FAIRNESS COMMIT</p>
-                <h2 id="verify-title">The deck was locked before the deal.</h2>
-                <code>{view.commit}</code>
-                <p>
-                  {view.revealed
-                    ? 'Hand complete. Reveal verification is available.'
-                    : 'The seed remains hidden until showdown.'}
-                </p>
-              </section>
-            </div>
-          ) : null}
+                  <button
+                    ref={modalCloseRef}
+                    className="modal-close"
+                    type="button"
+                    onClick={() => setVerifyOpen(false)}
+                  >
+                    CLOSE
+                  </button>
+                  <p className="eyebrow">FAIRNESS COMMIT</p>
+                  <h2 id="verify-title">The deck was locked before the deal.</h2>
+                  <code>{view.commit}</code>
+                  <p>
+                    {view.revealed
+                      ? 'Hand complete. Reveal verification is available.'
+                      : 'The seed remains hidden until showdown.'}
+                  </p>
+                </section>
+              </div>
+            ) : null}
+          </div>
         </section>
       </div>
       <div className="viewport-warning">
@@ -493,6 +500,7 @@ function Seat({
   count,
   active,
   phase,
+  anchorRef,
 }: {
   seat: ViewSeat
   index: number
@@ -500,6 +508,7 @@ function Seat({
   active: boolean
   phase: SoloTableView['phase']
   twoColour: boolean
+  anchorRef: (element: HTMLElement | null) => void
 }) {
   const position =
     seatPositions[count]?.[index] ?? seatPositions[9]?.[index] ?? fallbackSeatPosition
@@ -522,6 +531,7 @@ function Seat({
           : null
   return (
     <article
+      ref={anchorRef}
       className={classes.join(' ')}
       style={{ '--seat-x': `${position.x}%`, '--seat-y': `${position.y}%` } as CSSProperties}
     >
