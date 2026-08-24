@@ -68,20 +68,24 @@ python art/pipeline/test_checker_chars.py
   mask channels for each tintable region; and a palette lookup indexed by one
   per-instance `paletteIndex` property. The renderer must apply that property in
   the shared shader or instance buffer. It must not clone material datablocks.
-- Venue character integration uses linked mesh instances of the two rigged bases,
-  alternating five male and four female seats. Each seat keeps its own armature,
-  root transform, and `paletteIndex`; body and weighted garment meshes are shared
-  per variant. The cost is 18,082 triangles and two character draw calls per seat,
-  or 162,738 character triangles and 18 additional draw calls for nine seats.
+- Venue character integration uses weighted seated LOD meshes of the two rigged
+  bases, alternating five male and four female seats. Each seat keeps its own
+  armature, root transform, and `paletteIndex`; the body and garment LODs remain
+  skinned and share the atlas. The LOD costs about 3,491 triangles per seat,
+  31,423 character triangles across nine seats, and 18 character draw calls.
+  Venue exports omit the source standing/action clips; the full nine-clip GLBs
+  remain in `art/out/` for runtime use where needed.
 - Venue materials are built from ColorRamp-driven shaders; `retint()` changes the
   ramp stops, so a shared material can be re-paletted per venue without the
   silent-no-op BSDF trap.
 - Exports are deterministic: identical GLB bytes across runs (verified by
   SHA-256). The `.blend` file embeds Blender save metadata and is not byte-stable,
   but geometry is.
-- Measured result (2026-08-24): rooftop 172,440 triangles / 24 materials / 52
-  objects; basement 165,956 / 20 / 44 (128x128 checker plus 1024 character atlas);
-  suite 179,642 / 21 / 49. All comfortably inside the budget table.
+- Measured result (2026-08-24), before -> after: rooftop 172,440 -> 41,125
+  triangles and 12,399 -> 2,982KB; basement 165,956 -> 34,641 triangles and
+  12,049 -> 2,631KB; suite 179,642 -> 48,327 triangles and 12,764 -> 3,347KB.
+  Each venue is hard-gated at 250,000 triangles, 24 materials, 120 draw calls,
+  and 6,144KB download size.
 - Character validation (triangles, armature binding, bone count) is exercised
   against a synthetic rigged GLB fixture produced deterministically; it passes a
   valid skinned mesh and fails loudly on missing skin/weights or insufficient

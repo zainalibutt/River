@@ -87,6 +87,9 @@ VENUE_CHAIR = {
 CHARACTER_SCALE = 0.73
 CHARACTER_SEAT_Z = 0.05
 CHARACTER_VARIANTS = ('male', 'female')
+CHARACTER_BODY_LOD_RATIO = 0.18
+CHARACTER_GARMENT_LOD_RATIO = 0.24
+DOWNLOAD_BUDGET_KB = 6144
 
 
 def build_chip_meshes():
@@ -165,6 +168,23 @@ def character_seat_positions(venue, count=9):
     return seat_positions(count, FELT_RX * 1.42, FELT_RY * 1.58)
 
 
+def apply_seated_lod(obj):
+    if obj.type != 'MESH':
+        return
+    ratio = CHARACTER_BODY_LOD_RATIO if obj.data.name.startswith('base') else CHARACTER_GARMENT_LOD_RATIO
+    modifier = obj.modifiers.new('river_seated_lod', 'DECIMATE')
+    modifier.ratio = ratio
+    modifier.use_collapse_triangulate = False
+    modifier_index = obj.modifiers.find(modifier.name)
+    if modifier_index > 0:
+        obj.modifiers.move(modifier_index, 0)
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.modifier_apply(modifier=modifier.name)
+    obj.select_set(False)
+
+
 def build_character_atlas():
     image = bpy.data.images.new('river_character_atlas', width=1024, height=1024, alpha=True)
     image.generated_color = (0.52, 0.38, 0.30, 1.0)
@@ -210,6 +230,8 @@ def import_character_templates():
         for obj in imported_all:
             if obj not in imported:
                 bpy.data.objects.remove(obj, do_unlink=True)
+        for obj in imported:
+            apply_seated_lod(obj)
         templates[variant] = imported
     return templates
 
@@ -224,6 +246,8 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
         mapping[source] = clone
     for source, clone in mapping.items():
         clone.parent = mapping.get(source.parent)
+        if clone.type == 'ARMATURE':
+            clone.animation_data_clear()
         for modifier in clone.modifiers:
             if modifier.type == 'ARMATURE' and modifier.object in mapping:
                 modifier.object = mapping[modifier.object]
@@ -264,6 +288,9 @@ def build_venue_characters(venue):
     for template in templates.values():
         for obj in template:
             bpy.data.objects.remove(obj, do_unlink=True)
+    for action in list(bpy.data.actions):
+        if action.users == 0:
+            bpy.data.actions.remove(action)
 
 
 def build_rooftop(venue):
@@ -831,6 +858,7 @@ def build_venue(venue, chip_meshes, card_mesh):
         export_materials='EXPORT',
         export_lights=True,
         export_extras=True,
+        export_animations=False,
     )
     append_gpu_instances(glb, pools)
     dedupe_materials(glb)
@@ -839,6 +867,7 @@ def build_venue(venue, chip_meshes, card_mesh):
     # gated while the download grew from 185KB to 12MB unnoticed, because
     # nothing measured the thing a player actually waits for.
     glb_kb = os.path.getsize(glb) / 1024.0
+    report.glb_kb = glb_kb
     gltf, binary = checker.read_glb(glb)
     checker.compute_counts(gltf, binary, report)
     failures = []
@@ -847,11 +876,12 @@ def build_venue(venue, chip_meshes, card_mesh):
         failures.append('no light rig built for ' + venue['id'])
     for intrusion in intrusions:
         failures.append('orbit clear radius: ' + intrusion)
-    report.glb_kb = glb_kb
     return glb, report, failures
 
 
 def checker_check_fail(venue_id, report, failures):
+    if report.glb_kb > DOWNLOAD_BUDGET_KB:
+        failures.append('download budget exceeded: %.0fKB > %dKB' % (report.glb_kb, DOWNLOAD_BUDGET_KB))
     if report.total_triangles > 250000:
         failures.append('scene triangle budget exceeded: %d' % report.total_triangles)
     if report.materials > 24:
