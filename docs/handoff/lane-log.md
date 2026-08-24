@@ -36,6 +36,8 @@ Format: one row per completed packet, newest last.
 | 2026-08-24 | 5E chip instancing | Codex | `5b8008c` | Accepted. GPU instancing with stable per-instance ids. Draw calls 50/42/47 to 34/26/31 |
 | 2026-08-24 | 4M table items | DeepSeek | `f0ce29f` | Accepted. Zero imports, so it cannot touch poker odds by construction |
 | 2026-08-24 | 4N REP progression | DeepSeek | `1bfea54` | Accepted. 14 tests, pure, no clock |
+| 2026-08-25 | 4T table item purchase | Claude | `0c15bf7` | Bought through the ledger with a deterministic ref, slot rule enforced by a partial unique index, equipped modifiers reach the REP award |
+| 2026-08-25 | 5T venue tone mapping | Claude | `264e08b` | The first screenshot showed a bleached white room. No tone mapping, so everything above 1.0 clipped. ACES filmic added |
 | 2026-08-24 | 5F characters in venues | Codex | `9a7d5f6` | Accepted on craft. Linked mesh instancing, shared 1024 atlas, no material copies, gates untouched. **But the download went 185KB to 12MB and nothing measured it** |
 | 2026-08-24 | 4P daily challenges | DeepSeek | `8b8e78f` | Accepted. 14 tests, deterministic set, no clock or randomness. It hit the progressFor collision itself and resolved it the same way |
 | 2026-08-24 | 4S challenge tally and strip | Claude | `d3f5f3a` | Server tallies metrics per UTC day at settle; client shows ambient progress |
@@ -100,6 +102,19 @@ rewrote it for its challenges export and removed Claude's `export * from
 - **A visual pass still needs a compositing browser pane.** Two attempts failed
   because the MCP tabs report `visibilityState: hidden` with rAF at zero
   callbacks, regardless of which tab is fronted.
+
+## The recurring defect this session
+
+**Four engine modules were complete and wired to nothing**: REP had no producer,
+challenges had no tally, table items had no consumer, and the measured light
+rigs shipped to a browser that ignored them. A fifth case was the venue assets
+in the web app sitting months behind the pipeline.
+
+Every one looked finished from the commit log and passed its own gates. The seam
+between packets is where work quietly dies when several lanes run in parallel.
+
+**Ask "does anything actually call this?" as the first review question, not the
+last.**
 
 ## Standing review notes
 
