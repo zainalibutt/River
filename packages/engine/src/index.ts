@@ -1,6 +1,18 @@
 export * from './betting.js'
 export * from './bots.js'
 export * from './cards.js'
+export type {
+  Challenge,
+  ChallengeMetric,
+  ChallengeProgress,
+  MetricTally,
+} from './challenges.js'
+export {
+  challengePool,
+  completedRepReward,
+  dailySet,
+  progressFor as challengeProgressFor,
+} from './challenges.js'
 export * from './config.js'
 export * from './economy.js'
 export * from './evaluator.js'
