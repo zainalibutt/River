@@ -32,7 +32,9 @@ from geo import (
     balustrade,
     bar_back,
     card_body,
+    box,
     checkerboard_plane,
+    cylinder,
     bar_bottle,
     basement_counter,
     chair_dining,
@@ -91,6 +93,96 @@ CHARACTER_VARIANTS = ('male', 'female')
 CHARACTER_BODY_LOD_RATIO = 0.18
 CHARACTER_GARMENT_LOD_RATIO = 0.24
 DOWNLOAD_BUDGET_KB = 6144
+CHARACTER_ATLAS_SIZE = 1024
+
+
+def scale_translate_geo(geo, scale, offset):
+    verts, faces = geo
+    sx, sy, sz = scale
+    ox, oy, oz = offset
+    return ([(x * sx + ox, y * sy + oy, z * sz + oz) for x, y, z in verts], faces)
+
+
+def mesh_with_uv_region(name, geo, material, region, parent):
+    mesh = build_mesh_from_geo(name, geo)
+    mesh.materials.append(material)
+    uv_layer = mesh.uv_layers.new(name='UVMap')
+    u0, v0 = region
+    for polygon in mesh.polygons:
+        for loop_index in polygon.loop_indices:
+            uv_layer.data[loop_index].uv = (u0 + 0.25, v0 + 0.25)
+    obj = bpy.data.objects.new(name, mesh)
+    obj.parent = parent
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def build_character_features(variant, body, atlas_material):
+    face_geo = concat([
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.105, 0.100, 0.142), (0.0, -0.052, 1.532)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 6, 4), (0.036, 0.024, 0.032), (0.176, -0.002, 1.525)),
+        box((0.161, -0.078, 1.565), (0.019, 0.056, 0.018)),
+        box((0.161, 0.022, 1.565), (0.019, 0.056, 0.018)),
+    ])
+    hair_geo = concat([
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 5), (0.105, 0.095, 0.062), (0.0, 0.005, 1.625)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.030, 0.050, 0.082), (-0.075, -0.018, 1.565)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.030, 0.050, 0.082), (0.075, -0.018, 1.565)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 6, 4), (0.012, 0.010, 0.012), (0.181, -0.045, 1.548)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 6, 4), (0.012, 0.010, 0.012), (0.181, 0.045, 1.548)),
+    ])
+    garment_geo = concat([
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.225, 0.145, 0.26), (0.0, -0.01, 1.06)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.075, 0.080, 0.075), (-0.18, -0.01, 1.275)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.075, 0.080, 0.075), (0.18, -0.01, 1.275)),
+        cylinder(0.082, 1.375, 1.32, 12),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.040, 0.034, 0.028), (-0.425, -0.19, 1.025)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.040, 0.034, 0.028), (0.425, -0.19, 1.025)),
+    ])
+    features = [
+        mesh_with_uv_region('river_' + variant + '_face_features', face_geo, atlas_material, (0.0, 0.0), body),
+        mesh_with_uv_region('river_' + variant + '_hair_cap', hair_geo, atlas_material, (0.0, 0.5), body),
+        mesh_with_uv_region('river_' + variant + '_garment_finish', garment_geo, atlas_material, (0.5, 0.0), body),
+    ]
+    for obj in features:
+        obj['characterFeature'] = True
+        obj['paletteIndex'] = 0
+    return features
+
+
+def apply_seated_rest_pose(armature):
+    for side, rotation in (('L', -0.38), ('R', 0.38)):
+        bone = armature.pose.bones.get('upperarm01.' + side)
+        if bone is not None:
+            bone.rotation_mode = 'XYZ'
+            bone.rotation_euler = (math.radians(-7.0), 0.0, rotation)
+        forearm = armature.pose.bones.get('lowerarm01.' + side)
+        if forearm is not None:
+            forearm.rotation_mode = 'XYZ'
+            forearm.rotation_euler = (math.radians(8.0), 0.0, 0.0)
+    bpy.ops.object.select_all(action='DESELECT')
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode='POSE')
+    bpy.ops.pose.armature_apply(selected=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def shape_seated_arms(obj):
+    if obj.type != 'MESH':
+        return
+    arm_groups = {
+        group.index
+        for group in obj.vertex_groups
+        if any(token in group.name.lower() for token in ('upperarm', 'lowerarm', 'wrist', 'finger', 'metacarpal'))
+    }
+    if not arm_groups:
+        return
+    for vertex in obj.data.vertices:
+        if any(element.group in arm_groups and element.weight > 0.2 for element in vertex.groups):
+            vertex.co.x *= 0.70
+            vertex.co.y -= 0.07
+            vertex.co.z -= 0.015
 
 
 def build_chip_meshes():
@@ -187,8 +279,19 @@ def apply_seated_lod(obj):
 
 
 def build_character_atlas():
-    image = bpy.data.images.new('river_character_atlas', width=1024, height=1024, alpha=True)
-    image.generated_color = (0.52, 0.38, 0.30, 1.0)
+    image = bpy.data.images.new('river_character_atlas', width=CHARACTER_ATLAS_SIZE, height=CHARACTER_ATLAS_SIZE, alpha=True)
+    colours = (
+        (0.60, 0.40, 0.29, 1.0),
+        (0.16, 0.20, 0.23, 1.0),
+        (0.08, 0.055, 0.045, 1.0),
+        (0.63, 0.42, 0.15, 1.0),
+    )
+    half = CHARACTER_ATLAS_SIZE // 2
+    pixels = []
+    for y in range(CHARACTER_ATLAS_SIZE):
+        for x in range(CHARACTER_ATLAS_SIZE):
+            pixels.extend(colours[(y // half) * 2 + (x // half)])
+    image.pixels = pixels
     image.filepath_raw = os.path.join(TEX_DIR, 'character_atlas.png')
     image.file_format = 'PNG'
     image.save_render(image.filepath_raw)
@@ -208,7 +311,16 @@ def build_character_atlas():
     return material
 
 
-def import_character_templates():
+def remap_character_uv(obj, region):
+    if obj.type != 'MESH':
+        return
+    uv_layer = obj.data.uv_layers[0] if obj.data.uv_layers else obj.data.uv_layers.new(name='UVMap')
+    u0, v0 = region
+    for uv in uv_layer.data:
+        uv.uv = (u0 + 0.04 + (uv.uv.x % 1.0) * 0.42, v0 + 0.04 + (uv.uv.y % 1.0) * 0.42)
+
+
+def import_character_templates(atlas_material):
     templates = {}
     for variant in CHARACTER_VARIANTS:
         path = os.path.join(OUT_DIR, 'char_' + variant + '.glb')
@@ -233,6 +345,19 @@ def import_character_templates():
                 bpy.data.objects.remove(obj, do_unlink=True)
         for obj in imported:
             apply_seated_lod(obj)
+        body = next((obj for obj in imported if obj.type == 'MESH' and not obj.name.startswith('garment_')), None)
+        armature = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
+        if body is not None and armature is not None:
+            apply_seated_rest_pose(armature)
+            shape_seated_arms(body)
+            remap_character_uv(body, (0.0, 0.0))
+            garment = next((obj for obj in imported if obj.type == 'MESH' and obj.name.startswith('garment_')), None)
+            if garment is not None:
+                shape_seated_arms(garment)
+                remap_character_uv(garment, (0.5, 0.0))
+                imported.remove(garment)
+                bpy.data.objects.remove(garment, do_unlink=True)
+            imported.extend(build_character_features(variant, body, atlas_material))
         templates[variant] = imported
     return templates
 
@@ -255,7 +380,9 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
         if clone.type == 'MESH':
             if clone.data.uv_layers:
                 clone.data.uv_layers[0].name = 'UVMap'
-            if source.name.startswith('char_') or source.data.name.startswith('base'):
+            if source.get('characterFeature'):
+                clone.data.name = 'river_' + variant + '_feature'
+            elif source.name.startswith('char_') or source.data.name.startswith('base'):
                 clone.data.name = 'char_' + variant + '_body'
             else:
                 clone.data.name = 'char_' + variant + '_garment'
@@ -280,7 +407,7 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
 
 def build_venue_characters(venue):
     atlas_material = build_character_atlas()
-    templates = import_character_templates()
+    templates = import_character_templates(atlas_material)
     positions = character_seat_positions(venue)
     for seat_index, (x, y) in enumerate(positions):
         variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]
