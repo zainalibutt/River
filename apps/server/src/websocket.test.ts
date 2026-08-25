@@ -57,4 +57,40 @@ describe('WebSocket adapter', () => {
     })
     client.close()
   })
+
+  it('leaves an upgrade on another path for whoever else is listening', async () => {
+    const http = createServer((_request, response) => {
+      response.writeHead(200).end('river')
+    })
+    const hub = new RoomHub({
+      ledger: memoryLedger(),
+      verifyToken: async () => ({ playerId: PLAYER_ID, anonymous: true }),
+    })
+    const sockets = attachRiverWebSocketServer(http, hub)
+    servers.push({ http, sockets })
+
+    // Next serves hot reload from this server on its own path. Destroying the
+    // socket instead of passing it on leaves the page loading but never
+    // updating, which reads as a broken build rather than a broken server.
+    // Both listeners run either way, so seeing the request is not the test.
+    // What matters is that the socket is still alive when it arrives.
+    const claimed: { path: string; alive: boolean }[] = []
+    http.on('upgrade', (request, socket) => {
+      claimed.push({
+        path: new URL(request.url ?? '/', 'http://river.local').pathname,
+        alive: !socket.destroyed,
+      })
+      socket.destroy()
+    })
+
+    await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve))
+    const port = (http.address() as AddressInfo).port
+    const client = new WebSocket(`ws://127.0.0.1:${port}/_next/hmr`)
+    await new Promise<void>((resolve) => {
+      client.once('error', () => resolve())
+      client.once('close', () => resolve())
+    })
+    expect(claimed).toEqual([{ path: '/_next/hmr', alive: true }])
+    expect(sockets.clients.size).toBe(0)
+  })
 })

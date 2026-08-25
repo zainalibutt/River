@@ -34,4 +34,13 @@ describe('server config', () => {
       }),
     ).toThrow('valid TCP port')
   })
+
+  it('refuses to start on a blank service role key', () => {
+    expect(() =>
+      readServerConfig({
+        SUPABASE_URL: 'https://river.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: '   ',
+      }),
+    ).toThrow('must not be blank')
+  })
 })

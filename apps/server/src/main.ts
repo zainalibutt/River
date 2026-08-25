@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
+import type { Duplex } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { config as loadEnv } from 'dotenv'
 import { createSupabaseTokenVerifier } from './auth.js'
@@ -15,6 +16,7 @@ import { attachRiverWebSocketServer } from './websocket.js'
 interface NextApplication {
   prepare(): Promise<void>
   getRequestHandler(): (request: IncomingMessage, response: ServerResponse) => Promise<void>
+  getUpgradeHandler(): (request: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>
 }
 
 const require = createRequire(import.meta.url)
@@ -26,6 +28,11 @@ const next = require('next') as (options: {
 }) => NextApplication
 
 loadEnv({ path: fileURLToPath(new URL('../../../.env.local', import.meta.url)), quiet: true })
+
+function errorText(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`
+  return String(error)
+}
 
 async function start(): Promise<void> {
   const config = readServerConfig(process.env)
@@ -46,6 +53,10 @@ async function start(): Promise<void> {
   })
   const hub = new RoomHub({
     verifyToken: createSupabaseTokenVerifier({ supabaseUrl: config.supabaseUrl }),
+    onError: (context, error) => {
+      process.stderr.write(`river: ${context}: ${errorText(error)}
+`)
+    },
     ledger,
     economy: createSupabaseEconomy({
       supabaseUrl: config.supabaseUrl,
@@ -62,6 +73,16 @@ async function start(): Promise<void> {
     }),
   })
   const sockets = attachRiverWebSocketServer(server, hub)
+  // Next owns hot reload in development and asks for it over its own upgrade.
+  // Without this the page loads but never reflects an edit.
+  if (development) {
+    const upgrade = application.getUpgradeHandler()
+    server.on('upgrade', (request, socket, head) => {
+      const requestPath = new URL(request.url ?? '/', 'http://river.local').pathname
+      if (requestPath === '/ws') return
+      void upgrade(request, socket, head)
+    })
+  }
   const shutdown = (): void => {
     sockets.close(() => server.close())
   }

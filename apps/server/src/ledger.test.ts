@@ -63,4 +63,36 @@ describe('Supabase ledger adapter', () => {
       ledger.apply({ playerId: PLAYER_ID, delta: -1, reason: 'table_buy_in', ref: 'request-2' }),
     ).rejects.toThrow('insufficient balance')
   })
+
+  it('gives up on a Supabase call that never answers', async () => {
+    const ledger = new SupabaseLedger({
+      supabaseUrl: 'https://river.test',
+      serviceRoleKey: 'service-role',
+      timeoutMs: 20,
+      fetch: (_target, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            const error = new Error('aborted')
+            error.name = 'TimeoutError'
+            reject(error)
+          })
+        }),
+    })
+    await expect(ledger.balance(PLAYER_ID)).rejects.toThrow('did not answer within 20ms')
+  })
+
+  it('carries a deadline on every request it makes', async () => {
+    const signals: (AbortSignal | null | undefined)[] = []
+    const ledger = new SupabaseLedger({
+      supabaseUrl: 'https://river.test',
+      serviceRoleKey: 'service-role',
+      fetch: async (_target, init) => {
+        signals.push(init?.signal)
+        return new Response(JSON.stringify(2_500), { status: 200 })
+      },
+    })
+    await ledger.apply({ playerId: PLAYER_ID, delta: 100, reason: 'test', ref: 'ref-1' })
+    expect(signals.length).toBe(1)
+    expect(signals[0]).toBeInstanceOf(AbortSignal)
+  })
 })

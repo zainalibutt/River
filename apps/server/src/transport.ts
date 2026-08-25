@@ -104,9 +104,18 @@ interface RoomState {
   activeEmotes: Set<string>
 }
 
+/**
+ * Somewhere for a swallowed failure to go.
+ *
+ * Without one, a Supabase outage and a forged token close the socket with the
+ * same code and leave nothing behind to tell them apart.
+ */
+export type HubErrorReporter = (context: string, error: unknown) => void
+
 export interface RoomHubOptions {
   verifyToken: TokenVerifier
   ledger: Ledger
+  onError?: HubErrorReporter
   economy?: SupabaseEconomy
   tableItems?: TableItemStore
   cosmetics?: CosmeticStore
@@ -269,10 +278,12 @@ export class RoomHub {
   private readonly activePlayers = new Map<string, ConnectionState>()
   private readonly completed = new Map<string, ServerMessage>()
   private readonly grantInFlight = new Set<string>()
+  private readonly onError: HubErrorReporter
 
   constructor(options: RoomHubOptions) {
     this.verifyToken = options.verifyToken
     this.ledger = options.ledger
+    this.onError = options.onError ?? ((): void => {})
     this.economy = options.economy ?? null
     this.tableItems = options.tableItems
     this.cosmetics = options.cosmetics
@@ -367,8 +378,20 @@ export class RoomHub {
       this.error(connection, null, 'already_authenticated', 'Connection is already authenticated')
       return
     }
+    // Only the token check may report an authentication failure. Everything
+    // after it is the session being opened, and a ledger that is down is not
+    // a player who cannot prove who they are - telling them otherwise sends
+    // them off to fix credentials that were never the problem.
+    let player: AuthenticatedPlayer
     try {
-      const player = await this.verifyToken(accessToken)
+      player = await this.verifyToken(accessToken)
+    } catch (error) {
+      this.onError('authenticate: token rejected', error)
+      connection.peer.close(4003, 'Authentication failed')
+      return
+    }
+
+    try {
       const previous = this.activePlayers.get(player.playerId)
       if (previous !== undefined) {
         if (previous.roomId !== null) {
@@ -391,8 +414,11 @@ export class RoomHub {
         playerId: player.playerId,
         anonymous: player.anonymous,
       })
-    } catch {
-      connection.peer.close(4003, 'Authentication failed')
+    } catch (error) {
+      this.onError('authenticate: session could not be opened', error)
+      connection.player = null
+      this.activePlayers.delete(player.playerId)
+      connection.peer.close(4004, 'Could not open your session')
     }
   }
 

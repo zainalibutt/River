@@ -10,10 +10,10 @@ export function attachRiverWebSocketServer(
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 })
   server.on('upgrade', (request, socket, head) => {
     const requestPath = new URL(request.url ?? '/', 'http://river.local').pathname
-    if (requestPath !== path) {
-      socket.destroy()
-      return
-    }
+    // Leave every other upgrade alone rather than destroying it. This server
+    // also hosts Next, whose dev hot reload arrives as an upgrade on its own
+    // path, and a socket nobody claims is closed by the runtime anyway.
+    if (requestPath !== path) return
     sockets.handleUpgrade(request, socket, head, (client) => {
       sockets.emit('connection', client, request)
     })
