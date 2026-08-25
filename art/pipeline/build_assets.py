@@ -215,27 +215,31 @@ def mesh_with_uv_region(name, geo, material, region, parent, slot=None):
     return obj
 
 
+def rotate_character_geo(geo):
+    return transform_geo(geo, angle=-math.pi / 2.0)
+
+
 def build_character_features(variant, body, atlas_material):
-    head_form_geo = translate_geo(concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 16, 10), (0.14, 0.115, 0.18), (0.0, 0.0, 1.52)),
+    head_form_geo = rotate_character_geo(concat([
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 16, 10), (0.14, 0.115, 0.17), (0.0, 0.0, 1.52)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 14, 8), (0.115, 0.105, 0.105), (0.0, -0.01, 1.45)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.03, 0.05), (0.0, -0.11, 1.52)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.03, 0.05), (0.0, 0.11, 1.52)),
-    ]), 0.14, 0.0, 0.0)
-    face_geo = translate_geo(concat([
+    ]))
+    face_geo = rotate_character_geo(concat([
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.018), (-0.115, -0.052, 1.57)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.018), (-0.115, 0.052, 1.57)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.022, 0.028, 0.02), (-0.13, -0.052, 1.545)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.022, 0.028, 0.02), (-0.13, 0.052, 1.545)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.028, 0.05), (-0.145, 0.0, 1.525)),
         box((-0.14, -0.025, 1.475), (0.035, 0.05, 0.012)),
-    ]), 0.08, 0.0, 0.0)
-    hair_geo = translate_geo(concat([
+    ]))
+    hair_geo = rotate_character_geo(concat([
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 16, 8), (0.145, 0.12, 0.065), (0.0, 0.015, 1.61)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.05), (0.0, -0.095, 1.56)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.05), (0.0, 0.095, 1.56)),
-    ]), 0.08, 0.0, 0.0)
-    garment_geo = concat([
+    ]))
+    garment_geo = rotate_character_geo(concat([
         scale_translate_geo(cone(0.22, 0.32, 1.30, 0.64, 18), (1.0, 0.70, 1.0), (0.0, -0.12, 0.0)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 14, 8), (0.17, 0.11, 0.10), (-0.02, -0.18, 1.23)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 14, 8), (0.17, 0.11, 0.10), (-0.02, 0.18, 1.23)),
@@ -244,17 +248,17 @@ def build_character_features(variant, body, atlas_material):
         box((-0.22, 0.08, 1.18), (0.022, 0.03, 0.14)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.20, 0.055, 0.06), (-0.22, -0.18, 1.03)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.20, 0.055, 0.06), (-0.22, 0.18, 1.03)),
-    ])
-    hands_geo = concat([
+    ]))
+    hands_geo = rotate_character_geo(concat([
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.07, 0.055, 0.055), (-0.41, -0.18, 1.025)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.07, 0.055, 0.055), (-0.41, 0.18, 1.025)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.055, 0.05, 0.05), (-0.47, -0.18, 1.025)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.055, 0.05, 0.05), (-0.47, 0.18, 1.025)),
-    ])
-    accent_geo = concat([
+    ]))
+    accent_geo = rotate_character_geo(concat([
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.025, 0.035, 0.025), (-0.16, 0.0, 1.20)),
         box((-0.18, -0.012, 1.10), (0.012, 0.024, 0.16)),
-    ])
+    ]))
     features = [
         mesh_with_uv_region('river_' + variant + '_head_form', head_form_geo, atlas_material, atlas_region_for_slot('skin'), body),
         mesh_with_uv_region('river_' + variant + '_face_features', face_geo, atlas_material, atlas_region_for_slot('face'), body, 'face'),
@@ -318,7 +322,6 @@ def shape_seated_torso(obj):
         height = max(0.0, min(1.0, (vertex.co.z - 0.58) / 0.72))
         factor = 0.72 + height * 0.22
         vertex.co.x *= factor
-        vertex.co.y = -0.12 + (vertex.co.y + 0.12) * factor
 
 
 def build_chip_meshes():
