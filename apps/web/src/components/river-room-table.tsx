@@ -5,6 +5,7 @@ import {
   DEFAULT_STAKE,
   itemCatalogue,
   type Street,
+  type TableSummary,
   type TurnAction,
 } from '@river/engine'
 import type { RoomEvent, RoomSeatView, RoomView } from '@river/server'
@@ -20,6 +21,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { RiverLobby } from '@/components/river-lobby'
 import { RiverVenue } from '@/components/river-venue'
 import {
   createRiverAuthClient,
@@ -251,6 +253,8 @@ export function RiverRoomTable() {
   const [balance, setBalance] = useState(0)
   const [ownedItems, setOwnedItems] = useState<readonly OwnedEntry[]>([])
   const [shopOpen, setShopOpen] = useState(false)
+  const [tables, setTables] = useState<readonly TableSummary[]>([])
+  const [lobbyOpen, setLobbyOpen] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [verify, setVerify] = useState<VerifyResult>({
     status: 'idle',
@@ -300,6 +304,10 @@ export function RiverRoomTable() {
         unsubscribeMessage = socket.subscribe((message: ServerMessage) => {
           if (message.kind === 'error') {
             setNotice(message.message)
+            return
+          }
+          if (message.kind === 'tables') {
+            setTables(message.tables)
             return
           }
           if (message.kind === 'social') {
@@ -677,6 +685,37 @@ export function RiverRoomTable() {
                 ))}
               </section>
             )}
+            <button
+              type="button"
+              className={`lobby-toggle-button${lobbyOpen ? ' open' : ''}`}
+              aria-expanded={lobbyOpen}
+              onClick={() => {
+                setLobbyOpen((open) => !open)
+                socketRef.current?.listTables()
+              }}
+            >
+              TABLES
+            </button>
+            {lobbyOpen ? (
+              <div className="lobby-backdrop" role="presentation">
+                <RiverLobby
+                  tables={tables}
+                  connected={connection === 'connected'}
+                  onRefresh={() => socketRef.current?.listTables()}
+                  onJoin={(nextRoomId, nextVenue) => {
+                    const url = new URL(window.location.href)
+                    url.search = new URLSearchParams({
+                      room: nextRoomId,
+                      venue: nextVenue,
+                    }).toString()
+                    window.location.assign(url.toString())
+                  }}
+                />
+                <button type="button" className="lobby-close" onClick={() => setLobbyOpen(false)}>
+                  CLOSE
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               className={`shop-toggle${shopOpen ? ' open' : ''}`}

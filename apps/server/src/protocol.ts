@@ -1,6 +1,7 @@
 import type { Card, Challenge, LegalActions, StakeConfig, Street, TurnAction } from '@river/engine'
 import type { FairnessClientSeed } from './fairness.js'
 
+export type VenueId = 'rooftop' | 'basement' | 'suite'
 export type AwayPolicy = 'check-or-fold'
 export type KickReason = 'host' | 'idle' | 'duplicate-session'
 export type Emote =
@@ -33,6 +34,12 @@ export interface RoomConfig {
   randomBytes: (size: number) => Uint8Array
   turnBudgetsMs: Record<Street, number>
   socialRateLimit: SocialRateLimit
+  /**
+   * Which room this table is in. Server-side because the lobby groups by it,
+   * and a client-supplied venue would let two players at one table disagree
+   * about where they are sitting.
+   */
+  venueId: VenueId
 }
 
 export type RoomCommand =

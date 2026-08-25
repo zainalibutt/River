@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import type { TurnAction } from '@river/engine'
+import type { TableSummary, TurnAction } from '@river/engine'
+import { tableStatus } from '@river/engine'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
 import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-service.js'
 import { claimDailyFor, claimRescueFor } from './economy-service.js'
@@ -48,6 +49,7 @@ export type ClientMessage =
   | { kind: 'command'; requestId: string; command: ClientRoomCommand }
   | { kind: 'social'; requestId: string; command: ClientSocialCommand }
   | { kind: 'resync'; requestId: string }
+  | { kind: 'listTables'; requestId: string }
   | { kind: 'buyTableItem'; requestId: string; itemId: string }
   | { kind: 'equipTableItem'; requestId: string; itemId: string }
   | { kind: 'claimDaily'; requestId: string }
@@ -65,6 +67,7 @@ export type ServerMessage =
       events: RoomEvent[]
     }
   | { kind: 'social'; roomId: string; requestId: string | null; event: SocialEvent }
+  | { kind: 'tables'; requestId: string; tables: TableSummary[] }
   | { kind: 'grant'; requestId: string; outcome: GrantOutcome }
   | { kind: 'tableItem'; requestId: string; outcome: PurchaseOutcome | EquipOutcome }
   | { kind: 'error'; requestId: string | null; code: string; message: string }
@@ -233,6 +236,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   ) {
     return { kind: value.kind, requestId, itemId: value.itemId }
   }
+  if (value.kind === 'listTables') return { kind: 'listTables', requestId }
   if (value.kind === 'claimDaily') return { kind: 'claimDaily', requestId }
   if (value.kind === 'claimRescue') return { kind: 'claimRescue', requestId }
   return null
@@ -301,6 +305,14 @@ export class RoomHub {
     }
     if (message.kind === 'claimDaily' || message.kind === 'claimRescue') {
       await this.grant(connection, message)
+      return
+    }
+    if (message.kind === 'listTables') {
+      this.send(connection, {
+        kind: 'tables',
+        requestId: message.requestId,
+        tables: this.tableSummaries(),
+      })
       return
     }
     if (message.kind === 'buyTableItem' || message.kind === 'equipTableItem') {
@@ -505,6 +517,36 @@ export class RoomHub {
     } finally {
       this.grantInFlight.delete(player.playerId)
     }
+  }
+
+  /**
+   * Every live room as a lobby row.
+   *
+   * Rooms are in-memory per server instance, so this lists what this process
+   * is hosting rather than a global directory. Invite codes are never included
+   * - a lobby that leaked them would make a private table public.
+   */
+  private tableSummaries(): TableSummary[] {
+    const summaries: TableSummary[] = []
+    for (const [roomId, state] of this.rooms) {
+      const view = state.room.viewFor('')
+      const seatsTotal = view.seats.length
+      const seatsTaken = view.seats.filter((seat) => seat.playerId !== null).length
+      const config = state.room.config
+      summaries.push({
+        roomId,
+        venueId: config.venueId,
+        stakeId: config.stake.id,
+        smallBlind: config.stake.smallBlind,
+        bigBlind: config.stake.bigBlind,
+        seatsTaken,
+        seatsTotal,
+        handNumber: view.handNumber,
+        status: tableStatus(seatsTaken, seatsTotal, view.handNumber, view.phase === 'hand'),
+        hasPassword: config.inviteCode.length > 0,
+      })
+    }
+    return summaries
   }
 
   private isSeated(playerId: string): boolean {

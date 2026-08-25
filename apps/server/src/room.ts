@@ -108,6 +108,7 @@ export function defaultRoomConfig(overrides: Partial<RoomConfig> & { seed: strin
   return {
     maxSeats: overrides.maxSeats ?? DEFAULT_MAX_SEATS,
     stake: overrides.stake ?? DEFAULT_STAKE,
+    venueId: overrides.venueId ?? 'rooftop',
     seed: overrides.seed,
     countdownMs: overrides.countdownMs ?? 3000,
     nowMs: overrides.nowMs ?? Date.now,
