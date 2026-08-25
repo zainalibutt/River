@@ -36,6 +36,7 @@ function record(overrides: Partial<HandRecord> = {}): HandRecord {
     ],
     actions: [action(0, 'preflop', 'call'), action(1, 'preflop', 'check')],
     board: [ACE_SPADES, KING_HEARTS, QUEEN_DIAMONDS, JACK_CLUBS, TEN_SPADES],
+    potSize: 1000,
     results: [
       { seat: 0, delta: 500, showed: false },
       { seat: 1, delta: -500, showed: false },

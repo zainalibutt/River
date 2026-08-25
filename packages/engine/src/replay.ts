@@ -67,7 +67,7 @@ export function buildReplay(record: HandRecord): readonly ReplayFrame[] {
     })
   }
 
-  const settled = Math.max(settledPot(record), pot)
+  const settled = record.potSize > 0 ? record.potSize : pot
   frames.push({
     index: frames.length,
     street,
@@ -122,10 +122,6 @@ function formatChips(amount: number): string {
 
 function boardFor(record: HandRecord, street: Street): Card[] {
   return record.board.slice(0, CARDS_BY_STREET[street])
-}
-
-function settledPot(record: HandRecord): number {
-  return record.results.reduce((sum, result) => sum + Math.abs(result.delta), 0)
 }
 
 function seedBlinds(record: HandRecord, committed: Map<number, number>): void {

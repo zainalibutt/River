@@ -1,4 +1,12 @@
-import type { Card, Challenge, LegalActions, StakeConfig, Street, TurnAction } from '@river/engine'
+import type {
+  Card,
+  Challenge,
+  HandRecord,
+  LegalActions,
+  StakeConfig,
+  Street,
+  TurnAction,
+} from '@river/engine'
 import type { FairnessClientSeed } from './fairness.js'
 
 export type VenueId = 'rooftop' | 'basement' | 'suite'
@@ -92,6 +100,7 @@ export type RoomEvent =
   | { kind: 'awayPlayed'; playerId: string; action: TurnAction }
   | { kind: 'uncontested'; playerId: string; amount: number }
   | { kind: 'showdown'; awards: { playerId: string; amount: number }[] }
+  | { kind: 'handRecorded'; record: HandRecord }
   | {
       kind: 'repAwarded'
       handNumber: number

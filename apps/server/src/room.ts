@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { Card, LegalActions, SidePot, Street, TurnAction } from '@river/engine'
+import type { Card, HandRecord, LegalActions, SidePot, Street, TurnAction } from '@river/engine'
 import {
   BettingError,
   BettingHand,
@@ -23,6 +23,7 @@ import {
   freshFairnessSeed,
   isFairnessSeed,
 } from './fairness.js'
+import { HandRecorder } from './hand-recorder.js'
 import type {
   AwayPolicy,
   KickReason,
@@ -161,6 +162,7 @@ export class Room implements RoomHandle {
   private settledClientSeeds: FairnessClientSeed[] | null = null
   private status: string | null = null
   private readonly eventLog: RoomEvent[] = []
+  private readonly recorder = new HandRecorder()
 
   constructor(id: string, config: RoomConfig, fixedDeck?: Card[]) {
     if (config.maxSeats < 2 || config.maxSeats > DEFAULT_MAX_SEATS) {
@@ -193,6 +195,16 @@ export class Room implements RoomHandle {
       tallyDay: '',
     }))
     this.fixedDeck = fixedDeck ?? null
+  }
+
+  /**
+   * Settled hands, most recent first.
+   *
+   * A player who joins mid session has seen none of the `handRecorded` events,
+   * so the table has to be able to hand over what it already knows.
+   */
+  recentHands(count?: number): readonly HandRecord[] {
+    return count === undefined ? this.recorder.recent() : this.recorder.recent(count)
   }
 
   viewFor(playerId: string): RoomView {
@@ -500,6 +512,20 @@ export class Room implements RoomHandle {
         seat.hole.push(this.drawPile.next())
       }
     }
+    this.recorder.begin({
+      handNumber: this.handNumber,
+      startedAtMs: this.now(),
+      stake: {
+        smallBlind: this.config.stake.smallBlind,
+        bigBlind: this.config.stake.bigBlind,
+      },
+      seats: active.map((seat) => ({
+        seat: this.seats.indexOf(seat),
+        playerId: seat.playerId ?? '',
+        startingStack: seat.stack,
+      })),
+      commit,
+    })
     this.betting = new BettingHand({
       seats: active.map((seat) => ({ id: seat.playerId ?? '', stack: seat.stack })),
       dealerIndex: dealerActive === -1 ? 0 : dealerActive,
@@ -684,6 +710,7 @@ export class Room implements RoomHandle {
     if (betting === null) {
       return false
     }
+    const street = betting.street
     try {
       switch (action.kind) {
         case 'fold':
@@ -710,6 +737,7 @@ export class Room implements RoomHandle {
       throw error
     }
     this.syncStacks(betting)
+    this.recorder.record(this.seatOfPlayer(playerId), street, action)
     events.push({ kind: eventKind, playerId, action })
     this.advanceBoard(betting.street, events)
     return true
@@ -882,6 +910,7 @@ export class Room implements RoomHandle {
     }
     const winners = new Set<string>()
     this.advanceBoard(betting.street, events)
+    const potTotal = betting.pot()
     const winnerId = betting.uncontestedWinnerId
     if (winnerId !== undefined) {
       const amount = betting.pot()
@@ -915,6 +944,20 @@ export class Room implements RoomHandle {
       serverSeed: this.revealedSeed,
       clientSeeds: this.settledClientSeeds.map((seed) => ({ ...seed })),
     })
+    const recorded = this.recorder.finish({
+      board: this.board,
+      potSize: potTotal,
+      finalStacks: new Map(this.seats.map((seat, index) => [index, seat.stack])),
+      showedSeats: new Set(
+        [...this.revealedPlayerIds]
+          .map((playerId) => this.seatOfPlayer(playerId))
+          .filter((seat) => seat !== -1),
+      ),
+      revealedSeed: this.revealedSeed,
+    })
+    if (recorded !== null) {
+      events.push({ kind: 'handRecorded', record: recorded })
+    }
     for (const seat of this.seats) {
       if (seat.stack <= 0 && seat.playerId !== null && !seat.busted) {
         seat.busted = true

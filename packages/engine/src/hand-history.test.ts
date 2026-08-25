@@ -33,6 +33,7 @@ function record(overrides: Partial<HandRecord> = {}): HandRecord {
     ],
     actions: [action(0, 'preflop', 'call'), action(1, 'preflop', 'check')],
     board: [ACE_SPADES, KING_HEARTS],
+    potSize: 1000,
     results: [
       { seat: 0, delta: 500, showed: false },
       { seat: 1, delta: -500, showed: false },
@@ -109,7 +110,24 @@ describe('summariseHand', () => {
   it('handles an empty result list without throwing', () => {
     const summary = summariseHand(record({ results: [] }))
     expect(summary.winnerSeats).toEqual([])
-    expect(summary.potSize).toBe(0)
+    expect(summary.wentToShowdown).toBe(false)
+  })
+
+  it('reports the pot the table recorded rather than deriving it from deltas', () => {
+    const threeWay = record({
+      seats: [
+        { seat: 0, playerId: 'alice', startingStack: 100_000 },
+        { seat: 1, playerId: 'bob', startingStack: 100_000 },
+        { seat: 2, playerId: 'carol', startingStack: 100_000 },
+      ],
+      potSize: 3000,
+      results: [
+        { seat: 0, delta: 2000, showed: true },
+        { seat: 1, delta: -1000, showed: true },
+        { seat: 2, delta: -1000, showed: false },
+      ],
+    })
+    expect(summariseHand(threeWay).potSize).toBe(3000)
   })
 
   it('summarises two identical records identically', () => {

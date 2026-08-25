@@ -27,6 +27,8 @@ export interface HandRecord {
   seats: HandSeatStart[]
   actions: HandAction[]
   board: Card[]
+  /** Total chips contributed to the pot, as the table counted it. */
+  potSize: number
   results: HandSeatResult[]
   commit: string
   revealedSeed: string | null
@@ -52,12 +54,11 @@ export function summariseHand(record: HandRecord): HandSummary {
   const winnerSeats = record.results
     .filter((result) => result.delta > 0)
     .map((result) => result.seat)
-  const potSize = record.results.reduce((sum, result) => sum + Math.abs(result.delta), 0)
   const wentToShowdown = record.results.some((result) => result.showed)
   return {
     winnerSeats,
     finalStreet,
-    potSize,
+    potSize: record.potSize,
     wentToShowdown,
     actionCount: record.actions.length,
   }
