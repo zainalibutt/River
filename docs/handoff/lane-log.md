@@ -40,6 +40,8 @@ Format: one row per completed packet, newest last.
 | 2026-08-25 | Migration applied | Codex | n/a | `player_table_items` live on River Production. RLS on, unique equipped-slot index, owner-only SELECT, public INSERT denied |
 | 2026-08-25 | 4W table item store and wire | Claude | `647bae3` | Supabase-backed store plus buy and equip client messages. The purchase path had been written against an interface with no implementation |
 | 2026-08-25 | 5H leaked venue light | Codex | `ae41583` | **Solved the empty venue.** A stray gltf point light at intensity 54,351, leaked from an older character import, washed every room out. Export now excludes punctual lights and the build fails if one appears |
+| 2026-08-25 | 4X lobby model | DeepSeek | `ebb886e` | Accepted. 21 tests, stable sort, no mutation, bestTableFor never returns a table the bankroll cannot cover |
+| 2026-08-25 | 4Y inventory wire and shop | Claude | `d9a3b58`, `f5342a0` | Snapshot carries inventory, socket can buy and equip, shop panel built. Ownership outranks price so an owned item never reads as unaffordable |
 | 2026-08-25 | 5L the lid | Claude | `19683bb` | `cylinder()` always capped its top, so the parapet sealed a solid 3.9m disc over every venue. This, not the leaked light, is why the rooms looked empty |
 | 2026-08-25 | 5M rooftop prop pass | Claude | `13318ce` | Braziers replace clipped white spheres, string lights and palms brought in from spec radii that assume a terrace 1.62x larger than the pipeline builds |
 | 2026-08-25 | 4U showdown order | DeepSeek | `d4eb60f` | Accepted. Folded seats filtered first, so the hidden-information proof holds |
@@ -199,6 +201,15 @@ malformed command in a test is invisible to the test run; only
 Two habits from this: run typecheck before trusting a new suite, and make
 adversarial tests assert that the thing they are testing actually happened
 before asserting the property holds.
+
+## Typecheck caught me too
+
+The shop test file passed the whole suite with a type error in it. Vitest
+transpiles without typechecking, so a malformed object asserts nothing and still
+goes green; only `npm run typecheck` found it. This is the same trap flagged to
+DeepSeek two packets earlier, and it caught the person who wrote the warning.
+
+Run typecheck before trusting any new suite, including your own.
 
 ## Standing review notes
 
