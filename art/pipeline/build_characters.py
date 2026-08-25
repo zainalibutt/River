@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bmesh
 import bpy
 
+from buildkit import smooth_mesh_by_angle
 from values import (
     BUDGET,
     CHARACTER_CULL_FRACTION,
@@ -308,6 +309,9 @@ def main():
         if female:
             apply_female_proportions(obj)
         garment = build_garment(obj)
+        smooth_mesh_by_angle(obj.data)
+        if garment is not None:
+            smooth_mesh_by_angle(garment.data)
         armature = armature_of(obj)
         actions = build_animations(armature) if armature else []
         stats = checks_for(obj)

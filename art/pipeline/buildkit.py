@@ -1,3 +1,4 @@
+import math
 import os
 
 import bpy
@@ -120,6 +121,7 @@ def build_mesh(name, geo, material):
     verts, faces = geo
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
+    smooth_mesh_by_angle(mesh)
     if material is not None:
         mesh.materials.append(material)
     return mesh
@@ -129,6 +131,20 @@ def build_mesh_from_geo(name, geo):
     verts, faces = geo
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
+    smooth_mesh_by_angle(mesh)
+    return mesh
+
+
+def smooth_mesh_by_angle(mesh, angle_degrees=35.0):
+    mesh.shade_smooth()
+    mesh.set_sharp_from_angle(angle=math.radians(angle_degrees))
+    mesh.update()
+    normals = [(corner.vector.x, corner.vector.y, corner.vector.z) for corner in mesh.corner_normals]
+    mesh.normals_split_custom_set(normals)
+    sharp_edges = mesh.attributes.get('sharp_edge')
+    if sharp_edges is not None:
+        mesh.attributes.remove(sharp_edges)
+    mesh.update()
     return mesh
 
 

@@ -20,6 +20,7 @@ from buildkit import (
     object_at,
     retint,
     seat_positions,
+    smooth_mesh_by_angle,
 )
 from geo import (
     concat,
@@ -350,10 +351,12 @@ def import_character_templates(atlas_material):
         if body is not None and armature is not None:
             apply_seated_rest_pose(armature)
             shape_seated_arms(body)
+            smooth_mesh_by_angle(body.data)
             remap_character_uv(body, (0.0, 0.0))
             garment = next((obj for obj in imported if obj.type == 'MESH' and obj.name.startswith('garment_')), None)
             if garment is not None:
                 shape_seated_arms(garment)
+                smooth_mesh_by_angle(garment.data)
                 remap_character_uv(garment, (0.5, 0.0))
                 imported.remove(garment)
                 bpy.data.objects.remove(garment, do_unlink=True)
