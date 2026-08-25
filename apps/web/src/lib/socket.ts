@@ -123,6 +123,14 @@ export class RiverSocket {
     return this.send({ kind: 'social', requestId: this.requestId(), command })
   }
 
+  buyTableItem(itemId: string): string {
+    return this.send({ kind: 'buyTableItem', requestId: this.requestId(), itemId })
+  }
+
+  equipTableItem(itemId: string): string {
+    return this.send({ kind: 'equipTableItem', requestId: this.requestId(), itemId })
+  }
+
   resync(): string {
     return this.send({ kind: 'resync', requestId: this.requestId() })
   }

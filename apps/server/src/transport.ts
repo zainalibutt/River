@@ -7,7 +7,12 @@ import { isFairnessSeed } from './fairness.js'
 import type { Ledger } from './ledger.js'
 import type { Emote, RoomCommand, RoomEvent, RoomResult, RoomView } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
-import type { EquipOutcome, PurchaseOutcome, TableItemStore } from './table-item-service.js'
+import type {
+  EquipOutcome,
+  OwnedItem,
+  PurchaseOutcome,
+  TableItemStore,
+} from './table-item-service.js'
 import { equipItem, purchaseItem } from './table-item-service.js'
 
 export interface ClientPeer {
@@ -56,6 +61,7 @@ export type ServerMessage =
       requestId: string | null
       view: RoomView
       balance: number
+      ownedItems: OwnedItem[]
       events: RoomEvent[]
     }
   | { kind: 'social'; roomId: string; requestId: string | null; event: SocialEvent }
@@ -68,6 +74,11 @@ interface ConnectionState {
   player: AuthenticatedPlayer | null
   roomId: string | null
   balance: number
+  /**
+   * Cached inventory. A snapshot is sent on every room event, so reading the
+   * store there would put a database round trip in the hot path.
+   */
+  ownedItems: OwnedItem[]
   identityUpgraded: boolean
 }
 
@@ -261,6 +272,7 @@ export class RoomHub {
       player: null,
       roomId: null,
       balance: 0,
+      ownedItems: [],
       identityUpgraded: false,
     }
     return {
@@ -484,6 +496,9 @@ export class RoomHub {
           ? await purchaseItem(player.playerId, message.itemId, { ledger: this.ledger, store })
           : await equipItem(player.playerId, message.itemId, { store })
       if (outcome.kind === 'purchased') connection.balance = outcome.balance
+      if (outcome.kind === 'purchased' || outcome.kind === 'equipped') {
+        connection.ownedItems = await store.list(player.playerId)
+      }
       this.send(connection, { kind: 'tableItem', requestId: message.requestId, outcome })
     } catch {
       this.error(connection, message.requestId, 'item_failed', 'That could not be processed')
@@ -567,6 +582,7 @@ export class RoomHub {
       requestId,
       view: state.room.viewFor(player.playerId),
       balance: connection.balance,
+      ownedItems: connection.ownedItems.map((entry) => ({ ...entry })),
       events: result.events,
     }
     this.completed.set(cacheKey, reply)
@@ -1021,6 +1037,7 @@ export class RoomHub {
       requestId,
       view: state.room.viewFor(player.playerId),
       balance: connection.balance,
+      ownedItems: connection.ownedItems.map((entry) => ({ ...entry })),
       events,
     })
   }
