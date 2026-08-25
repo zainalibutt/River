@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto'
 import type { TableSummary, TurnAction } from '@river/engine'
 import { tableStatus } from '@river/engine'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
+import type { CosmeticOutcome, CosmeticStore, OwnedCosmetic } from './cosmetic-service.js'
+import { buyCosmetic, wearCosmetic } from './cosmetic-service.js'
 import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-service.js'
 import { claimDailyFor, claimRescueFor } from './economy-service.js'
 import { isFairnessSeed } from './fairness.js'
@@ -49,6 +51,8 @@ export type ClientMessage =
   | { kind: 'command'; requestId: string; command: ClientRoomCommand }
   | { kind: 'social'; requestId: string; command: ClientSocialCommand }
   | { kind: 'resync'; requestId: string }
+  | { kind: 'buyCosmetic'; requestId: string; cosmeticId: string }
+  | { kind: 'wearCosmetic'; requestId: string; cosmeticId: string }
   | { kind: 'listTables'; requestId: string }
   | { kind: 'buyTableItem'; requestId: string; itemId: string }
   | { kind: 'equipTableItem'; requestId: string; itemId: string }
@@ -64,10 +68,12 @@ export type ServerMessage =
       view: RoomView
       balance: number
       ownedItems: OwnedItem[]
+      ownedCosmetics: OwnedCosmetic[]
       events: RoomEvent[]
     }
   | { kind: 'social'; roomId: string; requestId: string | null; event: SocialEvent }
   | { kind: 'tables'; requestId: string; tables: TableSummary[] }
+  | { kind: 'cosmetic'; requestId: string; outcome: CosmeticOutcome }
   | { kind: 'grant'; requestId: string; outcome: GrantOutcome }
   | { kind: 'tableItem'; requestId: string; outcome: PurchaseOutcome | EquipOutcome }
   | { kind: 'error'; requestId: string | null; code: string; message: string }
@@ -82,6 +88,7 @@ interface ConnectionState {
    * store there would put a database round trip in the hot path.
    */
   ownedItems: OwnedItem[]
+  ownedCosmetics: OwnedCosmetic[]
   identityUpgraded: boolean
 }
 
@@ -102,6 +109,7 @@ export interface RoomHubOptions {
   ledger: Ledger
   economy?: SupabaseEconomy
   tableItems?: TableItemStore
+  cosmetics?: CosmeticStore
   createRoom?: (roomId: string) => Room
 }
 
@@ -236,6 +244,14 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   ) {
     return { kind: value.kind, requestId, itemId: value.itemId }
   }
+  if (
+    (value.kind === 'buyCosmetic' || value.kind === 'wearCosmetic') &&
+    typeof value.cosmeticId === 'string' &&
+    value.cosmeticId.length > 0 &&
+    value.cosmeticId.length <= 64
+  ) {
+    return { kind: value.kind, requestId, cosmeticId: value.cosmeticId }
+  }
   if (value.kind === 'listTables') return { kind: 'listTables', requestId }
   if (value.kind === 'claimDaily') return { kind: 'claimDaily', requestId }
   if (value.kind === 'claimRescue') return { kind: 'claimRescue', requestId }
@@ -247,6 +263,7 @@ export class RoomHub {
   private readonly ledger: Ledger
   private readonly economy: SupabaseEconomy | null
   private readonly tableItems: TableItemStore | undefined
+  private readonly cosmetics: CosmeticStore | undefined
   private readonly createRoom: (roomId: string) => Room
   private readonly rooms = new Map<string, RoomState>()
   private readonly activePlayers = new Map<string, ConnectionState>()
@@ -258,6 +275,7 @@ export class RoomHub {
     this.ledger = options.ledger
     this.economy = options.economy ?? null
     this.tableItems = options.tableItems
+    this.cosmetics = options.cosmetics
     this.createRoom =
       options.createRoom ??
       ((roomId) =>
@@ -277,6 +295,7 @@ export class RoomHub {
       roomId: null,
       balance: 0,
       ownedItems: [],
+      ownedCosmetics: [],
       identityUpgraded: false,
     }
     return {
@@ -313,6 +332,10 @@ export class RoomHub {
         requestId: message.requestId,
         tables: this.tableSummaries(),
       })
+      return
+    }
+    if (message.kind === 'buyCosmetic' || message.kind === 'wearCosmetic') {
+      await this.cosmetic(connection, message)
       return
     }
     if (message.kind === 'buyTableItem' || message.kind === 'equipTableItem') {
@@ -549,6 +572,48 @@ export class RoomHub {
     return summaries
   }
 
+  /** Buy or wear a cosmetic. Serialised per player, like every other spend. */
+  private async cosmetic(
+    connection: ConnectionState,
+    message: Extract<ClientMessage, { kind: 'buyCosmetic' | 'wearCosmetic' }>,
+  ): Promise<void> {
+    const player = connection.player
+    if (player === null) {
+      this.error(connection, message.requestId, 'not_authenticated', 'Authenticate first')
+      return
+    }
+    if (this.cosmetics === undefined) {
+      this.error(
+        connection,
+        message.requestId,
+        'cosmetics_unavailable',
+        'Cosmetics are unavailable',
+      )
+      return
+    }
+    if (this.grantInFlight.has(player.playerId)) {
+      this.error(connection, message.requestId, 'grant_in_flight', 'A purchase is already running')
+      return
+    }
+    this.grantInFlight.add(player.playerId)
+    try {
+      const store = this.cosmetics
+      const outcome =
+        message.kind === 'buyCosmetic'
+          ? await buyCosmetic(player.playerId, message.cosmeticId, { ledger: this.ledger, store })
+          : await wearCosmetic(player.playerId, message.cosmeticId, { store })
+      if (outcome.kind === 'purchased') connection.balance = outcome.balance
+      if (outcome.kind === 'purchased' || outcome.kind === 'worn') {
+        connection.ownedCosmetics = await store.list(player.playerId)
+      }
+      this.send(connection, { kind: 'cosmetic', requestId: message.requestId, outcome })
+    } catch {
+      this.error(connection, message.requestId, 'cosmetic_failed', 'That could not be processed')
+    } finally {
+      this.grantInFlight.delete(player.playerId)
+    }
+  }
+
   private isSeated(playerId: string): boolean {
     const connection = this.activePlayers.get(playerId)
     if (connection === undefined || connection.roomId === null) return false
@@ -625,6 +690,7 @@ export class RoomHub {
       view: state.room.viewFor(player.playerId),
       balance: connection.balance,
       ownedItems: connection.ownedItems.map((entry) => ({ ...entry })),
+      ownedCosmetics: connection.ownedCosmetics.map((entry) => ({ ...entry })),
       events: result.events,
     }
     this.completed.set(cacheKey, reply)
@@ -1080,6 +1146,7 @@ export class RoomHub {
       view: state.room.viewFor(player.playerId),
       balance: connection.balance,
       ownedItems: connection.ownedItems.map((entry) => ({ ...entry })),
+      ownedCosmetics: connection.ownedCosmetics.map((entry) => ({ ...entry })),
       events,
     })
   }

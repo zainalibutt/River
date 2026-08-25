@@ -2,6 +2,8 @@
 
 import {
   type Card,
+  type Cosmetic,
+  cosmeticCatalogue,
   DEFAULT_STAKE,
   itemCatalogue,
   type Street,
@@ -253,6 +255,10 @@ export function RiverRoomTable() {
   const [balance, setBalance] = useState(0)
   const [ownedItems, setOwnedItems] = useState<readonly OwnedEntry[]>([])
   const [shopOpen, setShopOpen] = useState(false)
+  const [shopTab, setShopTab] = useState<'items' | 'wear'>('items')
+  const [ownedCosmetics, setOwnedCosmetics] = useState<
+    readonly { cosmeticId: string; slot: string; equipped: boolean }[]
+  >([])
   const [tables, setTables] = useState<readonly TableSummary[]>([])
   const [lobbyOpen, setLobbyOpen] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
@@ -348,6 +354,7 @@ export function RiverRoomTable() {
           }
           setBalance(message.balance)
           setOwnedItems(message.ownedItems)
+          setOwnedCosmetics(message.ownedCosmetics)
           const flash = repFlashFor(message.events, message.view.selfId)
           if (flash !== null) setRepFlash(flash)
           const nextNotice = eventNotice(message.events, message.view.selfId)
@@ -731,31 +738,87 @@ export function RiverRoomTable() {
                   <strong>{balance.toLocaleString()} CHIPS</strong>
                   <em>{equippedRatePercent(itemCatalogue(), ownedItems)}% REP</em>
                 </header>
-                <ol className="shop-list">
-                  {shopRows(itemCatalogue(), ownedItems, balance).map((row) => (
-                    <li key={row.item.id} className={`shop-row ${row.state}`}>
-                      <span className="shop-name">{row.item.name}</span>
-                      <span className="shop-slot">{row.item.slot}</span>
-                      <span className="shop-rep">+{Math.round(row.item.repModifier * 100)}%</span>
-                      <span className="shop-price">
-                        {row.state === 'unaffordable'
-                          ? `NEED ${row.shortfall.toLocaleString()}`
-                          : row.item.priceChips.toLocaleString()}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={!isActionable(row.state) || connection !== 'connected'}
-                        onClick={() =>
-                          row.state === 'buyable'
-                            ? socketRef.current?.buyTableItem(row.item.id)
-                            : socketRef.current?.equipTableItem(row.item.id)
-                        }
-                      >
-                        {actionLabel(row.state)}
-                      </button>
-                    </li>
-                  ))}
-                </ol>
+                <nav className="shop-tabs" aria-label="Shop sections">
+                  <button
+                    type="button"
+                    className={shopTab === 'items' ? 'chosen' : ''}
+                    aria-pressed={shopTab === 'items'}
+                    onClick={() => setShopTab('items')}
+                  >
+                    TABLE ITEMS
+                  </button>
+                  <button
+                    type="button"
+                    className={shopTab === 'wear' ? 'chosen' : ''}
+                    aria-pressed={shopTab === 'wear'}
+                    onClick={() => setShopTab('wear')}
+                  >
+                    WARDROBE
+                  </button>
+                </nav>
+                {shopTab === 'wear' ? (
+                  <ol className="shop-list">
+                    {cosmeticCatalogue().map((cosmetic: Cosmetic) => {
+                      const owned = ownedCosmetics.find((entry) => entry.cosmeticId === cosmetic.id)
+                      const state = owned
+                        ? owned.equipped
+                          ? 'equipped'
+                          : 'owned'
+                        : balance >= cosmetic.priceChips
+                          ? 'buyable'
+                          : 'unaffordable'
+                      return (
+                        <li key={cosmetic.id} className={`shop-row ${state}`}>
+                          <span className="shop-name">{cosmetic.name}</span>
+                          <span className="shop-slot">{cosmetic.slot}</span>
+                          <span className="shop-rep">{cosmetic.rarity}</span>
+                          <span className="shop-price">
+                            {state === 'unaffordable'
+                              ? `NEED ${(cosmetic.priceChips - balance).toLocaleString()}`
+                              : cosmetic.priceChips.toLocaleString()}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={!isActionable(state) || connection !== 'connected'}
+                            onClick={() =>
+                              state === 'buyable'
+                                ? socketRef.current?.buyCosmetic(cosmetic.id)
+                                : socketRef.current?.wearCosmetic(cosmetic.id)
+                            }
+                          >
+                            {state === 'owned' ? 'WEAR' : actionLabel(state)}
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                ) : (
+                  <ol className="shop-list">
+                    {shopRows(itemCatalogue(), ownedItems, balance).map((row) => (
+                      <li key={row.item.id} className={`shop-row ${row.state}`}>
+                        <span className="shop-name">{row.item.name}</span>
+                        <span className="shop-slot">{row.item.slot}</span>
+                        <span className="shop-rep">+{Math.round(row.item.repModifier * 100)}%</span>
+                        <span className="shop-price">
+                          {row.state === 'unaffordable'
+                            ? `NEED ${row.shortfall.toLocaleString()}`
+                            : row.item.priceChips.toLocaleString()}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={!isActionable(row.state) || connection !== 'connected'}
+                          onClick={() =>
+                            row.state === 'buyable'
+                              ? socketRef.current?.buyTableItem(row.item.id)
+                              : socketRef.current?.equipTableItem(row.item.id)
+                          }
+                        >
+                          {actionLabel(row.state)}
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </aside>
             ) : null}
             <section className="invite-strip" aria-label="Private table invite">

@@ -123,6 +123,14 @@ export class RiverSocket {
     return this.send({ kind: 'social', requestId: this.requestId(), command })
   }
 
+  buyCosmetic(cosmeticId: string): string {
+    return this.send({ kind: 'buyCosmetic', requestId: this.requestId(), cosmeticId })
+  }
+
+  wearCosmetic(cosmeticId: string): string {
+    return this.send({ kind: 'wearCosmetic', requestId: this.requestId(), cosmeticId })
+  }
+
   listTables(): string {
     return this.send({ kind: 'listTables', requestId: this.requestId() })
   }

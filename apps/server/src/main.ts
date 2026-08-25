@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { config as loadEnv } from 'dotenv'
 import { createSupabaseTokenVerifier } from './auth.js'
 import { readServerConfig } from './config.js'
+import { SupabaseCosmeticStore } from './cosmetic-store.js'
 import { createSupabaseEconomy } from './economy-service.js'
 import { SupabaseLedger } from './ledger.js'
 import { SupabaseTableItemStore } from './table-item-store.js'
@@ -52,6 +53,10 @@ async function start(): Promise<void> {
       ledger,
     }),
     tableItems: new SupabaseTableItemStore({
+      supabaseUrl: config.supabaseUrl,
+      serviceRoleKey: config.serviceRoleKey,
+    }),
+    cosmetics: new SupabaseCosmeticStore({
       supabaseUrl: config.supabaseUrl,
       serviceRoleKey: config.serviceRoleKey,
     }),
