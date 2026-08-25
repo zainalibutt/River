@@ -94,6 +94,23 @@ camera parameters, prop placement — lives in `art/pipeline/` as code, and the
 build is the only way a venue comes into existence. `docs/design/14-venue-build-spec.md`
 records the measured values that seeded it.
 
+## Characters push realism, not stylisation
+
+The first honest character renders read as neither: too little detail to be
+convincing, too much attempt at anatomy to look deliberate. That is the worst
+place to sit, because it reads as a limitation rather than a choice.
+
+The obvious cheap answer was to go deliberately low-poly and call it a style.
+**Rejected.** the reference's characters are caricatured but unmistakably
+people, with faces you read across the table, and the point of River is to match
+that standard rather than route around it. Choosing stylisation here would have
+been choosing it because it was easier, which is exactly the kind of corner the
+brief says invalidates the result.
+
+The budget allows it. Venues currently ship at 1,887KB against a 6,144KB gate
+and 34,889 triangles against 250,000. There is room for characters several times
+heavier than the current seated shell.
+
 ## Budgets are gates, not notes
 
 Triangles, materials, draw calls, texture size and download size each fail the
