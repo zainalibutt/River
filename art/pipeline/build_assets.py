@@ -7,6 +7,7 @@ import sys
 os.environ.setdefault('RIVER_OUT', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'out'))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import bmesh
 import bpy
 
 import check_assets as checker
@@ -35,8 +36,6 @@ from geo import (
     card_body,
     box,
     checkerboard_plane,
-    cone,
-    cylinder,
     bar_bottle,
     basement_counter,
     chair_dining,
@@ -60,11 +59,9 @@ from geo import (
     parapet_ring,
     planter,
     rail_ring_oval,
-    sphere,
     stepladder,
     string_light_run,
     terrace_disc,
-    torus,
     wall_panel,
     wall_sconce,
     wood_pedestal,
@@ -152,13 +149,6 @@ COSMETIC_PREVIEW_LOADOUTS = (
 )
 
 
-def scale_translate_geo(geo, scale, offset):
-    verts, faces = geo
-    sx, sy, sz = scale
-    ox, oy, oz = offset
-    return ([(x * sx + ox, y * sy + oy, z * sz + oz) for x, y, z in verts], faces)
-
-
 def atlas_cell(column, row):
     return (
         column / CHARACTER_ATLAS_COLUMNS,
@@ -202,77 +192,6 @@ def remap_character_uv(obj, region):
         )
 
 
-def mesh_with_uv_region(name, geo, material, region, parent, slot=None):
-    mesh = build_mesh_from_geo(name, geo)
-    mesh.materials.append(material)
-    obj = bpy.data.objects.new(name, mesh)
-    obj['cosmeticSlot'] = slot
-    obj['paletteIndex'] = 0
-    obj['atlasRegion'] = list(region)
-    remap_character_uv(obj, region)
-    obj.parent = parent
-    bpy.context.scene.collection.objects.link(obj)
-    return obj
-
-
-def rotate_character_geo(geo):
-    return transform_geo(geo, angle=-math.pi / 2.0)
-
-
-def build_character_features(variant, body, atlas_material):
-    head_form_geo = rotate_character_geo(concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 16, 10), (0.14, 0.115, 0.17), (0.0, 0.0, 1.52)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 14, 8), (0.115, 0.105, 0.105), (0.0, -0.01, 1.45)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.03, 0.05), (0.0, -0.11, 1.52)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.03, 0.05), (0.0, 0.11, 1.52)),
-    ]))
-    face_geo = rotate_character_geo(concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.018), (-0.115, -0.052, 1.57)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.018), (-0.115, 0.052, 1.57)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.022, 0.028, 0.02), (-0.13, -0.052, 1.545)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.022, 0.028, 0.02), (-0.13, 0.052, 1.545)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.028, 0.05), (-0.145, 0.0, 1.525)),
-        box((-0.14, -0.025, 1.475), (0.035, 0.05, 0.012)),
-    ]))
-    hair_geo = rotate_character_geo(concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 16, 8), (0.145, 0.12, 0.065), (0.0, 0.015, 1.61)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.05), (0.0, -0.095, 1.56)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.05), (0.0, 0.095, 1.56)),
-    ]))
-    garment_geo = rotate_character_geo(concat([
-        scale_translate_geo(cone(0.22, 0.32, 1.30, 0.64, 18), (1.0, 0.70, 1.0), (0.0, -0.12, 0.0)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 14, 8), (0.17, 0.11, 0.10), (-0.02, -0.18, 1.23)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 14, 8), (0.17, 0.11, 0.10), (-0.02, 0.18, 1.23)),
-        translate_geo(torus(0.145, 0.022, 18, 8), 0.0, 0.0, 1.32),
-        box((-0.22, -0.08, 1.18), (0.022, 0.03, 0.14)),
-        box((-0.22, 0.08, 1.18), (0.022, 0.03, 0.14)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.20, 0.055, 0.06), (-0.22, -0.18, 1.03)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.20, 0.055, 0.06), (-0.22, 0.18, 1.03)),
-    ]))
-    hands_geo = rotate_character_geo(concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.07, 0.055, 0.055), (-0.41, -0.18, 1.025)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.07, 0.055, 0.055), (-0.41, 0.18, 1.025)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.055, 0.05, 0.05), (-0.47, -0.18, 1.025)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.055, 0.05, 0.05), (-0.47, 0.18, 1.025)),
-    ]))
-    accent_geo = rotate_character_geo(concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.025, 0.035, 0.025), (-0.16, 0.0, 1.20)),
-        box((-0.18, -0.012, 1.10), (0.012, 0.024, 0.16)),
-    ]))
-    features = [
-        mesh_with_uv_region('river_' + variant + '_head_form', head_form_geo, atlas_material, atlas_region_for_slot('skin'), body),
-        mesh_with_uv_region('river_' + variant + '_face_features', face_geo, atlas_material, atlas_region_for_slot('face'), body, 'face'),
-        mesh_with_uv_region('river_' + variant + '_hair_cap', hair_geo, atlas_material, atlas_region_for_slot('head'), body, 'head'),
-        mesh_with_uv_region('river_' + variant + '_garment_finish', garment_geo, atlas_material, atlas_region_for_slot('torso'), body, 'torso'),
-        mesh_with_uv_region('river_' + variant + '_hands_features', hands_geo, atlas_material, atlas_region_for_slot('hands'), body, 'hands'),
-        mesh_with_uv_region('river_' + variant + '_accent_features', accent_geo, atlas_material, atlas_region_for_slot('accent'), body, 'accent'),
-    ]
-    for obj in features:
-        obj['characterFeature'] = True
-        obj['paletteIndex'] = 0
-    return features
-
-
 def apply_seated_rest_pose(armature):
     for side, rotation in (('L', -0.38), ('R', 0.38)):
         bone = armature.pose.bones.get('upperarm01.' + side)
@@ -308,20 +227,52 @@ def shape_seated_arms(obj):
             vertex.co.z -= 0.015
 
 
-def shape_seated_torso(obj):
-    if obj.type != 'MESH':
-        return
-    arm_groups = {
-        group.index
-        for group in obj.vertex_groups
-        if any(token in group.name.lower() for token in ('upperarm', 'lowerarm', 'wrist', 'finger', 'metacarpal'))
-    }
-    for vertex in obj.data.vertices:
-        if vertex.co.z >= 1.4 or any(element.group in arm_groups and element.weight > 0.2 for element in vertex.groups):
+def strip_opaque_hair_planes(obj):
+    mesh = obj.data
+    adjacency = [[] for _ in mesh.vertices]
+    for edge in mesh.edges:
+        first, second = edge.vertices
+        adjacency[first].append(second)
+        adjacency[second].append(first)
+    components = []
+    seen = set()
+    for vertex in mesh.vertices:
+        if vertex.index in seen:
             continue
-        height = max(0.0, min(1.0, (vertex.co.z - 0.58) / 0.72))
-        factor = 0.72 + height * 0.22
-        vertex.co.x *= factor
+        component = set()
+        pending = [vertex.index]
+        while pending:
+            current = pending.pop()
+            if current in component:
+                continue
+            component.add(current)
+            seen.add(current)
+            pending.extend(adjacency[current])
+        components.append(component)
+    hair_vertices = set()
+    hair_faces = 0
+    hair_components = 0
+    for component in components:
+        points = [mesh.vertices[index].co for index in component]
+        z_min = min(point.z for point in points)
+        z_max = max(point.z for point in points)
+        faces = sum(1 for face in mesh.polygons if all(index in component for index in face.vertices))
+        if len(component) <= 18 and faces <= 16 and z_max >= 1.62 and z_max - z_min >= 0.18:
+            hair_vertices.update(component)
+            hair_faces += faces
+            hair_components += 1
+    if not hair_vertices:
+        return 0, 0, 0
+    mesh_data = bmesh.new()
+    mesh_data.from_mesh(mesh)
+    mesh_data.verts.ensure_lookup_table()
+    bmesh.ops.delete(mesh_data, geom=[mesh_data.verts[index] for index in sorted(hair_vertices)], context='VERTS')
+    mesh_data.to_mesh(mesh)
+    mesh_data.free()
+    obj['removedOpaqueHairComponents'] = hair_components
+    obj['removedOpaqueHairFaces'] = hair_faces
+    obj['removedOpaqueHairVertices'] = len(hair_vertices)
+    return hair_components, hair_faces, len(hair_vertices)
 
 
 def build_chip_meshes():
@@ -487,24 +438,24 @@ def import_character_templates(atlas_material):
         for obj in imported_all:
             if obj not in imported:
                 bpy.data.objects.remove(obj, do_unlink=True)
+        garment = next((obj for obj in imported if obj.type == 'MESH' and obj.name.startswith('garment_')), None)
+        if garment is not None:
+            imported.remove(garment)
+            bpy.data.objects.remove(garment, do_unlink=True)
+        body = next((obj for obj in imported if obj.type == 'MESH'), None)
+        if body is not None:
+            components, faces, vertices = strip_opaque_hair_planes(body)
+            print('CHAR %s stripped hair components=%d faces=%d vertices=%d' % (
+                variant, components, faces, vertices
+            ))
         for obj in imported:
             apply_seated_lod(obj)
-        body = next((obj for obj in imported if obj.type == 'MESH' and not obj.name.startswith('garment_')), None)
         armature = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
         if body is not None and armature is not None:
             apply_seated_rest_pose(armature)
             shape_seated_arms(body)
-            shape_seated_torso(body)
             smooth_mesh_by_angle(body.data)
             remap_character_uv(body, atlas_region_for_slot('skin'))
-            garment = next((obj for obj in imported if obj.type == 'MESH' and obj.name.startswith('garment_')), None)
-            if garment is not None:
-                shape_seated_arms(garment)
-                smooth_mesh_by_angle(garment.data)
-                remap_character_uv(garment, atlas_region_for_slot('torso'))
-                imported.remove(garment)
-                bpy.data.objects.remove(garment, do_unlink=True)
-            imported.extend(build_character_features(variant, body, atlas_material))
         templates[variant] = imported
     return templates
 
@@ -572,7 +523,7 @@ def build_venue_characters(venue):
     positions = character_seat_positions(venue)
     for seat_index, (x, y) in enumerate(positions):
         variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]
-        angle = math.atan2(-y, -x) + math.pi
+        angle = math.atan2(-x, y)
         loadout = COSMETIC_PREVIEW_LOADOUTS[seat_index % len(COSMETIC_PREVIEW_LOADOUTS)]
         duplicate_character(templates[variant], seat_index, variant, x, y, angle, atlas_material, loadout)
     for template in templates.values():
