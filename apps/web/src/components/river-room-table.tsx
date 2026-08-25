@@ -5,6 +5,7 @@ import {
   type Cosmetic,
   cosmeticCatalogue,
   DEFAULT_STAKE,
+  type HandRecord,
   itemCatalogue,
   type Street,
   type TableSummary,
@@ -23,6 +24,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverLobby } from '@/components/river-lobby'
 import { RiverVenue } from '@/components/river-venue'
 import {
@@ -259,6 +261,8 @@ export function RiverRoomTable() {
   const [ownedCosmetics, setOwnedCosmetics] = useState<
     readonly { cosmeticId: string; slot: string; equipped: boolean }[]
   >([])
+  const [hands, setHands] = useState<readonly HandRecord[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [tables, setTables] = useState<readonly TableSummary[]>([])
   const [lobbyOpen, setLobbyOpen] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
@@ -355,6 +359,14 @@ export function RiverRoomTable() {
           setBalance(message.balance)
           setOwnedItems(message.ownedItems)
           setOwnedCosmetics(message.ownedCosmetics)
+          const settled = message.events.flatMap((event) =>
+            event.kind === 'handRecorded' ? [event.record] : [],
+          )
+          if (settled.length > 0) {
+            // Newest first, so the panel reads the way a player thinks about
+            // the night: the hand that just happened is the one at the top.
+            setHands((previous) => [...settled.reverse(), ...previous].slice(0, 24))
+          }
           const flash = repFlashFor(message.events, message.view.selfId)
           if (flash !== null) setRepFlash(flash)
           const nextNotice = eventNotice(message.events, message.view.selfId)
@@ -577,6 +589,22 @@ export function RiverRoomTable() {
               <span>VERIFY</span>
               <strong>{view.commit?.slice(0, 8) ?? '--------'}</strong>
             </button>
+            <button
+              type="button"
+              className="verify-pill history-pill"
+              aria-label={`Hand history, ${hands.length} hands recorded`}
+              onClick={() => setHistoryOpen(true)}
+            >
+              <span>HANDS</span>
+              <strong>{hands.length}</strong>
+            </button>
+            {historyOpen ? (
+              <RiverHandHistory
+                hands={hands}
+                selfId={view.selfId}
+                onClose={() => setHistoryOpen(false)}
+              />
+            ) : null}
             {verifyOpen ? (
               <div className="modal-backdrop" role="presentation">
                 <section
