@@ -15,6 +15,7 @@ export {
   dailySet,
   progressFor as challengeProgressFor,
 } from './challenges.js'
+export * from './chip-stacks.js'
 export * from './config.js'
 export * from './cosmetics.js'
 export * from './economy.js'
