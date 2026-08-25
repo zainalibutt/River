@@ -95,6 +95,59 @@ CHARACTER_BODY_LOD_RATIO = 0.18
 CHARACTER_GARMENT_LOD_RATIO = 0.24
 DOWNLOAD_BUDGET_KB = 6144
 CHARACTER_ATLAS_SIZE = 1024
+CHARACTER_ATLAS_COLUMNS = 8
+CHARACTER_ATLAS_ROWS = 4
+
+BASE_ATLAS_CELLS = {
+    'skin': (0, 0),
+    'torso': (1, 0),
+    'head': (2, 0),
+    'face': (3, 0),
+    'hands': (4, 0),
+    'accent': (5, 0),
+}
+
+COSMETIC_ATLAS = {
+    'cap-grey': {'slot': 'head', 'paletteIndex': 0, 'colour': (0.22, 0.24, 0.25, 1.0)},
+    'cap-navy': {'slot': 'head', 'paletteIndex': 1, 'colour': (0.08, 0.14, 0.25, 1.0)},
+    'cap-tan': {'slot': 'head', 'paletteIndex': 2, 'colour': (0.58, 0.38, 0.18, 1.0)},
+    'cap-silk': {'slot': 'head', 'paletteIndex': 3, 'colour': (0.25, 0.08, 0.12, 1.0)},
+    'glasses-round': {'slot': 'face', 'paletteIndex': 4, 'colour': (0.08, 0.08, 0.09, 1.0)},
+    'glasses-shade': {'slot': 'face', 'paletteIndex': 5, 'colour': (0.04, 0.18, 0.20, 1.0)},
+    'glasses-mono': {'slot': 'face', 'paletteIndex': 6, 'colour': (0.67, 0.48, 0.16, 1.0)},
+    'jacket-leather': {'slot': 'torso', 'paletteIndex': 7, 'colour': (0.06, 0.07, 0.08, 1.0)},
+    'jacket-bomb': {'slot': 'torso', 'paletteIndex': 8, 'colour': (0.28, 0.31, 0.34, 1.0)},
+    'jacket-pinstripe': {'slot': 'torso', 'paletteIndex': 9, 'colour': (0.12, 0.13, 0.15, 1.0)},
+    'jacket-cardinal': {'slot': 'torso', 'paletteIndex': 10, 'colour': (0.46, 0.05, 0.07, 1.0)},
+    'ring-signet': {'slot': 'hands', 'paletteIndex': 11, 'colour': (0.75, 0.48, 0.10, 1.0)},
+    'ring-silver': {'slot': 'hands', 'paletteIndex': 12, 'colour': (0.63, 0.67, 0.70, 1.0)},
+    'ring-jade': {'slot': 'hands', 'paletteIndex': 13, 'colour': (0.06, 0.42, 0.25, 1.0)},
+    'ring-pearl': {'slot': 'hands', 'paletteIndex': 14, 'colour': (0.86, 0.82, 0.71, 1.0)},
+    'bandana-red': {'slot': 'accent', 'paletteIndex': 15, 'colour': (0.63, 0.05, 0.04, 1.0)},
+    'chain-gold': {'slot': 'accent', 'paletteIndex': 16, 'colour': (0.82, 0.55, 0.10, 1.0)},
+    'watch-brass': {'slot': 'accent', 'paletteIndex': 17, 'colour': (0.55, 0.31, 0.08, 1.0)},
+    'scarf-plaid': {'slot': 'accent', 'paletteIndex': 18, 'colour': (0.19, 0.32, 0.20, 1.0)},
+    'pin-diamond': {'slot': 'accent', 'paletteIndex': 19, 'colour': (0.26, 0.62, 0.68, 1.0)},
+    'beanie-wool': {'slot': 'head', 'paletteIndex': 20, 'colour': (0.35, 0.16, 0.24, 1.0)},
+    'scarf-silk': {'slot': 'accent', 'paletteIndex': 21, 'colour': (0.42, 0.16, 0.38, 1.0)},
+}
+
+COSMETIC_PREVIEW_LOADOUTS = (
+    {
+        'head': 'cap-grey',
+        'face': 'glasses-round',
+        'torso': 'jacket-leather',
+        'hands': 'ring-signet',
+        'accent': 'chain-gold',
+    },
+    {
+        'head': 'cap-silk',
+        'face': 'glasses-mono',
+        'torso': 'jacket-cardinal',
+        'hands': 'ring-jade',
+        'accent': 'scarf-silk',
+    },
+)
 
 
 def scale_translate_geo(geo, scale, offset):
@@ -104,15 +157,57 @@ def scale_translate_geo(geo, scale, offset):
     return ([(x * sx + ox, y * sy + oy, z * sz + oz) for x, y, z in verts], faces)
 
 
-def mesh_with_uv_region(name, geo, material, region, parent):
+def atlas_cell(column, row):
+    return (
+        column / CHARACTER_ATLAS_COLUMNS,
+        row / CHARACTER_ATLAS_ROWS,
+        1.0 / CHARACTER_ATLAS_COLUMNS,
+        1.0 / CHARACTER_ATLAS_ROWS,
+    )
+
+
+def atlas_region_for_slot(slot):
+    return atlas_cell(*BASE_ATLAS_CELLS[slot])
+
+
+def atlas_region_for_cosmetic(cosmetic_id):
+    cosmetic = COSMETIC_ATLAS[cosmetic_id]
+    index = cosmetic['paletteIndex']
+    return atlas_cell(index % CHARACTER_ATLAS_COLUMNS, 1 + index // CHARACTER_ATLAS_COLUMNS)
+
+
+def cosmetic_metadata(cosmetic_id):
+    cosmetic = COSMETIC_ATLAS[cosmetic_id]
+    return {
+        'id': cosmetic_id,
+        'slot': cosmetic['slot'],
+        'paletteIndex': cosmetic['paletteIndex'],
+        'region': list(atlas_region_for_cosmetic(cosmetic_id)),
+    }
+
+
+def remap_character_uv(obj, region):
+    if obj.type != 'MESH':
+        return
+    uv_layer = obj.data.uv_layers[0] if obj.data.uv_layers else obj.data.uv_layers.new(name='UVMap')
+    u0, v0, width, height = region
+    inset_u = width * 0.08
+    inset_v = height * 0.08
+    for uv in uv_layer.data:
+        uv.uv = (
+            u0 + inset_u + (uv.uv.x % 1.0) * (width - inset_u * 2.0),
+            v0 + inset_v + (uv.uv.y % 1.0) * (height - inset_v * 2.0),
+        )
+
+
+def mesh_with_uv_region(name, geo, material, region, parent, slot):
     mesh = build_mesh_from_geo(name, geo)
     mesh.materials.append(material)
-    uv_layer = mesh.uv_layers.new(name='UVMap')
-    u0, v0 = region
-    for polygon in mesh.polygons:
-        for loop_index in polygon.loop_indices:
-            uv_layer.data[loop_index].uv = (u0 + 0.25, v0 + 0.25)
     obj = bpy.data.objects.new(name, mesh)
+    obj['cosmeticSlot'] = slot
+    obj['paletteIndex'] = 0
+    obj['atlasRegion'] = list(region)
+    remap_character_uv(obj, region)
     obj.parent = parent
     bpy.context.scene.collection.objects.link(obj)
     return obj
@@ -137,13 +232,21 @@ def build_character_features(variant, body, atlas_material):
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.075, 0.080, 0.075), (-0.18, -0.01, 1.275)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.075, 0.080, 0.075), (0.18, -0.01, 1.275)),
         cylinder(0.082, 1.375, 1.32, 12),
+    ])
+    hands_geo = concat([
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.040, 0.034, 0.028), (-0.425, -0.19, 1.025)),
         scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.040, 0.034, 0.028), (0.425, -0.19, 1.025)),
     ])
+    accent_geo = concat([
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.025, 0.018, 0.025), (0.0, -0.155, 1.29)),
+        box((-0.018, -0.17, 1.22), (0.036, 0.022, 0.008)),
+    ])
     features = [
-        mesh_with_uv_region('river_' + variant + '_face_features', face_geo, atlas_material, (0.0, 0.0), body),
-        mesh_with_uv_region('river_' + variant + '_hair_cap', hair_geo, atlas_material, (0.0, 0.5), body),
-        mesh_with_uv_region('river_' + variant + '_garment_finish', garment_geo, atlas_material, (0.5, 0.0), body),
+        mesh_with_uv_region('river_' + variant + '_face_features', face_geo, atlas_material, atlas_region_for_slot('face'), body, 'face'),
+        mesh_with_uv_region('river_' + variant + '_hair_cap', hair_geo, atlas_material, atlas_region_for_slot('head'), body, 'head'),
+        mesh_with_uv_region('river_' + variant + '_garment_finish', garment_geo, atlas_material, atlas_region_for_slot('torso'), body, 'torso'),
+        mesh_with_uv_region('river_' + variant + '_hands_features', hands_geo, atlas_material, atlas_region_for_slot('hands'), body, 'hands'),
+        mesh_with_uv_region('river_' + variant + '_accent_features', accent_geo, atlas_material, atlas_region_for_slot('accent'), body, 'accent'),
     ]
     for obj in features:
         obj['characterFeature'] = True
@@ -281,17 +384,26 @@ def apply_seated_lod(obj):
 
 def build_character_atlas():
     image = bpy.data.images.new('river_character_atlas', width=CHARACTER_ATLAS_SIZE, height=CHARACTER_ATLAS_SIZE, alpha=True)
-    colours = (
-        (0.60, 0.40, 0.29, 1.0),
-        (0.16, 0.20, 0.23, 1.0),
-        (0.08, 0.055, 0.045, 1.0),
-        (0.63, 0.42, 0.15, 1.0),
-    )
-    half = CHARACTER_ATLAS_SIZE // 2
+    base_colours = {
+        'skin': (0.60, 0.40, 0.29, 1.0),
+        'torso': (0.16, 0.20, 0.23, 1.0),
+        'head': (0.08, 0.055, 0.045, 1.0),
+        'face': (0.63, 0.42, 0.15, 1.0),
+        'hands': (0.60, 0.40, 0.29, 1.0),
+        'accent': (0.63, 0.42, 0.15, 1.0),
+    }
+    cell_width = CHARACTER_ATLAS_SIZE // CHARACTER_ATLAS_COLUMNS
+    cell_height = CHARACTER_ATLAS_SIZE // CHARACTER_ATLAS_ROWS
+    colours = {}
+    for slot, cell in BASE_ATLAS_CELLS.items():
+        colours[cell] = base_colours[slot]
+    for cosmetic in COSMETIC_ATLAS.values():
+        index = cosmetic['paletteIndex']
+        colours[(index % CHARACTER_ATLAS_COLUMNS, 1 + index // CHARACTER_ATLAS_COLUMNS)] = cosmetic['colour']
     pixels = []
     for y in range(CHARACTER_ATLAS_SIZE):
         for x in range(CHARACTER_ATLAS_SIZE):
-            pixels.extend(colours[(y // half) * 2 + (x // half)])
+            pixels.extend(colours.get((x // cell_width, y // cell_height), (0.025, 0.025, 0.03, 1.0)))
     image.pixels = pixels
     image.filepath_raw = os.path.join(TEX_DIR, 'character_atlas.png')
     image.file_format = 'PNG'
@@ -307,18 +419,14 @@ def build_character_atlas():
     if bsdf is not None:
         links.new(texture.outputs['Color'], bsdf.inputs['Base Color'])
         bsdf.inputs['Roughness'].default_value = 0.62
-    material['atlasSchema'] = 'skin garment hat accessories plus tint masks'
+    material['atlasSchema'] = '8x4 shared atlas: base regions row 0, catalogue cosmetics rows 1-3'
     material['paletteProperty'] = 'paletteIndex'
+    material['atlasColumns'] = CHARACTER_ATLAS_COLUMNS
+    material['atlasRows'] = CHARACTER_ATLAS_ROWS
+    material['cosmeticRegions'] = json.dumps({
+        cosmetic_id: cosmetic_metadata(cosmetic_id) for cosmetic_id in COSMETIC_ATLAS
+    }, sort_keys=True, separators=(',', ':'))
     return material
-
-
-def remap_character_uv(obj, region):
-    if obj.type != 'MESH':
-        return
-    uv_layer = obj.data.uv_layers[0] if obj.data.uv_layers else obj.data.uv_layers.new(name='UVMap')
-    u0, v0 = region
-    for uv in uv_layer.data:
-        uv.uv = (u0 + 0.04 + (uv.uv.x % 1.0) * 0.42, v0 + 0.04 + (uv.uv.y % 1.0) * 0.42)
 
 
 def import_character_templates(atlas_material):
@@ -352,12 +460,12 @@ def import_character_templates(atlas_material):
             apply_seated_rest_pose(armature)
             shape_seated_arms(body)
             smooth_mesh_by_angle(body.data)
-            remap_character_uv(body, (0.0, 0.0))
+            remap_character_uv(body, atlas_region_for_slot('skin'))
             garment = next((obj for obj in imported if obj.type == 'MESH' and obj.name.startswith('garment_')), None)
             if garment is not None:
                 shape_seated_arms(garment)
                 smooth_mesh_by_angle(garment.data)
-                remap_character_uv(garment, (0.5, 0.0))
+                remap_character_uv(garment, atlas_region_for_slot('torso'))
                 imported.remove(garment)
                 bpy.data.objects.remove(garment, do_unlink=True)
             imported.extend(build_character_features(variant, body, atlas_material))
@@ -365,12 +473,16 @@ def import_character_templates(atlas_material):
     return templates
 
 
-def duplicate_character(template, seat_index, variant, x, y, angle, atlas_material):
+def duplicate_character(template, seat_index, variant, x, y, angle, atlas_material, loadout):
     mapping = {}
     for source in template:
         clone = source.copy()
         if source.data is not None:
-            clone.data = source.data
+            slot = source.get('cosmeticSlot')
+            cosmetic_id = loadout.get(slot) if slot is not None else None
+            clone.data = source.data.copy() if cosmetic_id is not None else source.data
+            if cosmetic_id is not None:
+                remap_character_uv(clone, atlas_region_for_cosmetic(cosmetic_id))
         bpy.context.scene.collection.objects.link(clone)
         mapping[source] = clone
     for source, clone in mapping.items():
@@ -391,7 +503,12 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
                 clone.data.name = 'char_' + variant + '_garment'
             clone.data.materials.clear()
             clone.data.materials.append(atlas_material)
-            clone['paletteIndex'] = seat_index % 9
+            slot = source.get('cosmeticSlot')
+            cosmetic_id = loadout.get(slot) if slot is not None else None
+            clone['paletteIndex'] = COSMETIC_ATLAS[cosmetic_id]['paletteIndex'] if cosmetic_id is not None else 0
+            clone['cosmeticId'] = cosmetic_id or ''
+            clone['cosmeticSlot'] = slot or ''
+            clone['atlasRegion'] = list(atlas_region_for_cosmetic(cosmetic_id)) if cosmetic_id is not None else list(atlas_region_for_slot('skin'))
             clone['atlasMaterial'] = atlas_material.name
     root = bpy.data.objects.new('river_character_%02d' % seat_index, None)
     bpy.context.scene.collection.objects.link(root)
@@ -403,7 +520,12 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
     root.scale = (CHARACTER_SCALE, CHARACTER_SCALE, CHARACTER_SCALE)
     root['seatIndex'] = seat_index
     root['variant'] = variant
-    root['paletteIndex'] = seat_index % 9
+    root['paletteIndex'] = 0
+    root['paletteIndices'] = json.dumps({
+        slot: COSMETIC_ATLAS[cosmetic_id]['paletteIndex']
+        for slot, cosmetic_id in loadout.items()
+    }, sort_keys=True, separators=(',', ':'))
+    root['loadout'] = json.dumps(loadout, sort_keys=True, separators=(',', ':'))
     root['atlasMaterial'] = atlas_material.name
     return root
 
@@ -415,7 +537,8 @@ def build_venue_characters(venue):
     for seat_index, (x, y) in enumerate(positions):
         variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]
         angle = math.atan2(-y, -x) + math.pi
-        duplicate_character(templates[variant], seat_index, variant, x, y, angle, atlas_material)
+        loadout = COSMETIC_PREVIEW_LOADOUTS[seat_index % len(COSMETIC_PREVIEW_LOADOUTS)]
+        duplicate_character(templates[variant], seat_index, variant, x, y, angle, atlas_material, loadout)
     for template in templates.values():
         for obj in template:
             bpy.data.objects.remove(obj, do_unlink=True)

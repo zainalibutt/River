@@ -64,10 +64,46 @@ python art/pipeline/test_checker_chars.py
   follow the same addressable pool. Board cards sit at HUD-readable size in the
   3D scene; hero cards are DOM-only per the card-legibility study.
 - Character tinting groundwork is atlas-first: one shared 1024 atlas with fixed
-  UV islands for skin, garment, hat, and accessories; neutral colour data plus
-  mask channels for each tintable region; and a palette lookup indexed by one
-  per-instance `paletteIndex` property. The renderer must apply that property in
-  the shared shader or instance buffer. It must not clone material datablocks.
+  UV islands for skin, garment, head, face, hands and accent; neutral colour
+  data plus mask channels for each tintable region; and a palette lookup indexed
+  by one per-instance `paletteIndex` property. The renderer must apply that
+  property in the shared shader or instance buffer. It must not clone material
+  datablocks.
+- Cosmetic atlas mapping is canonical between the engine catalogue and this
+  pipeline. The 1024 atlas is an 8x4 grid: row 0 is the base layer (`skin` 0,0;
+  `torso` 1,0; `head` 2,0; `face` 3,0; `hands` 4,0; `accent` 5,0), and catalogue
+  palette indices occupy rows 1-3 at `(paletteIndex % 8, 1 + floor(paletteIndex / 8))`.
+  Each selected feature carries `cosmeticId`, `cosmeticSlot`, `paletteIndex` and
+  `atlasRegion` in GLTF extras; every feature still uses the single shared atlas
+  material.
+
+  | Cosmetic id | Slot | Palette index | Atlas cell |
+  |---|---|---:|---|
+  | `cap-grey` | head | 0 | (0,1) |
+  | `cap-navy` | head | 1 | (1,1) |
+  | `cap-tan` | head | 2 | (2,1) |
+  | `cap-silk` | head | 3 | (3,1) |
+  | `glasses-round` | face | 4 | (4,1) |
+  | `glasses-shade` | face | 5 | (5,1) |
+  | `glasses-mono` | face | 6 | (6,1) |
+  | `jacket-leather` | torso | 7 | (7,1) |
+  | `jacket-bomb` | torso | 8 | (0,2) |
+  | `jacket-pinstripe` | torso | 9 | (1,2) |
+  | `jacket-cardinal` | torso | 10 | (2,2) |
+  | `ring-signet` | hands | 11 | (3,2) |
+  | `ring-silver` | hands | 12 | (4,2) |
+  | `ring-jade` | hands | 13 | (5,2) |
+  | `ring-pearl` | hands | 14 | (6,2) |
+  | `bandana-red` | accent | 15 | (7,2) |
+  | `chain-gold` | accent | 16 | (0,3) |
+  | `watch-brass` | accent | 17 | (1,3) |
+  | `scarf-plaid` | accent | 18 | (2,3) |
+  | `pin-diamond` | accent | 19 | (3,3) |
+  | `beanie-wool` | head | 20 | (4,3) |
+  | `scarf-silk` | accent | 21 | (5,3) |
+
+  The venue build alternates two complete loadouts as a visual proof; runtime
+  clients replace those preview extras with the seated player's worn IDs.
 - Venue character integration uses weighted seated LOD meshes of the two rigged
   bases, alternating five male and four female seats. Each seat keeps its own
   armature, root transform, and `paletteIndex`; the body and garment LODs remain
