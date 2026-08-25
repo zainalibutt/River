@@ -1,6 +1,12 @@
 'use client'
 
-import { type Card, DEFAULT_STAKE, type Street, type TurnAction } from '@river/engine'
+import {
+  type Card,
+  DEFAULT_STAKE,
+  itemCatalogue,
+  type Street,
+  type TurnAction,
+} from '@river/engine'
 import type { RoomEvent, RoomSeatView, RoomView } from '@river/server'
 import type { ClientRoomCommand, ServerMessage } from '@river/server/wire'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -31,6 +37,13 @@ import {
   shouldClearPreset,
 } from '@/lib/preset'
 import { type RepFlash, repFlashFor, shouldShowRate } from '@/lib/rep-feedback'
+import {
+  actionLabel,
+  equippedRatePercent,
+  isActionable,
+  type OwnedEntry,
+  shopRows,
+} from '@/lib/shop'
 import {
   appendSocialEvent,
   applySpeaking,
@@ -235,6 +248,9 @@ export function RiverRoomTable() {
   const [chatDraft, setChatDraft] = useState('')
   const [socialOpen, setSocialOpen] = useState(false)
   const [repFlash, setRepFlash] = useState<RepFlash | null>(null)
+  const [balance, setBalance] = useState(0)
+  const [ownedItems, setOwnedItems] = useState<readonly OwnedEntry[]>([])
+  const [shopOpen, setShopOpen] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [verify, setVerify] = useState<VerifyResult>({
     status: 'idle',
@@ -322,6 +338,8 @@ export function RiverRoomTable() {
             setKick(nextKick)
             if (ownKick.reason === 'duplicate-session') socket.close()
           }
+          setBalance(message.balance)
+          setOwnedItems(message.ownedItems)
           const flash = repFlashFor(message.events, message.view.selfId)
           if (flash !== null) setRepFlash(flash)
           const nextNotice = eventNotice(message.events, message.view.selfId)
@@ -659,6 +677,48 @@ export function RiverRoomTable() {
                 ))}
               </section>
             )}
+            <button
+              type="button"
+              className={`shop-toggle${shopOpen ? ' open' : ''}`}
+              aria-expanded={shopOpen}
+              onClick={() => setShopOpen((open) => !open)}
+            >
+              ITEMS
+            </button>
+            {shopOpen ? (
+              <aside className="shop-panel" aria-label="Table items">
+                <header className="shop-head">
+                  <span>TABLE ITEMS</span>
+                  <strong>{balance.toLocaleString()} CHIPS</strong>
+                  <em>{equippedRatePercent(itemCatalogue(), ownedItems)}% REP</em>
+                </header>
+                <ol className="shop-list">
+                  {shopRows(itemCatalogue(), ownedItems, balance).map((row) => (
+                    <li key={row.item.id} className={`shop-row ${row.state}`}>
+                      <span className="shop-name">{row.item.name}</span>
+                      <span className="shop-slot">{row.item.slot}</span>
+                      <span className="shop-rep">+{Math.round(row.item.repModifier * 100)}%</span>
+                      <span className="shop-price">
+                        {row.state === 'unaffordable'
+                          ? `NEED ${row.shortfall.toLocaleString()}`
+                          : row.item.priceChips.toLocaleString()}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={!isActionable(row.state) || connection !== 'connected'}
+                        onClick={() =>
+                          row.state === 'buyable'
+                            ? socketRef.current?.buyTableItem(row.item.id)
+                            : socketRef.current?.equipTableItem(row.item.id)
+                        }
+                      >
+                        {actionLabel(row.state)}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </aside>
+            ) : null}
             <section className="invite-strip" aria-label="Private table invite">
               <span>TABLE CODE</span>
               <strong>{view.inviteCode || '------'}</strong>
