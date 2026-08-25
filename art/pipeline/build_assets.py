@@ -35,6 +35,7 @@ from geo import (
     card_body,
     box,
     checkerboard_plane,
+    cone,
     cylinder,
     bar_bottle,
     basement_counter,
@@ -63,6 +64,7 @@ from geo import (
     stepladder,
     string_light_run,
     terrace_disc,
+    torus,
     wall_panel,
     wall_sconce,
     wood_pedestal,
@@ -91,7 +93,7 @@ VENUE_CHAIR = {
 CHARACTER_SCALE = 0.73
 CHARACTER_SEAT_Z = 0.05
 CHARACTER_VARIANTS = ('male', 'female')
-CHARACTER_BODY_LOD_RATIO = 0.18
+CHARACTER_BODY_LOD_RATIO = 0.42
 CHARACTER_GARMENT_LOD_RATIO = 0.24
 DOWNLOAD_BUDGET_KB = 6144
 CHARACTER_ATLAS_SIZE = 1024
@@ -200,7 +202,7 @@ def remap_character_uv(obj, region):
         )
 
 
-def mesh_with_uv_region(name, geo, material, region, parent, slot):
+def mesh_with_uv_region(name, geo, material, region, parent, slot=None):
     mesh = build_mesh_from_geo(name, geo)
     mesh.materials.append(material)
     obj = bpy.data.objects.new(name, mesh)
@@ -214,34 +216,47 @@ def mesh_with_uv_region(name, geo, material, region, parent, slot):
 
 
 def build_character_features(variant, body, atlas_material):
-    face_geo = concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.105, 0.100, 0.142), (0.0, -0.052, 1.532)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 6, 4), (0.036, 0.024, 0.032), (0.176, -0.002, 1.525)),
-        box((0.161, -0.078, 1.565), (0.019, 0.056, 0.018)),
-        box((0.161, 0.022, 1.565), (0.019, 0.056, 0.018)),
-    ])
-    hair_geo = concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 5), (0.105, 0.095, 0.062), (0.0, 0.005, 1.625)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.030, 0.050, 0.082), (-0.075, -0.018, 1.565)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.030, 0.050, 0.082), (0.075, -0.018, 1.565)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 6, 4), (0.012, 0.010, 0.012), (0.181, -0.045, 1.548)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 6, 4), (0.012, 0.010, 0.012), (0.181, 0.045, 1.548)),
-    ])
+    head_form_geo = translate_geo(concat([
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 16, 10), (0.14, 0.115, 0.18), (0.0, 0.0, 1.52)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 14, 8), (0.115, 0.105, 0.105), (0.0, -0.01, 1.45)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.03, 0.05), (0.0, -0.11, 1.52)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.03, 0.05), (0.0, 0.11, 1.52)),
+    ]), 0.14, 0.0, 0.0)
+    face_geo = translate_geo(concat([
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.018), (-0.115, -0.052, 1.57)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.018), (-0.115, 0.052, 1.57)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.022, 0.028, 0.02), (-0.13, -0.052, 1.545)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.022, 0.028, 0.02), (-0.13, 0.052, 1.545)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.028, 0.05), (-0.145, 0.0, 1.525)),
+        box((-0.14, -0.025, 1.475), (0.035, 0.05, 0.012)),
+    ]), 0.08, 0.0, 0.0)
+    hair_geo = translate_geo(concat([
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 16, 8), (0.145, 0.12, 0.065), (0.0, 0.015, 1.61)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.05), (0.0, -0.095, 1.56)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.035, 0.045, 0.05), (0.0, 0.095, 1.56)),
+    ]), 0.08, 0.0, 0.0)
     garment_geo = concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 10, 6), (0.225, 0.145, 0.26), (0.0, -0.01, 1.06)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.075, 0.080, 0.075), (-0.18, -0.01, 1.275)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.075, 0.080, 0.075), (0.18, -0.01, 1.275)),
-        cylinder(0.082, 1.375, 1.32, 12),
+        scale_translate_geo(cone(0.22, 0.32, 1.30, 0.64, 18), (1.0, 0.70, 1.0), (0.0, -0.12, 0.0)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 14, 8), (0.17, 0.11, 0.10), (-0.02, -0.18, 1.23)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 14, 8), (0.17, 0.11, 0.10), (-0.02, 0.18, 1.23)),
+        translate_geo(torus(0.145, 0.022, 18, 8), 0.0, 0.0, 1.32),
+        box((-0.22, -0.08, 1.18), (0.022, 0.03, 0.14)),
+        box((-0.22, 0.08, 1.18), (0.022, 0.03, 0.14)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.20, 0.055, 0.06), (-0.22, -0.18, 1.03)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.20, 0.055, 0.06), (-0.22, 0.18, 1.03)),
     ])
     hands_geo = concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.040, 0.034, 0.028), (-0.425, -0.19, 1.025)),
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.040, 0.034, 0.028), (0.425, -0.19, 1.025)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.07, 0.055, 0.055), (-0.41, -0.18, 1.025)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.07, 0.055, 0.055), (-0.41, 0.18, 1.025)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.055, 0.05, 0.05), (-0.47, -0.18, 1.025)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.055, 0.05, 0.05), (-0.47, 0.18, 1.025)),
     ])
     accent_geo = concat([
-        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 8, 5), (0.025, 0.018, 0.025), (0.0, -0.155, 1.29)),
-        box((-0.018, -0.17, 1.22), (0.036, 0.022, 0.008)),
+        scale_translate_geo(sphere(1.0, 0.0, 0.0, 0.0, 12, 8), (0.025, 0.035, 0.025), (-0.16, 0.0, 1.20)),
+        box((-0.18, -0.012, 1.10), (0.012, 0.024, 0.16)),
     ])
     features = [
+        mesh_with_uv_region('river_' + variant + '_head_form', head_form_geo, atlas_material, atlas_region_for_slot('skin'), body),
         mesh_with_uv_region('river_' + variant + '_face_features', face_geo, atlas_material, atlas_region_for_slot('face'), body, 'face'),
         mesh_with_uv_region('river_' + variant + '_hair_cap', hair_geo, atlas_material, atlas_region_for_slot('head'), body, 'head'),
         mesh_with_uv_region('river_' + variant + '_garment_finish', garment_geo, atlas_material, atlas_region_for_slot('torso'), body, 'torso'),
@@ -287,6 +302,23 @@ def shape_seated_arms(obj):
             vertex.co.x *= 0.70
             vertex.co.y -= 0.07
             vertex.co.z -= 0.015
+
+
+def shape_seated_torso(obj):
+    if obj.type != 'MESH':
+        return
+    arm_groups = {
+        group.index
+        for group in obj.vertex_groups
+        if any(token in group.name.lower() for token in ('upperarm', 'lowerarm', 'wrist', 'finger', 'metacarpal'))
+    }
+    for vertex in obj.data.vertices:
+        if vertex.co.z >= 1.4 or any(element.group in arm_groups and element.weight > 0.2 for element in vertex.groups):
+            continue
+        height = max(0.0, min(1.0, (vertex.co.z - 0.58) / 0.72))
+        factor = 0.72 + height * 0.22
+        vertex.co.x *= factor
+        vertex.co.y = -0.12 + (vertex.co.y + 0.12) * factor
 
 
 def build_chip_meshes():
@@ -459,6 +491,7 @@ def import_character_templates(atlas_material):
         if body is not None and armature is not None:
             apply_seated_rest_pose(armature)
             shape_seated_arms(body)
+            shape_seated_torso(body)
             smooth_mesh_by_angle(body.data)
             remap_character_uv(body, atlas_region_for_slot('skin'))
             garment = next((obj for obj in imported if obj.type == 'MESH' and obj.name.startswith('garment_')), None)
