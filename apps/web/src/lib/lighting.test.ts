@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   blenderToThree,
+  FILL_ATTENUATION,
   intensityFor,
   lightDirection,
   loadLightingSidecar,
@@ -159,5 +160,51 @@ describe('lamp aiming', () => {
     expect(light.target[0]).toBeCloseTo(0, 9)
     expect(light.target[1]).toBeCloseTo(6, 9)
     expect(light.target[2]).toBeCloseTo(-1, 9)
+  })
+})
+
+describe('fill attenuation', () => {
+  const rig = {
+    world: { colour: '#101613', strength: 1.5 },
+    camera: { radius: 6.1, height: 4.05, pitch: 62, fov: 64, clear_radius: 8.4 },
+    lights: [
+      {
+        name: 'table',
+        type: 'area',
+        colour: '#FFE2BC',
+        energy: 240,
+        size: 5.5,
+        shadow: true,
+        position: [0, 0, 3.9] as [number, number, number],
+        rotation_deg: [0, 0, 0] as [number, number, number],
+      },
+      {
+        name: 'sky_fill',
+        type: 'area',
+        colour: '#5C74B8',
+        energy: 240,
+        size: 14,
+        shadow: false,
+        position: [0, 1, 7] as [number, number, number],
+        rotation_deg: [0, 0, 0] as [number, number, number],
+      },
+    ],
+  }
+
+  it('leaves the one shadow caster at full strength', () => {
+    const [key] = toSceneLights(rig)
+    expect(key?.intensity).toBeCloseTo(intensityFor(240), 9)
+  })
+
+  it('discounts a fill, because it cannot be occluded by anything', () => {
+    // Same energy, same size class: the only difference is that one of them
+    // casts a shadow and the other floods.
+    const [, fill] = toSceneLights(rig)
+    expect(fill?.intensity).toBeCloseTo(intensityFor(240) * FILL_ATTENUATION, 9)
+  })
+
+  it('keeps the key brighter than an equal-energy fill, so the table leads', () => {
+    const [key, fill] = toSceneLights(rig)
+    expect(key?.intensity ?? 0).toBeGreaterThan(fill?.intensity ?? 0)
   })
 })

@@ -1004,14 +1004,34 @@ input:focus-visible {
   color: var(--river-amber);
 }
 
+/*
+ * An empty chair is a marker, not a card.
+ *
+ * Nine of these at 176 by 116 covered most of the table and read as fog over
+ * the venue. The buy-in is the same at every seat, so printing it nine times
+ * was nine copies of one fact. It comes back on hover, where it is asked for.
+ */
 .open-seat {
   display: grid;
-  width: 176px;
-  height: 116px;
+  width: 62px;
+  height: 62px;
   place-items: center;
-  border: 1px dashed rgb(242 234 223 / 34%);
+  border: 1px dashed rgb(242 234 223 / 22%);
   border-radius: 999px;
-  background: rgb(10 13 12 / 34%);
+  background: rgb(10 13 12 / 26%);
+  transition:
+    width 160ms var(--ease-out),
+    height 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    background 160ms var(--ease-out);
+}
+
+.open-seat:hover,
+.open-seat:focus-within {
+  width: 132px;
+  height: 84px;
+  border-color: var(--river-amber);
+  background: rgb(10 13 12 / 76%);
 }
 
 .open-seat button {
@@ -1019,15 +1039,28 @@ input:focus-visible {
   height: 100%;
   border: 0;
   background: transparent;
-  color: var(--river-cream-dim);
-  font-size: 19px;
+  color: rgb(242 234 223 / 52%);
+  font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.open-seat:hover button,
+.open-seat:focus-within button {
+  color: var(--river-cream);
+  font-size: 15px;
 }
 
 .open-seat small {
+  display: none;
   color: var(--river-amber);
-  font-size: 14px;
+  font-size: 13px;
+}
+
+.open-seat:hover small,
+.open-seat:focus-within small {
+  display: block;
 }
 
 .seat.reconnecting {

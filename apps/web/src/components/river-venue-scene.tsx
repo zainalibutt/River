@@ -276,13 +276,15 @@ function CasterLight({ light }: { light: SceneLight }) {
       <primitive object={target} />
       <spotLight
         castShadow
-        angle={0.9}
+        angle={0.62}
         color={light.colour}
         distance={0}
         // The caster carries the pool of light on the felt, so it is scaled
         // apart from the fills - a spot falls off with distance and the broad
-        // area sources do not.
-        intensity={light.intensity * 9}
+        // area sources do not. It has to win outright: the parapet and terrace
+        // are pale concrete and the felt is dark green, so under even light the
+        // walls beat the table and the eye lands in the wrong place.
+        intensity={light.intensity * 26}
         penumbra={0.85}
         position={light.position}
         shadow-mapSize={[2048, 2048]}
@@ -300,8 +302,13 @@ function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
 
   return (
     <>
-      {/* A low ambient so an unlit corner reads as dim rather than as a hole. */}
-      <ambientLight intensity={0.18} />
+      {/*
+        Low enough that an unlit corner reads as dim rather than as a hole, and
+        no higher. Ambient is the one light that cannot be occluded by
+        anything, so every point of it is a point of contrast removed from the
+        whole venue.
+      */}
+      <ambientLight intensity={0.11} />
       {lights.map((light) =>
         light.kind === 'spot' ? (
           <CasterLight key={light.name} light={light} />

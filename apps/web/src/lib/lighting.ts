@@ -96,6 +96,22 @@ export function blenderToThree(position: readonly number[]): [number, number, nu
  */
 export const ENERGY_TO_INTENSITY = 0.008
 
+/**
+ * How much a shadowless fill is worth.
+ *
+ * three.js rect area lights cast no shadows. In Blender the same sources are
+ * occluded by the parapet, the chairs and the players, so a fourteen metre sky
+ * fill lights the terrace in patches. Here it lights everything evenly, and a
+ * venue with no occlusion anywhere has no dark in it - the floor comes out
+ * brighter than the felt and the eye has nowhere to go.
+ *
+ * Rather than hand-tuning each lamp, every fill is worth a fraction of its
+ * measured energy and the one shadow-casting key is left alone. That keeps a
+ * single number to change, and it keeps the pool of light on the table where
+ * the room was designed to put it.
+ */
+export const FILL_ATTENUATION = 0.55
+
 export function intensityFor(energy: number): number {
   return Math.max(0, energy) * ENERGY_TO_INTENSITY
 }
@@ -114,7 +130,7 @@ export function toSceneLights(rig: VenueRig | undefined): SceneLight[] {
       name: light.name,
       kind: light.shadow ? 'spot' : 'area',
       colour: light.colour,
-      intensity: intensityFor(light.energy),
+      intensity: intensityFor(light.energy) * (light.shadow ? 1 : FILL_ATTENUATION),
       width: light.size,
       height: light.size,
       position,
