@@ -232,6 +232,13 @@ export function RiverScene({ seatIds, seatRefs, venueId }: SceneProps) {
         position: cameraPlacement(venue).position,
       }}
       dpr={[1, 1.5]}
+      // The stage is a fixed 1920x1080 box scaled to fit the window, and the
+      // measured rectangle comes back already scaled. Sizing from that lays the
+      // canvas out smaller than the box it sits in, so the venue stops short of
+      // two edges and every seat label - positioned as a percent of the full
+      // box - drifts away from the player it belongs to. offsetWidth ignores
+      // transforms, which is the size we actually want.
+      resize={{ offsetSize: true }}
       onCreated={(state) => {
         // The scene is only judged in a browser, and four separate attempts to
         // measure it failed because there was nothing to read it from. This is
