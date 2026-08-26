@@ -9,6 +9,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bmesh
 import bpy
+from mathutils import Vector
+from mathutils.bvhtree import BVHTree
 
 import check_assets as checker
 from buildkit import (
@@ -634,6 +636,127 @@ def build_venue_characters(venue):
             bpy.data.actions.remove(action)
 
 
+def _surface_colour(mesh, colour_fn):
+    for existing in list(mesh.color_attributes):
+        mesh.color_attributes.remove(existing)
+    layer = mesh.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')
+    for polygon in mesh.polygons:
+        for loop_index in polygon.loop_indices:
+            vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
+            layer.data[loop_index].color = colour_fn(vertex)
+    mesh.color_attributes.active_color_index = 0
+    mesh.color_attributes.render_color_index = 0
+
+
+def _use_vertex_colour(material):
+    if material.get('riverVertexColour'):
+        return tuple(material['riverVertexColourBase'])
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    bsdf = next((node for node in nodes if node.type == 'BSDF_PRINCIPLED'), None)
+    if bsdf is None or any(node.type == 'TEX_IMAGE' for node in nodes):
+        return None
+    base = tuple(bsdf.inputs['Base Color'].default_value[:3])
+    colour = nodes.new('ShaderNodeVertexColor')
+    colour.layer_name = 'Color'
+    base_input = bsdf.inputs['Base Color']
+    if base_input.links:
+        links.remove(base_input.links[0])
+    links.new(colour.outputs['Color'], base_input)
+    material['riverVertexColour'] = True
+    material['riverVertexColourBase'] = base
+    return base
+
+
+def _detail_factor(point, venue_id, role):
+    radius = math.sqrt(point.x * point.x + point.y * point.y)
+    noise = math.sin(point.x * 3.71 + point.y * 5.13) * 0.035
+    noise += math.sin(point.x * 10.19 - point.y * 7.37) * 0.018
+    if venue_id == 'rooftop' and role == 'floor':
+        edge = min(1.0, radius / 4.0)
+        return 0.95 - edge * 0.28 + noise
+    if venue_id == 'rooftop' and role == 'parapet':
+        return 0.76 + noise * 1.4 - max(0.0, point.z - 0.75) * 0.05
+    if role == 'floor':
+        return 0.88 - min(1.0, radius / 7.0) * 0.16 + noise
+    if role == 'wall':
+        return 0.83 + noise * 1.2 - min(0.13, max(0.0, point.z) * 0.035)
+    return 0.90 + noise
+
+
+def _surface_bvh():
+    vertices = []
+    polygons = []
+    for obj in bpy.context.scene.objects:
+        if obj.type != 'MESH' or obj.data.name.startswith('char_') or obj.name.startswith('char_'):
+            continue
+        if obj.name in {'river_card', 'board_card_pool'} or obj.name.startswith('chip_'):
+            continue
+        offset = len(vertices)
+        matrix = obj.matrix_world
+        vertices.extend(matrix @ vertex.co for vertex in obj.data.vertices)
+        polygons.extend(tuple(offset + index for index in polygon.vertices) for polygon in obj.data.polygons)
+    return BVHTree.FromPolygons(vertices, polygons, all_triangles=False)
+
+
+def _ambient_factor(bvh, obj, point, normal):
+    matrix = obj.matrix_world
+    world_point = matrix @ point
+    world_normal = (matrix.to_3x3() @ normal).normalized()
+    tangent = world_normal.cross(Vector((0.0, 0.0, 1.0)))
+    if tangent.length < 0.001:
+        tangent = world_normal.cross(Vector((0.0, 1.0, 0.0)))
+    tangent.normalize()
+    bitangent = world_normal.cross(tangent).normalized()
+    directions = [
+        world_normal,
+        (world_normal + tangent * 0.55).normalized(),
+        (world_normal - tangent * 0.55).normalized(),
+        (world_normal + bitangent * 0.55).normalized(),
+        (world_normal - bitangent * 0.55).normalized(),
+    ]
+    hits = 0
+    origin = world_point + world_normal * 0.025
+    for direction in directions:
+        _location, _normal, _index, distance = bvh.ray_cast(origin, direction, 1.35)
+        if distance is not None:
+            hits += 1
+    return 1.0 - hits / len(directions) * 0.28
+
+
+def add_venue_surface_detail(venue_id):
+    roles = {
+        'rooftop': {
+            'floor': ['rooftop_terrace'],
+            'parapet': ['rooftop_parapet', 'rooftop_brazier_0', 'rooftop_brazier_1'],
+            'wall': ['rooftop_planter_0', 'rooftop_planter_1', 'rooftop_planter_2', 'rooftop_planter_3', 'rooftop_planter_4', 'rooftop_planter_5', 'rooftop_palms'],
+        },
+        'basement': {
+            'floor': ['basement_floor'],
+            'wall': ['basement_room_walls', 'basement_ceiling', 'basement_ceiling_pipes', 'basement_machine_bank', 'basement_counter', 'basement_carts', 'basement_crates', 'basement_ladder'],
+        },
+        'suite': {
+            'floor': ['suite_floor'],
+            'wall': ['suite_room_walls', 'suite_ceiling', 'suite_bar', 'suite_balusters', 'suite_handrail', 'suite_scroll_ornaments', 'suite_standing_patrons'],
+        },
+    }[venue_id]
+    targets = []
+    for role, names in roles.items():
+        for name in names:
+            obj = bpy.data.objects.get(name)
+            if obj is not None:
+                targets.append((obj, role))
+    bvh = _surface_bvh()
+    for obj, role in targets:
+        base = _use_vertex_colour(obj.data.materials[0])
+        if base is None:
+            continue
+        def colour(vertex, obj=obj, role=role, base=base):
+            factor = _detail_factor(vertex.co, venue_id, role) * _ambient_factor(bvh, obj, vertex.co, vertex.normal)
+            return (base[0] * factor * 0.96, base[1] * factor * 0.985, base[2] * factor, 1.0)
+        _surface_colour(obj.data, colour)
+
+
 def build_rooftop(venue):
     floor_mat = add_material('rooftop_floor', venue['floor'])
     floor = build_mesh_from_geo('rooftop_terrace', terrace_disc())
@@ -695,12 +818,12 @@ def build_rooftop(venue):
     foliage_mat = add_material('rooftop_foliage', venue['foliage'])
     palms = []
     for index in range(6):
-        angle = 2.0 * math.pi * index / 6 + 0.4
+        angle = 2.0 * math.pi * index / 6
         palms.append(
             translate_geo(
-                palm(1.45 + 0.15 * (index % 3), fronds=6, seed=41 + index * 7),
-                4.28 * math.cos(angle),
-                4.28 * math.sin(angle),
+                palm(1.45 + 0.15 * (index % 3), fronds=10, seed=41 + index * 7),
+                3.2 * math.cos(angle),
+                3.2 * math.sin(angle),
                 0.0,
             )
         )
@@ -1195,6 +1318,7 @@ def build_venue(venue, chip_meshes, card_mesh):
         build_basement(venue)
     else:
         build_suite(venue)
+    add_venue_surface_detail(venue['id'])
     lights = build_lighting(venue['id'])
     intrusions = clear_radius_violations(venue['id'])
     glb = os.path.join(OUT_DIR, venue['id'] + '_assets.glb')

@@ -315,7 +315,7 @@ def chair_dining():
 def planter():
     parts = [
         cylinder(0.2, 0.38, 0.0, PLANTER_SEG),
-        cone(0.26, 0.04, 0.78, 0.38, PLANTER_SEG),
+        cylinder(0.17, 0.42, 0.37, PLANTER_SEG),
     ]
     return concat(parts)
 
@@ -613,24 +613,30 @@ def mountain_range(count=9, inner_radius=88.0, outer_radius=142.0, seed=770511):
 
 
 def palm(height=3.0, fronds=7, seed=41):
-    """Trunk plus a crown of fronds, merged into one geometry."""
     rand = _lcg(seed)
-    parts = [cone(0.10, 0.06, height, 0.0, 6)]
+    parts = [cylinder(0.075, height, 0.38, 8)]
     for index in range(fronds):
         angle = 2.0 * math.pi * index / fronds + rand() * 0.3
-        length = 0.85 + 0.5 * rand()
-        droop = -0.32 - 0.28 * rand()
-        tip_x = length * math.cos(angle)
-        tip_y = length * math.sin(angle)
-        wx = -math.sin(angle) * 0.11
-        wy = math.cos(angle) * 0.11
+        length = 0.72 + 0.32 * rand()
+        droop = -0.24 - 0.18 * rand()
+        width = 0.075 + 0.025 * rand()
+        forward = (math.cos(angle), math.sin(angle))
+        side = (-forward[1], forward[0])
+        mid_x = forward[0] * length * 0.52
+        mid_y = forward[1] * length * 0.52
+        tip_x = forward[0] * length
+        tip_y = forward[1] * length
+        mid_z = height - 0.07
+        tip_z = height + droop
         verts = [
             (0.0, 0.0, height),
-            (wx, wy, height - 0.04),
-            (tip_x, tip_y, height + droop),
-            (-wx, -wy, height - 0.04),
+            (side[0] * width * 0.45, side[1] * width * 0.45, height - 0.025),
+            (mid_x + side[0] * width, mid_y + side[1] * width, mid_z),
+            (tip_x, tip_y, tip_z),
+            (mid_x - side[0] * width, mid_y - side[1] * width, mid_z),
+            (-side[0] * width * 0.45, -side[1] * width * 0.45, height - 0.025),
         ]
-        parts.append((verts, [(0, 1, 2), (0, 2, 3)]))
+        parts.append((verts, [(0, 1, 2), (0, 2, 4), (0, 4, 5), (0, 5, 1), (2, 3, 4)]))
     return concat(parts)
 
 

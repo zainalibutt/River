@@ -61,7 +61,7 @@ ROOFTOP = {
     'wood': '141210',
     'chair': '17181B',
     'chrome': 'B9BEC4',
-    'floor': 'D9D4C6',
+    'floor': '30383A',
     'floor_pattern': 'B9B2A4',
     'parapet': '2A2F3A',
     'parapet_lit': 'FFD9A0',
