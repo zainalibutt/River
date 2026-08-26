@@ -1,5 +1,3 @@
-import { blenderToThree } from '@/lib/lighting'
-
 export type VenueId = 'rooftop' | 'basement' | 'suite'
 
 export interface VenueCamera {
@@ -85,7 +83,11 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
  * way round the room was.
  */
 export function cameraPlacement(venue: Venue): CameraPlacement {
-  const position = blenderToThree([0, -venue.camera.radius, venue.camera.height])
+  // This is blenderToThree([0, -radius, height]) written out. The conversion is
+  // not imported, because lighting.ts refers back to this module and the scene
+  // loads through a dynamic chunk that will not tolerate the cycle. A test
+  // asserts the two agree, so the duplication cannot drift unnoticed.
+  const position: [number, number, number] = [0, venue.camera.height, venue.camera.radius]
   const target: [number, number, number] = [0, TABLE_SURFACE_HEIGHT, 0]
   return {
     position,
