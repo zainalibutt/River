@@ -107,9 +107,19 @@ that standard rather than route around it. Choosing stylisation here would have
 been choosing it because it was easier, which is exactly the kind of corner the
 brief says invalidates the result.
 
-The budget allows it. Venues currently ship at 1,887KB against a 6,144KB gate
-and 34,889 triangles against 250,000. There is room for characters several times
-heavier than the current seated shell.
+**What this cost, and what it turned out to be.** Four packets went into building
+faces out of scaled spheres, each one a little better and none of them right. The
+base character was an MPFB human all along: 8,221 vertices, a 137-bone rig, nine
+authored poker clips, and a face with a nose, lips and a jaw. It was buried under
+hair geometry authored as alpha cutouts and exported with no textures at all, so
+it rendered as opaque ribbons hanging over the face. Every replacement face was
+being bolted onto the outside of a head that was only ever occluded, and in one
+render the real hands with fingers are visible at the frame edge beside the
+primitive ones built to replace them.
+
+Deleting all of it took the rooftop from 94,537 triangles to 62,499 and produced
+a person. **The rule that would have caught this four packets earlier: before
+adding, look at what is already there with everything else turned off.**
 
 ## Budgets are gates, not notes
 
@@ -144,3 +154,55 @@ read as finished in the commit log.
 **Rule.** With several lanes running, the seam between packets is where work
 quietly dies. "Does anything actually call this?" is the first review question,
 not the last.
+
+## Art is judged where the player sees it, not where it is made
+
+Two days of venue work were signed off from Blender renders. The browser was
+drawing something else entirely: the camera outside the building looking at the
+exterior wall, ten-metre starbursts where the palms should be, a daylight sky on
+a night rooftop. The measured values were identical in both files.
+
+Three separate faults, none visible from the pipeline side:
+
+- The camera was hardcoded on the opposite side of the table from every light,
+  because it never went through the coordinate conversion the lights use. Round
+  venues, so it still rendered - it rendered the back of the room lit for the
+  front.
+- Blender fits a landscape camera's angle horizontally and three.js reads it
+  vertically, so the measured 64 degrees asked for a frame most of a right angle
+  too wide.
+- Every lamp carried rotation zero, which in Blender means straight down. A
+  three.js area light emits along its own local axis until something turns it,
+  so the fourteen-metre sky fill was firing horizontally into the back wall.
+
+**Decision.** The browser is the reference surface. The lookdev renders through
+AgX, so the renderer does too - matching the view transform is not a preference,
+it decides whether the two pictures can be compared at all. Every conversion
+between the two spaces is one function with tests, and anything that needs those
+numbers calls it rather than restating them.
+
+**The instrument came first, in the end.** Four attempts to measure the running
+scene failed because nothing exposed it, and each failure produced another
+plausible guess. The canvas now hands its state to the window in development,
+and the conversion bug was confirmed in one query rather than argued about.
+
+## The expensive failures are the silent ones
+
+Fixing the camera meant importing one function into the venue registry. That
+closed a cycle, because the lighting module refers back to the registry for its
+venue id. The scene loads through a dynamic chunk, and a cycle there resolves to
+nothing at all.
+
+Nothing threw. No console error. Typecheck passed, all 524 tests passed, lint was
+clean, and the entire 3D table was absent from the page.
+
+The same shape appeared twice more the same day: a sibling imported with the ESM
+extension the engine uses, which Turbopack cannot resolve and the test runner
+can; and a canvas measured after a CSS transform, laid out at 1619 by 911 inside
+a 1920 by 1080 box, so the venue stopped short of two edges and every seat label
+drifted away from the player it named.
+
+**Rule.** A green suite is evidence about the code the suite runs, in the way it
+runs it. It is not evidence that the application starts. Anything whose failure
+mode is silence needs a check that fails loudly - which is why the animation
+driver reports the clips a rig does not carry rather than playing nothing.
