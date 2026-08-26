@@ -443,7 +443,8 @@
         </header>
         <span class="role">Terra High &middot; server, security, long grinds</span>
         <ul>
-          <li><span class="dot flight"></span><span><b>5W the blue palms</b> &mdash; in flight, uncommitted in the tree. <code>COLOR_0</code> renders green in Blender and vivid blue in the browser, because Blender ignores a colour attribute unless a shader node reads it while three.js multiplies by it automatically. The working diff moves the bake to <code>FLOAT_COLOR</code>, neutralises the base tint into the vertex colour, and restores <code>baseColorFactor</code> from a <code>riverVertexColourBase</code> extra after export.</span></li>
+          <li><span class="dot flight"></span><span><b>5X clip amplitude</b> &mdash; opened. A full breathe cycle rotates the head <b>0.099 degrees</b>, measured in the browser and matching the 0.05-degree source constant exactly. Worse, three clips key nothing at all: their targets are named <code>upperarm01.R</code> while the rig carries <code>upperarm01R</code>, so the lookup returns None and <code>continue</code> runs silently &mdash; a chip toss that moves no arm, and an all-in stand-up that does not use its legs. Brief at <code>docs/handoff/packet-5X-clip-amplitude.md</code>.</span></li>
+          <li><span class="dot done"></span><span><b>5W the blue palms</b> &mdash; landed at <code>877c841</code>, and it landed while the client lane was open in the same working copy without touching a file outside its own. <code>COLOR_0</code> renders green in Blender and vivid blue in the browser, because Blender ignores a colour attribute unless a shader node reads it while three.js multiplies by it automatically. The bake moves to <code>FLOAT_COLOR</code>, the base tint is neutralised into the vertex colour, and <code>baseColorFactor</code> is restored from a <code>riverVertexColourBase</code> extra after export. <em>Still needs a republish before it reaches the browser</em> &mdash; <code>art/out</code> is not what the app serves.</span></li>
                     <li><span class="dot done"></span><span><b>5V nighttime depth</b> &mdash; accepted, and the first art packet that improved the picture rather than the numbers. Baked occlusion in vertex colours, a dark wet-concrete terrace, and palms that are palms rather than traffic cones. Rooftop 71,343 triangles against a gate of 250,000.</span></li>
           <li><span class="dot done"></span><span><b>5U clothes and clips</b> &mdash; accepted. Nine clothed seats with distinct loadouts, and all nine animation clips finally carried into every venue export &mdash; so the driver that shipped with nothing to play has something to play.</span></li>
           <li><span class="dot flight"></span><span><b>5T face atlas</b> &mdash; half accepted. Brows, a lash line, lip tone and a hairline band now read at the table, and it found a real pipeline bug on the way: exported character UVs collapsing to a point after a double remap. But the face cell reached onto the shoulders and bled chevrons across the chest, and 5S had quietly deleted the garment mesh, so the table is nine nude people. Region tightened; the clothes are the next packet.</span></li>
@@ -503,6 +504,7 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>Eight of the nine characters were frozen</b> &mdash; the mixer root fix was correct and not enough. The venue carries nine copies of one rig against a single clip set, every copy uses the same bone names, so the loader suffixes the duplicates and every unsuffixed track bound to whichever rig imported first. Actions were keyed by clip name alone as well, so nine per-seat cues collapsed onto one shared action and eight were no-ops &mdash; the seat each cue names was computed and then discarded. Measured before: <b>3 moving bones out of 1,233, all on one character</b>. After: 72 across all nine, 33,291 tracks bound. <code>delaySeconds</code> is honoured too; it existed so nine people would not breathe on the same frame, and was ignored at playback.</span></li>
           <li><span class="dot done"></span><span><b>The mixer was bound to the wrong root</b> &mdash; a glTF clip names its target nodes by path from the scene root, and the driver built one mixer per top-level child instead, so every track resolved to nothing. The failure mode is the worst kind: a mixer that binds nothing reports no error and simply never moves anything. It would have read exactly as &ldquo;the clips did not export&rdquo;. Clip names, track counts and durations now go to <code>window.riverClips</code>, because the last four faults in this scene were found by measuring it rather than reading it.</span></li>
           <li><span class="dot done"></span><span><b>What a successor would otherwise rediscover</b> &mdash; the six modules finished and wired to nothing, the four faults that shipped because art was verified in Blender, and six traps in this repository that produce a green suite over a broken application. Written down at <code>docs/handoff/session-state.md</code> rather than left in a chat log.</span></li>
           <li><span class="dot done"></span><span><b>Night venues published</b> &mdash; all three rooms rebuilt at night and republished, with the byte counts recorded, because <code>art/out</code> is not what the app serves and every skyline change had once been invisible in the browser for that reason.</span></li>
@@ -637,23 +639,23 @@
     </p>
     <div class="steps">
       <article class="step">
-        <h4>1 &middot; Watch the characters move</h4>
+        <h4>1 &middot; Make the clips actually move</h4>
         <p>
-          Nine clips reached all three venues and the mixer root was corrected
-          immediately after, so the driver has something to play and somewhere to
-          bind it. Neither has been seen working. Every cue was tested against a
-          rig that carried nothing. This scene has produced four faults already;
-          expect a fifth.
+          The playback side is fixed and proven &mdash; nine rigs, 33,291 tracks
+          bound. The clips are the remaining half and they are wrong twice over: a
+          full breathe cycle rotates the head <b>0.099 degrees</b>, and three clips
+          key nothing at all because their targets carry a dot the rig's bone names
+          do not. Codex has it as 5X, with a build gate so a missing bone stops
+          being a silent skip.
         </p>
       </article>
       <article class="step">
-        <h4>2 &middot; The palms are blue in the browser</h4>
+        <h4>2 &middot; Republish the venues</h4>
         <p>
-          Green in Blender, vivid blue on screen. Blender ignores a colour
-          attribute unless a shader node reads it, while three.js multiplies by it
-          automatically &mdash; so the bake was verified in the one renderer where
-          it does nothing. Same shape as the camera, the field of view and the lamp
-          rotations before it. Codex has the diagnosis and a working diff.
+          5W is committed but <code>art/out</code> is not what the app serves. The
+          palms stay blue in the browser until <code>publish_assets.py</code> runs
+          and the byte counts are checked. This has already cost two days once,
+          when every skyline change was invisible against a stale 206K asset.
         </p>
       </article>
       <article class="step">
@@ -696,7 +698,7 @@
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> 7f9d99d</span>
+    <span><b>HEAD</b> df85bc0</span>
     <span><b>Tests</b> 725 green</span>
     <span><b>Lint &amp; typecheck</b> clean</span>
     <span><b>Production</b> live</span>
