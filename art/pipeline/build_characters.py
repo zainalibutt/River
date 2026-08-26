@@ -384,22 +384,27 @@ def generate_clip(armature, name, seconds, loop):
     action.use_fake_user = True
     armature.animation_data_create().action = action
     tracks = {
-        'IDLE_breathe': [('spine01', 0.03, 0.5), ('spine02', 0.04, 2.1), ('head', 0.05, 2.0)],
-        'PEEK_card': [('head', 0.35, 1.0), ('lowerarm01.L', 0.4, 1.0)],
-        'PRESET_reach': [('upperarm01.R', 0.5, 1.0), ('lowerarm01.R', 0.5, 1.0)],
-        'CHIP_toss': [('upperarm01.R', 0.6, 1.0), ('lowerarm01.R', 0.8, 1.0)],
-        'DEAL_toss': [('upperarm01.L', 0.6, 1.0), ('lowerarm01.L', 0.8, 1.0)],
-        'ALLIN_standup': [('upperleg01.L', 12.0, 1.0), ('upperleg01.R', 12.0, 1.0), ('spine01', 0.6, 1.0), ('head', 0.5, 1.0)],
-        'REACT_win': [('head', 0.4, 1.0), ('spine01', 0.4, 1.0), ('upperarm01.R', 0.5, 1.0)],
-        'REACT_lose': [('head', 0.5, 1.0), ('spine01', 0.5, 1.0), ('upperarm01.L', 0.5, 1.0)],
-        'FOLD_muck': [('head', 0.6, 1.0), ('lowerarm01.R', 0.5, 1.0)],
+        'IDLE_breathe': [('spine01', 1.0, 0.5), ('spine02', 1.4, 2.1), ('head', 1.2, 2.0)],
+        'PEEK_card': [('head', 8.0, 1.0), ('lowerarm01.L', 28.0, 1.0)],
+        'PRESET_reach': [('upperarm01.R', 18.0, 1.0), ('lowerarm01.R', 32.0, 1.0)],
+        'CHIP_toss': [('upperarm01.R', 24.0, 1.0), ('lowerarm01.R', 46.0, 1.0)],
+        'DEAL_toss': [('upperarm01.L', 22.0, 1.0), ('lowerarm01.L', 40.0, 1.0)],
+        'ALLIN_standup': [('upperleg01.L', 42.0, 1.0), ('upperleg01.R', 42.0, 1.0), ('spine01', 18.0, 1.0), ('head', 12.0, 1.0)],
+        'REACT_win': [('head', 12.0, 1.0), ('spine01', 16.0, 1.0), ('upperarm01.R', 38.0, 1.0)],
+        'REACT_lose': [('head', 16.0, 1.0), ('spine01', 14.0, 1.0), ('upperarm01.L', 28.0, 1.0)],
+        'FOLD_muck': [('head', 10.0, 1.0), ('lowerarm01.R', 35.0, 1.0)],
     }
+    targets = list(tracks.get(name, []))
+    probe = os.environ.get('RIVER_CLIP_PROBE_MISSING_BONE')
+    if probe:
+        targets.append((probe, 1.0, 1.0))
+    missing = [bone_name for bone_name, _, _ in targets if armature.pose.bones.get(bone_name) is None]
+    if missing:
+        raise SystemExit('FAIL: animation %s references missing bone(s): %s' % (name, ', '.join(missing)))
     for frame in range(duration + 1):
         t = frame / duration
-        for bone_name, magnitude, frequency in tracks.get(name, []):
+        for bone_name, magnitude, frequency in targets:
             pose_bone = armature.pose.bones.get(bone_name)
-            if pose_bone is None:
-                continue
             pose_bone.rotation_mode = 'XYZ'
             if loop:
                 rads = math.radians(magnitude * math.sin(2.0 * math.pi * frequency * t))

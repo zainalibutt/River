@@ -25,6 +25,7 @@ from buildkit import (
     seat_positions,
     smooth_mesh_by_angle,
 )
+from build_characters import build_animations
 from geo import (
     concat,
     mountain_range,
@@ -496,6 +497,7 @@ def build_garment_material():
 
 def import_character_templates(atlas_material):
     templates = {}
+    animation_actions = []
     for variant in CHARACTER_VARIANTS:
         path = os.path.join(OUT_DIR, 'char_' + variant + '.glb')
         if not os.path.exists(path):
@@ -530,8 +532,12 @@ def import_character_templates(atlas_material):
             apply_seated_rest_pose(armature)
             shape_seated_arms(body)
             smooth_mesh_by_angle(body.data)
+        if variant == 'male' and armature is not None:
+            for action in list(bpy.data.actions):
+                bpy.data.actions.remove(action, do_unlink=True)
+            animation_actions = [bpy.data.actions[name] for name in build_animations(armature)]
         templates[variant] = imported
-    return templates
+    return templates, animation_actions
 
 
 def apply_garment_palette(obj, colour):
@@ -546,7 +552,7 @@ def apply_garment_palette(obj, colour):
     obj.data.color_attributes.render_color_index = 0
 
 
-def duplicate_character(template, seat_index, variant, x, y, angle, atlas_material, garment_material, loadout):
+def duplicate_character(template, animation_actions, seat_index, variant, x, y, angle, atlas_material, garment_material, loadout):
     mapping = {}
     face_cosmetic_id = loadout.get('face') or loadout.get('head')
     body_region = atlas_region_for_cosmetic(face_cosmetic_id) if face_cosmetic_id is not None else atlas_region_for_slot('skin')
@@ -567,6 +573,14 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
         clone.parent = mapping.get(source.parent)
         if clone.type == 'ARMATURE':
             if seat_index == 0:
+                animation_data = clone.animation_data_create()
+                animation_data.action = None
+                for track in list(animation_data.nla_tracks):
+                    animation_data.nla_tracks.remove(track)
+                for action in animation_actions:
+                    track = animation_data.nla_tracks.new()
+                    track.name = action.name
+                    track.strips.new(action.name, int(action.frame_range[0]), action)
                 clone['animationOwner'] = True
             else:
                 clone.animation_data_clear()
@@ -621,13 +635,13 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
 def build_venue_characters(venue):
     atlas_material = build_character_atlas()
     garment_material = build_garment_material()
-    templates = import_character_templates(atlas_material)
+    templates, animation_actions = import_character_templates(atlas_material)
     positions = character_seat_positions(venue)
     for seat_index, (x, y) in enumerate(positions):
         variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]
         angle = math.atan2(-x, y)
         loadout = COSMETIC_PREVIEW_LOADOUTS[seat_index % len(COSMETIC_PREVIEW_LOADOUTS)]
-        duplicate_character(templates[variant], seat_index, variant, x, y, angle, atlas_material, garment_material, loadout)
+        duplicate_character(templates[variant], animation_actions, seat_index, variant, x, y, angle, atlas_material, garment_material, loadout)
     for template in templates.values():
         for obj in template:
             bpy.data.objects.remove(obj, do_unlink=True)
