@@ -2589,3 +2589,17 @@ input:focus-visible {
   color: var(--river-cream-dim);
   font-size: 11px;
 }
+
+.hand-readout {
+  margin: 10px 0 0;
+  padding: 7px 18px;
+  border: 1px solid var(--river-room-edge);
+  border-radius: 999px;
+  background: rgb(20 27 24 / 88%);
+  color: var(--river-amber);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-align: center;
+  white-space: nowrap;
+}

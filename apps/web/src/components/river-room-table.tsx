@@ -34,6 +34,7 @@ import {
   loadBrowserAuthConfig,
   upgradeRiverSession,
 } from '@/lib/auth'
+import { readoutFor } from '@/lib/hand-readout'
 import { formatAmount } from '@/lib/presentation'
 import {
   canArmPreset,
@@ -180,6 +181,24 @@ function verifyCopy(status: VerifyResult['status']): string {
     default:
       return 'A commit appears when the next hand begins.'
   }
+}
+
+/**
+ * What the player is holding, under the board.
+ *
+ * It reads from the view's own seat rather than being pushed by the server,
+ * so it can never say something the player is not entitled to see - the hole
+ * cards are only in the view at all when they are theirs.
+ */
+function HandReadout({ view }: { view: RoomView }) {
+  const hero = view.seats.find((seat) => seat.playerId === view.selfId)
+  const readout = readoutFor(hero?.hole ?? [], view.board)
+  if (readout === null) return null
+  return (
+    <p className="hand-readout" role="status" aria-live="polite">
+      <span>{readout.full}</span>
+    </p>
+  )
 }
 
 function orderedSeats(view: RoomView): RoomSeatView[] {
@@ -886,6 +905,7 @@ export function RiverRoomTable() {
               <strong>{formatAmount(view.pot, false)}</strong>
             </div>
             <Board cards={view.board} street={view.street} />
+            <HandReadout view={view} />
             <div className="status-line populated" aria-live="polite">
               {kick === null
                 ? (notice ?? view.message ?? waitingCopy(view, seatedCount, isHost))
