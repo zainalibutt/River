@@ -24,6 +24,6 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/apps/web/public/assets", "!**/art/out"]
+    "includes": ["**", "!**/apps/web/public/assets", "!**/art/out", "!**/docs/board"]
   }
 }

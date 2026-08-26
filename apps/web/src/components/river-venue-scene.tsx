@@ -90,6 +90,66 @@ function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
 
 const seatIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 
+type SeatRig = { seat: number; boneNames: string[] }
+
+function seatClipKey(seat: number, clip: string): string {
+  return `${seat}:${clip}`
+}
+
+/**
+ * The seated rigs, in seat order.
+ *
+ * The pipeline stamps `seatIndex` on each character root and the exporter
+ * carries it through as glTF extras, so the seat a rig belongs to is read from
+ * the asset rather than inferred from position or import order.
+ */
+function seatRigs(scene: THREE.Object3D): SeatRig[] {
+  const rigs: SeatRig[] = []
+  scene.traverse((object) => {
+    const seat = object.userData?.seatIndex
+    if (typeof seat !== 'number') return
+    const skinned: THREE.SkinnedMesh[] = []
+    object.traverse((child) => {
+      if (child instanceof THREE.SkinnedMesh) skinned.push(child)
+    })
+    const skeleton = skinned[0]?.skeleton
+    if (skeleton === undefined) return
+    rigs.push({ seat, boneNames: skeleton.bones.map((bone) => bone.name) })
+  })
+  return rigs.sort((left, right) => left.seat - right.seat)
+}
+
+/**
+ * One clip, pointed at one rig's bones.
+ *
+ * Returns how many tracks found a target as well as the clip, because a
+ * retarget that matches nothing produces an action that plays, reports no
+ * error, and never moves a vertex.
+ */
+function retargetToRig(
+  clip: THREE.AnimationClip,
+  from: readonly string[],
+  to: readonly string[],
+): { clip: THREE.AnimationClip; matched: number } {
+  const rename = new Map<string, string>()
+  from.forEach((name, index) => {
+    const replacement = to[index]
+    if (replacement !== undefined) rename.set(name, replacement)
+  })
+  const cloned = clip.clone()
+  let matched = 0
+  for (const track of cloned.tracks) {
+    const split = track.name.lastIndexOf('.')
+    const node = split < 0 ? track.name : track.name.slice(0, split)
+    const property = split < 0 ? '' : track.name.slice(split)
+    const mapped = rename.get(node)
+    if (mapped === undefined) continue
+    track.name = mapped + property
+    matched += 1
+  }
+  return { clip: cloned, matched }
+}
+
 /** The plaque and the stage, as percentages of the 1920 by 1080 design box. */
 const PLAQUE = { widthPercent: (208 / 1920) * 100, heightPercent: (76 / 1080) * 100 }
 const STAGE = { widthPercent: 100, heightPercent: 100 }
@@ -128,16 +188,39 @@ function VenueAsset({ venueId, cues }: { venueId: VenueId; cues: readonly Animat
     // mixer rooted anywhere else binds nothing and reports no error at all.
     const mixer = new THREE.AnimationMixer(asset.scene)
     mixers.current.push(mixer)
-    for (const clip of clips) {
-      actions.current.set(clip.name, mixer.clipAction(clip))
+    // The venue carries nine copies of one rig and one clip set authored
+    // against a single skeleton. Every copy uses the same bone names, so the
+    // loader suffixes the duplicates - spine01, spine01_1 ... spine01_8 - and
+    // an unsuffixed track binds to whichever rig imported first. That is one
+    // character breathing and eight sitting perfectly still, with no error.
+    // Retarget per seat by bone index: the nine skeletons are the same rig, so
+    // position in the bone list is the mapping, and no name parsing is needed.
+    const rigs = seatRigs(asset.scene)
+    const base = rigs[0]?.boneNames ?? []
+    let bound = 0
+    for (const rig of rigs) {
+      for (const clip of clips) {
+        const targeted = retargetToRig(clip, base, rig.boneNames)
+        bound += targeted.matched
+        actions.current.set(seatClipKey(rig.seat, clip.name), mixer.clipAction(targeted.clip))
+      }
     }
     if (process.env.NODE_ENV !== 'production') {
+      // A retarget that matched nothing plays silently and looks exactly like
+      // a rig that carries no clips, which is the failure this scene has
+      // already produced twice. Say so rather than let it read as working.
+      if (rigs.length > 0 && bound === 0) {
+        console.warn(
+          `river: ${venue.name} matched no animation tracks to any of its ${rigs.length} rigs; the clips will not move anything`,
+        )
+      }
       Object.assign(window, {
         riverClips: clips.map((clip) => ({
           name: clip.name,
           tracks: clip.tracks.length,
           seconds: Number(clip.duration.toFixed(2)),
         })),
+        riverRigs: { seats: rigs.map((rig) => rig.seat), boundTracks: bound },
       })
     }
     return () => {
@@ -149,14 +232,30 @@ function VenueAsset({ venueId, cues }: { venueId: VenueId; cues: readonly Animat
   const playing = useMemo(() => (cues.length > 0 ? cues : seatIndexes.map(idleCueFor)), [cues])
 
   useEffect(() => {
+    // A cue names a seat, and only that seat's action may answer it. Matching
+    // on clip name alone played one shared action nine times over, which is
+    // eight no-ops and one character doing everybody's gestures.
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const start = (cue: AnimationCue) => {
+      const action = actions.current.get(seatClipKey(cue.seat, cue.clip))
+      if (action === undefined) return
+      action.reset()
+      action.setLoop(cue.loop ? THREE.LoopRepeat : THREE.LoopOnce, Number.POSITIVE_INFINITY)
+      action.clampWhenFinished = !cue.loop
+      action.play()
+    }
     for (const cue of playing) {
-      for (const [key, action] of actions.current) {
-        if (key !== cue.clip) continue
-        action.reset()
-        action.setLoop(cue.loop ? THREE.LoopRepeat : THREE.LoopOnce, Number.POSITIVE_INFINITY)
-        action.clampWhenFinished = !cue.loop
-        action.play()
+      // The stagger is the whole reason idlePhaseFor exists: nine characters
+      // breathing on the same frame reads as a row of clones. It was computed
+      // per seat and then thrown away here.
+      if (cue.delaySeconds > 0) {
+        timers.push(setTimeout(() => start(cue), cue.delaySeconds * 1000))
+        continue
       }
+      start(cue)
+    }
+    return () => {
+      for (const timer of timers) clearTimeout(timer)
     }
   }, [playing])
 
