@@ -178,18 +178,29 @@ def cosmetic_metadata(cosmetic_id):
     }
 
 
-def remap_character_uv(obj, region):
+def remap_character_uv(obj, region, face_region=None):
     if obj.type != 'MESH':
         return
     uv_layer = obj.data.uv_layers[0] if obj.data.uv_layers else obj.data.uv_layers.new(name='UVMap')
     u0, v0, width, height = region
     inset_u = width * 0.08
     inset_v = height * 0.08
-    for uv in uv_layer.data:
-        uv.uv = (
-            u0 + inset_u + (uv.uv.x % 1.0) * (width - inset_u * 2.0),
-            v0 + inset_v + (uv.uv.y % 1.0) * (height - inset_v * 2.0),
-        )
+    for loop_index, uv in enumerate(uv_layer.data):
+        vertex = obj.data.vertices[obj.data.loops[loop_index].vertex_index].co
+        active_region = region
+        if face_region is not None and vertex.z > 1.34 and abs(vertex.x) < 0.18 and -0.20 < vertex.y < -0.08:
+            active_region = face_region
+        active_u0, active_v0, active_width, active_height = active_region
+        active_inset_u = active_width * 0.08
+        active_inset_v = active_height * 0.08
+        if active_region == face_region:
+            source_u = 0.5 + max(-0.5, min(0.5, vertex.x / 0.62)) * 0.42
+            source_v = 0.18 + max(0.0, min(1.0, (vertex.z - 1.0) / 0.67)) * 0.66
+        else:
+            source_u = float(uv.uv.x) % 1.0
+            source_v = float(uv.uv.y) % 1.0
+        uv.uv.x = active_u0 + active_inset_u + source_u * (active_width - active_inset_u * 2.0)
+        uv.uv.y = active_v0 + active_inset_v + source_v * (active_height - active_inset_v * 2.0)
 
 
 def apply_seated_rest_pose(armature):
@@ -368,6 +379,43 @@ def apply_seated_lod(obj):
     obj.select_set(False)
 
 
+def atlas_blend(a, b, amount):
+    return tuple(a[index] * (1.0 - amount) + b[index] * amount for index in range(3)) + (1.0,)
+
+
+def atlas_pixel(base, x, y, male, variant, face_details=True):
+    skin_warm = (0.72, 0.43, 0.29)
+    skin_cool = (0.36, 0.28, 0.27)
+    skin = atlas_blend(skin_cool, skin_warm, 0.34 + 0.32 * (variant % 3) / 2.0)
+    grain = 0.018 * math.sin((x + variant * 17) * 0.31) * math.sin((y + variant * 11) * 0.19)
+    colour = tuple(max(0.0, min(1.0, channel + grain)) for channel in skin[:3]) + (1.0,)
+    if face_details and 0.22 < x < 0.78 and 0.16 < y < 0.92:
+        brow = ((x < 0.47 and 0.61 < y < 0.68) or (x > 0.53 and 0.61 < y < 0.68))
+        lashes = ((x < 0.47 and 0.57 < y < 0.625) or (x > 0.53 and 0.57 < y < 0.625))
+        eye = ((x < 0.47 and 0.585 < y < 0.64) or (x > 0.53 and 0.585 < y < 0.64))
+        nose = 0.46 < x < 0.54 and 0.47 < y < 0.58
+        lips = 0.43 < x < 0.57 and 0.39 < y < 0.45
+        hairline = y > 0.875 - 0.018 * math.cos((x - 0.5) * 14.0)
+        stubble = male and 0.34 < x < 0.66 and 0.28 < y < 0.46
+        if hairline:
+            hair = (0.08 + 0.06 * (variant % 4), 0.035, 0.025)
+            colour = atlas_blend(colour, hair, 0.92)
+        elif brow or lashes:
+            colour = atlas_blend(colour, (0.07, 0.025, 0.02), 0.94)
+        elif eye:
+            colour = atlas_blend(colour, (0.015, 0.02, 0.018), 0.98)
+        elif nose:
+            colour = atlas_blend(colour, (0.40, 0.20, 0.16), 0.22)
+        elif lips:
+            lip_tone = (0.52 + 0.05 * (variant % 3), 0.15, 0.16)
+            colour = atlas_blend(colour, lip_tone, 0.72)
+        elif stubble and math.sin(x * 480.0 + y * 271.0 + variant) > 0.12:
+            colour = atlas_blend(colour, (0.16, 0.09, 0.07), 0.36)
+    if base is not None:
+        colour = atlas_blend(colour, base[:3], 0.13)
+    return colour
+
+
 def build_character_atlas():
     image = bpy.data.images.new('river_character_atlas', width=CHARACTER_ATLAS_SIZE, height=CHARACTER_ATLAS_SIZE, alpha=True)
     base_colours = {
@@ -380,16 +428,24 @@ def build_character_atlas():
     }
     cell_width = CHARACTER_ATLAS_SIZE // CHARACTER_ATLAS_COLUMNS
     cell_height = CHARACTER_ATLAS_SIZE // CHARACTER_ATLAS_ROWS
-    colours = {}
-    for slot, cell in BASE_ATLAS_CELLS.items():
-        colours[cell] = base_colours[slot]
-    for cosmetic in COSMETIC_ATLAS.values():
-        index = cosmetic['paletteIndex']
-        colours[(index % CHARACTER_ATLAS_COLUMNS, 1 + index // CHARACTER_ATLAS_COLUMNS)] = cosmetic['colour']
     pixels = []
     for y in range(CHARACTER_ATLAS_SIZE):
         for x in range(CHARACTER_ATLAS_SIZE):
-            pixels.extend(colours.get((x // cell_width, y // cell_height), (0.025, 0.025, 0.03, 1.0)))
+            column = x // cell_width
+            row = y // cell_height
+            cell_x = (x % cell_width) / cell_width
+            cell_y = (y % cell_height) / cell_height
+            if row == 0 and column in (0, 4):
+                pixels.extend(atlas_pixel(base_colours['skin'], cell_x, cell_y, False, column, False))
+            elif row == 0 and column in (1, 2, 3, 5):
+                slot = next(name for name, cell in BASE_ATLAS_CELLS.items() if cell == (column, row))
+                pixels.extend(base_colours[slot])
+            elif row > 0 and column < CHARACTER_ATLAS_COLUMNS:
+                palette_index = (row - 1) * CHARACTER_ATLAS_COLUMNS + column
+                cosmetic = next((item for item in COSMETIC_ATLAS.values() if item['paletteIndex'] == palette_index), None)
+                pixels.extend(atlas_pixel(cosmetic['colour'] if cosmetic else None, cell_x, cell_y, palette_index % 2 == 1, palette_index))
+            else:
+                pixels.extend((0.025, 0.025, 0.03, 1.0))
     image.pixels = pixels
     image.filepath_raw = os.path.join(TEX_DIR, 'character_atlas.png')
     image.file_format = 'PNG'
@@ -455,19 +511,21 @@ def import_character_templates(atlas_material):
             apply_seated_rest_pose(armature)
             shape_seated_arms(body)
             smooth_mesh_by_angle(body.data)
-            remap_character_uv(body, atlas_region_for_slot('skin'))
         templates[variant] = imported
     return templates
 
 
 def duplicate_character(template, seat_index, variant, x, y, angle, atlas_material, loadout):
     mapping = {}
+    face_cosmetic_id = loadout.get('face') or loadout.get('head')
+    body_region = atlas_region_for_cosmetic(face_cosmetic_id) if face_cosmetic_id is not None else atlas_region_for_slot('skin')
+    body_palette_index = COSMETIC_ATLAS[face_cosmetic_id]['paletteIndex'] if face_cosmetic_id is not None else 0
     for source in template:
         clone = source.copy()
         if source.data is not None:
             slot = source.get('cosmeticSlot')
             cosmetic_id = loadout.get(slot) if slot is not None else None
-            clone.data = source.data.copy() if cosmetic_id is not None else source.data
+            clone.data = source.data.copy() if source.type == 'MESH' else source.data
             if cosmetic_id is not None:
                 remap_character_uv(clone, atlas_region_for_cosmetic(cosmetic_id))
         bpy.context.scene.collection.objects.link(clone)
@@ -482,6 +540,7 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
         if clone.type == 'MESH':
             if clone.data.uv_layers:
                 clone.data.uv_layers[0].name = 'UVMap'
+            remap_character_uv(clone, atlas_region_for_slot('skin'), body_region)
             if source.get('characterFeature'):
                 clone.data.name = 'river_' + variant + '_feature'
             elif source.name.startswith('char_') or source.data.name.startswith('base'):
@@ -492,7 +551,7 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
             clone.data.materials.append(atlas_material)
             slot = source.get('cosmeticSlot')
             cosmetic_id = loadout.get(slot) if slot is not None else None
-            clone['paletteIndex'] = COSMETIC_ATLAS[cosmetic_id]['paletteIndex'] if cosmetic_id is not None else 0
+            clone['paletteIndex'] = body_palette_index
             clone['cosmeticId'] = cosmetic_id or ''
             clone['cosmeticSlot'] = slot or ''
             clone['atlasRegion'] = list(atlas_region_for_cosmetic(cosmetic_id)) if cosmetic_id is not None else list(atlas_region_for_slot('skin'))
@@ -507,7 +566,7 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
     root.scale = (CHARACTER_SCALE, CHARACTER_SCALE, CHARACTER_SCALE)
     root['seatIndex'] = seat_index
     root['variant'] = variant
-    root['paletteIndex'] = 0
+    root['paletteIndex'] = body_palette_index
     root['paletteIndices'] = json.dumps({
         slot: COSMETIC_ATLAS[cosmetic_id]['paletteIndex']
         for slot, cosmetic_id in loadout.items()

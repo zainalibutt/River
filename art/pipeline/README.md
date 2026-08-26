@@ -77,6 +77,16 @@ python art/pipeline/test_checker_chars.py
   `atlasRegion` in GLTF extras; every feature still uses the single shared atlas
   material.
 
+  Packet 5T extends the generated atlas without adding geometry: the skin and
+  cosmetic face cells carry a deterministic warm/cool skin field plus MPFB UV
+  landmarks for a hairline band, brows and lashes, eyes, nose shading, lips,
+  and male stubble. A seated body is remapped to the selected loadout's face
+  or head palette cell, so the existing `paletteIndex` extras select a visibly
+  different face variant while all seats continue to share one material and
+  one 1024x1024 image. The source garment remains intentionally untextured:
+  `garment_male` has zero UV layers in the GLB and needs a separate unwrap or
+  regenerated source asset before it can use this atlas.
+
   | Cosmetic id | Slot | Palette index | Atlas cell |
   |---|---|---:|---|
   | `cap-grey` | head | 0 | (0,1) |
