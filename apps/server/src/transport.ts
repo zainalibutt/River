@@ -1,7 +1,16 @@
 import { randomBytes } from 'node:crypto'
-import type { TableSummary, TurnAction } from '@river/engine'
+import type { BotPersonality, TableSummary, TurnAction } from '@river/engine'
 import { tableStatus } from '@river/engine'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
+import {
+  actionFor,
+  botPlayerId,
+  botsForTable,
+  botsWanted,
+  emptySeatsIn,
+  isBotPlayer,
+  thinkingMs,
+} from './bot-service.js'
 import type { CosmeticOutcome, CosmeticStore, OwnedCosmetic } from './cosmetic-service.js'
 import { buyCosmetic, wearCosmetic } from './cosmetic-service.js'
 import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-service.js'
@@ -114,6 +123,9 @@ interface RoomState {
   socialActions: Map<string, number[]>
   speakingPlayers: Set<string>
   activeEmotes: Set<string>
+  botTimer: ReturnType<typeof setTimeout> | null
+  /** Which character is in which bot seat, so a table keeps its cast. */
+  botCast: Map<string, BotPersonality>
 }
 
 /**
@@ -128,11 +140,21 @@ export interface RoomHubOptions {
   verifyToken: TokenVerifier
   ledger: Ledger
   onError?: HubErrorReporter
+  /** Injectable so a test can make a bot's choices repeatable. */
+  botRng?: () => number
+  /**
+   * How many seats bots may fill. Zero, the default, means a table is people
+   * only - seating characters changes who acts and when, so it is opted into
+   * rather than assumed.
+   */
+  botSeats?: number
   economy?: SupabaseEconomy
   tableItems?: TableItemStore
   cosmetics?: CosmeticStore
   createRoom?: (roomId: string, venueId?: VenueId) => Room
 }
+
+const DEFAULT_BOT_THINK_CAP = 4_000
 
 const ROOM_ID = /^[a-z0-9][a-z0-9-]{2,31}$/
 const REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/
@@ -293,11 +315,20 @@ export class RoomHub {
   private readonly completed = new Map<string, ServerMessage>()
   private readonly grantInFlight = new Set<string>()
   private readonly onError: HubErrorReporter
+  /**
+   * Bots draw from here rather than from the hand's fairness stream. A bot must
+   * never be able to influence the deck, and sharing a source with the shuffle
+   * would mean its bluff frequency moved the cards.
+   */
+  private readonly botRng: () => number
+  private readonly botSeats: number
 
   constructor(options: RoomHubOptions) {
     this.verifyToken = options.verifyToken
     this.ledger = options.ledger
     this.onError = options.onError ?? ((): void => {})
+    this.botRng = options.botRng ?? Math.random
+    this.botSeats = Math.max(0, options.botSeats ?? 0)
     this.economy = options.economy ?? null
     this.tableItems = options.tableItems
     this.cosmetics = options.cosmetics
@@ -690,6 +721,10 @@ export class RoomHub {
       if (serverCommand.kind !== 'kick') throw new Error('kick command lost its server identity')
       result = await this.kickThenCredit(connection, state, requestId, serverCommand)
     } else {
+      // Fill the table on the way into a hand, not when a seat is taken.
+      // Seating bots as people arrive races them for seats, and a person who
+      // clicked an empty chair a moment ago finds a bot in it.
+      if (command.kind === 'startHand') this.seatBots(state)
       if (
         command.kind === 'startHand' &&
         state.room.viewFor(player.playerId).handNumber === 0 &&
@@ -998,6 +1033,8 @@ export class RoomHub {
       socialActions: new Map(),
       speakingPlayers: new Set(),
       activeEmotes: new Set(),
+      botTimer: null,
+      botCast: new Map(),
     }
     this.rooms.set(roomId, created)
     return created
@@ -1066,6 +1103,79 @@ export class RoomHub {
     )
   }
 
+  /**
+   * Fill empty seats so a person can play without finding eight friends.
+   *
+   * Bots are seated straight into the room rather than through the command
+   * path, because that path debits the chip ledger and a bot has no bankroll.
+   * They keep the cast the room seed chose, so leaving and coming back finds
+   * the same opponents rather than a new table of strangers.
+   */
+  private seatBots(state: RoomState, target = this.botSeats): void {
+    if (target <= 0) return
+    const view = state.room.viewFor('')
+    const wanted = botsWanted(view, target)
+    if (wanted <= 0) return
+    const seats = emptySeatsIn(view)
+    const taken = new Set(state.botCast.keys())
+    const cast = botsForTable(state.room.id, target + taken.size).filter(
+      (personality) => !taken.has(botPlayerId(personality.id)),
+    )
+    const buyIn = state.room.config.stake.defaultBuyIn
+    for (let index = 0; index < wanted; index += 1) {
+      const personality = cast[index]
+      const seat = seats[index]
+      if (personality === undefined || seat === undefined) break
+      const playerId = botPlayerId(personality.id)
+      state.room.submit({ kind: 'join', playerId, name: personality.name })
+      const result = state.room.submit({ kind: 'sit', playerId, seat, buyIn })
+      if (result.ok) state.botCast.set(playerId, personality)
+    }
+  }
+
+  /**
+   * Act for a bot whose turn it is, after a pause.
+   *
+   * An instant answer is the clearest tell that a table is not real. The pause
+   * always lands well inside the turn budget, so a bot can never be the reason
+   * a hand times out.
+   */
+  private scheduleBotTurn(state: RoomState): void {
+    this.clearBotTurn(state)
+    const view = state.room.viewFor('')
+    const actor = view.currentActor?.playerId
+    if (actor === undefined || !isBotPlayer(actor)) return
+    const personality = state.botCast.get(actor)
+    if (personality === undefined) return
+
+    const rng = this.botRng
+    const delay = Math.min(thinkingMs(personality, rng), this.remainingTurnMs(state) * 0.6)
+    state.botTimer = setTimeout(
+      () => {
+        void this.enqueue(state, async () => {
+          state.botTimer = null
+          const current = state.room.viewFor(actor)
+          const action = actionFor(current, actor, personality, rng)
+          if (action === null) return
+          const result = state.room.submit({ kind: 'act', playerId: actor, action })
+          if (result.ok) this.broadcast(state, null, result.events)
+        })
+      },
+      Math.max(120, delay),
+    )
+  }
+
+  private remainingTurnMs(state: RoomState): number {
+    const deadline = state.room.viewFor('').turnDeadlineMs
+    if (deadline === null) return DEFAULT_BOT_THINK_CAP
+    return Math.max(0, deadline - state.room.config.nowMs())
+  }
+
+  private clearBotTurn(state: RoomState): void {
+    if (state.botTimer !== null) clearTimeout(state.botTimer)
+    state.botTimer = null
+  }
+
   private clearTurnTimeout(state: RoomState): void {
     if (state.turnTimer !== null) clearTimeout(state.turnTimer)
     state.turnTimer = null
@@ -1092,6 +1202,7 @@ export class RoomHub {
       this.snapshot(connection, state, connection === requester ? requestId : null, events)
     }
     this.scheduleTurnTimeout(state)
+    this.scheduleBotTurn(state)
     this.interruptEmotes(state, events)
     this.broadcastAvatarVo(state, events)
   }

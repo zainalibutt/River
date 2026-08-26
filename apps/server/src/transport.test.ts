@@ -63,6 +63,7 @@ function setup(
   turnBudgetsMs?: { preflop: number; flop: number; turn: number; river: number },
   socialRateLimit?: { maxActions: number; windowMs: number },
   economy?: SupabaseEconomy,
+  botSeats = 0,
 ) {
   const ledger = new MemoryLedger()
   const players: Record<string, AuthenticatedPlayer> = {
@@ -72,6 +73,9 @@ function setup(
   }
   const hub = new RoomHub({
     ledger,
+    botSeats,
+    // Fixed so a bot's choices are the same on every run.
+    botRng: () => 0.42,
     ...(economy === undefined ? {} : { economy }),
     verifyToken: async (token) => {
       const player = players[token]
@@ -744,5 +748,89 @@ describe('which room a table is in', () => {
   it('refuses a venue the wire made up', async () => {
     const { hub } = setup()
     expect(venueOfLast(await enterWith(hub, 'alice', 'river-junk', 'the-moon'))).toBe('rooftop')
+  })
+})
+
+describe('bots at the table', () => {
+  const withBots = () => setup(30_000, 0, undefined, undefined, undefined, 5)
+
+  async function sitAndStart(hub: RoomHub) {
+    const { peer, connection } = await connectAndEnter(hub, 'alice', 'Alice')
+    await connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'sit',
+        command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+      }),
+    )
+    await connection.receive(
+      JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+    )
+    return { peer, connection }
+  }
+
+  function seatsIn(peer: TestPeer) {
+    const snapshot = peer.last('snapshot')
+    if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+    return snapshot.view.seats
+  }
+
+  it('leaves a table alone unless the hub asked for bots', async () => {
+    const { hub } = setup()
+    const { peer } = await sitAndStart(hub)
+    expect(seatsIn(peer).filter((seat) => seat.playerId !== null).length).toBe(1)
+  })
+
+  it('fills the empty seats when a hand starts', async () => {
+    const { hub } = withBots()
+    const { peer } = await sitAndStart(hub)
+    const seated = seatsIn(peer).filter((seat) => seat.playerId !== null)
+    expect(seated.length).toBeGreaterThan(1)
+    // One seat is always kept free for the next person to arrive.
+    expect(seated.length).toBeLessThan(seatsIn(peer).length)
+  })
+
+  it('never debits the chip ledger for a bot buy-in', async () => {
+    const { hub, ledger } = withBots()
+    await sitAndStart(hub)
+    // A bot has no account and no bankroll. Every entry must belong to a real
+    // player id, or bot chips are being minted against somebody's balance.
+    for (const entry of ledger.entries) {
+      expect(entry.playerId.startsWith('bot:')).toBe(false)
+    }
+    expect(ledger.entries.filter((entry) => entry.reason === 'table_buy_in').length).toBe(1)
+  })
+
+  it('does not take a seat a person is waiting for', async () => {
+    const { hub } = withBots()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    await alice.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'a',
+        command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+      }),
+    )
+    await bob.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'b',
+        command: { kind: 'sit', seat: 1, buyIn: 50_000 },
+      }),
+    )
+    const seats = seatsIn(bob.peer)
+    expect(seats[1]?.playerId).toBe(BOB)
+  })
+
+  it('acts for a bot when the turn reaches it', async () => {
+    vi.useFakeTimers()
+    const { hub } = withBots()
+    const { peer } = await sitAndStart(hub)
+    const before = peer.messages.length
+    await vi.advanceTimersByTimeAsync(8_000)
+    // A bot that never acts is a table that never moves - the person would sit
+    // watching the clock run down on somebody else's turn.
+    expect(peer.messages.length).toBeGreaterThan(before)
   })
 })

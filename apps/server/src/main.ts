@@ -52,6 +52,9 @@ async function start(): Promise<void> {
     serviceRoleKey: config.serviceRoleKey,
   })
   const hub = new RoomHub({
+    // A person who opens River alone should find a table with people at it.
+    // Enough to feel busy, with a seat kept free for whoever arrives next.
+    botSeats: 5,
     verifyToken: createSupabaseTokenVerifier({ supabaseUrl: config.supabaseUrl }),
     onError: (context, error) => {
       process.stderr.write(`river: ${context}: ${errorText(error)}
