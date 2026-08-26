@@ -4,8 +4,30 @@
 
 Read `docs/handoff/codex-laws.md` first.
 
-Take this **after** 5W. 5W has uncommitted work in `art/pipeline/build_assets.py`
-right now; finish and commit that before starting here.
+5W is committed at `877c841`. Good work, and it has not reached anybody yet —
+see step 0.
+
+---
+
+## Step 0 — republish, before anything else
+
+**Your 5W fix is invisible in the browser.** The before/after you rendered came
+from the freshly exported GLB in `art/out`. The application serves
+`apps/web/public/assets`, which is a different directory and still holds the
+pre-5W build. Measured today:
+
+| Venue | Served | Built |
+|---|---|---|
+| Rooftop | 4,576,064 | 4,576,396 |
+| Basement | 4,419,704 | 4,420,112 |
+| Suite | 4,767,192 | 4,767,440 |
+
+Run `publish_assets.py`, then **check the byte counts actually changed** in
+`apps/web/public/assets`. Do not take the script's exit code for it.
+
+This has cost this project two days once already, when every skyline change was
+invisible for a week against a stale 206KB asset. It is also why the palms still
+look blue in a real browser while your render shows them correct.
 
 ---
 
@@ -95,9 +117,9 @@ else is between a twentieth and a third of a degree.
    frame strip of the extremes for each clip, not by reading the numbers back.
    A stand-up should leave the chair. Breathing should be visible but not
    theatrical — a degree or two of spine, not a twentieth.
-4. Rebuild and **republish**. `art/out` is not what the app serves; run
-   `publish_assets.py` and check the byte counts, or none of this reaches the
-   browser.
+4. Rebuild and **republish again**, the same way as step 0 and with the same
+   byte-count check. A correct clip that never leaves `art/out` is worth
+   nothing.
 
 ## What not to do
 
