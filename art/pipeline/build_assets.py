@@ -639,7 +639,7 @@ def build_venue_characters(venue):
 def _surface_colour(mesh, colour_fn):
     for existing in list(mesh.color_attributes):
         mesh.color_attributes.remove(existing)
-    layer = mesh.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')
+    layer = mesh.color_attributes.new(name='Color', type='FLOAT_COLOR', domain='CORNER')
     for polygon in mesh.polygons:
         for loop_index in polygon.loop_indices:
             vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
@@ -748,12 +748,11 @@ def add_venue_surface_detail(venue_id):
                 targets.append((obj, role))
     bvh = _surface_bvh()
     for obj, role in targets:
-        base = _use_vertex_colour(obj.data.materials[0])
-        if base is None:
+        if _use_vertex_colour(obj.data.materials[0]) is None:
             continue
-        def colour(vertex, obj=obj, role=role, base=base):
+        def colour(vertex, obj=obj, role=role):
             factor = _detail_factor(vertex.co, venue_id, role) * _ambient_factor(bvh, obj, vertex.co, vertex.normal)
-            return (base[0] * factor * 0.96, base[1] * factor * 0.985, base[2] * factor, 1.0)
+            return (factor, factor, factor, 1.0)
         _surface_colour(obj.data, colour)
 
 
@@ -1279,6 +1278,43 @@ def dedupe_materials(glb):
         handle.write(output)
 
 
+def restore_vertex_colour_base_factors(glb):
+    with open(glb, 'rb') as handle:
+        raw = handle.read()
+    offset = 12
+    json_chunk = None
+    binary = b''
+    while offset < len(raw):
+        chunk_length, chunk_type = struct.unpack_from('<II', raw, offset)
+        offset += 8
+        chunk = raw[offset:offset + chunk_length]
+        offset += chunk_length
+        if chunk_type == 0x4E4F534A:
+            json_chunk = chunk
+        elif chunk_type == 0x004E4942:
+            binary += chunk
+    if json_chunk is None:
+        raise SystemExit('FAIL: exported GLB has no JSON chunk')
+    gltf = json.loads(json_chunk.decode('utf-8'))
+    for material in gltf.get('materials', []):
+        base = material.get('extras', {}).get('riverVertexColourBase')
+        if not isinstance(base, list) or len(base) != 3:
+            continue
+        material.setdefault('pbrMetallicRoughness', {})['baseColorFactor'] = [
+            float(base[0]), float(base[1]), float(base[2]), 1.0,
+        ]
+    json_bytes = json.dumps(gltf, separators=(',', ':')).encode('utf-8')
+    json_bytes += b' ' * ((-len(json_bytes)) % 4)
+    total_length = 12 + 8 + len(json_bytes) + 8 + len(binary)
+    output = bytearray(struct.pack('<4sII', b'glTF', 2, total_length))
+    output.extend(struct.pack('<II', len(json_bytes), 0x4E4F534A))
+    output.extend(json_bytes)
+    output.extend(struct.pack('<II', len(binary), 0x004E4942))
+    output.extend(binary)
+    with open(glb, 'wb') as handle:
+        handle.write(output)
+
+
 def build_venue(venue, chip_meshes, card_mesh):
     shared_meshes = list(chip_meshes.values()) + [card_mesh]
     keep_names = {mesh.name for mesh in shared_meshes}
@@ -1337,6 +1373,7 @@ def build_venue(venue, chip_meshes, card_mesh):
     )
     append_gpu_instances(glb, pools)
     dedupe_materials(glb)
+    restore_vertex_colour_base_factors(glb)
     report = checker.Report()
     # File size is a budget too. Triangles, materials and draw calls were all
     # gated while the download grew from 185KB to 12MB unnoticed, because
