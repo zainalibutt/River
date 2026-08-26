@@ -1,0 +1,90 @@
+{
+  "rate": 22050,
+  "effects": [
+    {
+      "id": "card_deal",
+      "file": "audio/card_deal.wav",
+      "description": "Two cards dealt to a seat",
+      "seconds": 0.34,
+      "bytes": 15038,
+      "bus": "effects"
+    },
+    {
+      "id": "card_flip",
+      "file": "audio/card_flip.wav",
+      "description": "A card turned face up",
+      "seconds": 0.18,
+      "bytes": 7982,
+      "bus": "effects"
+    },
+    {
+      "id": "card_slide",
+      "file": "audio/card_slide.wav",
+      "description": "One card across the felt",
+      "seconds": 0.16,
+      "bytes": 7100,
+      "bus": "effects"
+    },
+    {
+      "id": "chip_place",
+      "file": "audio/chip_place.wav",
+      "description": "A single chip onto the felt",
+      "seconds": 0.06,
+      "bytes": 2690,
+      "bus": "effects"
+    },
+    {
+      "id": "chip_push",
+      "file": "audio/chip_push.wav",
+      "description": "A bet going in",
+      "seconds": 0.5,
+      "bytes": 22094,
+      "bus": "effects"
+    },
+    {
+      "id": "chip_stack",
+      "file": "audio/chip_stack.wav",
+      "description": "Idle riffling",
+      "seconds": 0.42,
+      "bytes": 18566,
+      "bus": "effects"
+    },
+    {
+      "id": "pot_push",
+      "file": "audio/pot_push.wav",
+      "description": "The pot pushed to a winner",
+      "seconds": 0.85,
+      "bytes": 37528,
+      "bus": "effects"
+    },
+    {
+      "id": "turn_alert",
+      "file": "audio/turn_alert.wav",
+      "description": "Your turn to act",
+      "seconds": 0.37,
+      "bytes": 16360,
+      "bus": "effects"
+    },
+    {
+      "id": "ui_click",
+      "file": "audio/ui_click.wav",
+      "description": "A control being pressed",
+      "seconds": 0.04,
+      "bytes": 1808,
+      "bus": "effects"
+    }
+  ],
+  "music": [
+    {
+      "id": "lobby_theme",
+      "file": null,
+      "title": null,
+      "performer": null,
+      "licence": null,
+      "attribution": null,
+      "loop": true,
+      "bus": "music"
+    }
+  ],
+  "voice": []
+}

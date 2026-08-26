@@ -145,3 +145,46 @@ python art/pipeline/test_checker_chars.py
   operators). `build_characters.py` therefore fails fast with a clear BLOCKED
   message and has not been run. It is written against the documented stage order
   and is unverified pending MPFB availability.
+
+## Audio
+
+`audio.py` generates every sound effect and writes `art/out/audio/manifest.json`.
+`check_audio.py` gates them. `publish_audio.py` copies both into
+`apps/web/public/audio`, which is what the app actually serves.
+
+```
+python art/pipeline/audio.py
+python art/pipeline/check_audio.py
+python art/pipeline/publish_audio.py
+```
+
+Effects are synthesised from the standard library only - no numpy, no ffmpeg -
+so the sound pipeline rebuilds on a clean checkout the same way the venues do.
+
+### The gates, and what each one catches
+
+Sound cannot be reviewed the way a render can: nobody listens to a hundred
+files on every build. So the failures that are silent get checked instead.
+
+| Gate | Catches |
+| --- | --- |
+| rms above a floor | A file of zeros. It passes duration, peak and size, and is the audio equivalent of the empty venue. |
+| rms below a ceiling, and a spread limit | One effect far louder than the rest. Nobody files that complaint, they just turn the sound off. |
+| peak under 0.92 | No headroom. A chip push is six clicks layered; a file normalised to 1.0 clips the moment anything joins it. |
+| first and last sample near zero | A click on every single playback. Caught three effects on its first run. |
+| dc offset near zero | A click on start plus wasted headroom. |
+| duration bounds | A one-shot that is not a one-shot. |
+| mono, 22050 Hz | An effect that quietly doubled the download. |
+| a licence and attribution per music track | Publishing somebody's master. A public-domain composition is not a public-domain recording. |
+| 1,024KB total | The number a player waits for. |
+
+Run `python art/pipeline/check_audio.py --self-test` to watch every gate fire
+against deliberately broken input. A gate nobody has seen fail is not known to
+work - that is why this exists.
+
+### Music
+
+The manifest carries a `licence` and an `attribution` per track, and both the
+build gate and the client refuse to play a track that has a file without them.
+The v1 slot is filled with public-domain performances; an original composition
+replaces one by editing the manifest, with no code change.
