@@ -27,6 +27,7 @@ import {
 import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverLobby } from '@/components/river-lobby'
 import { RiverVenue } from '@/components/river-venue'
+import { type AnimationCue, cuesForEvents } from '@/lib/animation'
 import {
   createRiverAuthClient,
   ensureRiverSession,
@@ -261,6 +262,7 @@ export function RiverRoomTable() {
   const [ownedCosmetics, setOwnedCosmetics] = useState<
     readonly { cosmeticId: string; slot: string; equipped: boolean }[]
   >([])
+  const [cues, setCues] = useState<readonly AnimationCue[]>([])
   const [hands, setHands] = useState<readonly HandRecord[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [tables, setTables] = useState<readonly TableSummary[]>([])
@@ -359,6 +361,11 @@ export function RiverRoomTable() {
           setBalance(message.balance)
           setOwnedItems(message.ownedItems)
           setOwnedCosmetics(message.ownedCosmetics)
+          const nextCues = cuesForEvents(message.events, (playerId) => {
+            const seat = message.view.seats.find((entry) => entry.playerId === playerId)
+            return seat?.seat ?? -1
+          })
+          if (nextCues.length > 0) setCues(nextCues)
           const settled = message.events.flatMap((event) =>
             event.kind === 'handRecorded' ? [event.record] : [],
           )
@@ -551,6 +558,7 @@ export function RiverRoomTable() {
         >
           {graphicsMode === 'three' ? (
             <RiverVenue
+              cues={cues}
               venueId={venueId}
               seatIds={seats.map((seat) => seat.playerId ?? `seat-${seat.seat}`)}
               seatRefs={seatRefs}

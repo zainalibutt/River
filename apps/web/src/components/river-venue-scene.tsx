@@ -14,6 +14,7 @@ import {
 } from 'react'
 import * as THREE from 'three'
 import { type OrbitControls as OrbitControlsImpl, RectAreaLightUniformsLib } from 'three-stdlib'
+import { type AnimationCue, idleCueFor, missingClips } from '@/lib/animation'
 import {
   type LightingSidecar,
   loadLightingSidecar,
@@ -34,6 +35,8 @@ type SceneProps = {
   seatIds: string[]
   seatRefs: RefObject<Map<string, HTMLElement>>
   venueId: VenueId
+  /** Latest gestures to play, one per seat. Never gates the hand. */
+  cues?: readonly AnimationCue[] | undefined
 }
 
 function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
@@ -75,9 +78,13 @@ function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
   return <group />
 }
 
-function VenueAsset({ venueId }: { venueId: VenueId }) {
+const seatIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+
+function VenueAsset({ venueId, cues }: { venueId: VenueId; cues: readonly AnimationCue[] }) {
   const venue = venueOf(venueId)
   const asset = useGLTF(venue.asset)
+  const mixers = useRef<THREE.AnimationMixer[]>([])
+  const actions = useRef<Map<string, THREE.AnimationAction>>(new Map())
 
   useLayoutEffect(() => {
     asset.scene.traverse((object) => {
@@ -86,6 +93,55 @@ function VenueAsset({ venueId }: { venueId: VenueId }) {
       object.receiveShadow = object.name !== 'river_card'
     })
   }, [asset.scene, venue.shadowCasters])
+
+  useLayoutEffect(() => {
+    mixers.current = []
+    actions.current = new Map()
+    const clips = asset.animations
+    if (clips.length === 0) {
+      // Say so once. The venues export nine skins and no clips, and a silent
+      // absence here is exactly how four earlier modules ended up finished and
+      // wired to nothing.
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(
+          `river: ${venue.name} carries no animation clips; missing ${missingClips([]).join(', ')}`,
+        )
+      }
+      return
+    }
+    const roots = asset.scene.children.filter((child) => child.type !== 'Mesh')
+    for (const root of roots) {
+      const mixer = new THREE.AnimationMixer(root)
+      mixers.current.push(mixer)
+      for (const clip of clips) {
+        actions.current.set(`${root.name}:${clip.name}`, mixer.clipAction(clip))
+      }
+    }
+    return () => {
+      for (const mixer of mixers.current) mixer.stopAllAction()
+      mixers.current = []
+    }
+  }, [asset.animations, asset.scene, venue.name])
+
+  const playing = useMemo(() => (cues.length > 0 ? cues : seatIndexes.map(idleCueFor)), [cues])
+
+  useEffect(() => {
+    for (const cue of playing) {
+      for (const [key, action] of actions.current) {
+        if (!key.endsWith(`:${cue.clip}`)) continue
+        action.reset()
+        action.setLoop(cue.loop ? THREE.LoopRepeat : THREE.LoopOnce, Number.POSITIVE_INFINITY)
+        action.clampWhenFinished = !cue.loop
+        action.play()
+      }
+    }
+  }, [playing])
+
+  // Advancing the mixers is the only per-frame cost, and it is skipped entirely
+  // while there is nothing to advance.
+  useFrame((_, delta) => {
+    for (const mixer of mixers.current) mixer.update(delta)
+  })
 
   return <primitive object={asset.scene} />
 }
@@ -243,7 +299,7 @@ function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
   )
 }
 
-function Scene({ seatIds, seatRefs, venueId }: SceneProps) {
+function Scene({ seatIds, seatRefs, venueId, cues = [] }: SceneProps) {
   const [sidecar, setSidecar] = useState<LightingSidecar>({})
 
   useEffect(() => {
@@ -265,7 +321,7 @@ function Scene({ seatIds, seatRefs, venueId }: SceneProps) {
       <color attach="background" args={[worldColour]} />
       <VenueLights lights={lights} />
       <Suspense fallback={null}>
-        <VenueAsset venueId={venueId} />
+        <VenueAsset venueId={venueId} cues={cues} />
       </Suspense>
       <InstancedTablePieces />
       <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
@@ -274,7 +330,7 @@ function Scene({ seatIds, seatRefs, venueId }: SceneProps) {
   )
 }
 
-export function RiverScene({ seatIds, seatRefs, venueId }: SceneProps) {
+export function RiverScene({ seatIds, seatRefs, venueId, cues = [] }: SceneProps) {
   const venue = venueOf(venueId)
   return (
     <Canvas
@@ -313,7 +369,7 @@ export function RiverScene({ seatIds, seatRefs, venueId }: SceneProps) {
       }}
       shadows
     >
-      <Scene seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
+      <Scene seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} cues={cues} />
     </Canvas>
   )
 }

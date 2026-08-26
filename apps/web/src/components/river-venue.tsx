@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import type { RefObject } from 'react'
+import type { AnimationCue } from '@/lib/animation'
 import type { VenueId } from '@/lib/venue'
 
 const RiverScene = dynamic(
@@ -15,8 +16,9 @@ type RiverVenueProps = {
   seatIds: string[]
   seatRefs: RefObject<Map<string, HTMLElement>>
   venueId: VenueId
+  cues?: readonly AnimationCue[] | undefined
 }
 
-export function RiverVenue({ seatIds, seatRefs, venueId }: RiverVenueProps) {
-  return <RiverScene seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
+export function RiverVenue({ seatIds, seatRefs, venueId, cues }: RiverVenueProps) {
+  return <RiverScene seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} cues={cues} />
 }
