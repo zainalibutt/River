@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blenderToThree } from './lighting.js'
+import { blenderToThree } from '@/lib/lighting'
 import {
   cameraPlacement,
   DEFAULT_VENUE,

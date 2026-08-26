@@ -1,4 +1,4 @@
-import { blenderToThree } from './lighting.js'
+import { blenderToThree } from '@/lib/lighting'
 
 export type VenueId = 'rooftop' | 'basement' | 'suite'
 
