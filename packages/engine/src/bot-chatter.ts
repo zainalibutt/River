@@ -57,10 +57,19 @@ export function nextUtterance(
   if (lastSpokeAtMs !== null && nowMs - lastSpokeAtMs < cooldownMs(personality)) {
     return null
   }
+  const chance = speakChance(personality, event)
   if (!shouldSpeak(personality, event, roll)) {
     return null
   }
-  return pickLine(lines, personality.id, event, roll)
+  // The roll that decided whether to speak cannot also choose the line. Having
+  // passed `roll < chance`, it is uniform over [0, chance) rather than over
+  // [0, 1), so pickLine only ever sees the bottom of its weight range: a silent
+  // character, whose quiet-event chance is 0.05, returned its first line one
+  // hundred percent of the time and could not reach any other.
+  //
+  // Rescaling recovers a uniform selector from the same draw, so the pick stays
+  // deterministic for a given roll and no caller has to find a second one.
+  return pickLine(lines, personality.id, event, chance <= 0 ? 0 : roll / chance)
 }
 
 export function quietestFirst(personalities: readonly BotPersonality[]): readonly BotPersonality[] {

@@ -164,3 +164,60 @@ describe('quietestFirst', () => {
     expect(quietestFirst([])).toHaveLength(0)
   })
 })
+
+describe('nextUtterance line selection', () => {
+  function line(
+    personalityId: string,
+    event: VoiceEvent,
+    index: number,
+    weight: number,
+  ): VoiceLine {
+    return {
+      id: lineId(personalityId, event, index),
+      personalityId,
+      event,
+      text: `line ${index}`,
+      expression: null,
+      weight,
+    }
+  }
+
+  function spoken(chatter: ChatterLevel, event: VoiceEvent, weights: number[]): string[] {
+    const who = personality('p', chatter)
+    const lines = weights.map((weight, index) => line('p', event, index, weight))
+    const chance = speakChance(who, event)
+    const said: string[] = []
+    for (let step = 0; step < 2000; step += 1) {
+      const roll = (chance * step) / 2000
+      const picked = nextUtterance(lines, who, event, null, 0, roll)
+      if (picked !== null) said.push(picked.id)
+    }
+    return said
+  }
+
+  it('reaches every line for the quietest character on the quietest event', () => {
+    // The roll that decides whether to speak is uniform over [0, chance) once
+    // it has passed, not over [0, 1). Reusing it to choose the line pinned a
+    // silent character - chance 0.05 - to its first line for every roll that
+    // ever let it speak, and no count or coverage check would show it.
+    const said = spoken('silent', 'idle_banter', [1, 1, 1])
+    expect(said.length).toBeGreaterThan(0)
+    expect(new Set(said).size).toBe(3)
+  })
+
+  it('honours weights rather than the speak chance that let it through', () => {
+    const said = spoken('silent', 'idle_banter', [1, 3])
+    const heavy = said.filter((id) => id.endsWith('_1')).length / said.length
+    expect(heavy).toBeGreaterThan(0.7)
+    expect(heavy).toBeLessThan(0.8)
+  })
+
+  it('weights the same way at every chatter level', () => {
+    for (const chatter of LEVELS) {
+      const said = spoken(chatter, 'all_in', [1, 3])
+      const heavy = said.filter((id) => id.endsWith('_1')).length / said.length
+      expect(heavy).toBeGreaterThan(0.7)
+      expect(heavy).toBeLessThan(0.8)
+    }
+  })
+})
