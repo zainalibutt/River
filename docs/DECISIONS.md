@@ -206,3 +206,30 @@ drifted away from the player it named.
 runs it. It is not evidence that the application starts. Anything whose failure
 mode is silence needs a check that fails loudly - which is why the animation
 driver reports the clips a rig does not carry rather than playing nothing.
+
+## Sound: generate the effects, licence the music, synthesise the voice
+
+Nothing existed. Three sources, chosen separately because the constraints
+differ.
+
+**Effects are generated**, in the same Python pipeline that builds the venues. A
+chip is a filtered noise burst with a resonant click and a randomised pitch; a
+card slide is shaped noise with an envelope. Sourcing them would mean tracking
+licences for a hundred short files to save an afternoon.
+
+**Music is licensed, and the slot is left open.** A classical composition is
+public domain; every commercial recording of it is not, and dropping a
+favourite recording into a public repository publishes somebody's master.
+Public-domain performances fill the slot for v1. The manifest carries an
+attribution field per track and reads the licence from it, so an original
+composition can replace a public-domain one without touching code - which is
+the point, because original music is coming.
+
+**Voice is synthesised**, and this was reversed. It was written off as the
+expensive part until it was actually priced: a full pack for thirteen
+characters is on the order of fifteen thousand characters of speech, which is
+about a penny through an open-weights model. Deferring it would have been
+deferring an afternoon's work on the strength of an assumption nobody checked.
+
+*Rule this belongs to:* the cost of a thing is a number, not a feeling. It took
+one search to turn "defer voice lines to v2" into "voice lines cost a penny".
