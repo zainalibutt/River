@@ -1,0 +1,708 @@
+
+<title>River Build Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap">
+
+<style>
+  :root {
+    --void: #0a0d0c;
+    --room: #131916;
+    --raised: #1b2320;
+    --edge: #2a342f;
+    --felt: #1c4232;
+    --felt-lit: #2a5b45;
+    --rail: #3b2a1f;
+    --cream: #f2eadf;
+    --cream-dim: #c3b9ac;
+    --faint: #8a8177;
+    --amber: #e8a93c;
+    --amber-bright: #ffc96b;
+    --copper: #b87333;
+    --win: #6fbf8b;
+    --danger: #e67d63;
+    --display: "Fraunces", Georgia, serif;
+    --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--void);
+    color: var(--cream);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 56px 28px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(34px, 5vw, 52px);
+    line-height: 1.05;
+    margin: 0;
+    text-wrap: balance;
+    color: var(--cream);
+  }
+
+  .sub {
+    margin: 14px 0 0;
+    color: var(--cream-dim);
+    max-width: 62ch;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 26px;
+    margin: 0 0 6px;
+    color: var(--cream);
+  }
+
+  .note {
+    margin: 0 0 24px;
+    color: var(--faint);
+    font-size: 14.5px;
+    max-width: 68ch;
+  }
+
+  /* headline numbers */
+  .scores {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
+  }
+
+  .score {
+    background: var(--room);
+    border: 1px solid var(--edge);
+    border-radius: 18px;
+    padding: 26px 24px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .score .n {
+    font-family: var(--display);
+    font-size: 58px;
+    line-height: 1;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--amber);
+  }
+
+  .score.broad .n { color: var(--copper); }
+  .score.design .n { color: var(--win); }
+
+  .score .k {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cream);
+  }
+
+  .score .d {
+    font-size: 13.5px;
+    color: var(--faint);
+    line-height: 1.5;
+  }
+
+  .track {
+    height: 6px;
+    border-radius: 99px;
+    background: var(--felt-shadow, #122c21);
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .track i {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+    background: var(--amber);
+  }
+
+  .score.broad .track i { background: var(--copper); }
+  .score.design .track i { background: var(--win); }
+
+  /* lanes */
+  .lanes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+  }
+
+  .lane {
+    background: var(--room);
+    border: 1px solid var(--edge);
+    border-radius: 18px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .lane header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .lane h3 {
+    font-family: var(--display);
+    font-size: 21px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--cream);
+  }
+
+  .role {
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 700;
+  }
+
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 99px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+
+  .pill.flight { color: var(--amber); }
+  .pill.done { color: var(--win); }
+  .pill.next { color: var(--cream-dim); }
+  .pill.stalled { color: var(--danger); }
+
+  .lane ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .lane li {
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--cream-dim);
+  }
+
+  .lane li b {
+    color: var(--cream);
+    font-weight: 600;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 99px;
+    margin-top: 7px;
+    flex: 0 0 auto;
+  }
+
+  .dot.done { background: var(--win); }
+  .dot.flight { background: var(--amber); }
+  .dot.next { background: var(--faint); }
+  .dot.stall { background: var(--danger); }
+
+  /* bars */
+  .bars {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+  }
+
+  .bar {
+    display: grid;
+    grid-template-columns: 190px 1fr 44px;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .bar .label {
+    font-size: 14px;
+    color: var(--cream-dim);
+  }
+
+  .bar .rail {
+    height: 22px;
+    background: var(--raised);
+    border: 1px solid var(--edge);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+
+  .bar .fill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--felt) 0%, var(--felt-lit) 100%);
+    border-right: 2px solid var(--win);
+  }
+
+  .bar.zero .fill { border-right: 2px solid var(--danger); }
+  .bar.zero .label { color: var(--danger); }
+
+  .bar .pct {
+    font-size: 13.5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--faint);
+    text-align: right;
+    font-weight: 600;
+  }
+
+  /* next steps */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px;
+  }
+
+  .step {
+    background: linear-gradient(180deg, var(--raised) 0%, var(--room) 100%);
+    border: 1px solid var(--edge);
+    border-left: 3px solid var(--amber);
+    border-radius: 14px;
+    padding: 22px;
+  }
+
+  .step h4 {
+    font-family: var(--display);
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    color: var(--cream);
+  }
+
+  .step p {
+    margin: 0;
+    font-size: 14.5px;
+    color: var(--cream-dim);
+    line-height: 1.55;
+  }
+
+  .flag {
+    background: var(--room);
+    border: 1px solid var(--rail);
+    border-left: 3px solid var(--danger);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+
+  .flag p { margin: 0 0 10px; color: var(--cream-dim); font-size: 14.5px; }
+  .flag p:last-child { margin-bottom: 0; }
+  .flag strong { color: var(--cream); }
+
+  code {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.88em;
+    color: var(--amber-bright);
+    background: rgb(232 169 60 / 9%);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    font-size: 13px;
+    color: var(--faint);
+    border-top: 1px solid var(--edge);
+    padding-top: 20px;
+  }
+
+  .meta b { color: var(--cream-dim); font-weight: 600; }
+
+  @media (max-width: 620px) {
+    .bar { grid-template-columns: 128px 1fr 40px; gap: 10px; }
+    .bar .label { font-size: 13px; }
+  }
+    .dot.fail { background: #d0523a; box-shadow: 0 0 0 3px rgba(208, 82, 58, 0.18); }
+
+  /* work tree */
+  .tree {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 13.5px;
+    line-height: 1.85;
+    background: var(--room);
+    border: 1px solid var(--edge);
+    border-radius: 14px;
+    padding: 22px 24px;
+    overflow-x: auto;
+  }
+
+  .tree ul { list-style: none; margin: 0; padding: 0; }
+  .tree > ul > li { margin-top: 14px; }
+  .tree > ul > li:first-child { margin-top: 0; }
+  .tree ul ul { padding-left: 20px; }
+
+  .tree .node {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    white-space: nowrap;
+  }
+
+  .tree .branch { color: var(--edge); user-select: none; }
+  .tree .root { color: var(--cream); font-weight: 700; letter-spacing: 0.04em; }
+  .tree .leaf { color: var(--cream-dim); }
+  .tree .tag {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .tree .t-done { color: var(--win); }
+  .tree .t-flight { color: var(--amber); }
+  .tree .t-gap { color: var(--danger); }
+  .tree .t-held { color: var(--faint); }
+  .tree .why { color: var(--faint); font-size: 12.5px; white-space: normal; }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Three lanes · updated 2026-08-26, evening</p>
+    <h1>River build board</h1>
+    <p class="sub">
+      Where the reference reproduction actually stands, measured against the tree rather than
+      against memory. Phases 1&ndash;4 are complete and in production; Phase&nbsp;5 &mdash; art, characters
+      and the long tail &mdash; is the active phase. 725 tests green, the full stack authenticated end to end, and the browser finally renders the room the venues were measured for.
+    </p>
+  </header>
+
+  <section class="scores">
+    <div class="score">
+      <span class="k">Narrow scope</span>
+      <span class="n">97%</span>
+      <div class="track"><i style="width:97%"></i></div>
+      <span class="d">The playable poker game. Engine, server, auth, economy, fairness, HUD &mdash; ignoring all 3D and art.</span>
+    </div>
+    <div class="score broad">
+      <span class="k">Broad scope</span>
+      <span class="n">90%</span>
+      <div class="track"><i style="width:90%"></i></div>
+      <span class="d">Scored against what v1 actually commits to. Console and voice are excluded because the spec defers them by decision, not by effort.</span>
+    </div>
+    <div class="score design">
+      <span class="k">Design &amp; contracts</span>
+      <span class="n">80%</span>
+      <div class="track"><i style="width:80%"></i></div>
+      <span class="d">Nineteen documents. Every hard decision resolved. This is why the remaining build is transcription, not invention.</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>The three lanes</h2>
+    <p class="note">
+      One owner per packet, no concurrent edits to the same files. Codex is on the server,
+      DeepSeek is in the engine, I am in the client and the art pipeline.
+    </p>
+    <div class="lanes">
+
+      <article class="lane">
+        <header>
+          <h3>Codex</h3>
+          <span class="pill flight">In flight</span>
+        </header>
+        <span class="role">Terra High &middot; server, security, long grinds</span>
+        <ul>
+          <li><span class="dot flight"></span><span><b>5W the blue palms</b> &mdash; in flight, uncommitted in the tree. <code>COLOR_0</code> renders green in Blender and vivid blue in the browser, because Blender ignores a colour attribute unless a shader node reads it while three.js multiplies by it automatically. The working diff moves the bake to <code>FLOAT_COLOR</code>, neutralises the base tint into the vertex colour, and restores <code>baseColorFactor</code> from a <code>riverVertexColourBase</code> extra after export.</span></li>
+                    <li><span class="dot done"></span><span><b>5V nighttime depth</b> &mdash; accepted, and the first art packet that improved the picture rather than the numbers. Baked occlusion in vertex colours, a dark wet-concrete terrace, and palms that are palms rather than traffic cones. Rooftop 71,343 triangles against a gate of 250,000.</span></li>
+          <li><span class="dot done"></span><span><b>5U clothes and clips</b> &mdash; accepted. Nine clothed seats with distinct loadouts, and all nine animation clips finally carried into every venue export &mdash; so the driver that shipped with nothing to play has something to play.</span></li>
+          <li><span class="dot flight"></span><span><b>5T face atlas</b> &mdash; half accepted. Brows, a lash line, lip tone and a hairline band now read at the table, and it found a real pipeline bug on the way: exported character UVs collapsing to a point after a double remap. But the face cell reached onto the shoulders and bled chevrons across the chest, and 5S had quietly deleted the garment mesh, so the table is nine nude people. Region tightened; the clothes are the next packet.</span></li>
+          <li><span class="dot done"></span><span><b>5S strip the duplicate character</b> &mdash; accepted, and it settled the argument. Deleting the sphere-built faces and unblocking the MPFB head produced a real face at the table: brow, eyes, nose, jaw, collarbones, hands with fingers. Triangles fell 94,537 to 62,499 and draw calls 99 to 45. The gap was never geometry.</span></li>
+          <li><span class="dot done"></span><span><b>5R face orientation</b> &mdash; accepted as far as it goes. The axis fix is correct and heads now sit on bodies. But the whole approach was misaimed and that was my brief, not its work &mdash; see below.</span></li>
+          <li><span class="dot fail"></span><span><b>5Q character realism</b> &mdash; <em>rejected.</em> The right geometry, in the wrong axis. Skull, jaw, ears, eye sockets, nose, mouth, collar and a thumb all now exist, and body triangles went 42,969 to 94,537 inside a 250,000 gate. But the face was authored facing &minus;x while the body faces &minus;y, and the head form carries a +0.14 x offset the face and hair do not. Every seat renders as a head beside a body. It committed without rendering.</span></li>
+          <li><span class="dot done"></span><span><b>5P cosmetic palettes</b> &mdash; accepted. 8&times;4 atlas, all 22 catalogue ids mapped to slot regions, one shared material held.</span></li>
+          <li><span class="dot done"></span><span><b>4F fairness</b> &mdash; accepted. Per-hand seeds, commit before reveal, rejection-sampled shuffle. The security defect is closed.</span></li>
+          <li><span class="dot done"></span><span><b>3B transport</b> &mdash; production live, two-player deployed test passed.</span></li>
+          <li><span class="dot done"></span><span><b>4G turn timers</b> &mdash; accepted. Server owns the clock; late client actions are coerced to the timeout action.</span></li>
+          <li><span class="dot done"></span><span><b>4J social wire</b> &mdash; accepted. Emotes refused during your own decision window; social traffic never enters room state, so chat cannot delay a deal.</span></li>
+          <li><span class="dot done"></span><span><b>5D Basement and Suite</b> &mdash; accepted. Basement 1,368 to 3,218 triangles, Suite 2,614 to 16,904, and it did not touch the camera gate to get there.</span></li>
+          <li><span class="dot done"></span><span><b>5J migration drift</b> &mdash; found the economy tables missing from production and <em>stopped</em> rather than pushing against live data.</span></li>
+          <li><span class="dot done"></span><span><b>5H leaked venue light</b> &mdash; solved the empty room. A stray glTF point light at intensity 54,351, leaked from an old character import, blew every venue past white.</span></li>
+          <li><span class="dot done"></span><span><b>5G download gate and LOD</b> &mdash; accepted. A hard 6MB gate plus a seated LOD: Rooftop 172,440 to 41,125 triangles, 12.4MB to 2.98MB.</span></li>
+          <li><span class="dot done"></span><span><b>5E chip instancing</b> &mdash; accepted. GPU instancing with stable per-instance ids, so a chip toss still moves one chip. Draw calls 50/42/47 to 34/26/31.</span></li>
+          <li><span class="dot done"></span><span><b>5F characters in venues</b> &mdash; accepted on craft: linked instancing, one shared atlas, no material copies, gates untouched. Every seat in all three rooms now has a body in it.</span></li>
+        </ul>
+      </article>
+
+      <article class="lane">
+        <header>
+          <h3>DeepSeek</h3>
+          <span class="pill flight">In flight</span>
+        </header>
+        <span class="role">V4 Flash &middot; bounded deterministic work</span>
+        <ul>
+          <li><span class="dot flight"></span><span><b>4Z voice pack</b> &mdash; dispatched. 480 lines across thirteen personalities and twelve events, written to the trait numbers rather than to the names. Both consuming modules were already finished and idle: the schema and weighted picker in <code>voice-lines.ts</code>, the speak chance and cooldowns in <code>bot-chatter.ts</code>. Brief at <code>docs/handoff/packet-4Z-voice-pack.md</code>.</span></li>
+          <li><span class="dot done"></span><span><b>Chatter wiring</b> &mdash; landed, review pending. The <code>chatter</code> field was set on all thirteen personalities and only ever read for a timing delay. It now drives speak chance per event class and a per-personality cooldown, so a silent rookie and a constant og no longer talk at the same rate.</span></li>
+                    <li><span class="dot done"></span><span><b>5H palette check</b> &mdash; accepted, and it did the thing the laws are for: two of its own tests failed, and rather than adjusting the code it worked out that its fixture was wrong and said so.</span></li>
+          <li><span class="dot done"></span><span><b>5G voice line schema</b> &mdash; accepted. The container before the contents, so the lines arrive keyed to personality and event rather than as prose to parse.</span></li>
+          <li><span class="dot done"></span><span><b>5F hand naming</b> &mdash; accepted and wired the same hour. Wheel straights, royal flushes and kicker decisions all named the way a player would say them.</span></li>
+          <li><span class="dot done"></span><span><b>5E plaque layout</b> &mdash; accepted and wired the same hour. Nine labels no longer stack, and it took the elliptical seat ring as a widened signature rather than replacing the circular one, so nothing else had to move.</span></li>
+          <li><span class="dot done"></span><span><b>5D seat projection</b> &mdash; accepted. The behind-camera guard is the part that mattered: a seat behind the camera projects to a coordinate that looks entirely reasonable and lands on the wrong side of the screen.</span></li>
+          <li><span class="dot done"></span><span><b>5C camera conversion</b> &mdash; accepted, and it reached the same conclusion I did from the other side: the hand-written camera placement carried a flipped sign. Two lanes converging on one bug is the strongest signal this setup produces.</span></li>
+          <li><span class="dot done"></span><span><b>5B hand narration</b> &mdash; accepted, and for the right reason. Asked to describe showdown hands, it found that <code>HandRecord</code> carries no hole cards, returned null rather than inventing them, and said so. Refusing to fake a result is the behaviour the laws were written for.</span></li>
+          <li><span class="dot done"></span><span><b>5A hand replay</b> &mdash; accepted with one correction. Fourteen tests, monotonic pot, street boundaries, deterministic. It flagged its own blind-seeding assumption unprompted, which was the honest thing to do.</span></li>
+          <li><span class="dot done"></span><span><b>4E economy engine</b> &mdash; accepted. Pure module, no clock reads, rescue tops up rather than adding flat.</span></li>
+          <li><span class="dot done"></span><span><b>Venue geometry</b> &mdash; three venues generating from script.</span></li>
+          <li><span class="dot done"></span><span><b>4H economy wiring</b> &mdash; accepted. Derives eligibility by parsing ledger refs rather than adding a state table &mdash; the hard constraint, got right unprompted.</span></li>
+          <li><span class="dot done"></span><span><b>4M table items, 4N progression</b> &mdash; accepted. Table items carry zero imports, so they cannot touch poker odds by construction rather than by discipline.</span></li>
+          <li><span class="dot done"></span><span><b>4Z chip stacks</b> &mdash; accepted. Denomination breakdown that always sums exactly to the stack, because a rendering that does not is a bug a player spots.</span></li>
+          <li><span class="dot done"></span><span><b>4X lobby model</b> &mdash; accepted. Stable sort, no mutation, and it never offers a table the bankroll cannot cover.</span></li>
+          <li><span class="dot done"></span><span><b>4U showdown reveal order</b> &mdash; accepted. Folded seats are filtered before anything else, so the hidden-information proof stays true.</span></li>
+          <li><span class="dot done"></span><span><b>4S seat presentation</b> &mdash; accepted. 2,048 exhaustive combinations, and it caught a malformed object in its own draft by running typecheck first.</span></li>
+          <li><span class="dot done"></span><span><b>4R bot personalities</b> &mdash; accepted. Thirteen characters across the three tiers, deterministic table picks, tilt blending clamped.</span></li>
+          <li><span class="dot done"></span><span><b>4Q hand history</b> &mdash; accepted. Chip conservation is checked, so a corrupt record cannot pass as a real hand.</span></li>
+          <li><span class="dot done"></span><span><b>4P daily challenges</b> &mdash; accepted. It hit the export collision that had broken the engine build and resolved it independently, the same way I had.</span></li>
+          
+        </ul>
+      </article>
+
+      <article class="lane">
+        <header>
+          <h3>Claude</h3>
+          <span class="pill done">Shipping</span>
+        </header>
+        <span class="role">Opus 5 &middot; design, review, client, art</span>
+        <ul>
+          <li><span class="dot done"></span><span><b>The mixer was bound to the wrong root</b> &mdash; a glTF clip names its target nodes by path from the scene root, and the driver built one mixer per top-level child instead, so every track resolved to nothing. The failure mode is the worst kind: a mixer that binds nothing reports no error and simply never moves anything. It would have read exactly as &ldquo;the clips did not export&rdquo;. Clip names, track counts and durations now go to <code>window.riverClips</code>, because the last four faults in this scene were found by measuring it rather than reading it.</span></li>
+          <li><span class="dot done"></span><span><b>What a successor would otherwise rediscover</b> &mdash; the six modules finished and wired to nothing, the four faults that shipped because art was verified in Blender, and six traps in this repository that produce a green suite over a broken application. Written down at <code>docs/handoff/session-state.md</code> rather than left in a chat log.</span></li>
+          <li><span class="dot done"></span><span><b>Night venues published</b> &mdash; all three rooms rebuilt at night and republished, with the byte counts recorded, because <code>art/out</code> is not what the app serves and every skyline change had once been invisible in the browser for that reason.</span></li>
+          <li><span class="dot done"></span><span><b>A colour palette check for venues</b> &mdash; answers whether the biggest thing in frame is also the brightest, which is exactly what was wrong with the Rooftop for two days. <em>Nothing calls it yet</em>, so it is currently the seventh module on the finished-and-wired-to-nothing list.</span></li>
+                    <li><span class="dot done"></span><span><b>The characters already had faces</b> &mdash; three packets spent sculpting heads out of spheres, on top of an MPFB human that ships a real face, a 137-bone rig and all nine poker clips. The face was buried under hair geometry authored as alpha cutouts, exported with no textures at all, so it rendered as opaque ribbons. The gap was never geometry. It was texture.</span></li>
+          <li><span class="dot done"></span><span><b>Sound, from nothing to gated</b> &mdash; nine effects synthesised in the same pipeline as the venues, standard library only. Sound cannot be reviewed the way a render can, so the silent failures are gated instead: a file of zeros passes duration, peak and size and is the audio equivalent of the empty venue. The checker earned itself on its first run by catching three effects that would have clicked on every playback.</span></li>
+          <li><span class="dot done"></span><span><b>Bots take the empty seats</b> &mdash; the engine had been finished and tested for a fortnight with no caller, so a full table needed eight people online at once. Bots seat when a hand starts rather than when a person sits, because seating them on arrival races people for chairs. Their ids carry a prefix no Supabase uuid can produce, and a test asserts no ledger entry ever belongs to one.</span></li>
+          <li><span class="dot done"></span><span><b>The player can see their hand</b> &mdash; the table rendered a hand for weeks without ever saying what it was.</span></li>
+          <li><span class="dot done"></span><span><b>Two of three venues were unreachable</b> &mdash; every table the hub created took the default config, so the Laundromat and the Executive Suite existed as built assets and as lobby filters with no table ever in either. The venue was also missing from the room view, so a seated client was never told where it was and chose for itself &mdash; the exact disagreement that putting the venue on the server was meant to prevent.</span></li>
+          <li><span class="dot done"></span><span><b>Gestures driven by the table</b> &mdash; room events resolve to one gesture per seat, highest priority winning so event order cannot decide whether a player stands up or shuffles chips. Nothing waits on a cue finishing. A check plays nothing, because the rig has no check gesture and a wrong one is a tell that means nothing.</span></li>
+          <li><span class="dot done"></span><span><b>The lights were pointing at a wall</b> &mdash; every lamp in all three rigs carries rotation zero, which in Blender means straight down. A three.js rect area light emits along its own -Z until something turns it, and nothing did, so the fourteen-metre sky fill was firing horizontally into the back wall. That reads as a blown-out room rather than as a light facing the wrong way, which is how it survived every previous look.</span></li>
+          <li><span class="dot done"></span><span><b>Two renderers, two view transforms</b> &mdash; the lookdev renders through AgX and the browser was using ACES, so the same rig gave a magenta room with a white floor in one and a lit terrace in the other. Matching the transform is what makes the two pictures comparable at all; the energy calibration then came down from 0.06 to 0.008.</span></li>
+          <li><span class="dot done"></span><span><b>Chip counts beside the wrong chair</b> &mdash; the HUD laid seats on a circle of one radius while the pipeline seats characters on an ellipse, a quarter turn round, through a conversion that flips z. The ring now reads the pipeline's own numbers, held by eight assertions.</span></li>
+          <li><span class="dot done"></span><span><b>The camera reads the room correctly</b> &mdash; three faults stacked. The scene hardcoded the camera on the far side of the table from every light; it read Blender's horizontal field of view as a vertical one, asking for a frame most of a right angle too wide; and importing the fix closed a cycle that made the whole 3D scene vanish with no error and every gate green. DeepSeek found the same sign flip independently in its own lane.</span></li>
+          <li><span class="dot done"></span><span><b>The scene can be measured now</b> &mdash; four attempts to read the camera from a running browser failed because nothing exposed it. The canvas hands its state to the window in development, which is how the convention bug was confirmed rather than guessed.</span></li>
+          <li><span class="dot fail"></span><span><b>The browser did not render what Blender rendered</b> &mdash; stripped the HUD off the canvas and looked. Camera outside the building, palms as ten-metre starbursts, daylight sky on a night rooftop. The measured values match in both files, so this is the conversion. Every art judgement so far was made against output the player never sees.</span></li>
+          <li><span class="dot done"></span><span><b>Connections told the truth</b> &mdash; authenticating wrapped the token check, the duplicate-session handover and the opening balance in one <code>try</code>, so a ledger that would not answer closed the socket as an authentication failure and swallowed the reason. A live table was refusing every valid token while logging nothing. Split apart, given an error hook, and every Supabase call now carries a deadline.</span></li>
+          <li><span class="dot done"></span><span><b>Hand history in front of the player</b> &mdash; 4Q and 5A both landed with nothing producing a record and nothing showing one. The room now records every hand and a scrubber steps through it, with the commit and revealed seed under each replay.</span></li>
+          <li><span class="dot done"></span><span><b>The pot was double counted</b> &mdash; both modules derived the pot from result deltas, which only agrees with the table heads-up. Three players each putting in one big blind produced four. The pot is now carried on the record.</span></li>
+          <li><span class="dot done"></span><span><b>Hot reload restored</b> &mdash; the game server destroyed every WebSocket upgrade that was not its own, taking Next&rsquo;s hot reload down with it. Every edit had looked like it had not been applied.</span></li>
+          <li><span class="dot done"></span><span><b>4V verify panel</b> &mdash; fairness is now checkable in the browser, not just claimed.</span></li>
+          <li><span class="dot done"></span><span><b>Venue lighting</b> &mdash; the pipeline carried no lights at all; ported the measured rigs.</span></li>
+          <li><span class="dot done"></span><span><b>4R preset actions</b> &mdash; shipped. The most distinctive the reference mechanic had one reference in the whole client.</span></li>
+          <li><span class="dot done"></span><span><b>Rooftop skyline</b> &mdash; 27 towers, mountains and palms as merged meshes. Repaired the camera gate, which was silently passing everything.</span></li>
+          <li><span class="dot done"></span><span><b>Cosmetics, end to end</b> &mdash; the fifth module finished and wired to nothing. Own table, own ledger reason, and a wardrobe tab beside the shop.</span></li>
+          <li><span class="dot done"></span><span><b>The lobby</b> &mdash; there was no way to find a table. Venue moved server-side so two players cannot disagree about which room they are in, and invite codes are never listed.</span></li>
+          <li><span class="dot done"></span><span><b>Table item shop</b> &mdash; the purchase path had no screen. Ownership outranks price, so an owned item never reads as unaffordable after spending down.</span></li>
+          <li><span class="dot done"></span><span><b>The lid</b> &mdash; cylinder() always capped its top, so the parapet sealed a solid disc over every venue. The rooms were never empty.</span></li>
+          <li><span class="dot done"></span><span><b>Table items connected</b> &mdash; the purchase path had been written against an interface with no implementation. Store, client messages and the live table now join up.</span></li>
+          <li><span class="dot done"></span><span><b>Clean venues published</b> &mdash; republished all three without the leak, verified zero punctual lights in the shipped files.</span></li>
+          <li><span class="dot done"></span><span><b>Hidden information proved</b> &mdash; nine adversarial cases asserting after every transition that no seat sees another’s cards, with a vacuity check so the suite cannot pass on nulls.</span></li>
+          <li><span class="dot done"></span><span><b>Table items, end to end</b> &mdash; bought through the ledger with a ref that makes a double click debit once, and equipped modifiers now reach the REP award.</span></li>
+          <li><span class="dot done"></span><span><b>Venue tone mapping</b> &mdash; the first real screenshot showed a bleached white room. Not a calibration problem: three.js clips everything above 1.0 without a tone curve.</span></li>
+          <li><span class="dot done"></span><span><b>Challenges, end to end</b> &mdash; the module produced a daily set and nothing produced a tally, so no challenge could ever complete. Now counted at settle and shown as ambient progress.</span></li>
+          <li><span class="dot done"></span><span><b>REP, end to end</b> &mdash; the calculation module had never landed, the server had no concept of REP, and nothing surfaced it. Now credited at settle and shown as a flash that fades on its own.</span></li>
+          <li><span class="dot done"></span><span><b>Venue lighting</b> &mdash; the measured rigs shipped to the browser and nothing read them. The scene now builds the real rig, and 3D is finally the default mode.</span></li>
+          <li><span class="dot done"></span><span><b>Venue selection</b> &mdash; three venues existed with no way to play two of them. The venue now travels in the invite URL, so one link seats everyone in the same room.</span></li>
+          <li><span class="dot done"></span><span><b>4L chat and emote panel</b> &mdash; the social wire had nothing driving it. Shortcut keys proven inert while typing, and proven still live outside chat.</span></li>
+          <li><span class="dot done"></span><span><b>History rebuild</b> &mdash; three agents collided in one index. Four packets untangled into four honest commits, proved byte-identical.</span></li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+
+  <section>
+    <h2>The work, as a tree</h2>
+    <p class="note">
+      Every branch that exists in the repository, with what is standing and what
+      is not. The red leaves are the honest ones &mdash; each is a module that
+      passes its own tests and that nothing calls.
+    </p>
+    <div class="tree">
+      <ul>
+        <li><span class="node"><span class="root">ENGINE</span><span class="tag t-done">complete</span><span class="why">pure, no I/O, 312 tests</span></span>
+          <ul>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">rules, evaluator, betting</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">provably fair shuffle</span><span class="tag t-done">done</span><span class="why">fresh seed per hand, commit before reveal</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">economy, REP, challenges</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">table items, cosmetics</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">lobby model</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand history, replay, narration</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">camera and seat projection</span><span class="tag t-done">done</span><span class="why">the conversion both renderers now share</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">HUD plaque layout</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand strength naming</span><span class="tag t-done">done</span><span class="why">on screen under the board</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">bot personalities and decisions</span><span class="tag t-done">done</span><span class="why">seated and playing</span></span></li>
+          </ul>
+        </li>
+        <li><span class="node"><span class="root">SERVER</span><span class="tag t-done">complete</span><span class="why">authority for every rule</span></span>
+          <ul>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">WebSocket transport, rooms</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">Supabase auth, JWKS verify</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">append-only chip ledger</span><span class="tag t-done">done</span><span class="why">idempotent by ref</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">turn timers, away policy</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">social wire, rate limited</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand recorder</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">venue per table</span><span class="tag t-done">done</span><span class="why">all three rooms reachable at last</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">bots taking a seat</span><span class="tag t-done">done</span><span class="why">off by default, on in production</span></span></li>
+          </ul>
+        </li>
+        <li><span class="node"><span class="root">CLIENT</span><span class="tag t-flight">near</span><span class="why">3D by default, DOM HUD over it</span></span>
+          <ul>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">table HUD, preset actions</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">lobby, shop, wardrobe</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">fairness verify panel</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand history and scrubber</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">venue scene, lighting, camera</span><span class="tag t-done">done</span><span class="why">matches the lookdev transform now</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">seat plaques</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">animation driver</span><span class="tag t-done">live</span><span class="why">clips arrived, cues firing</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">sound</span><span class="tag t-held">deferred</span><span class="why">plan in docs/handoff/audio-plan.md</span></span></li>
+          </ul>
+        </li>
+        <li><span class="node"><span class="root">ART</span><span class="tag t-flight">in flight</span><span class="why">everything generated from Python</span></span>
+          <ul>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">three venues, measured light rigs</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">chips, cards, props, skyline</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">characters: body, rig, face atlas</span><span class="tag t-done">done</span><span class="why">MPFB base, 62,499 tris on the rooftop</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">clothing</span><span class="tag t-done">done</span><span class="why">palette-driven, nine distinct loadouts</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">clips carried into venues</span><span class="tag t-done">done</span><span class="why">nine clips in all three venues</span></span></li>
+          </ul>
+        </li>
+        <li><span class="node"><span class="root">OPS</span><span class="tag t-flight">partial</span></span>
+          <ul>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">CI on two Node versions</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">Supabase migrations, RLS</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">continuous deploy</span><span class="tag t-gap"><b>manual</b></span><span class="why">only ci.yml exists</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">PS5 hardware spike</span><span class="tag t-held">held</span><span class="why">deferred by decision, not by effort</span></span></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Narrow scope, component by component</h2>
+    <p class="note">
+      What stands between here and a poker game people would actually sit down at. The two
+      zeroes are the honest ones &mdash; nothing exists for either.
+    </p>
+    <div class="bars">
+      <div class="bar"><span class="label">Rules engine</span><span class="rail"><i class="fill" style="width:95%"></i></span><span class="pct">95</span></div>
+      <div class="bar"><span class="label">Fairness</span><span class="rail"><i class="fill" style="width:95%"></i></span><span class="pct">95</span></div>
+      <div class="bar"><span class="label">Bots</span><span class="rail"><i class="fill" style="width:88%"></i></span><span class="pct">88</span></div>
+      <div class="bar"><span class="label">Server &amp; transport</span><span class="rail"><i class="fill" style="width:91%"></i></span><span class="pct">91</span></div>
+      <div class="bar"><span class="label">Accounts &amp; auth</span><span class="rail"><i class="fill" style="width:90%"></i></span><span class="pct">90</span></div>
+      <div class="bar"><span class="label">Client HUD</span><span class="rail"><i class="fill" style="width:88%"></i></span><span class="pct">88</span></div>
+      <div class="bar"><span class="label">Multiplayer UX</span><span class="rail"><i class="fill" style="width:84%"></i></span><span class="pct">84</span></div>
+      <div class="bar"><span class="label">Deploy &amp; ops</span><span class="rail"><i class="fill" style="width:78%"></i></span><span class="pct">78</span></div>
+      <div class="bar"><span class="label">Economy</span><span class="rail"><i class="fill" style="width:96%"></i></span><span class="pct">96</span></div>
+      <div class="bar"><span class="label">Lobby &amp; venue select</span><span class="rail"><i class="fill" style="width:92%"></i></span><span class="pct">92</span></div>
+      <div class="bar"><span class="label">Chat, emotes, REP</span><span class="rail"><i class="fill" style="width:98%"></i></span><span class="pct">98</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Broad scope &mdash; where the long tail is</h2>
+    <p class="note">
+      Everything the narrow number ignores. This is the half that makes it a reference reproduction
+      rather than a poker program. Sound now has nine generated effects behind nine gates;
+      what is left there is room tone per venue. The voice pack is dispatched &mdash; 480
+      lines into a schema and a scheduler that were both finished and idle.
+    </p>
+    <div class="bars">
+      <div class="bar"><span class="label">Design contracts</span><span class="rail"><i class="fill" style="width:80%"></i></span><span class="pct">80</span></div>
+      <div class="bar"><span class="label">Art pipeline</span><span class="rail"><i class="fill" style="width:86%"></i></span><span class="pct">86</span></div>
+      <div class="bar"><span class="label">Characters</span><span class="rail"><i class="fill" style="width:60%"></i></span><span class="pct">60</span></div>
+      <div class="bar"><span class="label">Venue geometry</span><span class="rail"><i class="fill" style="width:92%"></i></span><span class="pct">92</span></div>
+      <div class="bar"><span class="label">Sound</span><span class="rail"><i class="fill" style="width:38%"></i></span><span class="pct">38</span></div>
+      <div class="bar"><span class="label">Animation set</span><span class="rail"><i class="fill" style="width:70%"></i></span><span class="pct">70</span></div>
+      <div class="bar"><span class="label">Cosmetics</span><span class="rail"><i class="fill" style="width:82%"></i></span><span class="pct">82</span></div>
+      <div class="bar"><span class="label">Voice &mdash; Discord</span><span class="rail"><i class="fill" style="width:90%"></i></span><span class="pct">n/a</span></div>
+      <div class="bar"><span class="label">Console &mdash; deferred</span><span class="rail"><i class="fill" style="width:1%"></i></span><span class="pct">n/a</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What is next, in order</h2>
+    <p class="note">
+      Everything left is visible rather than structural. These are ordered by how
+      much is unknown, not by how much is left.
+    </p>
+    <div class="steps">
+      <article class="step">
+        <h4>1 &middot; Watch the characters move</h4>
+        <p>
+          Nine clips reached all three venues and the mixer root was corrected
+          immediately after, so the driver has something to play and somewhere to
+          bind it. Neither has been seen working. Every cue was tested against a
+          rig that carried nothing. This scene has produced four faults already;
+          expect a fifth.
+        </p>
+      </article>
+      <article class="step">
+        <h4>2 &middot; The palms are blue in the browser</h4>
+        <p>
+          Green in Blender, vivid blue on screen. Blender ignores a colour
+          attribute unless a shader node reads it, while three.js multiplies by it
+          automatically &mdash; so the bake was verified in the one renderer where
+          it does nothing. Same shape as the camera, the field of view and the lamp
+          rotations before it. Codex has the diagnosis and a working diff.
+        </p>
+      </article>
+      <article class="step">
+        <h4>3 &middot; Make the palette check a gate</h4>
+        <p>
+          <code>venue-palette.ts</code> can answer whether the biggest thing in
+          frame is also the brightest. It is exported from the barrel and imported
+          by nothing but its own test, which makes it the seventh finished module
+          wired to nothing on a project whose first review question is now
+          precisely that.
+        </p>
+      </article>
+      <article class="step">
+        <h4>4 &middot; Deploy</h4>
+        <p>
+          One workflow file stands between this and a link somebody can click.
+          Only <code>ci.yml</code> exists; Railway is still pushed by hand.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  <section class="flag">
+    <p><strong>The economy does not work in production.</strong> <code>economy_config</code> holds only <code>signup_bankroll</code>; the rescue and daily-grant keys, the streak table and the 4H views are all absent from the live schema. Daily grants and bust rescues fail for every player. The drift was found and written up rather than force-pushed at a database with live rows, which was the right call &mdash; but it needs a reviewed, non-destructive fix before launch.</p>
+    <p><strong>Separately, six engine modules were finished and wired to nothing, and a seventh is live right now.</strong> REP had no producer, challenges had no tally, table items had no consumer, the measured light rigs shipped to a browser that ignored them, hand history had nothing showing it, and the bots had no caller for a fortnight. <code>venue-palette.ts</code> is the seventh and is still uncalled today. Each passed its own gates and read as complete in the commit log. With several lanes running, the seam between packets is where work quietly dies &mdash; so the first review question is now "does anything actually call this?", not the last.</p>
+    <p>
+      The Rooftop is now 71,343 triangles against a gate of 250,000, with a real skyline, a
+      wet-concrete terrace and baked occlusion. The Basement and Suite were still blockouts
+      at 1,368 and 2,614 when the camera gate was repaired, and it showed they were
+      <strong>mis-scaled, not merely sparse</strong> &mdash; string lights ran in a line across the
+      table and through the camera orbit, and walls stood 2m from the felt against specs of 6m and
+      8.2m. Three such defects are fixed. Closing the rest is most of what stands between the art
+      direction and the game.
+    </p>
+    <p>
+      Everything requiring pixels is still unverified &mdash; orbit camera, instanced chips, shadow
+      casting, seat-plate projection. R3F is observer-driven and observers do not fire in a hidden
+      tab, so a real visual pass needs the browser pane displayed.
+    </p>
+  </section>
+
+  <div class="meta">
+    <span><b>HEAD</b> 7f9d99d</span>
+    <span><b>Tests</b> 725 green</span>
+    <span><b>Lint &amp; typecheck</b> clean</span>
+    <span><b>Production</b> live</span>
+    <span><b>Design docs</b> 19</span>
+  </div>
+
+</div>
+
+

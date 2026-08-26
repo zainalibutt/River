@@ -3,6 +3,10 @@
 Written 2026-08-26. Read this, then `docs/DECISIONS.md`. Between them there
 should be nothing about this project that has to be rediscovered.
 
+For the state of the work at a glance, `docs/board/` holds the build board —
+`index.html` is the source of the published page and its README carries the
+live URL. It is the surface to update as work lands.
+
 ## The shape of the work
 
 Three models in one working copy, one human owner.
