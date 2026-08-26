@@ -2,6 +2,7 @@
 
 import { OrbitControls, useGLTF } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { projectToScreen, type ScreenCamera } from '@river/engine'
 import {
   type RefObject,
   Suspense,
@@ -38,16 +39,36 @@ type SceneProps = {
 function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
   const venue = venueOf(venueId)
   const seats = useMemo(() => worldSeats(seatIds, venue.seatRing), [seatIds, venue.seatRing])
-  const { camera } = useThree()
-  const point = useMemo(() => new THREE.Vector3(), [])
+  const { camera, controls } = useThree()
+  const focus = useMemo(() => new THREE.Vector3(), [])
 
   useFrame(() => {
+    const orbit = controls as OrbitControlsImpl | null
+    if (orbit === null) return
+    focus.copy(orbit.target)
+    const perspective = camera as THREE.PerspectiveCamera
+    const spec: ScreenCamera = {
+      position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+      target: { x: focus.x, y: focus.y, z: focus.z },
+      verticalFovDegrees: perspective.fov,
+      aspect: perspective.aspect,
+      near: perspective.near,
+      far: perspective.far,
+    }
     for (const seat of seats) {
-      point.set(seat.x, seat.y, seat.z).project(camera)
       const element = seatRefs.current.get(seat.id)
       if (element === undefined) continue
-      element.style.setProperty('--seat-x', `${((point.x + 1) / 2) * 100}%`)
-      element.style.setProperty('--seat-y', `${((-point.y + 1) / 2) * 100}%`)
+      const screen = projectToScreen({ x: seat.x, y: seat.y, z: seat.z }, spec)
+      // A seat behind the camera projects to a coordinate that looks perfectly
+      // reasonable and is on the wrong side of the screen. Nine seats and a
+      // camera that orbits means this happens, so it is hidden rather than
+      // trusted.
+      // Set directly rather than through a custom property: several seat
+      // states already own opacity, and a folded player must still be able to
+      // look folded while a seat behind the camera stays hidden.
+      element.style.visibility = screen.behind ? 'hidden' : 'visible'
+      element.style.setProperty('--seat-x', `${screen.xPercent}%`)
+      element.style.setProperty('--seat-y', `${screen.yPercent}%`)
     }
   })
 

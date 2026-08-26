@@ -166,7 +166,9 @@ export function worldSeats(
     return {
       id,
       x: ring.x * Math.cos(angle),
-      y: 0.54,
+      // Head height, not seat height. Anchoring at the felt buries the plaque
+      // in the player it labels; above the head it reads as theirs.
+      y: 1.46,
       z: -ring.y * Math.sin(angle),
     }
   })

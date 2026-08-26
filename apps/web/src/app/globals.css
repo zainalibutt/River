@@ -410,14 +410,20 @@ input:focus-visible {
   top: var(--seat-y);
   left: var(--seat-x);
   display: grid;
-  width: 344px;
-  height: 132px;
-  grid-template-columns: 84px 1fr 64px;
-  gap: 16px;
+  /*
+   * Nine of these ring a table three and a half metres across. At the old
+   * 344 by 132 they overlapped each other into an unreadable pile the moment
+   * the camera framing was corrected, so the away seats are a compact plaque
+   * and the hero seat keeps its full size below.
+   */
+  width: 208px;
+  height: 76px;
+  grid-template-columns: 44px 1fr 40px;
+  gap: 9px;
   align-items: center;
-  padding: 20px;
+  padding: 10px 12px;
   border: 1px solid var(--river-room-edge);
-  border-radius: 16px;
+  border-radius: 12px;
   background: linear-gradient(180deg, rgb(38 48 44 / 98%), rgb(20 27 24 / 98%));
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 6%),
@@ -430,7 +436,7 @@ input:focus-visible {
 }
 
 .seat-wide {
-  width: 400px;
+  width: 244px;
 }
 
 .hero-seat {
@@ -462,8 +468,8 @@ input:focus-visible {
 
 .avatar {
   display: grid;
-  width: 84px;
-  height: 84px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border: 1px solid var(--river-room-edge);
   border-radius: 16px;
