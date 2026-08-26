@@ -2,7 +2,7 @@
 
 import { OrbitControls, useGLTF } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { projectToScreen, type ScreenCamera } from '@river/engine'
+import { layOutPlaques, projectToScreen, type ScreenCamera } from '@river/engine'
 import {
   type RefObject,
   Suspense,
@@ -58,27 +58,41 @@ function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
       near: perspective.near,
       far: perspective.far,
     }
-    for (const seat of seats) {
+    const screens = seats.map((seat) => projectToScreen({ x: seat.x, y: seat.y, z: seat.z }, spec))
+    // Anchors alone put nine plaques on top of each other and over the board.
+    // The table centre is the point they are pushed away from, so a label
+    // never crosses to the far side and stops being that player's label.
+    const table = projectToScreen({ x: 0, y: focus.y, z: 0 }, spec)
+    const laidOut = layOutPlaques(
+      screens.map((screen) => ({ xPercent: screen.xPercent, yPercent: screen.yPercent })),
+      PLAQUE,
+      STAGE,
+      { xPercent: table.xPercent, yPercent: table.yPercent },
+    )
+    seats.forEach((seat, index) => {
       const element = seatRefs.current.get(seat.id)
-      if (element === undefined) continue
-      const screen = projectToScreen({ x: seat.x, y: seat.y, z: seat.z }, spec)
+      const screen = screens[index]
+      const placement = laidOut[index]
+      if (element === undefined || screen === undefined || placement === undefined) return
       // A seat behind the camera projects to a coordinate that looks perfectly
-      // reasonable and is on the wrong side of the screen. Nine seats and a
-      // camera that orbits means this happens, so it is hidden rather than
-      // trusted.
-      // Set directly rather than through a custom property: several seat
-      // states already own opacity, and a folded player must still be able to
-      // look folded while a seat behind the camera stays hidden.
+      // reasonable and is on the wrong side of the screen. Set directly rather
+      // than through a custom property: several seat states already own
+      // opacity, and a folded player must still look folded while a seat
+      // behind the camera stays hidden.
       element.style.visibility = screen.behind ? 'hidden' : 'visible'
-      element.style.setProperty('--seat-x', `${screen.xPercent}%`)
-      element.style.setProperty('--seat-y', `${screen.yPercent}%`)
-    }
+      element.style.setProperty('--seat-x', `${placement.xPercent}%`)
+      element.style.setProperty('--seat-y', `${placement.yPercent}%`)
+    })
   })
 
   return <group />
 }
 
 const seatIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+
+/** The plaque and the stage, as percentages of the 1920 by 1080 design box. */
+const PLAQUE = { widthPercent: (208 / 1920) * 100, heightPercent: (76 / 1080) * 100 }
+const STAGE = { widthPercent: 100, heightPercent: 100 }
 
 function VenueAsset({ venueId, cues }: { venueId: VenueId; cues: readonly AnimationCue[] }) {
   const venue = venueOf(venueId)
