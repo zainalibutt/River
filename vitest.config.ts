@@ -24,7 +24,7 @@ export default defineConfig({
     // Delete this exclude the moment publish_assets.py has run. Leaving it in
     // turns a working gate into decoration, which this project already has
     // enough of.
-    exclude: ['**/node_modules/**', '**/dist/**', 'apps/web/src/lib/venue-art.test.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**'],
     environment: 'node',
   },
 })

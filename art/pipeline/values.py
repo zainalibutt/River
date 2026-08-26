@@ -63,7 +63,7 @@ ROOFTOP = {
     'chrome': 'B9BEC4',
     'floor': '30383A',
     'floor_pattern': 'B9B2A4',
-    'parapet': '2A2F3A',
+    'parapet': '171B21',
     'parapet_lit': 'FFD9A0',
     'planter': '3A4046',
     'foliage': '16241C',
