@@ -123,13 +123,22 @@ function VenueAsset({ venueId, cues }: { venueId: VenueId; cues: readonly Animat
       }
       return
     }
-    const roots = asset.scene.children.filter((child) => child.type !== 'Mesh')
-    for (const root of roots) {
-      const mixer = new THREE.AnimationMixer(root)
-      mixers.current.push(mixer)
-      for (const clip of clips) {
-        actions.current.set(`${root.name}:${clip.name}`, mixer.clipAction(clip))
-      }
+    // One mixer on the whole imported scene rather than one per child. A glTF
+    // clip's tracks name their target nodes by path from the scene root, so a
+    // mixer rooted anywhere else binds nothing and reports no error at all.
+    const mixer = new THREE.AnimationMixer(asset.scene)
+    mixers.current.push(mixer)
+    for (const clip of clips) {
+      actions.current.set(clip.name, mixer.clipAction(clip))
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      Object.assign(window, {
+        riverClips: clips.map((clip) => ({
+          name: clip.name,
+          tracks: clip.tracks.length,
+          seconds: Number(clip.duration.toFixed(2)),
+        })),
+      })
     }
     return () => {
       for (const mixer of mixers.current) mixer.stopAllAction()
@@ -142,7 +151,7 @@ function VenueAsset({ venueId, cues }: { venueId: VenueId; cues: readonly Animat
   useEffect(() => {
     for (const cue of playing) {
       for (const [key, action] of actions.current) {
-        if (!key.endsWith(`:${cue.clip}`)) continue
+        if (key !== cue.clip) continue
         action.reset()
         action.setLoop(cue.loop ? THREE.LoopRepeat : THREE.LoopOnce, Number.POSITIVE_INFINITY)
         action.clampWhenFinished = !cue.loop
