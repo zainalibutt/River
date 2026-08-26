@@ -39,7 +39,30 @@ export interface SceneLight {
   width: number
   height: number
   position: [number, number, number]
+  /** A point to aim at. A rect area light points nowhere useful until told. */
+  target: [number, number, number]
   castShadow: boolean
+}
+
+/**
+ * Which way a Blender lamp faces, in three.js space.
+ *
+ * Blender lamps emit along their local -Z, so an unrotated one points straight
+ * down. A three.js RectAreaLight points along its own -Z, which is sideways,
+ * and nothing in the rig said otherwise - so the 14-metre sky fill was firing
+ * horizontally into the back wall instead of down onto the terrace. That reads
+ * as a blown-out room rather than as a light facing the wrong way.
+ */
+export function lightDirection(rotationDegrees: readonly number[]): [number, number, number] {
+  const [a, b, c] = [0, 1, 2].map((index) => ((rotationDegrees[index] ?? 0) * Math.PI) / 180)
+  const [sinA, cosA] = [Math.sin(a ?? 0), Math.cos(a ?? 0)]
+  const [sinB, cosB] = [Math.sin(b ?? 0), Math.cos(b ?? 0)]
+  const [sinC, cosC] = [Math.sin(c ?? 0), Math.cos(c ?? 0)]
+  // Blender applies Euler XYZ as Rz * Ry * Rx to the local -Z axis.
+  const x = -cosA * sinB * cosC - sinA * sinC
+  const y = -cosA * sinB * sinC + sinA * cosC
+  const z = -cosA * cosB
+  return blenderToThree([x, y, z])
 }
 
 /**
@@ -80,16 +103,21 @@ export function intensityFor(energy: number): number {
  */
 export function toSceneLights(rig: VenueRig | undefined): SceneLight[] {
   if (rig === undefined) return []
-  return rig.lights.map((light) => ({
-    name: light.name,
-    kind: light.shadow ? 'spot' : 'area',
-    colour: light.colour,
-    intensity: intensityFor(light.energy),
-    width: light.size,
-    height: light.size,
-    position: blenderToThree(light.position),
-    castShadow: light.shadow,
-  }))
+  return rig.lights.map((light) => {
+    const position = blenderToThree(light.position)
+    const direction = lightDirection(light.rotation_deg)
+    return {
+      name: light.name,
+      kind: light.shadow ? 'spot' : 'area',
+      colour: light.colour,
+      intensity: intensityFor(light.energy),
+      width: light.size,
+      height: light.size,
+      position,
+      target: [position[0] + direction[0], position[1] + direction[1], position[2] + direction[2]],
+      castShadow: light.shadow,
+    }
+  })
 }
 
 /** Exactly one caster per venue is the whole shadow budget. */

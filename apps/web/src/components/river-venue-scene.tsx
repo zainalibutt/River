@@ -152,6 +152,52 @@ function CameraOrbit({ venueId }: { venueId: VenueId }) {
   )
 }
 
+function AreaLight({ light }: { light: SceneLight }) {
+  const ref = useRef<THREE.RectAreaLight>(null)
+
+  useLayoutEffect(() => {
+    // A rect area light emits along its own -Z and nothing in the rig rotates
+    // it, so without this every soft source fires sideways at the nearest wall.
+    ref.current?.lookAt(light.target[0], light.target[1], light.target[2])
+  }, [light.target])
+
+  return (
+    <rectAreaLight
+      ref={ref}
+      color={light.colour}
+      height={light.height}
+      intensity={light.intensity}
+      position={light.position}
+      width={light.width}
+    />
+  )
+}
+
+function CasterLight({ light }: { light: SceneLight }) {
+  const target = useMemo(() => {
+    const object = new THREE.Object3D()
+    object.position.set(light.target[0], light.target[1], light.target[2])
+    return object
+  }, [light.target])
+
+  return (
+    <>
+      <primitive object={target} />
+      <spotLight
+        castShadow
+        angle={0.9}
+        color={light.colour}
+        distance={0}
+        intensity={light.intensity * 3.5}
+        penumbra={0.85}
+        position={light.position}
+        shadow-mapSize={[2048, 2048]}
+        target={target}
+      />
+    </>
+  )
+}
+
 function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
   useEffect(() => {
     // RectAreaLight renders black until its uniform tables are initialised.
@@ -164,26 +210,9 @@ function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
       <ambientLight intensity={0.18} />
       {lights.map((light) =>
         light.kind === 'spot' ? (
-          <spotLight
-            key={light.name}
-            castShadow
-            angle={0.9}
-            color={light.colour}
-            distance={0}
-            intensity={light.intensity * 3.5}
-            penumbra={0.85}
-            position={light.position}
-            shadow-mapSize={[2048, 2048]}
-          />
+          <CasterLight key={light.name} light={light} />
         ) : (
-          <rectAreaLight
-            key={light.name}
-            color={light.colour}
-            height={light.height}
-            intensity={light.intensity}
-            position={light.position}
-            width={light.width}
-          />
+          <AreaLight key={light.name} light={light} />
         ),
       )}
     </>
