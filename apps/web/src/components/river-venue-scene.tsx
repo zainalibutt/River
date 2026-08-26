@@ -217,6 +217,14 @@ export function RiverScene({ seatIds, seatRefs, venueId }: SceneProps) {
         position: cameraPlacement(venue).position,
       }}
       dpr={[1, 1.5]}
+      onCreated={(state) => {
+        // The scene is only judged in a browser, and four separate attempts to
+        // measure it failed because there was nothing to read it from. This is
+        // the instrument: camera, controls and scene graph, in development.
+        if (process.env.NODE_ENV !== 'production') {
+          Object.assign(window, { riverScene: state })
+        }
+      }}
       gl={{
         antialias: true,
         powerPreference: 'high-performance',
