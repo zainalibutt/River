@@ -39,7 +39,10 @@ interface Glb {
       type: string
     }[]
     bufferViews?: { byteOffset?: number; byteStride?: number }[]
-    materials?: { name?: string; pbrMetallicRoughness?: { baseColorFactor?: number[] } }[]
+    materials?: {
+      name?: string
+      pbrMetallicRoughness?: { baseColorFactor?: number[]; baseColorTexture?: unknown }
+    }[]
     meshes?: {
       primitives: {
         attributes?: Record<string, number>
@@ -103,6 +106,23 @@ interface NamedSurface extends Surface {
 }
 
 /**
+ * glTF stores `baseColorFactor` in linear space; `venue-palette` works in sRGB.
+ *
+ * Handing the linear value straight to `relativeLuminance` runs `linearise` over
+ * something already linear, which is a second transfer function on top of the
+ * first. It does not fail loudly - it quietly reports a different room than the
+ * one being shipped, and it reported the Rooftop's floor at luminance 0.0376
+ * when the shipped value is 0.2135.
+ *
+ * Confirmed against the running scene rather than assumed: three.js holds this
+ * material's colour as 0.1882, 0.2196, 0.2275, identical to the bytes in the
+ * file, and prints it as #788183 because printing converts to sRGB.
+ */
+function toSrgb(channel: number): number {
+  return channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055
+}
+
+/**
  * Every material in a venue, weighted by the triangle area that carries it.
  *
  * Instancing counts: a chip mesh referenced by forty nodes covers forty times
@@ -160,10 +180,21 @@ function surfacesOf(path: string): NamedSurface[] {
   const surfaces: NamedSurface[] = []
   for (const [index, held] of totals) {
     const material = index === -1 ? undefined : glb.gltf.materials?.[index]
+    // A textured material's factor is a multiplier over its map, and the
+    // convention is to leave it white. Judging that white is judging a
+    // placeholder: it reads as the brightest thing in the room and pairs with
+    // anything pale. The Laundromat's checkerboard floor is exactly this, and
+    // it produced a defect report against a surface whose colour this gate
+    // cannot see at all.
+    if (material?.pbrMetallicRoughness?.baseColorTexture !== undefined) continue
     const factor = material?.pbrMetallicRoughness?.baseColorFactor ?? [1, 1, 1, 1]
     surfaces.push({
       name: material?.name ?? 'default',
-      colour: { r: factor[0] ?? 1, g: factor[1] ?? 1, b: factor[2] ?? 1 } satisfies Rgb,
+      colour: {
+        r: toSrgb(factor[0] ?? 1),
+        g: toSrgb(factor[1] ?? 1),
+        b: toSrgb(factor[2] ?? 1),
+      } satisfies Rgb,
       area: held.area,
       radius: held.radiusWeighted / Math.max(held.area, 1e-9),
     })
