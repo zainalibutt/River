@@ -1,0 +1,79 @@
+name: Deploy
+
+# Deliberately not on every push to main.
+#
+# Three models commit to this branch, often several times an hour, and a lane
+# is regularly mid-packet on it - Codex has had a republished venue sitting
+# uncommitted while Claude committed around it. Push-to-deploy would ship those
+# intermediate states to a live table with real balances on it.
+#
+# So a deploy is asked for: the button in the Actions tab, or a version tag.
+# Both still have to pass the full CI suite first.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: What this deploy is for
+        required: false
+        default: Manual deploy
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      # The deploy runs this build on Railway. Proving it here means a broken
+      # build fails in front of the person who asked for the deploy rather
+      # than halfway through replacing a running server.
+      - run: npm run build
+
+  deploy:
+    name: Railway
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the token is present
+        # Railway reports a missing token as NOT_AUTHENTICATED, which reads as
+        # an outage rather than as an unset secret. Read through env rather
+        # than interpolating the secret into the script itself.
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "RAILWAY_TOKEN is not set on this repository."
+            echo "Add it under Settings > Secrets and variables > Actions."
+            echo "It must be the PROJECT token from the Railway project's"
+            echo "settings, not an account token. The account token is"
+            echo "RAILWAY_API_TOKEN, it is not project-scoped, and railway up"
+            echo "would not know which project to deploy. Setting both is an"
+            echo "error."
+            exit 1
+          fi
+      - run: npm i -g @railway/cli
+      - name: Deploy
+        # A project-scoped token already carries the project, so only the
+        # service needs naming. --ci streams the build and exits on the
+        # deployment's terminal status, so a failed deploy fails the job.
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service "${{ vars.RAILWAY_SERVICE || 'river' }}" --ci
+      - name: Say where it went
+        run: echo "Deployed ${{ github.sha }} to production."
