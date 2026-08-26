@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { blenderToThree } from './lighting.js'
 import {
+  cameraPlacement,
   DEFAULT_VENUE,
   isVenueId,
+  TABLE_SURFACE_HEIGHT,
   VENUE_ORDER,
   VENUES,
   venueFromParams,
@@ -64,5 +67,72 @@ describe('venue registry', () => {
     const seats = worldSeats(['a', 'b', 'c', 'd', 'e', 'f'])
     const keys = seats.map((seat) => `${seat.x.toFixed(3)}:${seat.z.toFixed(3)}`)
     expect(new Set(keys).size).toBe(seats.length)
+  })
+})
+
+describe('camera placement', () => {
+  it('agrees with the conversion every light already goes through', () => {
+    for (const id of VENUE_ORDER) {
+      const venue = venueOf(id)
+      // This is the whole point. The pipeline puts the play camera at Blender
+      // (0, -radius, height); anything that disagrees with blenderToThree here
+      // is looking at the room from a different world to the one lighting it.
+      expect(cameraPlacement(venue).position).toEqual(
+        blenderToThree([0, -venue.camera.radius, venue.camera.height]),
+      )
+    }
+  })
+
+  it('seats the camera on the side of the table the venue was framed from', () => {
+    // The scene used to hardcode -radius on Z, putting the camera diametrically
+    // opposite the measured position. Round venue, so it still rendered - it
+    // just rendered the back of the room lit for the front.
+    for (const id of VENUE_ORDER) {
+      const [x, y, z] = cameraPlacement(venueOf(id)).position
+      expect(x).toBe(0)
+      expect(y).toBeGreaterThan(TABLE_SURFACE_HEIGHT)
+      expect(z).toBeGreaterThan(0)
+    }
+  })
+
+  it('looks at the felt rather than the floor', () => {
+    for (const id of VENUE_ORDER) {
+      expect(cameraPlacement(venueOf(id)).target).toEqual([0, TABLE_SURFACE_HEIGHT, 0])
+    }
+  })
+
+  it('measures its orbit radius to the target, not to the origin', () => {
+    for (const id of VENUE_ORDER) {
+      const venue = venueOf(id)
+      const placement = cameraPlacement(venue)
+      // Locking the orbit to hypot(radius, height) pushes the camera outwards
+      // on the first update, because the target sits above the origin.
+      expect(placement.distance).toBeCloseTo(
+        Math.hypot(venue.camera.radius, venue.camera.height - TABLE_SURFACE_HEIGHT),
+        6,
+      )
+      expect(placement.distance).toBeLessThan(Math.hypot(venue.camera.radius, venue.camera.height))
+    }
+  })
+
+  it('sits inside the polar range the orbit controls allow', () => {
+    // Outside it, the controls silently move the camera on the first frame and
+    // the measured framing is lost before anyone sees it.
+    for (const id of VENUE_ORDER) {
+      const placement = cameraPlacement(venueOf(id))
+      const rise = placement.position[1] - placement.target[1]
+      const run = Math.hypot(placement.position[0], placement.position[2])
+      const polarDegrees = (Math.atan2(run, rise) * 180) / Math.PI
+      expect(polarDegrees).toBeGreaterThanOrEqual(50)
+      expect(polarDegrees).toBeLessThanOrEqual(70)
+    }
+  })
+
+  it('clears the seat ring, so the orbit never passes through a player', () => {
+    for (const id of VENUE_ORDER) {
+      const venue = venueOf(id)
+      const run = Math.hypot(...[0, 2].map((axis) => cameraPlacement(venue).position[axis] ?? 0))
+      expect(run).toBeGreaterThan(venue.seatRadius)
+    }
   })
 })

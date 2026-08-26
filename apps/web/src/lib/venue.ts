@@ -1,3 +1,5 @@
+import { blenderToThree } from './lighting.js'
+
 export type VenueId = 'rooftop' | 'basement' | 'suite'
 
 export interface VenueCamera {
@@ -8,6 +10,22 @@ export interface VenueCamera {
   /** Nothing over 2m may sit inside this, or the camera orbits through it. */
   clearRadius: number
 }
+
+export interface CameraPlacement {
+  /** three.js world space, ready to hand to a camera. */
+  position: [number, number, number]
+  target: [number, number, number]
+  /** Distance from position to target. The orbit runs on a fixed radius. */
+  distance: number
+}
+
+/**
+ * The height the camera looks at: the felt, not the floor.
+ *
+ * Aiming at the origin points the camera at the underside of the table and
+ * tips the whole venue up out of frame.
+ */
+export const TABLE_SURFACE_HEIGHT = 0.55
 
 export interface Venue {
   id: VenueId
@@ -54,6 +72,26 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     seatRadius: 2.35,
     shadowCasters: /^(river_suite_wood|river_suite_felt|river_suite_rail)$/,
   },
+}
+
+/**
+ * Where the camera actually goes, converted once from the measured values.
+ *
+ * The pipeline places the play camera at Blender (0, -radius, height). The
+ * scene used to hardcode that as three.js [0, height, -radius], which flips the
+ * sign the conversion puts on Z and seats the camera on the far side of the
+ * table from the one the venue was lit and framed for. Every light already went
+ * through blenderToThree; the camera did not, so the two disagreed about which
+ * way round the room was.
+ */
+export function cameraPlacement(venue: Venue): CameraPlacement {
+  const position = blenderToThree([0, -venue.camera.radius, venue.camera.height])
+  const target: [number, number, number] = [0, TABLE_SURFACE_HEIGHT, 0]
+  return {
+    position,
+    target,
+    distance: Math.hypot(position[0] - target[0], position[1] - target[1], position[2] - target[2]),
+  }
 }
 
 export const VENUE_ORDER: readonly VenueId[] = ['rooftop', 'basement', 'suite']

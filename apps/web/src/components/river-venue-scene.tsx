@@ -20,7 +20,7 @@ import {
   toSceneLights,
   worldColourOf,
 } from '@/lib/lighting'
-import { VENUE_ORDER, type VenueId, venueOf, worldSeats } from '@/lib/venue'
+import { cameraPlacement, VENUE_ORDER, type VenueId, venueOf, worldSeats } from '@/lib/venue'
 
 type SceneProps = {
   seatIds: string[]
@@ -101,6 +101,7 @@ function InstancedTablePieces() {
 
 function CameraOrbit({ venueId }: { venueId: VenueId }) {
   const venue = venueOf(venueId)
+  const placement = useMemo(() => cameraPlacement(venue), [venue])
   const controls = useRef<OrbitControlsImpl>(null)
 
   useFrame((_, delta) => {
@@ -127,11 +128,11 @@ function CameraOrbit({ venueId }: { venueId: VenueId }) {
       ref={controls}
       enablePan={false}
       enableZoom={false}
-      minDistance={Math.hypot(venue.camera.radius, venue.camera.height)}
-      maxDistance={Math.hypot(venue.camera.radius, venue.camera.height)}
+      minDistance={placement.distance}
+      maxDistance={placement.distance}
       minPolarAngle={THREE.MathUtils.degToRad(50)}
       maxPolarAngle={THREE.MathUtils.degToRad(70)}
-      target={[0, 0.55, 0]}
+      target={placement.target}
     />
   )
 }
@@ -213,7 +214,7 @@ export function RiverScene({ seatIds, seatRefs, venueId }: SceneProps) {
       className="river-venue"
       camera={{
         fov: venue.camera.fov,
-        position: [0, venue.camera.height, -venue.camera.radius],
+        position: cameraPlacement(venue).position,
       }}
       dpr={[1, 1.5]}
       gl={{
