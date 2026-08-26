@@ -188,7 +188,7 @@ def remap_character_uv(obj, region, face_region=None):
     for loop_index, uv in enumerate(uv_layer.data):
         vertex = obj.data.vertices[obj.data.loops[loop_index].vertex_index].co
         active_region = region
-        if face_region is not None and vertex.z > 1.34 and abs(vertex.x) < 0.18 and -0.20 < vertex.y < -0.08:
+        if face_region is not None and vertex.z > 1.34 and abs(vertex.x) < 0.18 and -0.159 < vertex.y < -0.08:
             active_region = face_region
         active_u0, active_v0, active_width, active_height = active_region
         active_inset_u = active_width * 0.08
