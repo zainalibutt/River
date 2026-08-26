@@ -83,10 +83,12 @@ finds them because they are bright.
 
 ## Functional defects found while auditing
 
-- **The room socket does not stay connected.** Three drops during this session:
-  it establishes, serves a table code, then falls back to "Reconnecting" and the
-  3D scene unmounts entirely. A page that outlives a server restart never
-  recovers and has to be hard-reloaded.
+- **A page that outlives a server restart never recovers** and has to be
+  hard-reloaded. Worth a reconnect that survives it.
+- ~~The room socket does not stay connected.~~ **Retracted.** The drops were the
+  duplicate-session handover doing its job against three tabs I did not know
+  were open on the same table. The client says so plainly - "this table is open
+  in another window" - and I read my own interference as a defect.
 - The in-app browser pane still reports `visibilityState: hidden` when fronted,
   so R3F sizes its canvas at 300x150 and nothing renders. Real Chrome remains
   the only instrument for anything visual.
