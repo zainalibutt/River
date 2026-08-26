@@ -37,7 +37,7 @@ type SceneProps = {
 
 function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
   const venue = venueOf(venueId)
-  const seats = useMemo(() => worldSeats(seatIds, venue.seatRadius), [seatIds, venue.seatRadius])
+  const seats = useMemo(() => worldSeats(seatIds, venue.seatRing), [seatIds, venue.seatRing])
   const { camera } = useThree()
   const point = useMemo(() => new THREE.Vector3(), [])
 
@@ -188,7 +188,10 @@ function CasterLight({ light }: { light: SceneLight }) {
         angle={0.9}
         color={light.colour}
         distance={0}
-        intensity={light.intensity * 3.5}
+        // The caster carries the pool of light on the felt, so it is scaled
+        // apart from the fills - a spot falls off with distance and the broad
+        // area sources do not.
+        intensity={light.intensity * 9}
         penumbra={0.85}
         position={light.position}
         shadow-mapSize={[2048, 2048]}
@@ -279,8 +282,13 @@ export function RiverScene({ seatIds, seatRefs, venueId }: SceneProps) {
       gl={{
         antialias: true,
         powerPreference: 'high-performance',
-        toneMapping: THREE.ACESFilmicToneMapping,
-        toneMappingExposure: 0.9,
+        // The lookdev renders through AgX, and every venue was signed off on
+        // that curve. ACES pushes saturation and clips sooner, which is why the
+        // browser read as a magenta room with a blown-out floor while the same
+        // rig looked correct in Blender. Matching the transform is not a tweak,
+        // it is the difference between judging the same picture or two.
+        toneMapping: THREE.AgXToneMapping,
+        toneMappingExposure: 1,
       }}
       shadows
     >

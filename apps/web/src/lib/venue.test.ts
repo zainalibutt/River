@@ -29,7 +29,7 @@ describe('venue registry', () => {
   it('keeps every seat ring inside its own camera orbit', () => {
     for (const id of VENUE_ORDER) {
       const venue = venueOf(id)
-      expect(venue.seatRadius).toBeLessThan(venue.camera.radius)
+      expect(Math.max(venue.seatRing.x, venue.seatRing.y)).toBeLessThan(venue.camera.radius)
     }
   })
 
@@ -57,8 +57,8 @@ describe('venue registry', () => {
   })
 
   it('places seats on the ring of the venue it is given', () => {
-    const tight = worldSeats(['a', 'b', 'c'], VENUES.suite.seatRadius)
-    const wide = worldSeats(['a', 'b', 'c'], VENUES.rooftop.seatRadius)
+    const tight = worldSeats(['a', 'b', 'c'], VENUES.suite.seatRing)
+    const wide = worldSeats(['a', 'b', 'c'], VENUES.rooftop.seatRing)
     const spread = (seats: { x: number; z: number }[]) =>
       Math.hypot(seats[0]?.x ?? 0, seats[0]?.z ?? 0)
     expect(spread(tight)).toBeLessThan(spread(wide))
@@ -133,7 +133,7 @@ describe('camera placement', () => {
     for (const id of VENUE_ORDER) {
       const venue = venueOf(id)
       const run = Math.hypot(...[0, 2].map((axis) => cameraPlacement(venue).position[axis] ?? 0))
-      expect(run).toBeGreaterThan(venue.seatRadius)
+      expect(run).toBeGreaterThan(Math.max(venue.seatRing.x, venue.seatRing.y))
     }
   })
 })
@@ -167,6 +167,50 @@ describe('field of view', () => {
     for (const id of VENUE_ORDER) {
       const measured = venueOf(id).camera.fov
       expect(verticalFov(measured, 16 / 9)).toBeLessThan(measured)
+    }
+  })
+})
+
+describe('seat ring', () => {
+  it('lays seats on the same ellipse the pipeline seats characters on', () => {
+    // art/pipeline: seat_positions(count, FELT_RX * 1.42, FELT_RY * 1.58),
+    // then (x, y, z) becomes (x, z, -y). A circle here puts the side seats a
+    // metre off the chairs they label, which is what a single radius did.
+    const ring = VENUES.rooftop.seatRing
+    const seats = worldSeats(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'], ring)
+    seats.forEach((seat, index) => {
+      const angle = Math.PI / 2 + (index * Math.PI * 2) / seats.length
+      expect(seat.x).toBeCloseTo(ring.x * Math.cos(angle), 9)
+      expect(seat.z).toBeCloseTo(-ring.y * Math.sin(angle), 9)
+    })
+  })
+
+  it('is an ellipse, not a circle', () => {
+    for (const id of VENUE_ORDER) {
+      const ring = venueOf(id).seatRing
+      expect(ring.x).not.toBeCloseTo(ring.y, 2)
+      expect(ring.x).toBeGreaterThan(ring.y)
+    }
+  })
+
+  it('starts the ring across the table, the way the pipeline seats it', () => {
+    const ring = VENUES.rooftop.seatRing
+    const [first] = worldSeats(['a', 'b', 'c', 'd'], ring)
+    if (first === undefined) throw new Error('expected a seat')
+    const camera = cameraPlacement(VENUES.rooftop).position
+    // Seat zero sits opposite the camera, because the pipeline starts its ring
+    // at a quarter turn. Which seat the local player occupies is a separate
+    // question; what matters here is that the labels agree with the chairs.
+    expect(first.x).toBeCloseTo(0, 9)
+    expect(first.z).toBeCloseTo(-ring.y, 9)
+    expect(Math.sign(first.z)).toBe(-Math.sign(camera[2]))
+  })
+
+  it('keeps every seat inside the ring it was given', () => {
+    const ring = VENUES.rooftop.seatRing
+    for (const seat of worldSeats(['a', 'b', 'c', 'd', 'e'], ring)) {
+      expect(Math.abs(seat.x)).toBeLessThanOrEqual(ring.x + 1e-9)
+      expect(Math.abs(seat.z)).toBeLessThanOrEqual(ring.y + 1e-9)
     }
   })
 })

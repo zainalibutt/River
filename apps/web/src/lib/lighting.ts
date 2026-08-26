@@ -89,8 +89,12 @@ export function blenderToThree(position: readonly number[]): [number, number, nu
  * One scalar is deliberate: hand-tuning each light is how the lookdev and the
  * web renderer drifted apart in the first place. If the venues read too dark or
  * too hot, change this number, not the individual energies.
+ *
+ * It came down from 0.06 to 0.008 once the lamps were aimed. The old value was
+ * calibrated against a rig throwing most of its light at the back wall, so the
+ * moment the sources pointed at the terrace a pale concrete floor went white.
  */
-export const ENERGY_TO_INTENSITY = 0.06
+export const ENERGY_TO_INTENSITY = 0.008
 
 export function intensityFor(energy: number): number {
   return Math.max(0, energy) * ENERGY_TO_INTENSITY

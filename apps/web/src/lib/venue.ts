@@ -1,3 +1,7 @@
+/** The felt's half-axes, straight from art/pipeline/values.py. */
+const FELT_RX = 1.24
+const FELT_RY = 0.72
+
 export type VenueId = 'rooftop' | 'basement' | 'suite'
 
 export interface VenueCamera {
@@ -31,8 +35,13 @@ export interface Venue {
   tagline: string
   asset: string
   camera: VenueCamera
-  /** Seat ring radius. The Suite's chairs are deeper, so its ring is tighter. */
-  seatRadius: number
+  /**
+   * The seat ring, as an ellipse. The table is oval, so a circle puts the two
+   * side seats a metre off the chairs they are meant to label. Mirrors
+   * character_seat_positions in the pipeline: the Suite's chairs are deeper, so
+   * its ring is tighter.
+   */
+  seatRing: { x: number; y: number }
   /** Meshes that cast the single soft shadow this venue budgets for. */
   shadowCasters: RegExp
 }
@@ -49,7 +58,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     tagline: 'City lights, open air, and a skyline that watches you lose.',
     asset: '/assets/rooftop_assets.glb',
     camera: { radius: 6.1, height: 4.05, pitchDegrees: 62, fov: 64, clearRadius: 8.4 },
-    seatRadius: 3.05,
+    seatRing: { x: FELT_RX * 1.42, y: FELT_RY * 1.58 },
     shadowCasters: /^(river_rooftop_wood|river_rooftop_felt|river_rooftop_rail)$/,
   },
   basement: {
@@ -58,7 +67,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     tagline: 'Strip lights, spin cycles, and nobody asking questions.',
     asset: '/assets/basement_assets.glb',
     camera: { radius: 3.6, height: 2.45, pitchDegrees: 72, fov: 66, clearRadius: 6.0 },
-    seatRadius: 2.6,
+    seatRing: { x: FELT_RX * 1.42, y: FELT_RY * 1.58 },
     shadowCasters: /^(river_basement_wood|river_basement_felt|river_basement_rail)$/,
   },
   suite: {
@@ -67,7 +76,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     tagline: 'Chandeliers, a full bar, and an audience beyond the rail.',
     asset: '/assets/suite_assets.glb',
     camera: { radius: 3.9, height: 2.85, pitchDegrees: 68, fov: 66, clearRadius: 5.4 },
-    seatRadius: 2.35,
+    seatRing: { x: FELT_RX * 1.3, y: FELT_RY * 1.44 },
     shadowCasters: /^(river_suite_wood|river_suite_felt|river_suite_rail)$/,
   },
 }
@@ -146,10 +155,19 @@ export type WorldSeat = {
 
 export function worldSeats(
   ids: readonly string[],
-  radius = VENUES.rooftop.seatRadius,
+  ring: { x: number; y: number } = VENUES.rooftop.seatRing,
 ): WorldSeat[] {
   return ids.map((id, index) => {
-    const angle = -Math.PI / 2 + (index * Math.PI * 2) / ids.length
-    return { id, x: Math.cos(angle) * radius, y: 0.54, z: Math.sin(angle) * radius }
+    // seat_positions in the pipeline, converted. Blender lays the ring out as
+    // (Rx cos a, Ry sin a) from a quarter turn, and (x, y, z) becomes
+    // (x, z, -y) - so the z sign flips and the ring is not a circle. Getting
+    // either wrong leaves every chip count hovering beside the wrong chair.
+    const angle = Math.PI / 2 + (index * Math.PI * 2) / ids.length
+    return {
+      id,
+      x: ring.x * Math.cos(angle),
+      y: 0.54,
+      z: -ring.y * Math.sin(angle),
+    }
   })
 }
