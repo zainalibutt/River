@@ -446,6 +446,10 @@ def build_character_atlas():
                 pixels.extend(atlas_pixel(cosmetic['colour'] if cosmetic else None, cell_x, cell_y, palette_index % 2 == 1, palette_index))
             else:
                 pixels.extend((0.025, 0.025, 0.03, 1.0))
+    for y in range(8):
+        for x in range(8):
+            offset = (y * CHARACTER_ATLAS_SIZE + x) * 4
+            pixels[offset:offset + 4] = [1.0, 1.0, 1.0, 1.0]
     image.pixels = pixels
     image.filepath_raw = os.path.join(TEX_DIR, 'character_atlas.png')
     image.file_format = 'PNG'
@@ -468,6 +472,23 @@ def build_character_atlas():
     material['cosmeticRegions'] = json.dumps({
         cosmetic_id: cosmetic_metadata(cosmetic_id) for cosmetic_id in COSMETIC_ATLAS
     }, sort_keys=True, separators=(',', ':'))
+    return material
+
+
+def build_garment_material():
+    material = bpy.data.materials.new('river_garment_flat_material')
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    bsdf = nodes.get('Principled BSDF')
+    colour = nodes.new('ShaderNodeVertexColor')
+    colour.name = 'river_garment_palette_colour'
+    colour.layer_name = 'Color'
+    if bsdf is not None:
+        links.new(colour.outputs['Color'], bsdf.inputs['Base Color'])
+        bsdf.inputs['Roughness'].default_value = 0.82
+    material['paletteProperty'] = 'paletteIndex'
+    material['paletteSource'] = 'vertex colour Color'
     return material
 
 
@@ -494,10 +515,6 @@ def import_character_templates(atlas_material):
         for obj in imported_all:
             if obj not in imported:
                 bpy.data.objects.remove(obj, do_unlink=True)
-        garment = next((obj for obj in imported if obj.type == 'MESH' and obj.name.startswith('garment_')), None)
-        if garment is not None:
-            imported.remove(garment)
-            bpy.data.objects.remove(garment, do_unlink=True)
         body = next((obj for obj in imported if obj.type == 'MESH'), None)
         if body is not None:
             components, faces, vertices = strip_opaque_hair_planes(body)
@@ -515,32 +532,54 @@ def import_character_templates(atlas_material):
     return templates
 
 
-def duplicate_character(template, seat_index, variant, x, y, angle, atlas_material, loadout):
+def apply_garment_palette(obj, colour):
+    if obj.type != 'MESH':
+        return
+    for layer in list(obj.data.color_attributes):
+        obj.data.color_attributes.remove(layer)
+    layer = obj.data.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')
+    for item in layer.data:
+        item.color = colour
+    obj.data.color_attributes.active_color_index = 0
+    obj.data.color_attributes.render_color_index = 0
+
+
+def duplicate_character(template, seat_index, variant, x, y, angle, atlas_material, garment_material, loadout):
     mapping = {}
     face_cosmetic_id = loadout.get('face') or loadout.get('head')
     body_region = atlas_region_for_cosmetic(face_cosmetic_id) if face_cosmetic_id is not None else atlas_region_for_slot('skin')
     body_palette_index = COSMETIC_ATLAS[face_cosmetic_id]['paletteIndex'] if face_cosmetic_id is not None else 0
+    garment_colour = COSMETIC_ATLAS[loadout['torso']]['colour']
     for source in template:
         clone = source.copy()
+        garment = source.type == 'MESH' and (source.name.startswith('garment_') or source.data.name.startswith('garment_'))
         if source.data is not None:
             slot = source.get('cosmeticSlot')
             cosmetic_id = loadout.get(slot) if slot is not None else None
             clone.data = source.data.copy() if source.type == 'MESH' else source.data
-            if cosmetic_id is not None:
+            if cosmetic_id is not None and not garment:
                 remap_character_uv(clone, atlas_region_for_cosmetic(cosmetic_id))
         bpy.context.scene.collection.objects.link(clone)
         mapping[source] = clone
     for source, clone in mapping.items():
         clone.parent = mapping.get(source.parent)
         if clone.type == 'ARMATURE':
-            clone.animation_data_clear()
+            if seat_index == 0:
+                clone['animationOwner'] = True
+            else:
+                clone.animation_data_clear()
+                clone['animationOwner'] = False
         for modifier in clone.modifiers:
             if modifier.type == 'ARMATURE' and modifier.object in mapping:
                 modifier.object = mapping[modifier.object]
         if clone.type == 'MESH':
-            if clone.data.uv_layers:
+            is_garment = source.name.startswith('garment_') or source.data.name.startswith('garment_')
+            if clone.data.uv_layers and not is_garment:
                 clone.data.uv_layers[0].name = 'UVMap'
-            remap_character_uv(clone, atlas_region_for_slot('skin'), body_region)
+            if not is_garment:
+                remap_character_uv(clone, atlas_region_for_slot('skin'), body_region)
+            if is_garment:
+                apply_garment_palette(clone, garment_colour)
             if source.get('characterFeature'):
                 clone.data.name = 'river_' + variant + '_feature'
             elif source.name.startswith('char_') or source.data.name.startswith('base'):
@@ -548,14 +587,15 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
             else:
                 clone.data.name = 'char_' + variant + '_garment'
             clone.data.materials.clear()
-            clone.data.materials.append(atlas_material)
+            clone.data.materials.append(garment_material if is_garment else atlas_material)
             slot = source.get('cosmeticSlot')
             cosmetic_id = loadout.get(slot) if slot is not None else None
             clone['paletteIndex'] = body_palette_index
             clone['cosmeticId'] = cosmetic_id or ''
             clone['cosmeticSlot'] = slot or ''
             clone['atlasRegion'] = list(atlas_region_for_cosmetic(cosmetic_id)) if cosmetic_id is not None else list(atlas_region_for_slot('skin'))
-            clone['atlasMaterial'] = atlas_material.name
+            clone['atlasMaterial'] = atlas_material.name if not is_garment else ''
+            clone['garmentMaterial'] = garment_material.name if is_garment else ''
     root = bpy.data.objects.new('river_character_%02d' % seat_index, None)
     bpy.context.scene.collection.objects.link(root)
     for source, clone in mapping.items():
@@ -578,13 +618,14 @@ def duplicate_character(template, seat_index, variant, x, y, angle, atlas_materi
 
 def build_venue_characters(venue):
     atlas_material = build_character_atlas()
+    garment_material = build_garment_material()
     templates = import_character_templates(atlas_material)
     positions = character_seat_positions(venue)
     for seat_index, (x, y) in enumerate(positions):
         variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]
         angle = math.atan2(-x, y)
         loadout = COSMETIC_PREVIEW_LOADOUTS[seat_index % len(COSMETIC_PREVIEW_LOADOUTS)]
-        duplicate_character(templates[variant], seat_index, variant, x, y, angle, atlas_material, loadout)
+        duplicate_character(templates[variant], seat_index, variant, x, y, angle, atlas_material, garment_material, loadout)
     for template in templates.values():
         for obj in template:
             bpy.data.objects.remove(obj, do_unlink=True)
@@ -629,9 +670,8 @@ def build_rooftop(venue):
         flame_mesh = build_mesh_from_geo('rooftop_fire_%d' % index, flame_geo)
         flame_mesh.materials.append(fire_mat)
         object_at('rooftop_fire_%d' % index, flame_mesh, (x, y, 0.0))
-    strand_mat = add_emissive_material('rooftop_string', venue['parapet_lit'], 0.42)
     strand = build_mesh_from_geo('rooftop_string_lights', string_light_run())
-    strand.materials.append(strand_mat)
+    strand.materials.append(lit_mat)
     object_at('rooftop_string_lights', strand, (0.0, 0.0, 0.0))
     # The skyline is the venue's identity - a rooftop without a city is a patio.
     # Built as merged meshes: 27 towers and their windows cost two draw calls
@@ -1168,7 +1208,8 @@ def build_venue(venue, chip_meshes, card_mesh):
         export_materials='EXPORT',
         export_lights=False,
         export_extras=True,
-        export_animations=False,
+        export_animations=True,
+        export_animation_mode='ACTIONS',
     )
     append_gpu_instances(glb, pools)
     dedupe_materials(glb)
@@ -1186,6 +1227,8 @@ def build_venue(venue, chip_meshes, card_mesh):
         failures.append('no light rig built for ' + venue['id'])
     for intrusion in intrusions:
         failures.append('orbit clear radius: ' + intrusion)
+    for action in list(bpy.data.actions):
+        bpy.data.actions.remove(action, do_unlink=True)
     return glb, report, failures
 
 
