@@ -96,6 +96,21 @@ export function cameraPlacement(venue: Venue): CameraPlacement {
   }
 }
 
+/**
+ * The measured field of view, as three.js wants it.
+ *
+ * Blender fits a landscape camera's angle horizontally; three.js reads fov
+ * vertically. Handing 64 straight to the camera therefore asks for a far wider
+ * view than the one that was measured, and the table sits small and distant in
+ * a frame that looks nothing like the render it was signed off from.
+ */
+export function verticalFov(horizontalDegrees: number, aspect: number): number {
+  if (!Number.isFinite(aspect) || aspect <= 0) return horizontalDegrees
+  const horizontal = (horizontalDegrees * Math.PI) / 180
+  const vertical = 2 * Math.atan(Math.tan(horizontal / 2) / aspect)
+  return (vertical * 180) / Math.PI
+}
+
 export const VENUE_ORDER: readonly VenueId[] = ['rooftop', 'basement', 'suite']
 
 export const DEFAULT_VENUE: VenueId = 'rooftop'

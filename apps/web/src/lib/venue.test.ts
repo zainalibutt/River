@@ -9,6 +9,7 @@ import {
   VENUES,
   venueFromParams,
   venueOf,
+  verticalFov,
   worldSeats,
 } from './venue.js'
 
@@ -133,6 +134,39 @@ describe('camera placement', () => {
       const venue = venueOf(id)
       const run = Math.hypot(...[0, 2].map((axis) => cameraPlacement(venue).position[axis] ?? 0))
       expect(run).toBeGreaterThan(venue.seatRadius)
+    }
+  })
+})
+
+describe('field of view', () => {
+  it('narrows a horizontal angle into the vertical one three.js reads', () => {
+    // Blender fits a landscape camera horizontally. 64 degrees across a 16:9
+    // frame is 38.7 degrees tall, and handing 64 straight to three.js asks for
+    // a view most of a right angle wider than the one that was measured.
+    expect(verticalFov(64, 16 / 9)).toBeCloseTo(38.72, 1)
+    expect(verticalFov(66, 16 / 9)).toBeCloseTo(40.13, 1)
+  })
+
+  it('leaves a square frame alone', () => {
+    expect(verticalFov(64, 1)).toBeCloseTo(64, 6)
+  })
+
+  it('narrows further as the frame gets wider', () => {
+    const wide = verticalFov(64, 21 / 9)
+    const standard = verticalFov(64, 16 / 9)
+    expect(wide).toBeLessThan(standard)
+    expect(standard).toBeLessThan(verticalFov(64, 4 / 3))
+  })
+
+  it('refuses to divide by a frame with no height', () => {
+    expect(verticalFov(64, 0)).toBe(64)
+    expect(verticalFov(64, Number.NaN)).toBe(64)
+  })
+
+  it('never widens the measured angle on a landscape frame', () => {
+    for (const id of VENUE_ORDER) {
+      const measured = venueOf(id).camera.fov
+      expect(verticalFov(measured, 16 / 9)).toBeLessThan(measured)
     }
   })
 })

@@ -20,7 +20,14 @@ import {
   toSceneLights,
   worldColourOf,
 } from '@/lib/lighting'
-import { cameraPlacement, VENUE_ORDER, type VenueId, venueOf, worldSeats } from '@/lib/venue'
+import {
+  cameraPlacement,
+  VENUE_ORDER,
+  type VenueId,
+  venueOf,
+  verticalFov,
+  worldSeats,
+} from '@/lib/venue'
 
 type SceneProps = {
   seatIds: string[]
@@ -103,6 +110,13 @@ function CameraOrbit({ venueId }: { venueId: VenueId }) {
   const venue = venueOf(venueId)
   const placement = useMemo(() => cameraPlacement(venue), [venue])
   const controls = useRef<OrbitControlsImpl>(null)
+  const { camera, size } = useThree()
+
+  useEffect(() => {
+    if (!(camera instanceof THREE.PerspectiveCamera) || size.height === 0) return
+    camera.fov = verticalFov(venue.camera.fov, size.width / size.height)
+    camera.updateProjectionMatrix()
+  }, [camera, size.width, size.height, venue.camera.fov])
 
   useFrame((_, delta) => {
     const gamepad = navigator.getGamepads().find((candidate) => candidate !== null)
@@ -126,6 +140,7 @@ function CameraOrbit({ venueId }: { venueId: VenueId }) {
   return (
     <OrbitControls
       ref={controls}
+      makeDefault
       enablePan={false}
       enableZoom={false}
       minDistance={placement.distance}
