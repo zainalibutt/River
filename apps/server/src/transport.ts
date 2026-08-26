@@ -8,7 +8,8 @@ import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-servi
 import { claimDailyFor, claimRescueFor } from './economy-service.js'
 import { isFairnessSeed } from './fairness.js'
 import type { Ledger } from './ledger.js'
-import type { Emote, RoomCommand, RoomEvent, RoomResult, RoomView } from './protocol.js'
+import type { Emote, RoomCommand, RoomEvent, RoomResult, RoomView, VenueId } from './protocol.js'
+import { isVenueId } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
 import type {
   EquipOutcome,
@@ -47,7 +48,18 @@ export type SocialEvent =
 
 export type ClientMessage =
   | { kind: 'authenticate'; accessToken: string }
-  | { kind: 'enter'; requestId: string; roomId: string; name: string; inviteCode?: string }
+  | {
+      kind: 'enter'
+      requestId: string
+      roomId: string
+      name: string
+      inviteCode?: string
+      /**
+       * Which room to open a NEW table in. Ignored when the table already
+       * exists, so joining can never move anyone who is already sitting there.
+       */
+      venueId?: VenueId
+    }
   | { kind: 'command'; requestId: string; command: ClientRoomCommand }
   | { kind: 'social'; requestId: string; command: ClientSocialCommand }
   | { kind: 'resync'; requestId: string }
@@ -119,7 +131,7 @@ export interface RoomHubOptions {
   economy?: SupabaseEconomy
   tableItems?: TableItemStore
   cosmetics?: CosmeticStore
-  createRoom?: (roomId: string) => Room
+  createRoom?: (roomId: string, venueId?: VenueId) => Room
 }
 
 const ROOM_ID = /^[a-z0-9][a-z0-9-]{2,31}$/
@@ -228,12 +240,14 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     typeof value.name === 'string'
   ) {
     const inviteCode = typeof value.inviteCode === 'string' ? value.inviteCode : undefined
+    const venueId = isVenueId(value.venueId) ? value.venueId : undefined
     return {
       kind: 'enter',
       requestId,
       roomId: value.roomId,
       name: value.name,
       ...(inviteCode === undefined ? {} : { inviteCode }),
+      ...(venueId === undefined ? {} : { venueId }),
     }
   }
   if (value.kind === 'command') {
@@ -273,7 +287,7 @@ export class RoomHub {
   private readonly economy: SupabaseEconomy | null
   private readonly tableItems: TableItemStore | undefined
   private readonly cosmetics: CosmeticStore | undefined
-  private readonly createRoom: (roomId: string) => Room
+  private readonly createRoom: (roomId: string, venueId?: VenueId) => Room
   private readonly rooms = new Map<string, RoomState>()
   private readonly activePlayers = new Map<string, ConnectionState>()
   private readonly completed = new Map<string, ServerMessage>()
@@ -289,10 +303,14 @@ export class RoomHub {
     this.cosmetics = options.cosmetics
     this.createRoom =
       options.createRoom ??
-      ((roomId) =>
+      ((roomId, venueId) =>
         new Room(
           roomId,
-          defaultRoomConfig({ seed: `river:${roomId}`, inviteCode: newInviteCode() }),
+          defaultRoomConfig({
+            seed: `river:${roomId}`,
+            inviteCode: newInviteCode(),
+            ...(venueId === undefined ? {} : { venueId }),
+          }),
         ))
   }
 
@@ -437,7 +455,7 @@ export class RoomHub {
       return
     }
     const exists = this.rooms.has(message.roomId)
-    const room = this.room(message.roomId)
+    const room = this.room(message.roomId, message.venueId)
     await this.enqueue(room, async () => {
       if (
         exists &&
@@ -965,11 +983,13 @@ export class RoomHub {
     })
   }
 
-  private room(roomId: string): RoomState {
+  private room(roomId: string, venueId?: VenueId): RoomState {
     const existing = this.rooms.get(roomId)
+    // A venue only applies to a table being created. Applying it to one that
+    // already exists would move everyone already sitting there.
     if (existing !== undefined) return existing
     const created: RoomState = {
-      room: this.createRoom(roomId),
+      room: this.createRoom(roomId, venueId),
       connections: new Set(),
       queue: Promise.resolve(),
       reconnectTimers: new Map(),

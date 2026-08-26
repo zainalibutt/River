@@ -78,7 +78,7 @@ function setup(
       if (player === undefined) throw new Error('invalid token')
       return player
     },
-    createRoom: (roomId) =>
+    createRoom: (roomId, venueId) =>
       new Room(
         roomId,
         defaultRoomConfig({
@@ -86,6 +86,7 @@ function setup(
           inviteCode: 'RIVER2',
           reconnectGraceMs,
           seedCollectionMs,
+          ...(venueId === undefined ? {} : { venueId }),
           ...(turnBudgetsMs === undefined ? {} : { turnBudgetsMs }),
           ...(socialRateLimit === undefined ? {} : { socialRateLimit }),
         }),
@@ -695,5 +696,53 @@ describe('resync', () => {
         expect(seat.hole).toBeNull()
       }
     }
+  })
+})
+
+describe('which room a table is in', () => {
+  async function enterWith(hub: RoomHub, token: string, roomId: string, venueId?: string) {
+    const peer = new TestPeer()
+    const connection = hub.connect(peer)
+    await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: token }))
+    await connection.receive(
+      JSON.stringify({
+        kind: 'enter',
+        requestId: `enter-${token}`,
+        roomId,
+        name: token,
+        inviteCode: 'river2',
+        ...(venueId === undefined ? {} : { venueId }),
+      }),
+    )
+    return peer
+  }
+
+  function venueOfLast(peer: TestPeer): string | undefined {
+    const snapshot = peer.last('snapshot')
+    return snapshot?.kind === 'snapshot' ? snapshot.view.venueId : undefined
+  }
+
+  it('opens a new table in the venue the link asked for', async () => {
+    const { hub } = setup()
+    expect(venueOfLast(await enterWith(hub, 'alice', 'river-suite', 'suite'))).toBe('suite')
+  })
+
+  it('still defaults to the rooftop when no venue is asked for', async () => {
+    const { hub } = setup()
+    expect(venueOfLast(await enterWith(hub, 'alice', 'river-plain'))).toBe('rooftop')
+  })
+
+  it('leaves an existing table where it is, whatever the joiner asks for', async () => {
+    const { hub } = setup()
+    await enterWith(hub, 'alice', 'river-shared', 'basement')
+    const bob = await enterWith(hub, 'bob', 'river-shared', 'suite')
+    // Two players at one table cannot be sitting in different rooms. Bob asked
+    // for the Suite and gets the Laundromat, because that is where the table is.
+    expect(venueOfLast(bob)).toBe('basement')
+  })
+
+  it('refuses a venue the wire made up', async () => {
+    const { hub } = setup()
+    expect(venueOfLast(await enterWith(hub, 'alice', 'river-junk', 'the-moon'))).toBe('rooftop')
   })
 })

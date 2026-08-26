@@ -10,6 +10,13 @@ import type {
 import type { FairnessClientSeed } from './fairness.js'
 
 export type VenueId = 'rooftop' | 'basement' | 'suite'
+
+export const VENUE_IDS: readonly VenueId[] = ['rooftop', 'basement', 'suite']
+
+/** A venue arriving over the wire is a string until this says otherwise. */
+export function isVenueId(value: unknown): value is VenueId {
+  return typeof value === 'string' && (VENUE_IDS as readonly string[]).includes(value)
+}
 export type AwayPolicy = 'check-or-fold'
 export type KickReason = 'host' | 'idle' | 'duplicate-session'
 export type Emote =
@@ -137,6 +144,14 @@ export interface RoomSeatView {
 }
 
 export interface RoomView {
+  /**
+   * Which room this table is in.
+   *
+   * The lobby already grouped by it, but a seated client was never told, so it
+   * chose its own and two players at one table could sit in different rooms -
+   * exactly what putting the venue on the server was meant to prevent.
+   */
+  venueId: VenueId
   handNumber: number
   phase: 'open' | 'seeding' | 'hand' | 'between'
   street: Street

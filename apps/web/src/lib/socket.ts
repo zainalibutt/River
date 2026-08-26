@@ -105,13 +105,18 @@ export class RiverSocket {
     })
   }
 
-  enter(roomId: string, name: string, inviteCode?: string): string {
+  /**
+   * `venueId` decides which room a NEW table opens in. The server ignores it
+   * for a table that already exists, so joining never moves anyone.
+   */
+  enter(roomId: string, name: string, inviteCode?: string, venueId?: string): string {
     return this.send({
       kind: 'enter',
       requestId: this.requestId(),
       roomId,
       name,
       ...(inviteCode === undefined ? {} : { inviteCode }),
+      ...(venueId === undefined ? {} : { venueId }),
     })
   }
 

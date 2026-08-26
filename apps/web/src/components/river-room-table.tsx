@@ -101,8 +101,9 @@ function initialRoomTarget(): {
   }
 }
 
-function emptyView(selfId = 'pending'): RoomView {
+function emptyView(selfId = 'pending', venueId: VenueId = DEFAULT_VENUE): RoomView {
   return {
+    venueId,
     handNumber: 0,
     phase: 'open',
     street: 'preflop',
@@ -230,8 +231,11 @@ function useTurnRemaining(deadline: number | null): number | null {
 
 export function RiverRoomTable() {
   const [{ roomId, inviteCode, expired, venueId: initialVenue }] = useState(initialRoomTarget)
-  const [venueId, setVenueId] = useState<VenueId>(initialVenue)
-  const [view, setView] = useState<RoomView>(() => emptyView())
+  const [view, setView] = useState<RoomView>(() => emptyView('pending', initialVenue))
+  // The table owns the venue, not this browser. The link's venue only decides
+  // which room a new table opens in; once a snapshot arrives the server is the
+  // authority, so two players can never be sitting in different rooms.
+  const venueId = view.venueId
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [notice, setNotice] = useState<string | null>(null)
   const [joinCode, setJoinCode] = useState(inviteCode ?? '')
@@ -401,7 +405,7 @@ export function RiverRoomTable() {
         })
         await socket.connect(session.access_token)
         if (disposed) return
-        socket.enter(roomId, nameRef.current, inviteCode)
+        socket.enter(roomId, nameRef.current, inviteCode, initialVenue)
       } catch {
         if (!disposed) {
           setConnection('offline')
@@ -683,7 +687,16 @@ export function RiverRoomTable() {
                     className={id === venueId ? 'chosen' : ''}
                     aria-pressed={id === venueId}
                     title={venueOf(id).tagline}
-                    onClick={() => setVenueId(id)}
+                    disabled={id === venueId}
+                    onClick={() => {
+                      // Opens a new table in that room rather than restyling
+                      // this one. A venue is a property of the table, so
+                      // changing it locally would only have changed what this
+                      // player sees.
+                      const url = new URL(window.location.href)
+                      url.search = new URLSearchParams({ venue: id }).toString()
+                      window.location.assign(url.toString())
+                    }}
                   >
                     {venueOf(id).name}
                   </button>

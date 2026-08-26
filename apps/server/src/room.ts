@@ -245,6 +245,7 @@ export class Room implements RoomHandle {
       }
     }
     return {
+      venueId: this.config.venueId,
       handNumber: this.handNumber,
       phase: this.phase,
       street: this.lastStreet,
