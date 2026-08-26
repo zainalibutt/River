@@ -20,16 +20,45 @@ export interface ScreenPoint {
 
 const WORLD_UP: Vec3 = { x: 0, y: 1, z: 0 }
 
-export function seatRing(count: number, radius: number, height: number): Vec3[] {
-  if (count <= 0 || radius <= 0) return []
+export interface Ring {
+  x: number
+  y: number
+}
+
+/**
+ * Evenly spaced seat positions around the table in three.js space.
+ *
+ * Seats are not on a circle; the art pipeline seats characters on an ellipse
+ * (FELT_RX * 1.42, FELT_RY * 1.58) with the first seat a quarter turn in:
+ *
+ *     angle = PI/2 + 2*PI*i/count
+ *     (x, y) = (ring_x * cos angle, ring_y * sin angle)
+ *
+ * then (x, y, z)_blender becomes (x, z, -y)_three. A circle is the special
+ * case where ring.x === ring.y. Passing a bare number keeps the legacy
+ * circular behaviour used by the existing seat-projection tests.
+ */
+export function seatRing(count: number, ring: number | Ring, height: number): Vec3[] {
+  const x = typeof ring === 'number' ? ring : ring.x
+  const y = typeof ring === 'number' ? ring : ring.y
+  if (count <= 0 || x <= 0 || y <= 0) return []
   const seats: Vec3[] = []
   for (let i = 0; i < count; i += 1) {
-    const angle = (Math.PI * 2 * i) / count
-    seats.push({
-      x: radius * Math.sin(angle),
-      y: height,
-      z: radius * Math.cos(angle),
-    })
+    if (typeof ring === 'number') {
+      const angle = (Math.PI * 2 * i) / count
+      seats.push({
+        x: x * Math.sin(angle),
+        y: height,
+        z: x * Math.cos(angle),
+      })
+    } else {
+      const angle = Math.PI / 2 + (Math.PI * 2 * i) / count
+      seats.push({
+        x: x * Math.cos(angle),
+        y: height,
+        z: -y * Math.sin(angle),
+      })
+    }
   }
   return seats
 }
