@@ -43,3 +43,33 @@ Recorded rather than hidden, because they are the next work.
 - **The Suite felt reads pale** where it should be dark.
 - **The Rooftop venue is built at roughly 62 percent of its designed scale**, so
   every prop radius in the build spec is wrong for the pipeline.
+
+## 20-23 — the night the rooms became rooms
+
+Between 15 and 20 the venues were rebuilt three times, the characters four, and
+the browser was found to be rendering something the Blender frames never showed.
+
+| | |
+|---|---|
+| `20-rooftop-night.png` | The Rooftop with baked ambient occlusion in vertex colours, a dark wet-concrete terrace, and palms that are palms. 71,343 triangles against a gate of 250,000. |
+| `21-laundromat-night.png` | The Laundromat. Reachable in play for the first time here - every table the server created had been in the Rooftop, so two of three venues existed as assets nobody could sit in. |
+| `22-suite-night.png` | The Executive Suite. |
+| `23-character-face.png` | A seated character at 2.6 metres. Brow, eye sockets, nose, jaw, a lash line and a hairline band, on an MPFB body with a 137-bone rig and nine authored poker clips. |
+
+### What 23 actually cost
+
+Four packets went into building faces out of scaled spheres, each one slightly
+better and none of them right. The base character had a face the whole time. It
+was buried under hair geometry authored as alpha cutouts and exported without
+any texture, so it rendered as opaque ribbons hanging over the features. Every
+replacement face was being bolted onto the outside of a head that was only ever
+occluded, and one frame shows the real hands with fingers at the edge of the
+shot beside the primitive ones built to replace them.
+
+Deleting all of it took the Rooftop from 94,537 triangles to 62,499 and produced
+a person.
+
+**The intermediate frames from that sequence were not kept.** They were reviewed
+and discarded, which was a mistake - the wrong frames are the useful ones, as
+01-04 demonstrate. Every character and venue render is captured here from this
+point on, whether or not it is any good.

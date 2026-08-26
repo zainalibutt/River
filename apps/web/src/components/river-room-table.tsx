@@ -441,7 +441,10 @@ export function RiverRoomTable() {
       socketRef.current?.close()
       socketRef.current = null
     }
-  }, [inviteCode, roomId])
+    // initialVenue is read once when a new table is opened. It comes from
+    // useState's initialiser and never changes, but naming it keeps the rule
+    // honest rather than silencing it.
+  }, [inviteCode, roomId, initialVenue])
 
   useEffect(() => {
     const resize = () =>
