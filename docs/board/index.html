@@ -504,6 +504,8 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>A deploy the repository can do</b> &mdash; Railway had been pushed by hand since it went live. Deliberately not push-to-deploy: three models commit to this branch several times an hour and a lane is regularly mid-packet on it, so push-to-deploy would ship intermediate states to a table holding real balances. It is the Actions button or a version tag, and either way it clears lint, typecheck, the full suite and a production build before Railway is touched. The CLI invocation is checked against Railway's own documentation rather than guessed.</span></li>
+          <li><span class="dot done"></span><span><b>A quiet character could only ever say one line</b> &mdash; found reviewing DeepSeek's chatter packet. The roll deciding <em>whether</em> a bot speaks was also choosing <em>which</em> line it said, and having passed the speak check it is uniform over [0, chance) rather than [0, 1). A silent character, whose quiet-event chance is 0.05, returned its first line <b>one hundred percent of the time across five thousand utterances</b>. Every other line it owned was unreachable, and no count or coverage check could see it. It mattered this hour rather than next week, because the voice pack being written against that picker gives all 480 lines a weight.</span></li>
           <li><span class="dot done"></span><span><b>The palette module has a consumer</b> &mdash; <code>venue-palette.ts</code> was the seventh module here to pass its own gates and be called by nothing. The web app now grades the venue files it ships. Room is split from backdrop at twelve metres, measured rather than chosen: the furthest Rooftop room surface is the terrace at 4.0m and the nearest backdrop is 34.1m, and the mountains are <b>83.9 percent of the venue's triangles</b> against a few hundred pixels of sky &mdash; grading unweighted area would score the backdrop and ignore the room. Proven to fire and to pass on two builds of the same code.</span></li>
           <li><span class="dot done"></span><span><b>Eight of the nine characters were frozen</b> &mdash; the mixer root fix was correct and not enough. The venue carries nine copies of one rig against a single clip set, every copy uses the same bone names, so the loader suffixes the duplicates and every unsuffixed track bound to whichever rig imported first. Actions were keyed by clip name alone as well, so nine per-seat cues collapsed onto one shared action and eight were no-ops &mdash; the seat each cue names was computed and then discarded. Measured before: <b>3 moving bones out of 1,233, all on one character</b>. After: 72 across all nine, 33,291 tracks bound. <code>delaySeconds</code> is honoured too; it existed so nine people would not breathe on the same frame, and was ignored at playback.</span></li>
           <li><span class="dot done"></span><span><b>The mixer was bound to the wrong root</b> &mdash; a glTF clip names its target nodes by path from the scene root, and the driver built one mixer per top-level child instead, so every track resolved to nothing. The failure mode is the worst kind: a mixer that binds nothing reports no error and simply never moves anything. It would have read exactly as &ldquo;the clips did not export&rdquo;. Clip names, track counts and durations now go to <code>window.riverClips</code>, because the last four faults in this scene were found by measuring it rather than reading it.</span></li>
@@ -670,10 +672,13 @@
         </p>
       </article>
       <article class="step">
-        <h4>4 &middot; Deploy</h4>
+        <h4>4 &middot; Set the Railway token</h4>
         <p>
-          One workflow file stands between this and a link somebody can click.
-          Only <code>ci.yml</code> exists; Railway is still pushed by hand.
+          The deploy workflow exists and is gated on the full suite plus a
+          production build. It needs <code>RAILWAY_TOKEN</code> &mdash; the
+          project-scoped one, not the account token &mdash; set on the
+          repository before its first run. That secret is the last thing
+          between here and a deploy anyone can trigger.
         </p>
       </article>
     </div>
@@ -700,8 +705,8 @@
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> a41afd5</span>
-    <span><b>Tests</b> 725 green</span>
+    <span><b>HEAD</b> d41475b</span>
+    <span><b>Tests</b> 736 green</span>
     <span><b>Lint &amp; typecheck</b> clean</span>
     <span><b>Production</b> live</span>
     <span><b>Design docs</b> 19</span>
