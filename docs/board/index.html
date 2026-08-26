@@ -504,6 +504,7 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>The palette module has a consumer</b> &mdash; <code>venue-palette.ts</code> was the seventh module here to pass its own gates and be called by nothing. The web app now grades the venue files it ships. Room is split from backdrop at twelve metres, measured rather than chosen: the furthest Rooftop room surface is the terrace at 4.0m and the nearest backdrop is 34.1m, and the mountains are <b>83.9 percent of the venue's triangles</b> against a few hundred pixels of sky &mdash; grading unweighted area would score the backdrop and ignore the room. Proven to fire and to pass on two builds of the same code.</span></li>
           <li><span class="dot done"></span><span><b>Eight of the nine characters were frozen</b> &mdash; the mixer root fix was correct and not enough. The venue carries nine copies of one rig against a single clip set, every copy uses the same bone names, so the loader suffixes the duplicates and every unsuffixed track bound to whichever rig imported first. Actions were keyed by clip name alone as well, so nine per-seat cues collapsed onto one shared action and eight were no-ops &mdash; the seat each cue names was computed and then discarded. Measured before: <b>3 moving bones out of 1,233, all on one character</b>. After: 72 across all nine, 33,291 tracks bound. <code>delaySeconds</code> is honoured too; it existed so nine people would not breathe on the same frame, and was ignored at playback.</span></li>
           <li><span class="dot done"></span><span><b>The mixer was bound to the wrong root</b> &mdash; a glTF clip names its target nodes by path from the scene root, and the driver built one mixer per top-level child instead, so every track resolved to nothing. The failure mode is the worst kind: a mixer that binds nothing reports no error and simply never moves anything. It would have read exactly as &ldquo;the clips did not export&rdquo;. Clip names, track counts and durations now go to <code>window.riverClips</code>, because the last four faults in this scene were found by measuring it rather than reading it.</span></li>
           <li><span class="dot done"></span><span><b>What a successor would otherwise rediscover</b> &mdash; the six modules finished and wired to nothing, the four faults that shipped because art was verified in Blender, and six traps in this repository that produce a green suite over a broken application. Written down at <code>docs/handoff/session-state.md</code> rather than left in a chat log.</span></li>
@@ -679,6 +680,7 @@
   </section>
 
   <section class="flag">
+    <p><strong>The Rooftop reads flat, and it is now a number.</strong> The terrace at <code>#30383a</code> and the parapet at <code>#2a2f3a</code> each exceed twelve percent of room area with a contrast ratio under 1.4, so the floor and the wall read as one shape rather than two. This is the complaint that cost two days when it was only ever a feeling.</p>
     <p><strong>The economy does not work in production.</strong> <code>economy_config</code> holds only <code>signup_bankroll</code>; the rescue and daily-grant keys, the streak table and the 4H views are all absent from the live schema. Daily grants and bust rescues fail for every player. The drift was found and written up rather than force-pushed at a database with live rows, which was the right call &mdash; but it needs a reviewed, non-destructive fix before launch.</p>
     <p><strong>Separately, six engine modules were finished and wired to nothing, and a seventh is live right now.</strong> REP had no producer, challenges had no tally, table items had no consumer, the measured light rigs shipped to a browser that ignored them, hand history had nothing showing it, and the bots had no caller for a fortnight. <code>venue-palette.ts</code> is the seventh and is still uncalled today. Each passed its own gates and read as complete in the commit log. With several lanes running, the seam between packets is where work quietly dies &mdash; so the first review question is now "does anything actually call this?", not the last.</p>
     <p>
@@ -698,7 +700,7 @@
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> df85bc0</span>
+    <span><b>HEAD</b> a41afd5</span>
     <span><b>Tests</b> 725 green</span>
     <span><b>Lint &amp; typecheck</b> clean</span>
     <span><b>Production</b> live</span>
