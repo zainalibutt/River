@@ -16,6 +16,7 @@ import check_assets as checker
 from buildkit import (
     add_emissive_material,
     add_material,
+    add_metal_material,
     build_mesh_from_geo,
     clear_scene,
     colorramp_material,
@@ -380,7 +381,7 @@ def build_chairs(venue, chair_fn, chair_mat, count=9):
             # furniture. The palette has defined 'chrome' the whole time.
             chrome = bpy.data.materials.get('rooftop_chrome')
             if chrome is None:
-                chrome = add_material('rooftop_chrome', venue['chrome'])
+                chrome = add_metal_material('rooftop_chrome', venue['chrome'])
             mesh.materials.append(chrome)
             for polygon in mesh.polygons[leather_faces:]:
                 polygon.material_index = 1

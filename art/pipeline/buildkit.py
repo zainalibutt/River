@@ -68,6 +68,31 @@ def add_material(name, hex_value):
     return material
 
 
+def add_metal_material(name, hex_value, roughness=0.28):
+    """A material that is actually metal.
+
+    Every surface in every venue ships at metallic 0, which is right for felt,
+    wood, leather and stone and wrong for the one thing in the room that is
+    meant to reflect. A chrome pedestal with a diffuse albedo and no metallic
+    response is a white plastic ring, and at night it is the brightest object in
+    frame - the chair feet were pulling the eye to the floor while the table sat
+    dark.
+
+    Metal takes its colour from its specular response rather than from diffuse,
+    so a dark room gives dark chrome with bright highlights, which is what
+    chrome does.
+    """
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    bsdf = next(n for n in nodes if n.type == 'BSDF_PRINCIPLED')
+    rgb = hex_to_rgb(hex_value)
+    bsdf.inputs['Base Color'].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
+    bsdf.inputs['Metallic'].default_value = 1.0
+    bsdf.inputs['Roughness'].default_value = roughness
+    return material
+
+
 def add_emissive_material(name, hex_value, strength=1.0):
     material = bpy.data.materials.new(name)
     material.use_nodes = True
