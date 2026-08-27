@@ -19,9 +19,9 @@
       ]
     },
     "camera": {
-      "radius": 6.1,
-      "height": 4.05,
-      "pitch": 62.0,
+      "radius": 3.2,
+      "height": 1.5,
+      "pitch": 73.5,
       "fov": 64.0,
       "clear_radius": 8.4
     },

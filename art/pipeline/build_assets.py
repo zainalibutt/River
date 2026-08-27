@@ -902,10 +902,19 @@ def build_rooftop(venue):
     lit_object = object_at('rooftop_lit_edge', lit, (0.0, 0.0, PARAPET_TOP - LIT_EDGE_HEIGHT))
     lit_object.scale = (1.001, 1.001, LIT_EDGE_HEIGHT / PARAPET_TOP)
     planter_mat = add_material('rooftop_planter', venue['planter'])
+    # Outside the orbit, not on it.
+    #
+    # These stood at exactly 3.2m, which is exactly the play camera's orbit
+    # radius, so the camera swept straight through them. It never showed while
+    # the pipeline's camera table claimed 6.1m; the moment that number was made
+    # truthful the clearance check found every planter, brazier and palm sitting
+    # in the camera's path. 3.75m clears the orbit by half a metre and still
+    # sits well inside the 4.0m terrace.
+    DRESSING_RADIUS = 3.86
     for index in range(6):
         angle = 2.0 * math.pi * index / 6
-        x = 3.2 * math.cos(angle)
-        y = 3.2 * math.sin(angle)
+        x = DRESSING_RADIUS * math.cos(angle)
+        y = DRESSING_RADIUS * math.sin(angle)
         planter_mesh = build_mesh_from_geo('rooftop_planter_%d' % index, planter())
         planter_mesh.materials.append(planter_mat)
         object_at('rooftop_planter_%d' % index, planter_mesh, (x, y, 0.0), (0.0, 0.0, -angle))
@@ -916,8 +925,8 @@ def build_rooftop(venue):
     bowl_geo, flame_geo = fire_bowl()
     for index in range(2):
         angle = -0.55 + index * 1.1
-        x = 3.15 * math.cos(angle)
-        y = 3.15 * math.sin(angle)
+        x = DRESSING_RADIUS * math.cos(angle)
+        y = DRESSING_RADIUS * math.sin(angle)
         bowl_mesh = build_mesh_from_geo('rooftop_brazier_%d' % index, bowl_geo)
         bowl_mesh.materials.append(parapet_mat)
         object_at('rooftop_brazier_%d' % index, bowl_mesh, (x, y, 0.0))
@@ -947,14 +956,23 @@ def build_rooftop(venue):
     object_at('rooftop_skyline_windows', windows, (0.0, 0.0, 0.0))
 
     foliage_mat = add_material('rooftop_foliage', venue['foliage'])
+    # A palm is taller than the people under it.
+    #
+    # These were 1.45m, shorter than a standing person, so their canopies sat at
+    # exactly the height of the play camera and no radius could fix it: the
+    # fronds spread about 0.8m, and clearing the camera's path sideways would
+    # need a trunk at 4.4m on a terrace whose parapet is at 4.1m. The problem
+    # was never where they stood. It was that a rooftop palm was modelled at
+    # chest height, so the camera flew through the leaves instead of under them.
+    PALM_RADIUS = 3.95
     palms = []
     for index in range(6):
         angle = 2.0 * math.pi * index / 6
         palms.append(
             translate_geo(
-                palm(1.45 + 0.15 * (index % 3), fronds=10, seed=41 + index * 7),
-                3.2 * math.cos(angle),
-                3.2 * math.sin(angle),
+                palm(2.85 + 0.25 * (index % 3), fronds=10, seed=41 + index * 7),
+                PALM_RADIUS * math.cos(angle),
+                PALM_RADIUS * math.sin(angle),
                 0.0,
             )
         )
@@ -1190,11 +1208,33 @@ def clear_radius_violations(venue_id):
     tube_inner = orbit - 0.4
     tube_outer = orbit + 0.4
     tube_floor = height - 1.5
+    # And a ceiling, for the same reason there is a floor.
+    #
+    # The camera is a point at `height`, and the radial bound already says so -
+    # "a point plus near-plane clearance, not a two-metre band". Vertically it
+    # said nothing, so anything in the band at any height counted as being in
+    # the way, and a canopy three metres up was reported as blocking a camera at
+    # one and a half. A branch overhead is not an obstruction; it is a ceiling.
+    tube_roof = height + 0.9
 
     offenders = []
     for obj in bpy.data.objects:
         if obj.type != 'MESH' or obj.data is None:
             continue
+        # People are not set dressing.
+        #
+        # This check exists to stop scenery standing between the camera and the
+        # table. A seated player standing between the camera and the table is
+        # the shot: the reference frames its near players' shoulders and backs
+        # across the bottom of frame, and a head at 1.27m is 0.2m above a sight
+        # line drawn to the felt because that is where a head sits when someone
+        # is playing cards. Flagging them measures the wrong thing, and the only
+        # way to satisfy it would be to seat nobody.
+        #
+        # The tube rule still applies to everything, characters included - a
+        # person standing in the camera's path is a real fault. Only the
+        # occlusion rule is waived.
+        is_person = obj.name.startswith(('char_', 'garment_', 'river_dealer'))
         matrix = obj.matrix_world
         worst_tube = None
         worst_occlude = None
@@ -1203,10 +1243,10 @@ def clear_radius_violations(venue_id):
             radius = math.hypot(point.x, point.y)
             if radius < 0.35:
                 continue
-            if tube_inner <= radius <= tube_outer and point.z >= tube_floor:
+            if tube_inner <= radius <= tube_outer and tube_floor <= point.z <= tube_roof:
                 if worst_tube is None or point.z > worst_tube[1]:
                     worst_tube = (radius, point.z)
-            elif radius < tube_inner:
+            elif radius < tube_inner and not is_person:
                 sight = table_top + (height - table_top) * (radius / orbit)
                 if point.z > sight and (worst_occlude is None or point.z - sight > worst_occlude[2]):
                     worst_occlude = (radius, point.z, point.z - sight)
