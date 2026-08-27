@@ -24,7 +24,7 @@ export function formatChips(amount: number, options?: ChipFormatOptions): string
   const approximate = options?.approximate === true
   const precision = options?.precision ?? 2
 
-  const { unit, suffix } = scaleFor(magnitude, approximate)
+  const { unit, suffix } = scaleFor(magnitude, precision, approximate)
   let value = magnitude / unit
   if (approximate) {
     value = Math.round(value * 10) / 10
@@ -35,16 +35,18 @@ export function formatChips(amount: number, options?: ChipFormatOptions): string
   return `${sign}${fixed}${suffix}`
 }
 
-function scaleFor(magnitude: number, approximate: boolean): { unit: number; suffix: string } {
+function scaleFor(
+  magnitude: number,
+  precision: number,
+  approximate: boolean,
+): { unit: number; suffix: string } {
   for (let index = 0; index < SCALES.length; index += 1) {
     const scale = SCALES[index] as { unit: number; suffix: string }
     if (magnitude < scale.unit) continue
-    if (approximate) {
-      const value = magnitude / scale.unit
-      const rounded = Math.round(value * 10) / 10
-      const next = SCALES[index - 1]
-      if (next !== undefined && rounded >= 1000) return next
-    }
+    const digits = approximate ? 1 : precision
+    const rounded = Number((magnitude / scale.unit).toFixed(digits))
+    const next = SCALES[index - 1]
+    if (next !== undefined && rounded >= 1000) return next
     return scale
   }
   return SCALES[SCALES.length - 1] ?? { unit: 1e3, suffix: 'K' }

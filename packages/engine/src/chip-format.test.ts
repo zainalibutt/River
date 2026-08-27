@@ -30,6 +30,28 @@ describe('formatChips', () => {
     expect(formatChips(10000)).toBe('10K')
   })
 
+  it('never prints a rollover like 1000K', () => {
+    expect(formatChips(999999)).toBe('1M')
+    expect(formatChips(1000000)).toBe('1M')
+  })
+
+  it('never leaves a numeric part of 1000 or more before its suffix', () => {
+    const range = [10_000, 99_999, 999_999, 1_000_000, 9_999_999, 1e9, 1e12]
+    for (const base of range) {
+      for (let offset = -2; offset <= 2; offset += 1) {
+        const amount = base + offset
+        if (amount < 10_000) continue
+        for (const approximate of [false, true]) {
+          const formatted = formatChips(amount, approximate ? { approximate: true } : undefined)
+          const suffix = formatted.match(/([KMBT])$/)
+          if (suffix === null) continue
+          const numeric = Number(formatted.replace(/^~/, '').slice(0, -1))
+          expect(numeric).toBeLessThan(1000)
+        }
+      }
+    }
+  })
+
   it('writes 10,000 and above in short form with default precision 2', () => {
     expect(formatChips(10000)).toBe('10K')
     expect(formatChips(22071)).toBe('22.07K')
