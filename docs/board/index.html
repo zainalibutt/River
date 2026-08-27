@@ -398,7 +398,7 @@
 <div class="wrap">
 
   <header>
-    <p class="eyebrow">Three lanes · updated 2026-08-26, evening</p>
+    <p class="eyebrow">Three lanes · updated 2026-08-27, after the reference audit</p>
     <h1>River build board</h1>
     <p class="sub">
       Where the reference reproduction actually stands, measured against the tree rather than
@@ -416,8 +416,8 @@
     </div>
     <div class="score broad">
       <span class="k">Broad scope</span>
-      <span class="n">90%</span>
-      <div class="track"><i style="width:90%"></i></div>
+      <span class="n">78%</span>
+      <div class="track"><i style="width:78%"></i></div>
       <span class="d">Scored against what v1 actually commits to. Console and voice are excluded because the spec defers them by decision, not by effort.</span>
     </div>
     <div class="score design">
@@ -604,7 +604,7 @@
       <div class="bar"><span class="label">Bots</span><span class="rail"><i class="fill" style="width:88%"></i></span><span class="pct">88</span></div>
       <div class="bar"><span class="label">Server &amp; transport</span><span class="rail"><i class="fill" style="width:91%"></i></span><span class="pct">91</span></div>
       <div class="bar"><span class="label">Accounts &amp; auth</span><span class="rail"><i class="fill" style="width:90%"></i></span><span class="pct">90</span></div>
-      <div class="bar"><span class="label">Client HUD</span><span class="rail"><i class="fill" style="width:88%"></i></span><span class="pct">88</span></div>
+      <div class="bar"><span class="label">Client HUD</span><span class="rail"><i class="fill" style="width:55%"></i></span><span class="pct">55</span></div>
       <div class="bar"><span class="label">Multiplayer UX</span><span class="rail"><i class="fill" style="width:84%"></i></span><span class="pct">84</span></div>
       <div class="bar"><span class="label">Deploy &amp; ops</span><span class="rail"><i class="fill" style="width:78%"></i></span><span class="pct">78</span></div>
       <div class="bar"><span class="label">Economy</span><span class="rail"><i class="fill" style="width:96%"></i></span><span class="pct">96</span></div>
@@ -623,9 +623,9 @@
     </p>
     <div class="bars">
       <div class="bar"><span class="label">Design contracts</span><span class="rail"><i class="fill" style="width:80%"></i></span><span class="pct">80</span></div>
-      <div class="bar"><span class="label">Art pipeline</span><span class="rail"><i class="fill" style="width:86%"></i></span><span class="pct">86</span></div>
-      <div class="bar"><span class="label">Characters</span><span class="rail"><i class="fill" style="width:60%"></i></span><span class="pct">60</span></div>
-      <div class="bar"><span class="label">Venue geometry</span><span class="rail"><i class="fill" style="width:92%"></i></span><span class="pct">92</span></div>
+      <div class="bar"><span class="label">Art pipeline</span><span class="rail"><i class="fill" style="width:70%"></i></span><span class="pct">70</span></div>
+      <div class="bar"><span class="label">Characters</span><span class="rail"><i class="fill" style="width:35%"></i></span><span class="pct">35</span></div>
+      <div class="bar"><span class="label">Venue geometry</span><span class="rail"><i class="fill" style="width:55%"></i></span><span class="pct">55</span></div>
       <div class="bar"><span class="label">Sound</span><span class="rail"><i class="fill" style="width:38%"></i></span><span class="pct">38</span></div>
       <div class="bar"><span class="label">Animation set</span><span class="rail"><i class="fill" style="width:70%"></i></span><span class="pct">70</span></div>
       <div class="bar"><span class="label">Cosmetics</span><span class="rail"><i class="fill" style="width:82%"></i></span><span class="pct">82</span></div>
@@ -637,54 +637,63 @@
   <section>
     <h2>What is next, in order</h2>
     <p class="note">
-      Everything left is visible rather than structural. These are ordered by how
-      much is unknown, not by how much is left.
+      Re-ordered on 27 August against fifteen reference frames that had been sitting
+      in <code>docs/images/</code> unopened. Every item above the line is a
+      composition decision, not a defect.
     </p>
     <div class="steps">
       <article class="step">
-        <h4>1 &middot; Make the clips actually move</h4>
+        <h4>1 &middot; Move the camera</h4>
         <p>
-          The playback side is fixed and proven &mdash; nine rigs, 33,291 tracks
-          bound. The clips are the remaining half and they are wrong twice over: a
-          full breathe cycle rotates the head <b>0.099 degrees</b>, and three clips
-          key nothing at all because their targets carry a dot the rig's bone names
-          do not. Codex has it as 5X, with a build gate so a missing bone stops
-          being a silent skip.
+          The Rooftop camera sits 4.05m up and 6.1m back, <b>30 degrees below
+          horizontal</b>. The reference sits near 1.5m and 3m at roughly 10, wide
+          enough to bend at the edges, and its near chairs are cropped by the
+          bottom of the frame. Two and a half times too high, twice too far, four
+          times too steep &mdash; and at 4.05m you are looking into the open tops
+          of the seat cylinders, which is why nine people read as standing in tubs.
+          Three numbers in <code>venue.ts</code>. Nothing else can be judged until
+          this lands.
         </p>
       </article>
       <article class="step">
-        <h4>2 &middot; Republish the venues</h4>
+        <h4>2 &middot; Chairs that are chairs</h4>
         <p>
-          5W is committed but <code>art/out</code> is not what the app serves. The
-          palms stay blue in the browser until <code>publish_assets.py</code> runs
-          and the byte counts are checked. This has already cost two days once,
-          when every skyline change was invisible against a stale 206K asset.
+          Every reference seat is black leather with a high curved back, a crown
+          emblem, a chrome pedestal and a foot ring, and the player sits
+          <em>in front of</em> the back. Empty ones fill the near foreground and
+          ground the whole shot. River models a drum and puts the character inside
+          it. The chair already has 1,432 triangles; the shape is wrong, not the
+          budget.
         </p>
       </article>
       <article class="step">
-        <h4>3 &middot; Make the palette check a gate</h4>
+        <h4>3 &middot; HUD to the reference's own rules</h4>
         <p>
-          <code>venue-palette.ts</code> can answer whether the biggest thing in
-          frame is also the brightest. It is exported from the barrel and imported
-          by nothing but its own test, which makes it the seventh finished module
-          wired to nothing on a project whose first review question is now
-          precisely that.
+          Persistent elements are small and cornered &mdash; a 44px icon row, a
+          bottom-left block of cards, chips and REP. Bet amounts float in world
+          space as small amber numerals. <b>Nothing persistent ever crosses the
+          felt.</b> Large elements are allowed but only transiently: a 330px
+          betting dial at the bottom edge over the player's own back, and full
+          nameplates only while a key is held. River shows persistent plaques,
+          a centred dead control eating a quarter of the frame, and a pot readout
+          larger than any face.
         </p>
       </article>
       <article class="step">
-        <h4>4 &middot; Set the Railway token</h4>
+        <h4>4 &middot; Dress the set</h4>
         <p>
-          The deploy workflow exists and is gated on the full suite plus a
-          production build. It needs <code>RAILWAY_TOKEN</code> &mdash; the
-          project-scoped one, not the account token &mdash; set on the
-          repository before its first run. That secret is the last thing
-          between here and a deploy anyone can trigger.
+          The reference rooftop is a place: a bar with a working bartender,
+          statues, framed portraits, a staircase, foil curtains, fire runs along a
+          pool, pendant lights, and a second table with its own game. River's is a
+          disc with a parapet and some palms. This is the largest remaining asset
+          gap and it is why the room reads empty however well it is lit.
         </p>
       </article>
     </div>
   </section>
 
   <section class="flag">
+    <p><strong>The reference was in the repository the whole time and nobody opened it.</strong> Fifteen frames of the game this project is cloning sit in <code>docs/images/</code>, and every visual judgement made here was against taste rather than against them. That is how a camera two and a half metres too high survived weeks of art packets, and how two confident arithmetic errors - linear base colours read as sRGB, rect-area nits compared against spot candela - both reached written findings and one of them reached another lane as a packet. The scores above are revised down accordingly. <em>Look at the target before measuring the thing.</em></p>
     <p><strong>The Rooftop reads flat, and it is now a number.</strong> The terrace at <code>#30383a</code> and the parapet at <code>#2a2f3a</code> each exceed twelve percent of room area with a contrast ratio under 1.4, so the floor and the wall read as one shape rather than two. This is the complaint that cost two days when it was only ever a feeling.</p>
     <p><strong>The economy drift is closed.</strong> It was carried as open from 5J on the 25th - <code>economy_config</code> holding only <code>signup_bankroll</code>, with the streak table and the 4H views absent. Checked against production directly on the 26th: all five config keys are present, and <code>economy_daily_streak_bonus</code> carries its full seven-day ladder from 0 to 90,000. The defect was real when it was written up and the schema has since been applied. <em>Nothing had re-checked it for a day and a half</em>, which is its own lesson: an open defect nobody re-measures stays open on the board long after it is fixed in the world.</p>
     <p><strong>Separately, six engine modules were finished and wired to nothing, and a seventh is live right now.</strong> REP had no producer, challenges had no tally, table items had no consumer, the measured light rigs shipped to a browser that ignored them, hand history had nothing showing it, and the bots had no caller for a fortnight. <code>venue-palette.ts</code> is the seventh and is still uncalled today. Each passed its own gates and read as complete in the commit log. With several lanes running, the seam between packets is where work quietly dies &mdash; so the first review question is now "does anything actually call this?", not the last.</p>
@@ -705,8 +714,8 @@
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> d41475b</span>
-    <span><b>Tests</b> 736 green</span>
+    <span><b>HEAD</b> b1ca076</span>
+    <span><b>Tests</b> 760 green</span>
     <span><b>Lint &amp; typecheck</b> clean</span>
     <span><b>Production</b> live</span>
     <span><b>Design docs</b> 19</span>
