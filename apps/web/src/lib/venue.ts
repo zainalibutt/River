@@ -2,6 +2,18 @@
 const FELT_RX = 1.24
 const FELT_RY = 0.72
 
+/**
+ * How far the pool of light on the table should reach.
+ *
+ * The felt's long half-axis plus the rail. The caster's cone is derived from
+ * this rather than carrying its own angle, because a hardcoded angle knows
+ * nothing about the table it is pointed at - the one it replaced threw a cone
+ * 2.24m across a felt 1.24m wide and spilled 81 percent of itself onto the
+ * floor, which measured as the floor taking three times more of that light than
+ * the table did.
+ */
+export const FELT_LIGHT_REACH = FELT_RX + 0.2
+
 export type VenueId = 'rooftop' | 'basement' | 'suite'
 
 export interface VenueCamera {

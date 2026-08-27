@@ -25,7 +25,9 @@ import {
 } from '@/lib/lighting'
 import {
   cameraPlacement,
+  FELT_LIGHT_REACH,
   ORBIT_POLAR_DEGREES,
+  TABLE_SURFACE_HEIGHT,
   VENUE_ORDER,
   type VenueId,
   venueOf,
@@ -407,6 +409,16 @@ function AreaLight({ light }: { light: SceneLight }) {
 }
 
 function CasterLight({ light }: { light: SceneLight }) {
+  // Derived from the table, not chosen. The cone opens just wide enough to
+  // cover the felt and its rail from wherever the rig put the lamp: measured
+  // by ablation, the old hardcoded 0.62 threw a 2.24m pool across a 1.24m felt
+  // and handed the floor 11.1 points of the frame's light against the table's
+  // 4.2 - the one lamp meant to light the table was lighting the room.
+  const coneAngle = useMemo(() => {
+    const drop = light.position[1] - TABLE_SURFACE_HEIGHT
+    if (!(drop > 0.1)) return 0.62
+    return Math.atan(FELT_LIGHT_REACH / drop)
+  }, [light.position])
   const target = useMemo(() => {
     const object = new THREE.Object3D()
     object.position.set(light.target[0], light.target[1], light.target[2])
@@ -418,7 +430,7 @@ function CasterLight({ light }: { light: SceneLight }) {
       <primitive object={target} />
       <spotLight
         castShadow
-        angle={0.62}
+        angle={coneAngle}
         color={light.colour}
         distance={0}
         // The caster carries the pool of light on the felt, so it is scaled
