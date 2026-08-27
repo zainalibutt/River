@@ -41,3 +41,9 @@ kilo.jsonc
 .claude/
 .codex/
 .ai/
+
+# Reference capture video (large binaries, kept local)
+docs/images/**/*.mp4
+docs/images/**/*.mov
+docs/images/**/*.mkv
+docs/images/**/*.webm
