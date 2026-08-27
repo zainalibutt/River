@@ -403,7 +403,7 @@
     <p class="sub">
       Where the build actually stands, measured against the tree rather than
       against memory. Phases 1&ndash;4 are complete and in production; Phase&nbsp;5 &mdash; art, characters
-      and the long tail &mdash; is the active phase. 725 tests green, the full stack authenticated end to end, and the browser finally renders the room the venues were measured for.
+      and the long tail &mdash; is the active phase. 792 tests green, the full stack authenticated end to end, and the browser finally renders the room the venues were measured for.
     </p>
   </header>
 
@@ -504,6 +504,9 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>The HUD is off the felt</b> &mdash; the radial menu drew a <b>420px disc even with no action to take</b>, purely to hold the words "choose an open seat", so the largest element on screen was a dead control lying across the near table rail. The pot was 52px cream numerals centred on the table and reads zero for most of a hand. Measured after: HUD coverage <b>3.7 percent</b> of the stage and <b>zero persistent elements intersecting the felt</b>, which is the reference's one hard rule.</span></li>
+          <li><span class="dot done"></span><span><b>A seat nobody sits in no longer has a body in it</b> &mdash; the venue bakes nine characters in as geometry, so the table showed nine strangers whatever the room said. Occupancy now comes off the room view. The chair stays either way: an empty chair is set dressing, an empty seat with a person in it is a lie about who is at the table. Lint caught the wiring half-done, where the prop was accepted and never passed on.</span></li>
+          <li><span class="dot done"></span><span><b>The camera sits where a player would</b> &mdash; 3.2m out and 1.5m up at 16 degrees, against 6.1m and 4.05m at 30. The old placement stood <em>outside the parapet</em>, since the terrace is only 4.0m across, and looked down into the open tops of the seat cylinders.</span></li>
           <li><span class="dot done"></span><span><b>A deploy the repository can do</b> &mdash; Railway had been pushed by hand since it went live. Deliberately not push-to-deploy: three models commit to this branch several times an hour and a lane is regularly mid-packet on it, so push-to-deploy would ship intermediate states to a table holding real balances. It is the Actions button or a version tag, and either way it clears lint, typecheck, the full suite and a production build before Railway is touched. The CLI invocation is checked against Railway's own documentation rather than guessed.</span></li>
           <li><span class="dot done"></span><span><b>A quiet character could only ever say one line</b> &mdash; found reviewing DeepSeek's chatter packet. The roll deciding <em>whether</em> a bot speaks was also choosing <em>which</em> line it said, and having passed the speak check it is uniform over [0, chance) rather than [0, 1). A silent character, whose quiet-event chance is 0.05, returned its first line <b>one hundred percent of the time across five thousand utterances</b>. Every other line it owned was unreachable, and no count or coverage check could see it. It mattered this hour rather than next week, because the voice pack being written against that picker gives all 480 lines a weight.</span></li>
           <li><span class="dot done"></span><span><b>The palette module has a consumer</b> &mdash; <code>venue-palette.ts</code> was the seventh module here to pass its own gates and be called by nothing. The web app now grades the venue files it ships. Room is split from backdrop at twelve metres, measured rather than chosen: the furthest Rooftop room surface is the terrace at 4.0m and the nearest backdrop is 34.1m, and the mountains are <b>83.9 percent of the venue's triangles</b> against a few hundred pixels of sky &mdash; grading unweighted area would score the backdrop and ignore the room. Proven to fire and to pass on two builds of the same code.</span></li>
@@ -714,8 +717,8 @@
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> b1ca076</span>
-    <span><b>Tests</b> 760 green</span>
+    <span><b>HEAD</b> 44e45d6</span>
+    <span><b>Tests</b> 792 green</span>
     <span><b>Lint &amp; typecheck</b> clean</span>
     <span><b>Production</b> live</span>
     <span><b>Design docs</b> 19</span>
