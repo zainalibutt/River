@@ -304,6 +304,28 @@ function VenueAsset({
   return <primitive object={asset.scene} />
 }
 
+/**
+ * Table pieces at the size they actually are.
+ *
+ * A casino chip is 39mm across and 3.3mm thick; a playing card is 63 by 88mm.
+ * The client was drawing chips at 240mm - six times over - and cards at 270 by
+ * 390, which is what those amber drums round the felt were.
+ *
+ * The chip is drawn at its real diameter and a thicker slab than a real chip,
+ * because a 3mm disc at this camera is a line. The card keeps the cheat scale
+ * the art direction asks for: readable beats accurate on the one object a
+ * player has to read from across a table.
+ *
+ * The venue GLB already carries correct chip and card geometry as instancing
+ * pools parked at the origin. Instancing those rather than these primitives is
+ * the right end state and is not this change.
+ */
+const CHIP_RADIUS = 0.0195
+const CHIP_HEIGHT = 0.012
+const CARD_WIDTH = 0.126
+const CARD_LENGTH = 0.176
+const CARD_THICKNESS = 0.004
+
 function InstancedTablePieces() {
   const chips = useRef<THREE.InstancedMesh>(null)
   const cards = useRef<THREE.InstancedMesh>(null)
@@ -313,14 +335,22 @@ function InstancedTablePieces() {
     if (chips.current !== null) {
       for (let index = 0; index < 36; index += 1) {
         const stack = index % 6
-        matrix.makeTranslation(-0.8 + stack * 0.32, 0.68 + Math.floor(index / 6) * 0.045, 0.72)
+        // Sit on the felt, not through it. These were laid out against a table
+        // surface of 0.55 and the felt is at 0.76, so every stack began 8cm
+        // inside the table and grew out of the top of it.
+        const y = TABLE_SURFACE_HEIGHT + CHIP_HEIGHT / 2 + Math.floor(index / 6) * CHIP_HEIGHT
+        matrix.makeTranslation(-0.36 + stack * 0.144, y, 0.46)
         chips.current.setMatrixAt(index, matrix)
       }
       chips.current.instanceMatrix.needsUpdate = true
     }
     if (cards.current !== null) {
       for (let index = 0; index < 5; index += 1) {
-        matrix.makeTranslation(-0.72 + index * 0.36, 0.65, 0)
+        matrix.makeTranslation(
+          -(CARD_WIDTH + 0.02) * 2 + index * (CARD_WIDTH + 0.02),
+          TABLE_SURFACE_HEIGHT + CARD_THICKNESS / 2,
+          0,
+        )
         cards.current.setMatrixAt(index, matrix)
       }
       cards.current.instanceMatrix.needsUpdate = true
@@ -330,11 +360,11 @@ function InstancedTablePieces() {
   return (
     <>
       <instancedMesh ref={chips} args={[undefined, undefined, 36]} castShadow={false} receiveShadow>
-        <cylinderGeometry args={[0.12, 0.12, 0.045, 16]} />
+        <cylinderGeometry args={[CHIP_RADIUS, CHIP_RADIUS, CHIP_HEIGHT, 16]} />
         <meshStandardMaterial color="#d8a338" metalness={0.25} roughness={0.42} />
       </instancedMesh>
       <instancedMesh ref={cards} args={[undefined, undefined, 5]} castShadow={false} receiveShadow>
-        <boxGeometry args={[0.27, 0.018, 0.39]} />
+        <boxGeometry args={[CARD_WIDTH, CARD_THICKNESS, CARD_LENGTH]} />
         <meshStandardMaterial color="#e8ded0" roughness={0.68} />
       </instancedMesh>
     </>
