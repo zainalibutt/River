@@ -504,6 +504,8 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>The menu layer has a direction, and it is not the reference's</b> &mdash; River had no menus, so it had no look to build them in, and the only material to hand was stills of the game it takes its genre from. Building against those would have produced a facsimile of a free-to-play grind: distressed collage, splatter, loot cases, a daily cut &mdash; selling things River does not have. The direction is <b>a private club after dark</b>. Near-black green and charcoal, warm ivory type, brushed brass for focus and progress <em>only</em>, one oxblood accent reserved for destructive actions; smoked glass and hairline rules instead of torn paper. It is cheaper to execute well rather than more expensive &mdash; collage needs a bespoke texture per surface, this needs two typefaces and translucent panels, which is CSS. It matches the product, because private invite tables for a friend group <em>is</em> a private club after dark. And the venue already is this: night, warm pendants, city bokeh, and a skyline that has only been visible since the glowing wall came down. Measurable rules, not adjectives &mdash; navigation at 20-25 percent of frame, focus at 180-250ms, transitions at 500-700ms preserving the venue, one dominant decision per screen, and an explicit rejection list.</span></li>
+          <li><span class="dot fail"></span><span><b>Broad scope was never missing systems &mdash; it was missing doorways</b> &mdash; the cosmetics store, table items, REP challenges, hand history and the lobby are all built, tested and <em>unreachable</em>, because River is one route. Every finished system got bolted onto the table page as a panel, which is also why the HUD is crowded: the HUD problem and the one-page problem are the same problem, and moving things to where they belong fixes both. Closing broad scope is six routes over services that already work, which is transcription rather than invention.</span></li>
           <li><span class="dot done"></span><span><b>Somebody finally looked at the shot</b> &mdash; the browser pane will not composite WebGL unless it is displayed, so the 3D had gone unseen for the whole project. Blender does not need the pane, or the MCP, or a window: <code>blender --background --python</code> renders the shipped GLB from the exact play camera in venue.ts. Three faults were visible in the first frame, none of which any existing gate could have caught, because every gate reads the file and none of them look at the picture.</span></li>
           <li><span class="dot done"></span><span><b>The table had a hole in every second facet</b> &mdash; both quad bands of <code>wood_pedestal</code> were triangulated as <code>(a, b, d)</code> and <code>(b, c, d)</code>. For a quad a-b-d-c the second triangle never touches a, so the pair cross through the middle and leave the corner by a with <em>no surface on it</em>. Every other band in <code>geo.py</code> uses <code>(a, d, c)</code>. From a low, close camera with the base filling the bottom third of frame it read as a ring of black zigzag teeth, and it had been read as a lighting or material problem for weeks.</span></li>
           <li><span class="dot done"></span><span><b>The terrace was walled inside a glowing box</b> &mdash; the &ldquo;lit parapet edge&rdquo; was the entire parapet ring built a second time, at full height, made emissive and raised 1.1m. An 8.2m luminous wall standing from 1.1m to 2.22m, dead level with a camera at 1.5m. It filled the top sixth of every frame with a flat tan band and hid the skyline behind it &mdash; 85m wide, 26m out, and completely invisible. The venue read as a beige studio cyclorama because it was standing in one. It is a 5cm strip now.</span></li>
@@ -656,68 +658,62 @@
   <section>
     <h2>What is next, in order</h2>
     <p class="note">
-      Re-ordered on 27 August. The first two items on the previous list &mdash;
-      move the camera, and get the HUD off the felt &mdash; have both landed, and
-      the order now runs from &ldquo;can it be played&rdquo; down to &ldquo;does
-      it look right&rdquo;, because the first question had never actually been
-      asked end to end and the answer was no.
+      The route map, fixed so the lanes cannot collide. Claude builds the shell
+      in <code>apps/web</code>; Codex has the people, in
+      <code>build_characters.py</code> and the character clips. There is no file
+      in common.
     </p>
     <div class="steps">
       <article class="step">
-        <h4>1 &middot; The characters</h4>
+        <h4>1 &middot; The design system, once</h4>
         <p>
-          With the room fixed, the people are what is wrong with the frame.
-          Every garment has a shredded hem and torn sleeves, which is real
-          broken geometry and not a texture. Every face carries dark seams. All
-          nine sit in the same pose with their arms spread on the felt. And the
-          chairs' chrome is now the brightest thing in the lower half of the
-          shot, pulling the eye to the floor when the felt should hold it &mdash;
-          there is still no pool of light on the table.
+          Tokens and four components &mdash; smoked panel, hairline rule, the
+          value row, the bottom action bar &mdash; plus the route scaffold.
+          Every screen after this is assembly rather than invention, which is
+          what makes six of them a finite job. Restraint is the risk: collage
+          hides loose spacing and mediocre type, and this direction will not.
         </p>
       </article>
       <article class="step">
-        <h4>2 &middot; A session that survives a refresh</h4>
+        <h4>2 &middot; The front door</h4>
         <p>
-          The play loop works &mdash; deal, four streets, showdown, payout, chips
-          conserved &mdash; and is gated. A reload rejoins the table it left, a
-          shutdown hands the stacks back, and the signup bankroll is no longer
-          exactly one buy-in. What is still open is the hard kill: a process that
-          dies without running its shutdown takes every seated stack with it.
-          That wants reconciliation on startup &mdash; a buy-in with no matching
-          cash-out, for a room that no longer exists, is a refund &mdash; rather
-          than a longer shutdown.
+          <code>/</code> is the menu. PLAY deals a bot table straight away.
+          PRIVATE TABLE opens the one configuration screen. JOIN FRIENDS is a
+          dialog, not a route. WARDROBE, COLLECTION and SETTINGS each finally
+          give a finished service somewhere to live. Nothing on the menu is a
+          button that does not work.
         </p>
       </article>
       <article class="step">
-        <h4>3 &middot; The developer panel</h4>
+        <h4>3 &middot; The room is the hero, not a person</h4>
         <p>
-          The server surface is built and tested: grant chips, take chips, ban,
-          lift, list. The role is granted with one SQL call and travels in the
-          access token. There is no interface for any of it yet, so today it is
-          reachable only by sending the wire message by hand. A panel that shows
-          for the developer account and refuses politely for everyone else is a
-          small piece of client work on top of a finished server one.
+          The direction board's hero is a generated figure at a fidelity
+          River's 5,837-triangle characters do not reach, and designing around
+          it would make every screen look broken the moment a real character
+          entered it. Menus take their imagery from venue renders, which the
+          pipeline now produces from any angle in ninety seconds. The character
+          returns to the menu when Codex's work lands.
         </p>
       </article>
       <article class="step">
-        <h4>4 &middot; Chairs that are chairs</h4>
+        <h4>4 &middot; The people</h4>
         <p>
-          Every reference seat is black leather with a high curved back, a crown
-          emblem, a chrome pedestal and a foot ring, and the player sits
-          <em>in front of</em> the back. Empty ones fill the near foreground and
-          ground the whole shot. River models a drum and puts the character inside
-          it. The chair already has 1,432 triangles; the shape is wrong, not the
-          budget.
+          Codex's lane, and the worst thing left in the frame. Every garment has
+          a shredded hem and torn sleeves - real broken geometry, not a texture.
+          Every face carries dark seams. All nine sit in the same pose with
+          their arms spread on the felt, and packet 5X already found three clips
+          that key nothing at all because their targets name bones the rig does
+          not have.
         </p>
       </article>
       <article class="step">
-        <h4>5 &middot; Dress the set</h4>
+        <h4>5 &middot; The held beat</h4>
         <p>
-          The reference rooftop is a place: a bar with a working bartender,
-          statues, framed portraits, a staircase, foil curtains, fire runs along a
-          pool, pendant lights, and a second table with its own game. River's is a
-          disc with a parapet and some palms. This is the largest remaining asset
-          gap and it is why the room reads empty however well it is lit.
+          The showdown reel is built and drives nothing. A hand result deserves
+          the room still visible underneath, a strong hand label, the amount,
+          and one way forward &mdash; reveal, hold, then offer. It is also the
+          clearest place for a score to attach later, which is why transitions
+          are being centralised now rather than retrofitted.
         </p>
       </article>
     </div>
