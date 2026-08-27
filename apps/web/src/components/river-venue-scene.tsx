@@ -39,6 +39,19 @@ type SceneProps = {
   venueId: VenueId
   /** Latest gestures to play, one per seat. Never gates the hand. */
   cues?: readonly AnimationCue[] | undefined
+  /**
+   * Seat indexes with a player or a bot in them.
+   *
+   * The venue GLB bakes nine characters in as geometry, so without this every
+   * seat shows a body whatever the room says - a table of nine strangers that
+   * never empties. The reference leaves chairs empty and uses them as
+   * foreground set dressing; the negative space is what makes it read as a
+   * room rather than a ring of people.
+   *
+   * Undefined means "show everyone", which keeps the venue previewable with no
+   * room attached.
+   */
+  occupiedSeats?: readonly number[] | undefined
 }
 
 function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
@@ -156,7 +169,15 @@ function retargetToRig(
 const PLAQUE = { widthPercent: (208 / 1920) * 100, heightPercent: (76 / 1080) * 100 }
 const STAGE = { widthPercent: 100, heightPercent: 100 }
 
-function VenueAsset({ venueId, cues }: { venueId: VenueId; cues: readonly AnimationCue[] }) {
+function VenueAsset({
+  venueId,
+  cues,
+  occupiedSeats,
+}: {
+  venueId: VenueId
+  cues: readonly AnimationCue[]
+  occupiedSeats: readonly number[] | undefined
+}) {
   const venue = venueOf(venueId)
   const asset = useGLTF(venue.asset)
   const mixers = useRef<THREE.AnimationMixer[]>([])
@@ -230,6 +251,17 @@ function VenueAsset({ venueId, cues }: { venueId: VenueId; cues: readonly Animat
       mixers.current = []
     }
   }, [asset.animations, asset.scene, venue.name])
+
+  useLayoutEffect(() => {
+    // Hide the baked character for any seat nobody is sitting in. The chair
+    // stays: an empty chair is set dressing, an empty seat with a body in it is
+    // a lie about who is at the table.
+    asset.scene.traverse((object) => {
+      const seat = object.userData?.seatIndex
+      if (typeof seat !== 'number') return
+      object.visible = occupiedSeats === undefined || occupiedSeats.includes(seat)
+    })
+  }, [asset.scene, occupiedSeats])
 
   const playing = useMemo(() => (cues.length > 0 ? cues : seatIndexes.map(idleCueFor)), [cues])
 
@@ -430,7 +462,7 @@ function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
   )
 }
 
-function Scene({ seatIds, seatRefs, venueId, cues = [] }: SceneProps) {
+function Scene({ seatIds, seatRefs, venueId, cues = [], occupiedSeats }: SceneProps) {
   const [sidecar, setSidecar] = useState<LightingSidecar>({})
 
   useEffect(() => {
@@ -452,7 +484,7 @@ function Scene({ seatIds, seatRefs, venueId, cues = [] }: SceneProps) {
       <color attach="background" args={[worldColour]} />
       <VenueLights lights={lights} />
       <Suspense fallback={null}>
-        <VenueAsset venueId={venueId} cues={cues} />
+        <VenueAsset venueId={venueId} cues={cues} occupiedSeats={occupiedSeats} />
       </Suspense>
       <InstancedTablePieces />
       <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
@@ -461,7 +493,7 @@ function Scene({ seatIds, seatRefs, venueId, cues = [] }: SceneProps) {
   )
 }
 
-export function RiverScene({ seatIds, seatRefs, venueId, cues = [] }: SceneProps) {
+export function RiverScene({ seatIds, seatRefs, venueId, cues = [], occupiedSeats }: SceneProps) {
   const venue = venueOf(venueId)
   return (
     <Canvas
@@ -526,7 +558,13 @@ export function RiverScene({ seatIds, seatRefs, venueId, cues = [] }: SceneProps
       }}
       shadows
     >
-      <Scene seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} cues={cues} />
+      <Scene
+        seatIds={seatIds}
+        seatRefs={seatRefs}
+        venueId={venueId}
+        cues={cues}
+        occupiedSeats={occupiedSeats}
+      />
     </Canvas>
   )
 }

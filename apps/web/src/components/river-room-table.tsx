@@ -586,6 +586,9 @@ export function RiverRoomTable() {
             <RiverVenue
               cues={cues}
               venueId={venueId}
+              occupiedSeats={seats
+                .filter((seat) => seat.playerId !== null)
+                .map((seat) => seat.seat)}
               seatIds={seats.map((seat) => seat.playerId ?? `seat-${seat.seat}`)}
               seatRefs={seatRefs}
             />
