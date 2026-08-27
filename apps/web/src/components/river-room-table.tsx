@@ -272,6 +272,9 @@ export function RiverRoomTable() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [tables, setTables] = useState<readonly TableSummary[]>([])
   const [lobbyOpen, setLobbyOpen] = useState(false)
+  // The table code shows on demand rather than all the time: INVITE copies the
+  // link, then holds the code up briefly for reading out to someone in the room.
+  const [inviteShown, setInviteShown] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [verify, setVerify] = useState<VerifyResult>({
     status: 'idle',
@@ -294,6 +297,14 @@ export function RiverRoomTable() {
   const nameRef = useRef('Guest')
   const seatRefs = useRef(new Map<string, HTMLElement>())
   const reconnectRef = useRef<number | null>(null)
+  const inviteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(
+    () => () => {
+      if (inviteTimerRef.current !== null) clearTimeout(inviteTimerRef.current)
+    },
+    [],
+  )
 
   const command = useCallback((next: ClientRoomCommand) => {
     try {
@@ -708,7 +719,7 @@ export function RiverRoomTable() {
             {graphicsMode === 'two' ? (
               <div className="dom-table-fallback" aria-hidden="true" />
             ) : null}
-            <nav className="menu-cluster" aria-label="Table menu">
+            <nav className="hud-corner hud-corner-left" aria-label="Table menu">
               <button
                 type="button"
                 onClick={() => setGraphicsMode((mode) => (mode === 'two' ? 'three' : 'two'))}
@@ -726,17 +737,22 @@ export function RiverRoomTable() {
               <span className={`network-mark ${connection}`}>
                 {connection === 'connected' ? 'LIVE' : 'LINK'}
               </span>
+              <button
+                type="button"
+                className={`verify-pill verify-pill-room verify-${verify.status}`}
+                disabled={view.commit === null}
+                aria-label={verifyStatusLabel(verify.status)}
+                title={verifyStatusLabel(verify.status)}
+                onClick={() => setVerifyOpen(true)}
+              >
+                {/* The eight-character commit read as loose hexadecimal to
+                    anyone not already convinced. The full figure lives in the
+                    modal this button opens; up here a lamp says which state
+                    the hand is in and the label says where to ask. */}
+                <span>VERIFY</span>
+                <i className="verify-dot" aria-hidden="true" />
+              </button>
             </nav>
-            <button
-              type="button"
-              className={`verify-pill verify-pill-room verify-${verify.status}`}
-              disabled={view.commit === null}
-              aria-label={verifyStatusLabel(verify.status)}
-              onClick={() => setVerifyOpen(true)}
-            >
-              <span>VERIFY</span>
-              <strong>{view.commit?.slice(0, 8) ?? '--------'}</strong>
-            </button>
             {historyOpen ? (
               <RiverHandHistory
                 hands={hands}
@@ -879,17 +895,6 @@ export function RiverRoomTable() {
                 ))}
               </section>
             )}
-            <button
-              type="button"
-              className={`lobby-toggle-button${lobbyOpen ? ' open' : ''}`}
-              aria-expanded={lobbyOpen}
-              onClick={() => {
-                setLobbyOpen((open) => !open)
-                socketRef.current?.listTables()
-              }}
-            >
-              TABLES
-            </button>
             {lobbyOpen ? (
               <div className="lobby-backdrop" role="presentation">
                 <RiverLobby
@@ -910,17 +915,6 @@ export function RiverRoomTable() {
                 </button>
               </div>
             ) : null}
-            <button
-              type="button"
-              className={`shop-toggle${shopOpen ? ' open' : ''}`}
-              aria-expanded={shopOpen}
-              onClick={() => {
-                setShopOpen((open) => !open)
-                setSocialOpen(false)
-              }}
-            >
-              ITEMS
-            </button>
             {shopOpen ? (
               <aside className="shop-panel" aria-label="Table items">
                 <header className="shop-head">
@@ -1025,6 +1019,28 @@ export function RiverRoomTable() {
             <div className="hud-corner hud-corner-right">
               <button
                 type="button"
+                className={`lobby-toggle-button${lobbyOpen ? ' open' : ''}`}
+                aria-expanded={lobbyOpen}
+                onClick={() => {
+                  setLobbyOpen((open) => !open)
+                  socketRef.current?.listTables()
+                }}
+              >
+                TABLES
+              </button>
+              <button
+                type="button"
+                className={`shop-toggle${shopOpen ? ' open' : ''}`}
+                aria-expanded={shopOpen}
+                onClick={() => {
+                  setShopOpen((open) => !open)
+                  setSocialOpen(false)
+                }}
+              >
+                ITEMS
+              </button>
+              <button
+                type="button"
                 className="verify-pill history-pill"
                 aria-label={`Hand history, ${hands.length} hands recorded`}
                 onClick={() => setHistoryOpen(true)}
@@ -1032,17 +1048,28 @@ export function RiverRoomTable() {
                 <span>HANDS</span>
                 <strong>{hands.length}</strong>
               </button>
-              <section className="invite-strip" aria-label="Private table invite">
-                <span>TABLE CODE</span>
-                <strong>{view.inviteCode || '------'}</strong>
-                <button
-                  type="button"
-                  disabled={view.inviteCode.length === 0}
-                  onClick={() => void share()}
-                >
-                  COPY INVITE
-                </button>
-              </section>
+              {/* One control where a three-part strip stood. The code is not
+                  play information - it is needed at the moment of inviting
+                  somebody, so pressing INVITE copies the link and holds the
+                  code up long enough to read it out loud. */}
+              <button
+                type="button"
+                className={`invite-chip${inviteShown && view.inviteCode.length > 0 ? ' showing-code' : ''}`}
+                disabled={view.inviteCode.length === 0}
+                title={
+                  view.inviteCode.length === 0
+                    ? 'No invite code yet'
+                    : `Table code ${view.inviteCode} - click to copy the invite link`
+                }
+                onClick={() => {
+                  void share()
+                  setInviteShown(true)
+                  if (inviteTimerRef.current !== null) clearTimeout(inviteTimerRef.current)
+                  inviteTimerRef.current = setTimeout(() => setInviteShown(false), 6000)
+                }}
+              >
+                {inviteShown && view.inviteCode.length > 0 ? view.inviteCode : 'INVITE'}
+              </button>
               <button
                 type="button"
                 className={`social-toggle${socialOpen ? ' open' : ''}`}

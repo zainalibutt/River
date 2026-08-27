@@ -61,7 +61,7 @@ button {
 
 button:focus-visible,
 input:focus-visible {
-  outline: 3px solid var(--river-amber-bright);
+  outline: 3px solid var(--club-brass-bright);
   outline-offset: 3px;
   box-shadow: 0 0 0 7px rgb(10 13 12 / 85%);
 }
@@ -170,79 +170,111 @@ input:focus-visible {
   opacity: 0.94;
 }
 
-.menu-cluster,
-.verify-pill {
+/*
+ * The top row, on the club tokens.
+ *
+ * Ten controls used to sit up here in four treatments: lamp-room buttons, two
+ * pill shapes, an amber invite strip and a pair of loose toggles. The menus
+ * settled one vocabulary in club.css and its custom properties are declared on
+ * :root, so the row borrows them directly rather than growing a second
+ * palette: smoked glass, a single hairline rule, tracked ivory micro-caps, and
+ * brass kept for the open or live state. Every control in either corner row
+ * shares the one rule below, which is what makes the next control land
+ * already dressed.
+ */
+.menu-cluster {
+  /* Kept for river-table.tsx, which still renders the old cluster. The live
+     table's controls sit in the .hud-corner rows instead. */
   position: absolute;
   top: 54px;
-  z-index: 20;
-  height: 64px;
-}
-
-.menu-cluster {
   left: 96px;
+  z-index: 20;
   display: flex;
-  gap: 16px;
+  gap: 14px;
 }
 
-.menu-cluster button,
-.verify-pill {
-  min-width: 64px;
-  border: 1px solid var(--river-room-edge);
-  border-radius: 16px;
-  background: rgb(27 35 32 / 86%);
-  color: var(--river-cream-dim);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-}
-
-.menu-cluster button:hover,
-.verify-pill:hover:not(:disabled) {
-  border-color: var(--river-copper);
-  background: var(--river-room-raised);
-}
-
-.verify-pill {
-  right: 96px;
+.hud-corner > button,
+.hud-corner > .network-mark,
+.menu-cluster button {
   display: flex;
-  width: 320px;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  border-radius: 999px;
+  gap: 10px;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--club-hairline);
+  border-radius: 0;
+  background: var(--club-glass);
+  color: var(--club-ivory-dim);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  cursor: pointer;
+  backdrop-filter: blur(14px) saturate(0.9);
+  transition:
+    color var(--club-focus) var(--club-glide),
+    border-color var(--club-focus) var(--club-glide);
 }
 
-.verify-pill span {
-  font-size: 18px;
-  letter-spacing: 0.12em;
+.hud-corner > button:hover:not(:disabled) {
+  border-color: var(--club-hairline-strong);
+  color: var(--club-ivory);
+}
+
+/* An open panel is where the player's attention is: brass, like any focus. */
+button.lobby-toggle-button.open,
+button.shop-toggle.open,
+button.social-toggle.open {
+  border-color: var(--club-brass);
+  color: var(--club-brass);
 }
 
 .verify-pill strong {
-  color: var(--river-copper);
-  font-size: 24px;
+  color: var(--club-ivory);
   font-variant-numeric: tabular-nums;
 }
 
 .verify-pill:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The fairness lamp. The verify rules further down recolour it per state. */
+.verify-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--club-ivory-faint);
+}
+
+button.invite-chip.showing-code {
+  color: var(--club-brass);
+  letter-spacing: 0.22em;
+  font-variant-numeric: tabular-nums;
 }
 
 .pot-readout {
-  /* The reference floats the pot as a small amber numeral beside the felt. A
-     52px readout centred on the table was the largest text on screen and it
-     reads zero for most of a hand's life. */
+  /* The reference has no pot text at all - the pot is a pile of chips on the
+     felt. The number stays because the venue does not yet count chips for
+     you, but it stays as a figure, not a panel: no ground, a micro-label, and
+     tabular ivory where a 30px amber shout used to be. */
   position: absolute;
-  top: 232px;
+  top: 236px;
   left: 810px;
   display: grid;
   width: 300px;
-  height: 60px;
-  place-items: center;
+  gap: 4px;
+  justify-items: center;
   text-align: center;
 }
 
-.pot-readout > span,
+.pot-readout > span {
+  color: var(--club-ivory-faint);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+}
+
 .street-label,
 .eyebrow {
   color: var(--river-cream-faint);
@@ -252,8 +284,9 @@ input:focus-visible {
 }
 
 .pot-readout strong {
-  color: var(--river-amber-bright);
-  font-size: 30px;
+  color: var(--club-ivory);
+  font-size: 24px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -394,18 +427,21 @@ input:focus-visible {
   width: 600px;
   height: 34px;
   place-items: center;
-  border-radius: 999px;
-  color: var(--river-cream-dim);
-  font-size: 16px;
-  font-weight: 500;
+  border-radius: 0;
+  color: var(--club-ivory-dim);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
 }
 
 .status-line.populated,
 .status-line:has(.countdown) {
-  border: 1px solid rgb(42 52 47 / 70%);
-  /* Opaque enough that a seat marker passing behind does not read through it.
-     At 62 percent the projected SIT plaques ghosted through the text. */
-  background: rgb(19 25 22 / 92%);
+  border: 1px solid var(--club-hairline);
+  /* A seat marker passing behind must not read through the text. The old rule
+     did it with 92 percent paint; glass at 74 percent plus the blur gets the
+     same legibility without a second material. */
+  background: var(--club-glass);
+  backdrop-filter: blur(14px) saturate(0.9);
 }
 
 .countdown {
@@ -1008,39 +1044,10 @@ input:focus-visible {
   font-weight: 700;
 }
 
-.invite-strip {
-  position: absolute;
-  top: 54px;
-  right: 96px;
-  z-index: 20;
-  display: grid;
-  grid-template-columns: auto auto auto;
-  min-height: 64px;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 12px 10px 20px;
-  border: 1px solid rgb(232 169 60 / 42%);
-  border-radius: 16px;
-  background: rgb(19 25 22 / 86%);
-}
+/* The invite strip is gone: TABLE CODE, the code and COPY INVITE folded into
+   the single INVITE control in the right corner row, because the code is
+   needed at the moment of inviting somebody and at no other time. */
 
-.invite-strip span,
-.invite-strip strong {
-  font-size: 16px;
-  letter-spacing: 0.12em;
-}
-
-.invite-strip span {
-  color: var(--river-cream-faint);
-}
-
-.invite-strip strong {
-  color: var(--river-amber-bright);
-  font-size: 24px;
-  font-variant-numeric: tabular-nums;
-}
-
-.invite-strip button,
 .upgrade-panel button,
 .inline-join button {
   min-height: 42px;
@@ -1054,27 +1061,19 @@ input:focus-visible {
 }
 
 .network-mark {
-  display: grid;
-  min-width: 62px;
-  min-height: 64px;
-  place-items: center;
-  border: 1px solid var(--river-room-edge);
-  border-radius: 16px;
-  color: var(--river-cream-faint);
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  /* Dressed by the corner-row rule; it only reports, so no pointer. */
+  cursor: default;
 }
 
 .network-mark.connected {
-  border-color: rgb(111 191 139 / 62%);
-  color: var(--river-win);
+  color: var(--club-ivory-dim);
 }
 
 .network-mark.reconnecting,
 .network-mark.offline {
-  border-color: rgb(232 169 60 / 62%);
-  color: var(--river-amber);
+  /* A link being restored is a thing in progress, which is brass's job. */
+  border-color: var(--club-brass);
+  color: var(--club-brass);
 }
 
 /*
@@ -1152,8 +1151,7 @@ input:focus-visible {
 .seat,
 .ram,
 .upgrade-panel,
-.inline-join,
-.invite-strip {
+.inline-join {
   pointer-events: auto;
 }
 
@@ -1531,20 +1529,24 @@ input:focus-visible {
 /* Verify panel — the fairness commit is only a claim until the player can
    recompute it. Status colour is semantic, not decorative: amber while the
    seed is still sealed, cream on a match, danger on a mismatch. */
-.verify-pill.verify-live strong {
-  color: var(--river-amber);
+.verify-pill.verify-live .verify-dot {
+  background: var(--club-brass);
 }
 
-.verify-pill.verify-match strong {
-  color: var(--river-cream);
+.verify-pill.verify-match .verify-dot {
+  background: var(--club-ivory);
 }
 
-.verify-pill.verify-mismatch {
-  border-color: var(--river-danger);
+/* The one oxblood in the row, and it means what oxblood means: something is
+   wrong with the hand's fairness proof. */
+button.verify-pill.verify-mismatch {
+  border-color: var(--club-oxblood);
+  color: var(--club-oxblood);
+  filter: brightness(1.7);
 }
 
-.verify-pill.verify-mismatch strong {
-  color: var(--river-danger);
+.verify-pill.verify-mismatch .verify-dot {
+  background: var(--club-oxblood);
 }
 
 .verify-modal .verify-rows {
@@ -1624,11 +1626,6 @@ input:focus-visible {
 /* The room HUD gives the top-right corner to the invite strip, so the verify
    pill sits beside the menu cluster instead. Without this it lands on top of
    the table code. */
-.verify-pill-room {
-  left: 360px;
-  right: auto;
-}
-
 /* Preset actions. Private to the player, so they sit outside the RAM wedge
    circle and read at reduced emphasis - the public half of this mechanic is the
    avatar gesture, not the HUD. */
@@ -1675,7 +1672,7 @@ input:focus-visible {
 }
 
 .preset-chip:focus-visible {
-  outline: 2px solid var(--river-amber-bright);
+  outline: 2px solid var(--club-brass-bright);
   outline-offset: 3px;
 }
 
@@ -1699,27 +1696,8 @@ input:focus-visible {
 /* Chat and emotes. A River divergence - the reference has no typed chat. The panel
    sits at the edge and never covers the felt or the action rail, because nothing
    social may compete with a decision in progress. */
-.social-toggle {
-  position: absolute;
-  top: 54px;
-  right: 96px;
-  z-index: 22;
-  min-width: 64px;
-  height: 64px;
-  padding: 0 20px;
-  border: 1px solid var(--river-room-edge);
-  border-radius: 16px;
-  background: rgb(27 35 32 / 86%);
-  color: var(--river-cream-dim);
-  font-size: 20px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.social-toggle.open {
-  border-color: var(--river-amber);
-  color: var(--river-amber);
-}
+/* The chat toggle lives in the right corner row and is dressed by the shared
+   corner rule; its open state is the brass rule beside the row. */
 
 .social-panel {
   position: absolute;
@@ -1839,7 +1817,7 @@ input:focus-visible {
 .social-toggle:focus-visible,
 .emote-rail button:focus-visible,
 .chat-entry button:focus-visible {
-  outline: 2px solid var(--river-amber-bright);
+  outline: 2px solid var(--club-brass-bright);
   outline-offset: 2px;
 }
 
@@ -1885,28 +1863,35 @@ input:focus-visible {
 }
 
 .venue-picker button {
-  padding: 10px 18px;
-  border: 1px solid var(--river-room-edge);
-  border-radius: 12px;
-  background: rgb(27 35 32 / 82%);
-  color: var(--river-cream-faint);
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--club-hairline);
+  border-radius: 0;
+  background: var(--club-glass);
+  color: var(--club-ivory-dim);
   font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   cursor: pointer;
+  backdrop-filter: blur(14px) saturate(0.9);
+  transition:
+    color var(--club-focus) var(--club-glide),
+    border-color var(--club-focus) var(--club-glide);
 }
 
 .venue-picker button:hover {
-  color: var(--river-cream-dim);
+  border-color: var(--club-hairline-strong);
+  color: var(--club-ivory);
 }
 
 .venue-picker button.chosen {
-  border-color: var(--river-amber);
-  color: var(--river-amber);
+  border-color: var(--club-brass);
+  color: var(--club-brass);
 }
 
 .venue-picker button:focus-visible {
-  outline: 2px solid var(--river-amber-bright);
+  outline: 2px solid var(--club-brass-bright);
   outline-offset: 3px;
 }
 
@@ -1927,24 +1912,25 @@ input:focus-visible {
 }
 
 .rep-flash strong {
-  font-size: 30px;
-  font-weight: 700;
-  color: var(--river-amber-bright);
-  letter-spacing: 0.02em;
+  /* REP is progress, and progress is brass. */
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--club-brass-bright);
+  letter-spacing: 0.08em;
 }
 
 .rep-rate {
   font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--river-cream-dim);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--club-ivory-dim);
 }
 
 .rep-level {
   font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--river-win);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--club-brass);
 }
 
 @keyframes rep-rise {
@@ -1993,49 +1979,49 @@ input:focus-visible {
   grid-template-columns: 1fr max-content;
   gap: 3px 8px;
   padding: 6px 10px;
-  border: 1px solid rgb(42 52 47 / 60%);
-  border-radius: 9px;
-  background: rgb(19 25 22 / 62%);
-  font-size: 11px;
+  border: 1px solid var(--club-hairline);
+  border-radius: 0;
+  background: var(--club-glass);
+  backdrop-filter: blur(14px) saturate(0.9);
 }
 
 .challenge.complete {
-  border-color: var(--river-win);
+  border-color: var(--club-brass);
 }
 
 .challenge-title {
-  font-size: 14px;
-  color: var(--river-cream-dim);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--club-ivory-dim);
 }
 
 .challenge-count {
   font-size: 13px;
-  font-weight: 700;
-  color: var(--river-cream-faint);
+  font-weight: 500;
+  color: var(--club-ivory-faint);
   font-variant-numeric: tabular-nums;
 }
 
 .challenge.complete .challenge-count {
-  color: var(--river-win);
+  color: var(--club-brass);
 }
 
+/* The same 2px brass line the club uses for every other piece of progress. */
 .challenge-bar {
   grid-column: 1 / -1;
-  height: 4px;
-  border-radius: 99px;
-  background: var(--river-felt-shadow);
+  height: 2px;
+  background: var(--club-hairline);
   overflow: hidden;
 }
 
 .challenge-bar i {
   display: block;
   height: 100%;
-  border-radius: 99px;
-  background: var(--river-amber);
+  background: var(--club-brass);
 }
 
 .challenge.complete .challenge-bar i {
-  background: var(--river-win);
+  background: var(--club-brass-bright);
 }
 
 /* A game HUD should not select like a document. Dragging across the table was
@@ -2053,26 +2039,8 @@ input:focus-visible {
 
 /* Table item shop. Chips are earned, never bought, so this is the only place
    a player spends them and the price has to read at a glance. */
-.shop-toggle {
-  position: absolute;
-  top: 130px;
-  right: 96px;
-  z-index: 22;
-  padding: 10px 20px;
-  border: 1px solid var(--river-room-edge);
-  border-radius: 12px;
-  background: rgb(27 35 32 / 86%);
-  color: var(--river-cream-dim);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-}
-
-.shop-toggle.open {
-  border-color: var(--river-amber);
-  color: var(--river-amber);
-}
+/* The ITEMS toggle sits in the right corner row; the shared corner rule and
+   the brass open rule beside it carry the styling. */
 
 .shop-panel {
   position: absolute;
@@ -2200,32 +2168,14 @@ input:focus-visible {
 }
 
 .shop-row button:focus-visible {
-  outline: 2px solid var(--river-amber-bright);
+  outline: 2px solid var(--club-brass-bright);
   outline-offset: 2px;
 }
 
 /* Lobby. Full-cover rather than a corner panel: choosing a table is a decision
    you make instead of playing, not alongside it. */
-.lobby-toggle-button {
-  position: absolute;
-  top: 130px;
-  left: 96px;
-  z-index: 22;
-  padding: 10px 20px;
-  border: 1px solid var(--river-room-edge);
-  border-radius: 12px;
-  background: rgb(27 35 32 / 86%);
-  color: var(--river-cream-dim);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-}
-
-.lobby-toggle-button.open {
-  border-color: var(--river-amber);
-  color: var(--river-amber);
-}
+/* The TABLES toggle sits in the right corner row with the ITEMS toggle; the
+   shared corner rule and the brass open rule carry the styling. */
 
 .lobby-backdrop {
   position: absolute;
@@ -2400,7 +2350,7 @@ input:focus-visible {
 .lobby button:focus-visible,
 .lobby-close:focus-visible,
 .lobby-toggle-button:focus-visible {
-  outline: 2px solid var(--river-amber-bright);
+  outline: 2px solid var(--club-brass-bright);
   outline-offset: 2px;
 }
 
@@ -2430,16 +2380,8 @@ input:focus-visible {
 }
 
 .shop-tabs button:focus-visible {
-  outline: 2px solid var(--river-amber-bright);
+  outline: 2px solid var(--club-brass-bright);
   outline-offset: 2px;
-}
-
-.history-pill span {
-  color: var(--river-cream-faint);
-}
-
-.history-pill strong {
-  color: var(--river-cream);
 }
 
 .history-modal {
@@ -2555,7 +2497,7 @@ input:focus-visible {
 }
 
 .history-head:focus-visible {
-  outline: 2px solid var(--river-amber-bright);
+  outline: 2px solid var(--club-brass-bright);
   outline-offset: -2px;
 }
 
@@ -2692,7 +2634,7 @@ input:focus-visible {
 }
 
 .replay-ticks button:focus-visible {
-  outline: 2px solid var(--river-amber-bright);
+  outline: 2px solid var(--club-brass-bright);
   outline-offset: 2px;
 }
 
@@ -2843,17 +2785,17 @@ input:focus-visible {
 }
 
 /*
- * The top-right corner.
+ * The corner rows.
  *
- * The hand-history pill, the invite strip and the chat toggle were each pinned
- * to top 54px / right 96px independently, so all three occupied the same 43px
- * band and the corner rendered as one illegible stack - COPY INVITE was under
- * CHAT, and the history pill was entirely underneath the table code.
+ * The hand-history pill, the invite strip and the chat toggle were once each
+ * pinned to top 54px / right 96px independently, so all three occupied the
+ * same band and the corner rendered as one illegible stack - COPY INVITE was
+ * under CHAT, and the history pill was entirely underneath the table code.
  *
- * They are laid out now rather than anchored. Their own absolute positioning is
- * neutralised inside this container rather than deleted, because the same
- * classes are used elsewhere and a rule removed is a rule that has to be found
- * again.
+ * Both corners are flex rows now and no child carries its own anchor, so the
+ * old neutralising rules went with the positions they neutralised. A control
+ * that joins a row inherits the corner treatment near the top of this file
+ * and lands dressed.
  */
 .hud-corner {
   position: absolute;
@@ -2863,19 +2805,14 @@ input:focus-visible {
   gap: 14px;
 }
 
+.hud-corner-left {
+  top: 54px;
+  left: 96px;
+}
+
 .hud-corner-right {
   top: 54px;
   right: 96px;
-}
-
-.hud-corner > .verify-pill,
-.hud-corner > .invite-strip,
-.hud-corner > .social-toggle {
-  position: static;
-  top: auto;
-  right: auto;
-  left: auto;
-  bottom: auto;
 }
 
 /*
