@@ -10,6 +10,13 @@ import type {
 import type { FairnessClientSeed } from './fairness.js'
 
 export type VenueId = 'rooftop' | 'basement' | 'suite'
+export type TurnTimerPreset = 'standard'
+
+export interface TableSettings {
+  maxSeats: number
+  stakeId: string
+  turnTimerPreset: TurnTimerPreset
+}
 
 export const VENUE_IDS: readonly VenueId[] = ['rooftop', 'basement', 'suite']
 
@@ -48,6 +55,7 @@ export interface RoomConfig {
   seedCollectionMs: number
   randomBytes: (size: number) => Uint8Array
   turnBudgetsMs: Record<Street, number>
+  turnTimerPreset: TurnTimerPreset
   socialRateLimit: SocialRateLimit
   /**
    * Which room this table is in. Server-side because the lobby groups by it,
@@ -152,6 +160,7 @@ export interface RoomView {
    * exactly what putting the venue on the server was meant to prevent.
    */
   venueId: VenueId
+  tableSettings?: TableSettings
   handNumber: number
   phase: 'open' | 'seeding' | 'hand' | 'between'
   street: Street

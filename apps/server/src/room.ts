@@ -15,6 +15,7 @@ import {
   type MetricTally,
   makeDeck,
   SEATS_PER_SHAPE,
+  type StakeConfig,
 } from '@river/engine'
 import {
   type FairnessClientSeed,
@@ -34,6 +35,7 @@ import type {
   RoomResult,
   RoomSeatView,
   RoomView,
+  TurnTimerPreset,
 } from './protocol.js'
 
 const STREET_ORDER: Street[] = ['preflop', 'flop', 'turn', 'river']
@@ -45,6 +47,30 @@ const DEFAULT_TURN_BUDGETS_MS: Record<Street, number> = {
   river: 25_000,
 }
 const DEFAULT_SOCIAL_RATE_LIMIT = { maxActions: 6, windowMs: 10_000 }
+
+export const KNOWN_STAKES: readonly StakeConfig[] = [DEFAULT_STAKE]
+
+export const TURN_TIMER_PRESETS: Readonly<Record<TurnTimerPreset, Record<Street, number>>> = {
+  standard: DEFAULT_TURN_BUDGETS_MS,
+}
+
+export function isKnownStakeId(value: unknown): value is string {
+  return typeof value === 'string' && KNOWN_STAKES.some((stake) => stake.id === value)
+}
+
+export function stakeForId(stakeId: string): StakeConfig {
+  const stake = KNOWN_STAKES.find((candidate) => candidate.id === stakeId)
+  if (stake === undefined) throw new Error(`unknown stake ${stakeId}`)
+  return stake
+}
+
+export function isTurnTimerPreset(value: unknown): value is TurnTimerPreset {
+  return typeof value === 'string' && value in TURN_TIMER_PRESETS
+}
+
+export function turnBudgetsForPreset(preset: TurnTimerPreset): Record<Street, number> {
+  return TURN_TIMER_PRESETS[preset]
+}
 
 interface PlayerState {
   name: string
@@ -120,6 +146,7 @@ export function defaultRoomConfig(overrides: Partial<RoomConfig> & { seed: strin
     seedCollectionMs: overrides.seedCollectionMs ?? 1_500,
     randomBytes: randomSource ?? randomBytes,
     turnBudgetsMs: overrides.turnBudgetsMs ?? DEFAULT_TURN_BUDGETS_MS,
+    turnTimerPreset: overrides.turnTimerPreset ?? 'standard',
     socialRateLimit: overrides.socialRateLimit ?? DEFAULT_SOCIAL_RATE_LIMIT,
   }
 }
@@ -246,6 +273,11 @@ export class Room implements RoomHandle {
     }
     return {
       venueId: this.config.venueId,
+      tableSettings: {
+        maxSeats: this.config.maxSeats,
+        stakeId: this.config.stake.id,
+        turnTimerPreset: this.config.turnTimerPreset,
+      },
       handNumber: this.handNumber,
       phase: this.phase,
       street: this.lastStreet,

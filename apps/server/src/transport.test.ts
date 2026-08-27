@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AuthenticatedPlayer } from './auth.js'
 import type { LedgerRow, SupabaseEconomy } from './economy-service.js'
 import type { Ledger, LedgerEntry } from './ledger.js'
-import { defaultRoomConfig, Room } from './room.js'
-import type { ClientPeer, ServerMessage } from './transport.js'
+import { defaultRoomConfig, Room, stakeForId, turnBudgetsForPreset } from './room.js'
+import type { ClientPeer, RoomCreationSettings, ServerMessage } from './transport.js'
 import { parseClientMessage, RoomHub } from './transport.js'
 
 const ALICE = '323c30d2-9e36-4c4d-96c8-a315322b113d'
@@ -85,7 +85,7 @@ function setup(
       if (player === undefined) throw new Error('invalid token')
       return player
     },
-    createRoom: (roomId, venueId) =>
+    createRoom: (roomId, settings?: RoomCreationSettings) =>
       new Room(
         roomId,
         defaultRoomConfig({
@@ -93,7 +93,15 @@ function setup(
           inviteCode: 'RIVER2',
           reconnectGraceMs,
           seedCollectionMs,
-          ...(venueId === undefined ? {} : { venueId }),
+          ...(settings?.venueId === undefined ? {} : { venueId: settings.venueId }),
+          ...(settings?.maxSeats === undefined ? {} : { maxSeats: settings.maxSeats }),
+          ...(settings?.stakeId === undefined ? {} : { stake: stakeForId(settings.stakeId) }),
+          ...(settings?.turnTimerPreset === undefined
+            ? {}
+            : {
+                turnTimerPreset: settings.turnTimerPreset,
+                turnBudgetsMs: turnBudgetsForPreset(settings.turnTimerPreset),
+              }),
           ...(turnBudgetsMs === undefined ? {} : { turnBudgetsMs }),
           ...(socialRateLimit === undefined ? {} : { socialRateLimit }),
         }),
@@ -173,6 +181,26 @@ describe('wire protocol parsing', () => {
         }),
       ),
     ).toBeNull()
+  })
+
+  it('accepts only configured table settings on enter', () => {
+    const enter = {
+      kind: 'enter',
+      requestId: 'table-settings',
+      roomId: 'river-settings',
+      name: 'Alice',
+      maxSeats: 6,
+      stakeId: '250-500',
+      turnTimerPreset: 'standard',
+    }
+    expect(parseClientMessage(JSON.stringify(enter))).toMatchObject(enter)
+    for (const invalid of [
+      { ...enter, maxSeats: 5 },
+      { ...enter, stakeId: '1000-2000' },
+      { ...enter, turnTimerPreset: 'instant' },
+    ]) {
+      expect(parseClientMessage(JSON.stringify(invalid))).toBeNull()
+    }
   })
 })
 
@@ -707,7 +735,13 @@ describe('resync', () => {
 })
 
 describe('which room a table is in', () => {
-  async function enterWith(hub: RoomHub, token: string, roomId: string, venueId?: string) {
+  async function enterWith(
+    hub: RoomHub,
+    token: string,
+    roomId: string,
+    venueId?: string,
+    settings?: Record<string, unknown>,
+  ) {
     const peer = new TestPeer()
     const connection = hub.connect(peer)
     await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: token }))
@@ -719,6 +753,7 @@ describe('which room a table is in', () => {
         name: token,
         inviteCode: 'river2',
         ...(venueId === undefined ? {} : { venueId }),
+        ...settings,
       }),
     )
     return peer
@@ -727,6 +762,11 @@ describe('which room a table is in', () => {
   function venueOfLast(peer: TestPeer): string | undefined {
     const snapshot = peer.last('snapshot')
     return snapshot?.kind === 'snapshot' ? snapshot.view.venueId : undefined
+  }
+
+  function settingsOfLast(peer: TestPeer) {
+    const snapshot = peer.last('snapshot')
+    return snapshot?.kind === 'snapshot' ? snapshot.view.tableSettings : undefined
   }
 
   it('opens a new table in the venue the link asked for', async () => {
@@ -750,7 +790,31 @@ describe('which room a table is in', () => {
 
   it('refuses a venue the wire made up', async () => {
     const { hub } = setup()
-    expect(venueOfLast(await enterWith(hub, 'alice', 'river-junk', 'the-moon'))).toBe('rooftop')
+    const peer = await enterWith(hub, 'alice', 'river-junk', 'the-moon')
+    expect(venueOfLast(peer)).toBeUndefined()
+    expect(peer.last('error')).toMatchObject({ code: 'invalid_message' })
+  })
+
+  it('applies table settings from a creator and ignores a joiner', async () => {
+    const { hub } = setup()
+    const creator = await enterWith(hub, 'alice', 'river-settings', 'suite', {
+      maxSeats: 6,
+      stakeId: '250-500',
+      turnTimerPreset: 'standard',
+    })
+    expect(settingsOfLast(creator)).toEqual({
+      maxSeats: 6,
+      stakeId: '250-500',
+      turnTimerPreset: 'standard',
+    })
+
+    const joiner = await enterWith(hub, 'bob', 'river-settings', 'basement', {
+      maxSeats: 2,
+      stakeId: '250-500',
+      turnTimerPreset: 'standard',
+    })
+    expect(venueOfLast(joiner)).toBe('suite')
+    expect(settingsOfLast(joiner)).toEqual(settingsOfLast(creator))
   })
 })
 

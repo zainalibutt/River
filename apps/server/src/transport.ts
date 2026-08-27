@@ -1,9 +1,12 @@
 import { randomBytes } from 'node:crypto'
-import type { BotPersonality, TableSummary, TurnAction } from '@river/engine'
 import {
+  type BotPersonality,
   nextUtterance,
+  SEATS_PER_SHAPE,
   type SpeechCandidate,
   scheduleTableSpeech,
+  type TableSummary,
+  type TurnAction,
   tableStatus,
   VOICE_PACK,
   type VoiceEvent,
@@ -26,9 +29,25 @@ import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-servi
 import { claimDailyFor, claimRescueFor } from './economy-service.js'
 import { isFairnessSeed } from './fairness.js'
 import type { Ledger } from './ledger.js'
-import type { Emote, RoomCommand, RoomEvent, RoomResult, RoomView, VenueId } from './protocol.js'
+import type {
+  Emote,
+  RoomCommand,
+  RoomEvent,
+  RoomResult,
+  RoomView,
+  TableSettings,
+  TurnTimerPreset,
+  VenueId,
+} from './protocol.js'
 import { isVenueId } from './protocol.js'
-import { defaultRoomConfig, Room } from './room.js'
+import {
+  defaultRoomConfig,
+  isKnownStakeId,
+  isTurnTimerPreset,
+  Room,
+  stakeForId,
+  turnBudgetsForPreset,
+} from './room.js'
 import type {
   EquipOutcome,
   OwnedItem,
@@ -77,6 +96,9 @@ export type ClientMessage =
        * exists, so joining can never move anyone who is already sitting there.
        */
       venueId?: VenueId
+      maxSeats?: number
+      stakeId?: string
+      turnTimerPreset?: TurnTimerPreset
     }
   | { kind: 'command'; requestId: string; command: ClientRoomCommand }
   | { kind: 'social'; requestId: string; command: ClientSocialCommand }
@@ -233,7 +255,14 @@ export interface RoomHubOptions {
    * process - see `MemoryBanList` for what that costs.
    */
   bans?: BanList
-  createRoom?: (roomId: string, venueId?: VenueId) => Room
+  createRoom?: (roomId: string, settings?: RoomCreationSettings) => Room
+}
+
+export interface RoomCreationSettings {
+  venueId?: VenueId
+  maxSeats?: TableSettings['maxSeats']
+  stakeId?: TableSettings['stakeId']
+  turnTimerPreset?: TableSettings['turnTimerPreset']
 }
 
 const DEFAULT_BOT_THINK_CAP = 4_000
@@ -342,6 +371,30 @@ function socialCommand(value: unknown): ClientSocialCommand | null {
   return null
 }
 
+function roomCreationSettings(value: Record<string, unknown>): RoomCreationSettings | null {
+  const maxSeats = value.maxSeats
+  if (
+    maxSeats !== undefined &&
+    (typeof maxSeats !== 'number' ||
+      !Number.isSafeInteger(maxSeats) ||
+      !Object.values(SEATS_PER_SHAPE).includes(maxSeats))
+  ) {
+    return null
+  }
+  const stakeId = value.stakeId
+  if (stakeId !== undefined && !isKnownStakeId(stakeId)) return null
+  const turnTimerPreset = value.turnTimerPreset
+  if (turnTimerPreset !== undefined && !isTurnTimerPreset(turnTimerPreset)) return null
+  const venueId = value.venueId
+  if (venueId !== undefined && !isVenueId(venueId)) return null
+  return {
+    ...(maxSeats === undefined ? {} : { maxSeats }),
+    ...(stakeId === undefined ? {} : { stakeId }),
+    ...(turnTimerPreset === undefined ? {} : { turnTimerPreset }),
+    ...(venueId === undefined ? {} : { venueId }),
+  }
+}
+
 export function parseClientMessage(raw: string): ClientMessage | null {
   let value: unknown
   try {
@@ -361,14 +414,15 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     typeof value.name === 'string'
   ) {
     const inviteCode = typeof value.inviteCode === 'string' ? value.inviteCode : undefined
-    const venueId = isVenueId(value.venueId) ? value.venueId : undefined
+    const settings = roomCreationSettings(value)
+    if (settings === null) return null
     return {
       kind: 'enter',
       requestId,
       roomId: value.roomId,
       name: value.name,
       ...(inviteCode === undefined ? {} : { inviteCode }),
-      ...(venueId === undefined ? {} : { venueId }),
+      ...settings,
     }
   }
   if (value.kind === 'command') {
@@ -413,7 +467,7 @@ export class RoomHub {
   private readonly economy: SupabaseEconomy | null
   private readonly tableItems: TableItemStore | undefined
   private readonly cosmetics: CosmeticStore | undefined
-  private readonly createRoom: (roomId: string, venueId?: VenueId) => Room
+  private readonly createRoom: (roomId: string, settings?: RoomCreationSettings) => Room
   private readonly rooms = new Map<string, RoomState>()
   private readonly activePlayers = new Map<string, ConnectionState>()
   private readonly completed = new Map<string, ServerMessage>()
@@ -439,13 +493,21 @@ export class RoomHub {
     this.cosmetics = options.cosmetics
     this.createRoom =
       options.createRoom ??
-      ((roomId, venueId) =>
+      ((roomId, settings) =>
         new Room(
           roomId,
           defaultRoomConfig({
             seed: `river:${roomId}`,
             inviteCode: newInviteCode(),
-            ...(venueId === undefined ? {} : { venueId }),
+            ...(settings?.venueId === undefined ? {} : { venueId: settings.venueId }),
+            ...(settings?.maxSeats === undefined ? {} : { maxSeats: settings.maxSeats }),
+            ...(settings?.stakeId === undefined ? {} : { stake: stakeForId(settings.stakeId) }),
+            ...(settings?.turnTimerPreset === undefined
+              ? {}
+              : {
+                  turnTimerPreset: settings.turnTimerPreset,
+                  turnBudgetsMs: turnBudgetsForPreset(settings.turnTimerPreset),
+                }),
           }),
         ))
   }
@@ -612,7 +674,7 @@ export class RoomHub {
       return
     }
     const exists = this.rooms.has(message.roomId)
-    const room = this.room(message.roomId, message.venueId)
+    const room = this.room(message.roomId, message)
     await this.enqueue(room, async () => {
       if (
         exists &&
@@ -1180,13 +1242,13 @@ export class RoomHub {
     })
   }
 
-  private room(roomId: string, venueId?: VenueId): RoomState {
+  private room(roomId: string, settings?: RoomCreationSettings): RoomState {
     const existing = this.rooms.get(roomId)
     // A venue only applies to a table being created. Applying it to one that
     // already exists would move everyone already sitting there.
     if (existing !== undefined) return existing
     const created: RoomState = {
-      room: this.createRoom(roomId, venueId),
+      room: this.createRoom(roomId, settings),
       connections: new Set(),
       queue: Promise.resolve(),
       reconnectTimers: new Map(),
