@@ -7,9 +7,11 @@ import {
   DEFAULT_STAKE,
   type HandRecord,
   itemCatalogue,
+  type ShowdownReel,
   type Street,
   seatMood,
   seatPin,
+  showdownReel,
   type TableSummary,
   type TurnAction,
   turnClock,
@@ -266,6 +268,8 @@ export function RiverRoomTable() {
   const [kick, setKick] = useState<KickState>(null)
   const [peek, setPeek] = useState(false)
   const [platesHeld, setPlatesHeld] = useState(false)
+  const [reel, setReel] = useState<ShowdownReel | null>(null)
+  const [reelAtMs, setReelAtMs] = useState(0)
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
   const [raiseTo, setRaiseTo] = useState(0)
   const [dialBand, setDialBand] = useState(0)
@@ -399,7 +403,16 @@ export function RiverRoomTable() {
           if (settled.length > 0) {
             // Newest first, so the panel reads the way a player thinks about
             // the night: the hand that just happened is the one at the top.
+            const newest = settled[settled.length - 1]
             setHands((previous) => [...settled.reverse(), ...previous].slice(0, 24))
+            // A hand used to end by simply being over. The reel is the beats of
+            // a showdown - who shows, what they had, who takes it - and it has
+            // been sitting in the engine with nothing calling it.
+            if (newest !== undefined) {
+              const built = showdownReel({ record: newest })
+              setReel(built.beats.length > 0 ? built : null)
+              setReelAtMs(0)
+            }
           }
           const flash = repFlashFor(message.events, message.view.selfId)
           if (flash !== null) setRepFlash(flash)
@@ -499,6 +512,35 @@ export function RiverRoomTable() {
       window.removeEventListener('blur', drop)
     }
   }, [command, view.legal])
+
+  useEffect(() => {
+    if (reel === null) return
+    // Walk the beats on their own timings. The engine produced a plan; this is
+    // the only place that turns it into elapsed time, so nothing in the engine
+    // ever had to read a clock.
+    const started = Date.now()
+    const tick = window.setInterval(() => {
+      const elapsed = Date.now() - started
+      if (elapsed >= reel.totalMs) {
+        setReel(null)
+        setReelAtMs(0)
+        return
+      }
+      setReelAtMs(elapsed)
+    }, 80)
+    return () => window.clearInterval(tick)
+  }, [reel])
+
+  const showdownBeat = useMemo(() => {
+    if (reel === null) return null
+    // The last beat whose moment has arrived and whose hold has not expired.
+    for (let index = reel.beats.length - 1; index >= 0; index -= 1) {
+      const beat = reel.beats[index]
+      if (beat === undefined) continue
+      if (reelAtMs >= beat.atMs && reelAtMs < beat.atMs + beat.holdMs) return beat
+    }
+    return null
+  }, [reel, reelAtMs])
 
   const seats = useMemo(() => orderedSeats(view), [view])
   const selfSeat = view.seats.find((seat) => seat.playerId === view.selfId) ?? null
@@ -929,6 +971,30 @@ export function RiverRoomTable() {
               <strong>{formatAmount(view.pot, false)}</strong>
             </div>
             <Board cards={view.board} street={view.street} />
+            {showdownBeat === null ? null : (
+              <div className="showdown-card" role="status" aria-live="polite">
+                {showdownBeat.kind === 'name' ? (
+                  <>
+                    <span className="showdown-who">
+                      {view.seats.find((entry) => entry.seat === showdownBeat.seat)?.name ??
+                        `Seat ${showdownBeat.seat + 1}`}
+                    </span>
+                    <strong className="showdown-hand">{showdownBeat.hand}</strong>
+                  </>
+                ) : null}
+                {showdownBeat.kind === 'award' ? (
+                  <>
+                    <span className="showdown-who">
+                      {view.seats.find((entry) => entry.seat === showdownBeat.seat)?.name ??
+                        `Seat ${showdownBeat.seat + 1}`}
+                    </span>
+                    <strong className="showdown-win">
+                      WINS {formatAmount(showdownBeat.amount, true)}
+                    </strong>
+                  </>
+                ) : null}
+              </div>
+            )}
             <HandReadout view={view} />
             <div className="status-line populated" aria-live="polite">
               {kick === null

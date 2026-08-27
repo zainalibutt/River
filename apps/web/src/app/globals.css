@@ -2730,3 +2730,49 @@ input:focus-visible {
 .remote-timer.urgent {
   border-color: var(--river-amber-bright);
 }
+
+/* The showdown, as a moment rather than a state change.
+
+   A hand used to end by simply being over: the pot moved and the next one
+   started. The reference cuts away to the winner and names the hand, and this
+   is the readable half of that - who took it and with what.
+
+   Transient by definition, so it is allowed to sit over the felt in a way no
+   persistent element is. It clears itself when the reel runs out. */
+.showdown-card {
+  position: absolute;
+  top: 300px;
+  left: 50%;
+  z-index: 24;
+  display: grid;
+  gap: 2px;
+  padding: 14px 28px;
+  border: 1px solid rgb(232 169 60 / 45%);
+  border-radius: 14px;
+  background: rgb(10 13 12 / 88%);
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.showdown-who {
+  color: var(--river-cream-dim);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.showdown-hand {
+  color: var(--river-cream);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.showdown-win {
+  color: var(--river-amber-bright);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
