@@ -371,10 +371,16 @@ input:focus-visible {
   color: var(--river-suit-spade);
 }
 
+/* An undealt card is nothing, not a grey box.
+
+   The well still occupies its slot so the board does not jump as cards land -
+   that is the whole reason it exists - but it stops painting itself onto the
+   felt. Preflop this was five lit rectangles lying across the table, which is
+   the one place the reference never puts a persistent element. */
 .card-well {
-  border: 2px solid rgb(195 185 172 / 20%);
-  background: rgb(10 13 12 / 16%);
-  box-shadow: inset 0 2px 12px rgb(0 0 0 / 25%);
+  border: 0;
+  background: none;
+  box-shadow: none;
 }
 
 .status-line {
