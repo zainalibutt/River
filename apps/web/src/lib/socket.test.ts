@@ -66,7 +66,7 @@ describe('River browser socket', () => {
       kind: 'authenticate',
       accessToken: 'access-token',
     })
-    socket.message({ kind: 'authenticated', playerId: 'player', anonymous: true })
+    socket.message({ kind: 'authenticated', playerId: 'player', anonymous: true, admin: false })
     await connected
     expect(stateListener).toHaveBeenCalledWith('connecting')
     expect(stateListener).toHaveBeenCalledWith('connected')
@@ -82,6 +82,7 @@ describe('River browser socket', () => {
       kind: 'authenticated',
       playerId: 'player',
       anonymous: true,
+      admin: false,
     })
   })
 
