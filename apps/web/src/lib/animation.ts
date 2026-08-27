@@ -32,7 +32,7 @@ export interface AnimationCue {
 }
 
 /**
- * the reference spent years patching out cinematic delay, and the reference notes
+ * The reference game spent years patching out cinematic delay, and the notes
  * say the second biggest mistake available here is making every animation
  * blocking. So a cue is fire and forget: it carries a delay for staggering, and
  * nothing anywhere waits on one finishing. If the server settles a hand while a

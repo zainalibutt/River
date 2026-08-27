@@ -170,7 +170,7 @@ Between-hands order, per the reference and Zain's choreography notes:
 
 ## Animation priority tiers
 
-**This is the most important rule in this document.** the reference spent years patching out blocking cinematics; River must not reintroduce them.
+**This is the most important rule in this document.** The reference spent years patching out blocking cinematics; River must not reintroduce them.
 
 | Tier | Category | Can be interrupted by |
 |---|---|---|

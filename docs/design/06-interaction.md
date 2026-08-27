@@ -122,7 +122,7 @@ type TurnIndicator =
 
 **Remote:** the active opponent's timer appears **above their head**, attached to their seat. There is no single global pointer teleporting from seat to seat.
 
-**Local:** the RAM becomes actionable immediately with no countdown. The urgency ring appears around the RAM only at **50% remaining**. the reference deliberately delays the local urgency treatment and it reads much better than a timer screaming from second one.
+**Local:** the RAM becomes actionable immediately with no countdown. The urgency ring appears around the RAM only at **50% remaining**. The reference deliberately delays the local urgency treatment and it reads much better than a timer screaming from second one.
 
 ### Action windows
 

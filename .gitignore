@@ -51,4 +51,8 @@ docs/images/**/*.webm
 # Competitor reference material - studied, not redistributed
 docs/images/menus/
 docs/images/3_main/
+docs/behaviour-reference.md
 docs/*-behaviour-reference.md
+
+# Internal working notes - not portfolio material
+docs/handoff/reference-hygiene.md

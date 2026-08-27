@@ -1,6 +1,6 @@
 # 04 — Component anatomy
 
-Rewritten 2026-08-24 against `docs/behaviour-reference.md`. The previous version specified a horizontal action rail with a linear slider — the reference calls that the defining mistake of a bad reference reproduction. The action surface is now radial, and several components split across world-space and HUD.
+Rewritten 2026-08-24 against `docs/behaviour-reference.md`. The previous version specified a horizontal action rail with a linear slider — the reference calls that the defining mistake of the genre. The action surface is now radial, and several components split across world-space and HUD.
 
 Dimensions are base-canvas pixels for HUD elements and metres for world-space elements. Every element names its data source; nothing renders from data the engine does not expose.
 

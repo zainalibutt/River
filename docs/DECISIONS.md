@@ -101,7 +101,7 @@ convincing, too much attempt at anatomy to look deliberate. That is the worst
 place to sit, because it reads as a limitation rather than a choice.
 
 The obvious cheap answer was to go deliberately low-poly and call it a style.
-**Rejected.** the reference's characters are caricatured but unmistakably
+**Rejected.** The reference game's characters are caricatured but unmistakably
 people, with faces you read across the table, and the point of River is to match
 that standard rather than route around it. Choosing stylisation here would have
 been choosing it because it was easier, which is exactly the kind of corner the

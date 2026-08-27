@@ -1,7 +1,7 @@
 import type { LegalActions, TurnAction } from '@river/engine'
 
 /**
- * Preset actions are the most distinctive mechanic in the reference: you commit to
+ * Preset actions are the genre's most distinctive mechanic: you commit to
  * an action before your turn arrives, and your avatar telegraphs it publicly
  * while the choice itself stays private in your HUD.
  *

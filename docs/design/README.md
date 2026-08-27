@@ -6,7 +6,7 @@ This directory is the design equivalent of `docs/spec.md`: it is canonical. Wher
 
 ## Source of truth for behaviour
 
-`docs/behaviour-reference.md` is the **behavioural source of truth** — 1,592 lines of researched the reference behaviour with Zain's inline decisions. Every document here was revised against it on 2026-08-24. Where any of these files still contradicts it, the reference wins and the file is stale.
+`docs/behaviour-reference.md` is the **behavioural source of truth** — 1,592 lines of researched the reference game behaviour with Zain's inline decisions. Every document here was revised against it on 2026-08-24. Where any of these files still contradicts it, the reference wins and the file is stale.
 
 ## Status
 

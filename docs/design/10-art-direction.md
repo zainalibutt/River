@@ -4,11 +4,11 @@ Art direction for River's 3D presentation, starting with venue one. Extends `01-
 
 > **READ THE REVISIONS FIRST.** This document grew by accretion across one working session. The sections below the first horizontal rule — the reference-derived revision, the lighting study, the card study, the venue build study, the orbit study and the material study — **supersede the original text above them wherever they disagree.** The original header described a dark single-lamp room with a fixed cinematic camera; both were wrong and are corrected further down.
 
-**Mandate: the reference staging, River grade.** Take the composition from the reference — oval table, seated bodies, per-seat HUD floating over the scene, venue as backdrop — and give each venue its own light. The Rooftop is bright and open; the Basement is dim and fluorescent. The range across venues is the point, not a single global grade.
+**Mandate: reference staging, River grade.** Take the composition from the reference game — oval table, seated bodies, per-seat HUD floating over the scene, venue as backdrop — and give each venue its own light. The Rooftop is bright and open; the Basement is dim and fluorescent. The range across venues is the point, not a single global grade.
 
 ## Ordering, and why it is not negotiable
 
-Art direction, then assets, then renderer. A 3D table with placeholder geometry and no seated bodies reads as **less** finished than the 2D mode already shipped. the reference looks good because of lighting, materials, venue character and people at the table. It does not look good because it is 3D. Building the renderer first produces a grey room that makes the project look worse than it did before it started.
+Art direction, then assets, then renderer. A 3D table with placeholder geometry and no seated bodies reads as **less** finished than the 2D mode already shipped. The reference looks good because of lighting, materials, venue character and people at the table. It does not look good because it is 3D. Building the renderer first produces a grey room that makes the project look worse than it did before it started.
 
 ## Budget
 
@@ -98,11 +98,11 @@ The camera never moves during a betting round. Motion is reserved for showdown a
 
 ## Seated bodies
 
-Confirmed for v1 by Zain. the reference's characters are a large part of why its tables feel occupied, and an empty 3D table reads worse than a 2D one.
+Confirmed for v1 by Zain. The reference's characters are a large part of why its tables feel occupied, and an empty 3D table reads worse than a 2D one.
 
 | Property | Value |
 |---|---|
-| Style | Stylised-realistic, the reference-adjacent. Not cartoon, not photoreal |
+| Style | Stylised-realistic, reference-adjacent. Not cartoon, not photoreal |
 | Budget | 12,000 triangles, one shared 1024 atlas across the cast |
 | Rig | Upper body only below the waist is static — characters are seated and never walk |
 | Faces | No facial animation, per spec. Features are textured, not rigged |
@@ -250,7 +250,7 @@ Measured minimum scales, rendered and compared:
 | 2.4x | 152mm | Comfortable. Recommended for board cards |
 | 3.0x | 190mm | Legible but the table starts reading as a toy |
 
-**Cards render at a cheat scale of 1.8x to 2.4x physical.** River's cards are not physically accurate objects and should never be modelled as such. the reference does the same thing — its cards are visibly oversized relative to its chips and hands, for exactly this reason.
+**Cards render at a cheat scale of 1.8x to 2.4x physical.** River's cards are not physically accurate objects and should never be modelled as such. The reference does the same thing — its cards are visibly oversized relative to its chips and hands, for exactly this reason.
 
 ### Finding 5 — the traditional card face is wrong for 10-foot reading
 
@@ -452,7 +452,7 @@ They also look like robots, and no amount of further primitive work fixes that. 
 
 ## Three venues at launch, the reference's set as general law
 
-**Settled 2026-08-24: three launch venues, not five.** the reference's wider venue set stays authoritative as *reference law* — its staging, lighting language, dealer conventions and identity-per-room approach govern River's art direction. River ships three rooms. Biker Bar and Casino are parked as post-launch, not cancelled, and the venue system is deliberately built so adding one is a room and a light rig rather than a new product.
+**Settled 2026-08-24: three launch venues, not five.** The reference's wider venue set stays authoritative as *reference law* — its staging, lighting language, dealer conventions and identity-per-room approach govern River's art direction. River ships three rooms. Biker Bar and Casino are parked as post-launch, not cancelled, and the venue system is deliberately built so adding one is a room and a light rig rather than a new product.
 
 Shipping at launch:
 
