@@ -2,7 +2,13 @@
 
 import { OrbitControls, useGLTF } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { layOutPlaques, projectToScreen, type ScreenCamera } from '@river/engine'
+import {
+  denominations,
+  layOutPlaques,
+  projectToScreen,
+  type ScreenCamera,
+  stackLayout,
+} from '@river/engine'
 import {
   type RefObject,
   Suspense,
@@ -35,6 +41,14 @@ import {
   worldSeats,
 } from '@/lib/venue'
 
+/** One seat's chips, already placed in the world by the seat ring. */
+export interface SeatChips {
+  seat: number
+  amount: number
+  x: number
+  z: number
+}
+
 type SceneProps = {
   seatIds: string[]
   seatRefs: RefObject<Map<string, HTMLElement>>
@@ -54,6 +68,8 @@ type SceneProps = {
    * room attached.
    */
   occupiedSeats?: readonly number[] | undefined
+  /** What each occupied seat has in front of it, for the chip stacks. */
+  seatChips?: readonly SeatChips[] | undefined
 }
 
 function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
@@ -320,29 +336,67 @@ function VenueAsset({
  * pools parked at the origin. Instancing those rather than these primitives is
  * the right end state and is not this change.
  */
+/** Enough for nine full stacks; anything past the last real chip is parked. */
+const MAX_CHIPS = 320
+
+/**
+ * Chip colours come from the engine's own denomination ladder.
+ *
+ * They were briefly a table in this file, which is a second copy of something
+ * `chip-stacks.ts` already publishes with each denomination - and a second copy
+ * of a colour is how a 5K chip ends up orange on the felt and red in the shop.
+ */
+const CHIP_COLOURS: ReadonlyMap<number, string> = new Map(
+  denominations().map((entry) => [entry.value, `#${entry.colour}`]),
+)
+
 const CHIP_RADIUS = 0.0195
 const CHIP_HEIGHT = 0.012
 const CARD_WIDTH = 0.126
 const CARD_LENGTH = 0.176
 const CARD_THICKNESS = 0.004
 
-function InstancedTablePieces() {
+function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }) {
   const chips = useRef<THREE.InstancedMesh>(null)
   const cards = useRef<THREE.InstancedMesh>(null)
   const matrix = useMemo(() => new THREE.Matrix4(), [])
+  const tint = useMemo(() => new THREE.Color(), [])
 
   useLayoutEffect(() => {
-    if (chips.current !== null) {
-      for (let index = 0; index < 36; index += 1) {
-        const stack = index % 6
-        // Sit on the felt, not through it. These were laid out against a table
-        // surface of 0.55 and the felt is at 0.76, so every stack began 8cm
-        // inside the table and grew out of the top of it.
-        const y = TABLE_SURFACE_HEIGHT + CHIP_HEIGHT / 2 + Math.floor(index / 6) * CHIP_HEIGHT
-        matrix.makeTranslation(-0.36 + stack * 0.144, y, 0.46)
-        chips.current.setMatrixAt(index, matrix)
+    const mesh = chips.current
+    if (mesh !== null) {
+      let placed = 0
+      for (const seat of seatChips) {
+        // Chips belong to somebody. They used to be a fixed grid of 36 in one
+        // spot on the felt, unrelated to what anybody had - a decal of chips
+        // rather than a readout of them.
+        const columns = stackLayout(seat.amount)
+        // Sit them on the felt between the player and the board, so a stack
+        // reads as that player's without covering the cards.
+        const inward = 0.62
+        const baseX = seat.x * inward
+        const baseZ = seat.z * inward
+        for (const column of columns) {
+          for (let height = 0; height < column.count; height += 1) {
+            if (placed >= MAX_CHIPS) break
+            matrix.makeTranslation(
+              baseX + column.offsetX,
+              TABLE_SURFACE_HEIGHT + CHIP_HEIGHT / 2 + height * CHIP_HEIGHT,
+              baseZ + column.offsetZ,
+            )
+            mesh.setMatrixAt(placed, matrix)
+            mesh.setColorAt(placed, tint.set(CHIP_COLOURS.get(column.denomination) ?? '#d8d2c6'))
+            placed += 1
+          }
+        }
       }
-      chips.current.instanceMatrix.needsUpdate = true
+      // Anything past the last real chip is parked at zero scale rather than
+      // left wherever the previous hand put it.
+      const hidden = new THREE.Matrix4().makeScale(0, 0, 0)
+      for (let index = placed; index < MAX_CHIPS; index += 1) mesh.setMatrixAt(index, hidden)
+      mesh.count = MAX_CHIPS
+      mesh.instanceMatrix.needsUpdate = true
+      if (mesh.instanceColor !== null) mesh.instanceColor.needsUpdate = true
     }
     if (cards.current !== null) {
       for (let index = 0; index < 5; index += 1) {
@@ -355,13 +409,18 @@ function InstancedTablePieces() {
       }
       cards.current.instanceMatrix.needsUpdate = true
     }
-  }, [matrix])
+  }, [matrix, tint, seatChips])
 
   return (
     <>
-      <instancedMesh ref={chips} args={[undefined, undefined, 36]} castShadow={false} receiveShadow>
+      <instancedMesh
+        ref={chips}
+        args={[undefined, undefined, MAX_CHIPS]}
+        castShadow={false}
+        receiveShadow
+      >
         <cylinderGeometry args={[CHIP_RADIUS, CHIP_RADIUS, CHIP_HEIGHT, 16]} />
-        <meshStandardMaterial color="#d8a338" metalness={0.25} roughness={0.42} />
+        <meshStandardMaterial metalness={0.12} roughness={0.55} />
       </instancedMesh>
       <instancedMesh ref={cards} args={[undefined, undefined, 5]} castShadow={false} receiveShadow>
         <boxGeometry args={[CARD_WIDTH, CARD_THICKNESS, CARD_LENGTH]} />
@@ -504,7 +563,14 @@ function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
   )
 }
 
-function Scene({ seatIds, seatRefs, venueId, cues = [], occupiedSeats }: SceneProps) {
+function Scene({
+  seatIds,
+  seatRefs,
+  venueId,
+  cues = [],
+  occupiedSeats,
+  seatChips = [],
+}: SceneProps) {
   const [sidecar, setSidecar] = useState<LightingSidecar>({})
 
   useEffect(() => {
@@ -528,14 +594,21 @@ function Scene({ seatIds, seatRefs, venueId, cues = [], occupiedSeats }: ScenePr
       <Suspense fallback={null}>
         <VenueAsset venueId={venueId} cues={cues} occupiedSeats={occupiedSeats} />
       </Suspense>
-      <InstancedTablePieces />
+      <InstancedTablePieces seatChips={seatChips} />
       <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
       <CameraOrbit venueId={venueId} />
     </>
   )
 }
 
-export function RiverScene({ seatIds, seatRefs, venueId, cues = [], occupiedSeats }: SceneProps) {
+export function RiverScene({
+  seatIds,
+  seatRefs,
+  venueId,
+  cues = [],
+  occupiedSeats,
+  seatChips,
+}: SceneProps) {
   const venue = venueOf(venueId)
   return (
     <Canvas
@@ -606,6 +679,7 @@ export function RiverScene({ seatIds, seatRefs, venueId, cues = [], occupiedSeat
         venueId={venueId}
         cues={cues}
         occupiedSeats={occupiedSeats}
+        seatChips={seatChips}
       />
     </Canvas>
   )

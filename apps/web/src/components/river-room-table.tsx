@@ -68,7 +68,14 @@ import {
   type SocialFeedEntry,
 } from '@/lib/social'
 import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib/socket'
-import { DEFAULT_VENUE, VENUE_ORDER, type VenueId, venueFromParams, venueOf } from '@/lib/venue'
+import {
+  DEFAULT_VENUE,
+  VENUE_ORDER,
+  type VenueId,
+  venueFromParams,
+  venueOf,
+  worldSeats,
+} from '@/lib/venue'
 import { type VerifyResult, verifyHand } from '@/lib/verify'
 
 const boardSlots = ['flop-one', 'flop-two', 'flop-three', 'turn', 'river'] as const
@@ -543,6 +550,25 @@ export function RiverRoomTable() {
   }, [reel, reelAtMs])
 
   const seats = useMemo(() => orderedSeats(view), [view])
+
+  const seatIds = useMemo(() => seats.map((seat) => seat.playerId ?? `seat-${seat.seat}`), [seats])
+
+  /**
+   * Where each player's chips sit in the world.
+   *
+   * The ring comes from worldSeats rather than being worked out again here.
+   * The plaques drifted a metre from the chairs they labelled once already,
+   * because two places each had their own idea of where a seat was.
+   */
+  const seatChips = useMemo(() => {
+    const ring = worldSeats(seatIds, venueOf(venueId).seatRing)
+    return seats.flatMap((seat, index) => {
+      const place = ring[index]
+      if (seat.playerId === null || seat.stack <= 0 || place === undefined) return []
+      return [{ seat: seat.seat, amount: seat.stack, x: place.x, z: place.z }]
+    })
+  }, [seats, seatIds, venueId])
+
   const selfSeat = view.seats.find((seat) => seat.playerId === view.selfId) ?? null
   const seatedCount = view.seats.filter((seat) => seat.playerId !== null && seat.stack > 0).length
   const isHost = view.hostPlayerId === view.selfId
@@ -649,7 +675,8 @@ export function RiverRoomTable() {
               occupiedSeats={seats
                 .filter((seat) => seat.playerId !== null)
                 .map((seat) => seat.seat)}
-              seatIds={seats.map((seat) => seat.playerId ?? `seat-${seat.seat}`)}
+              seatChips={seatChips}
+              seatIds={seatIds}
               seatRefs={seatRefs}
             />
           ) : null}
