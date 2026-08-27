@@ -263,6 +263,9 @@ function useTurnRemaining(deadline: number | null): number | null {
 export function RiverRoomTable() {
   const [{ roomId, inviteCode, expired, venueId: initialVenue }] = useState(initialRoomTarget)
   const [view, setView] = useState<RoomView>(() => emptyView('pending', initialVenue))
+  // How many seats fill with bots on the deal. Not part of the room view,
+  // because it is the server's arrangement rather than the table's state.
+  const [botSeats, setBotSeats] = useState(0)
   // The table owns the venue, not this browser. The link's venue only decides
   // which room a new table opens in; once a snapshot arrives the server is the
   // authority, so two players can never be sitting in different rooms.
@@ -375,6 +378,7 @@ export function RiverRoomTable() {
           }
           if (message.kind !== 'snapshot') return
           setView(message.view)
+          setBotSeats(message.botSeats)
           if (
             message.events.some((event) => event.kind === 'seedCommitted') &&
             message.view.seats.some(
@@ -1025,7 +1029,7 @@ export function RiverRoomTable() {
             <HandReadout view={view} />
             <div className="status-line populated" aria-live="polite">
               {kick === null
-                ? (notice ?? view.message ?? waitingCopy(view, seatedCount, isHost))
+                ? (notice ?? view.message ?? waitingCopy(view, seatedCount, botSeats, isHost))
                 : kickCopy(kick.reason)}
             </div>
             <div className={`seat-ring${platesHeld ? ' plates-held' : ''}`}>
@@ -1164,7 +1168,7 @@ export function RiverRoomTable() {
               onAction={(action) => command({ kind: 'act', action })}
               onDeal={() => command({ kind: 'startHand' })}
               onRebuy={() => command({ kind: 'rebuy', amount: DEFAULT_STAKE.defaultBuyIn })}
-              canDeal={isHost && seatedCount >= 2 && view.handNumber === 0}
+              canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
               seated={selfSeat !== null}
               kicked={kick !== null}
               onRejoin={() => {
@@ -1206,11 +1210,25 @@ export function RiverRoomTable() {
   )
 }
 
-function waitingCopy(view: RoomView, seatedCount: number, isHost: boolean): string | null {
+/**
+ * Two different questions, and they were being answered by one number.
+ *
+ * Whether you need to sit down is about the seats taken now. Whether the table
+ * can deal is about the seats taken once bots arrive, and bots arrive on the
+ * deal rather than as people do. Answering the second with the first told
+ * somebody sitting alone at a bot table to wait for a player who was never
+ * coming, and hid the button that would have brought nine.
+ */
+function waitingCopy(
+  view: RoomView,
+  seatedCount: number,
+  botSeats: number,
+  isHost: boolean,
+): string | null {
   if (view.phase === 'seeding') return 'Securing the deck…'
   if (view.phase !== 'open') return null
   if (seatedCount === 0) return 'Take an open seat to join the table.'
-  if (seatedCount < 2) return 'Waiting for one more player.'
+  if (seatedCount + botSeats < 2) return 'Waiting for one more player.'
   return isHost
     ? 'Table is ready. DEAL when your group is seated.'
     : 'Waiting for the host to deal.'

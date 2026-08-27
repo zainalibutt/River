@@ -31,6 +31,7 @@ describe('Supabase token verifier', () => {
     await expect(verify(await sign())).resolves.toEqual({
       playerId: PLAYER_ID,
       anonymous: true,
+      admin: false,
     })
   })
 
@@ -39,7 +40,46 @@ describe('Supabase token verifier', () => {
     await expect(verify(await sign({ is_anonymous: false }))).resolves.toEqual({
       playerId: PLAYER_ID,
       anonymous: false,
+      admin: false,
     })
+  })
+
+  it('grants the developer role from app_metadata on a real account', async () => {
+    const { sign, verify } = await signer()
+    const token = await sign({ is_anonymous: false, app_metadata: { river_role: 'developer' } })
+    await expect(verify(token)).resolves.toEqual({
+      playerId: PLAYER_ID,
+      anonymous: false,
+      admin: true,
+    })
+  })
+
+  it('never grants the developer role from anything the player can write', async () => {
+    const { sign, verify } = await signer()
+
+    // user_metadata is writable by the account holder through auth.updateUser.
+    // If the role were read from there, granting yourself every developer power
+    // in the game would be one call from the browser console.
+    const forged = await sign({
+      is_anonymous: false,
+      user_metadata: { river_role: 'developer' },
+    })
+    await expect(verify(forged)).resolves.toMatchObject({ admin: false })
+
+    // A top-level claim is not the metadata object either, and neither is a
+    // role by a different name.
+    await expect(
+      verify(await sign({ is_anonymous: false, river_role: 'developer' })),
+    ).resolves.toMatchObject({ admin: false })
+    await expect(
+      verify(await sign({ is_anonymous: false, app_metadata: { river_role: 'admin' } })),
+    ).resolves.toMatchObject({ admin: false })
+
+    // Anonymous sessions are handed to anyone who loads the page. One holding
+    // the claim means something upstream is wrong, and the answer is still no.
+    await expect(
+      verify(await sign({ is_anonymous: true, app_metadata: { river_role: 'developer' } })),
+    ).resolves.toMatchObject({ admin: false })
   })
 
   it('rejects the wrong issuer, audience, role, or an expired token', async () => {

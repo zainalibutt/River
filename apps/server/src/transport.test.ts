@@ -9,11 +9,13 @@ import { parseClientMessage, RoomHub } from './transport.js'
 
 const ALICE = '323c30d2-9e36-4c4d-96c8-a315322b113d'
 const BOB = '78047f44-a536-4861-9d8f-784d77bda917'
+const DEV = 'c1f9a4de-1f0b-4d4a-8a2c-2b6f0e5a7d31'
 
 class MemoryLedger implements Ledger {
   readonly balances = new Map([
     [ALICE, 100_000],
     [BOB, 100_000],
+    [DEV, 100_000],
   ])
   readonly entries: LedgerEntry[] = []
   private readonly refs = new Map<string, LedgerEntry>()
@@ -67,9 +69,10 @@ function setup(
 ) {
   const ledger = new MemoryLedger()
   const players: Record<string, AuthenticatedPlayer> = {
-    alice: { playerId: ALICE, anonymous: true },
-    aliceSaved: { playerId: ALICE, anonymous: false },
-    bob: { playerId: BOB, anonymous: false },
+    alice: { playerId: ALICE, anonymous: true, admin: false },
+    aliceSaved: { playerId: ALICE, anonymous: false, admin: false },
+    bob: { playerId: BOB, anonymous: false, admin: false },
+    dev: { playerId: DEV, anonymous: false, admin: true },
   }
   const hub = new RoomHub({
     ledger,
@@ -751,6 +754,91 @@ describe('which room a table is in', () => {
   })
 })
 
+describe('the developer account', () => {
+  async function send(hub: RoomHub, token: string, action: unknown, requestId = 'admin-1') {
+    const peer = new TestPeer()
+    const connection = hub.connect(peer)
+    await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: token }))
+    await connection.receive(JSON.stringify({ kind: 'admin', requestId, action }))
+    return { peer, connection }
+  }
+
+  it('tells the client whether the account holds the role', async () => {
+    const { hub } = setup()
+    const peer = new TestPeer()
+    const connection = hub.connect(peer)
+    await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'dev' }))
+    expect(peer.last('authenticated')).toMatchObject({ admin: true })
+
+    const ordinary = new TestPeer()
+    await hub
+      .connect(ordinary)
+      .receive(JSON.stringify({ kind: 'authenticate', accessToken: 'bob' }))
+    expect(ordinary.last('authenticated')).toMatchObject({ admin: false })
+  })
+
+  it('grants chips and moves the balance', async () => {
+    const { hub, ledger } = setup()
+    const { peer } = await send(hub, 'dev', {
+      kind: 'grantChips',
+      targetPlayerId: BOB,
+      amount: 50_000,
+    })
+    expect(peer.last('adminResult')).toMatchObject({
+      outcome: { kind: 'chipsGranted', balance: 150_000 },
+    })
+    expect(await ledger.balance(BOB)).toBe(150_000)
+  })
+
+  it('refuses every action to an account without the role, and changes nothing', async () => {
+    // The one that matters. If this ever passes for 'bob', anybody with a
+    // browser console can print themselves chips and remove other players.
+    const { hub, ledger } = setup()
+    for (const token of ['bob', 'alice']) {
+      const { peer } = await send(hub, token, {
+        kind: 'grantChips',
+        targetPlayerId: BOB,
+        amount: 50_000,
+      })
+      expect(peer.last('adminResult')).toBeUndefined()
+      expect(peer.last('error')).toMatchObject({ code: 'forbidden' })
+    }
+    expect(await ledger.balance(BOB)).toBe(100_000)
+  })
+
+  it('keeps a banned player out of every table', async () => {
+    const { hub } = setup()
+    await send(hub, 'dev', { kind: 'setBan', targetPlayerId: BOB, banned: true })
+
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    expect(bob.peer.last('snapshot')).toBeUndefined()
+    expect(bob.peer.last('error')).toMatchObject({ code: 'join_rejected' })
+
+    // And lifting it lets them back in.
+    await send(hub, 'dev', { kind: 'setBan', targetPlayerId: BOB, banned: false }, 'admin-2')
+    const again = await connectAndEnter(hub, 'bob', 'Bob')
+    expect(again.peer.last('snapshot')).toBeDefined()
+  })
+
+  it('rejects a malformed action at the wire rather than in the handler', async () => {
+    expect(parseClientMessage(JSON.stringify({ kind: 'admin', requestId: 'a' }))).toBeNull()
+    expect(
+      parseClientMessage(
+        JSON.stringify({ kind: 'admin', requestId: 'a', action: { kind: 'dropDatabase' } }),
+      ),
+    ).toBeNull()
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          kind: 'admin',
+          requestId: 'a',
+          action: { kind: 'grantChips', targetPlayerId: BOB, amount: 'lots' },
+        }),
+      ),
+    ).toBeNull()
+  })
+})
+
 describe('bots at the table', () => {
   const withBots = () => setup(30_000, 0, undefined, undefined, undefined, 5)
 
@@ -848,8 +936,7 @@ describe('bots at the table', () => {
     // street - `betStreet` is a display copy of money the pot has, not money
     // beside it. Adding both double-counts, which is how this first read 750
     // chips high: exactly one small blind plus one big blind.
-    const chipsInPlay = () =>
-      view().pot + seated().reduce((total, seat) => total + seat.stack, 0)
+    const chipsInPlay = () => view().pot + seated().reduce((total, seat) => total + seat.stack, 0)
 
     const opened = chipsInPlay()
     expect(view().phase).toBe('hand')
@@ -894,6 +981,19 @@ describe('bots at the table', () => {
     // Somebody won it: at least one stack moved.
     const movedSeats = seated().filter((seat) => seat.stack !== 50_000)
     expect(movedSeats.length).toBeGreaterThan(0)
+  })
+
+  it('tells the client the table fills with bots, so one person can deal', async () => {
+    // The deadlock this closes: bots take their seats on the deal, and the
+    // client would only offer a deal once two seats were taken. Sitting down
+    // alone at a bot table, there was no button to press and nothing coming.
+    const { hub } = withBots()
+    const { peer } = await sitAndStart(hub)
+    expect(peer.last('snapshot')).toMatchObject({ botSeats: 5 })
+
+    const { hub: quiet } = setup()
+    const solo = await sitAndStart(quiet)
+    expect(solo.peer.last('snapshot')).toMatchObject({ botSeats: 0 })
   })
 
   it('acts for a bot when the turn reaches it', async () => {

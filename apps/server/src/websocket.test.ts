@@ -35,7 +35,7 @@ describe('WebSocket adapter', () => {
     })
     const hub = new RoomHub({
       ledger: memoryLedger(),
-      verifyToken: async () => ({ playerId: PLAYER_ID, anonymous: true }),
+      verifyToken: async () => ({ playerId: PLAYER_ID, anonymous: true, admin: false }),
     })
     const sockets = attachRiverWebSocketServer(http, hub)
     servers.push({ http, sockets })
@@ -54,6 +54,7 @@ describe('WebSocket adapter', () => {
       kind: 'authenticated',
       playerId: PLAYER_ID,
       anonymous: true,
+      admin: false,
     })
     client.close()
   })
@@ -64,7 +65,7 @@ describe('WebSocket adapter', () => {
     })
     const hub = new RoomHub({
       ledger: memoryLedger(),
-      verifyToken: async () => ({ playerId: PLAYER_ID, anonymous: true }),
+      verifyToken: async () => ({ playerId: PLAYER_ID, anonymous: true, admin: false }),
     })
     const sockets = attachRiverWebSocketServer(http, hub)
     servers.push({ http, sockets })

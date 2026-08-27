@@ -8,6 +8,8 @@ import {
   VOICE_PACK,
   type VoiceEvent,
 } from '@river/engine'
+import type { AdminAction, AdminOutcome, BanList } from './admin.js'
+import { applyAdminAction, MemoryBanList } from './admin.js'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
 import {
   actionFor,
@@ -86,9 +88,10 @@ export type ClientMessage =
   | { kind: 'equipTableItem'; requestId: string; itemId: string }
   | { kind: 'claimDaily'; requestId: string }
   | { kind: 'claimRescue'; requestId: string }
+  | { kind: 'admin'; requestId: string; action: AdminAction }
 
 export type ServerMessage =
-  | { kind: 'authenticated'; playerId: string; anonymous: boolean }
+  | { kind: 'authenticated'; playerId: string; anonymous: boolean; admin: boolean }
   | {
       kind: 'snapshot'
       roomId: string
@@ -98,12 +101,23 @@ export type ServerMessage =
       ownedItems: OwnedItem[]
       ownedCosmetics: OwnedCosmetic[]
       events: RoomEvent[]
+      /**
+       * How many seats this table will fill with bots when a hand is dealt.
+       *
+       * The client needs it to know whether one person sitting alone can start
+       * anything. Bots take their seats on the deal rather than as people
+       * arrive, so a table that fills with them looks empty right up until the
+       * moment it does not - and a client that reasons only from the seats it
+       * can see concludes there is nobody to play against.
+       */
+      botSeats: number
     }
   | { kind: 'social'; roomId: string; requestId: string | null; event: SocialEvent }
   | { kind: 'tables'; requestId: string; tables: TableSummary[] }
   | { kind: 'cosmetic'; requestId: string; outcome: CosmeticOutcome }
   | { kind: 'grant'; requestId: string; outcome: GrantOutcome }
   | { kind: 'tableItem'; requestId: string; outcome: PurchaseOutcome | EquipOutcome }
+  | { kind: 'adminResult'; requestId: string; outcome: AdminOutcome }
   | { kind: 'error'; requestId: string | null; code: string; message: string }
 
 interface ConnectionState {
@@ -214,6 +228,11 @@ export interface RoomHubOptions {
   economy?: SupabaseEconomy
   tableItems?: TableItemStore
   cosmetics?: CosmeticStore
+  /**
+   * Who is barred from entering. Defaults to a list that lives as long as the
+   * process - see `MemoryBanList` for what that costs.
+   */
+  bans?: BanList
   createRoom?: (roomId: string, venueId?: VenueId) => Room
 }
 
@@ -285,6 +304,23 @@ function roomCommand(value: unknown): ClientRoomCommand | null {
     default:
       return null
   }
+}
+
+function adminAction(value: unknown): AdminAction | null {
+  if (!isObject(value) || typeof value.kind !== 'string') return null
+  if (value.kind === 'listBans') return { kind: 'listBans' }
+  if (typeof value.targetPlayerId !== 'string') return null
+  if (value.kind === 'grantChips' && Number.isSafeInteger(value.amount)) {
+    return {
+      kind: 'grantChips',
+      targetPlayerId: value.targetPlayerId,
+      amount: Number(value.amount),
+    }
+  }
+  if (value.kind === 'setBan' && typeof value.banned === 'boolean') {
+    return { kind: 'setBan', targetPlayerId: value.targetPlayerId, banned: value.banned }
+  }
+  return null
 }
 
 function socialCommand(value: unknown): ClientSocialCommand | null {
@@ -363,11 +399,16 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (value.kind === 'listTables') return { kind: 'listTables', requestId }
   if (value.kind === 'claimDaily') return { kind: 'claimDaily', requestId }
   if (value.kind === 'claimRescue') return { kind: 'claimRescue', requestId }
+  if (value.kind === 'admin') {
+    const action = adminAction(value.action)
+    return action === null ? null : { kind: 'admin', requestId, action }
+  }
   return null
 }
 
 export class RoomHub {
   private readonly verifyToken: TokenVerifier
+  private readonly bans: BanList
   private readonly ledger: Ledger
   private readonly economy: SupabaseEconomy | null
   private readonly tableItems: TableItemStore | undefined
@@ -388,6 +429,7 @@ export class RoomHub {
 
   constructor(options: RoomHubOptions) {
     this.verifyToken = options.verifyToken
+    this.bans = options.bans ?? new MemoryBanList()
     this.ledger = options.ledger
     this.onError = options.onError ?? ((): void => {})
     this.botRng = options.botRng ?? Math.random
@@ -447,6 +489,10 @@ export class RoomHub {
     }
     if (message.kind === 'claimDaily' || message.kind === 'claimRescue') {
       await this.grant(connection, message)
+      return
+    }
+    if (message.kind === 'admin') {
+      await this.admin(connection, message)
       return
     }
     if (message.kind === 'listTables') {
@@ -525,6 +571,11 @@ export class RoomHub {
         kind: 'authenticated',
         playerId: player.playerId,
         anonymous: player.anonymous,
+        // The client uses this to decide whether to render the developer
+        // panel. It is a convenience, not the check - every action is
+        // re-authorised against the token on arrival, so a client that lies to
+        // itself about this gets a panel whose buttons all refuse.
+        admin: player.admin,
       })
     } catch (error) {
       this.onError('authenticate: session could not be opened', error)
@@ -546,6 +597,18 @@ export class RoomHub {
     }
     if (connection.roomId !== null && connection.roomId !== message.roomId) {
       this.error(connection, message.requestId, 'already_in_room', 'Leave the current room first')
+      return
+    }
+    if (await this.bans.isBanned(player.playerId)) {
+      // Refused at the door rather than seated and removed. The wording does
+      // not distinguish a ban from a bad code, because a banned player learning
+      // exactly which state they are in is the first step to working around it.
+      this.error(
+        connection,
+        message.requestId,
+        'join_rejected',
+        'That code does not match a table.',
+      )
       return
     }
     const exists = this.rooms.has(message.roomId)
@@ -598,6 +661,41 @@ export class RoomHub {
       }
       this.broadcast(room, message.requestId, events, connection)
     })
+  }
+
+  /**
+   * A developer action.
+   *
+   * The role is re-read from the connection's verified token every time rather
+   * than trusted from a flag set at login, so a client cannot talk itself into
+   * the powers, and a refusal says as little as an ordinary one.
+   */
+  private async admin(
+    connection: ConnectionState,
+    message: Extract<ClientMessage, { kind: 'admin' }>,
+  ): Promise<void> {
+    const player = connection.player
+    if (player === null || !player.admin) {
+      this.error(connection, message.requestId, 'forbidden', 'That is not available.')
+      return
+    }
+    try {
+      const outcome = await applyAdminAction(message.action, {
+        ledger: this.ledger,
+        bans: this.bans,
+        actorId: player.playerId,
+        ref: `admin:${player.playerId}:${message.requestId}`,
+      })
+      // A developer topping up their own account should see it immediately
+      // rather than on the next reconnect.
+      if (outcome.kind === 'chipsGranted' && outcome.targetPlayerId === player.playerId) {
+        connection.balance = outcome.balance
+      }
+      this.send(connection, { kind: 'adminResult', requestId: message.requestId, outcome })
+    } catch (error) {
+      this.onError('admin: action failed', error)
+      this.error(connection, message.requestId, 'admin_failed', 'That could not be processed')
+    }
   }
 
   private async grant(
@@ -833,6 +931,7 @@ export class RoomHub {
       balance: connection.balance,
       ownedItems: connection.ownedItems.map((entry) => ({ ...entry })),
       ownedCosmetics: connection.ownedCosmetics.map((entry) => ({ ...entry })),
+      botSeats: this.botSeats,
       events: result.events,
     }
     this.completed.set(cacheKey, reply)
@@ -1450,6 +1549,7 @@ export class RoomHub {
       balance: connection.balance,
       ownedItems: connection.ownedItems.map((entry) => ({ ...entry })),
       ownedCosmetics: connection.ownedCosmetics.map((entry) => ({ ...entry })),
+      botSeats: this.botSeats,
       events,
     })
   }
