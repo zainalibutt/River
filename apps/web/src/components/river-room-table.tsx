@@ -457,11 +457,31 @@ export function RiverRoomTable() {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return
       if (event.code === 'Space') setPeek(true)
-      // Hold to read the table. The reference uses Tab for this; Tab is focus
-      // navigation in a browser and packet 2D tested that path, so River holds
-      // Shift instead. Nameplates are otherwise absent entirely - a permanent
-      // plate over every seat is the thing this replaces.
+      // Hold to read the table: names, stacks and state, on demand.
+      //
+      // The reference uses Tab and so does this now. It was Shift, because Tab
+      // is focus navigation in a browser and taking it costs keyboard users
+      // their way around - but at a table that lands you on a row of buttons
+      // rather than telling you who you are playing against, which is what Tab
+      // is for in every game that has this.
+      //
+      // The cost is paid where it is smallest. Tab is only intercepted while
+      // you are seated in a live hand; anywhere else - choosing a seat, the
+      // lobby, the shop, chat - it navigates exactly as it should, and Shift
+      // still works everywhere for anyone who wants it.
       if (event.key === 'Shift') setPlatesHeld(true)
+      // Read through the ref rather than closing over derived state. This
+      // listener is rebound only when `command` or the legal actions change, so
+      // a captured boolean would answer for whichever render last rebound it -
+      // and "am I seated in a live hand" changes on neither of those.
+      const current = viewRef.current
+      const inHand =
+        current.phase === 'hand' &&
+        current.seats.some((seat) => seat.playerId === current.selfId && !seat.folded)
+      if (event.key === 'Tab' && inHand) {
+        event.preventDefault()
+        setPlatesHeld(true)
+      }
       if (event.key.toLowerCase() === 'c') {
         if (view.legal?.check.enabled) command({ kind: 'act', action: { kind: 'check' } })
         else if (view.legal?.call.enabled) command({ kind: 'act', action: { kind: 'call' } })
@@ -470,7 +490,7 @@ export function RiverRoomTable() {
     }
     const up = (event: KeyboardEvent) => {
       if (event.code === 'Space') setPeek(false)
-      if (event.key === 'Shift') setPlatesHeld(false)
+      if (event.key === 'Shift' || event.key === 'Tab') setPlatesHeld(false)
     }
     // A key held when the window loses focus never sends its keyup, so the
     // plates would stay up for good after an alt-tab.

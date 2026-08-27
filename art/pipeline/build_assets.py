@@ -385,14 +385,22 @@ def build_chairs(venue, chair_fn, chair_mat, count=9):
             mesh.materials.append(chrome)
             for polygon in mesh.polygons[leather_faces:]:
                 polygon.material_index = 1
-            angle = math.atan2(-x, y)
-        else:
-            angle = math.atan2(-y, -x)
+            pass
+        # A chair faces the table, the same way the person in it does.
+        #
+        # This is the character placement formula with no half turn added, and
+        # the half turn is what was wrong. Measured on the shipped asset: every
+        # chair pointed its +Y at the table while every character pointed its
+        # -Y at it - exactly 180 degrees apart, so nine chairs sat with their
+        # backs to the felt and their occupants facing out of them. Two
+        # different expressions were being used for one relationship, and a
+        # third for the characters, which is how they drifted apart.
+        angle = math.atan2(-x, y)
         object_at(
             '%s_chair_%d' % (venue['id'], index),
             mesh,
             (x, y, 0.0),
-            (0.0, 0.0, angle + math.pi),
+            (0.0, 0.0, angle),
         )
 
 

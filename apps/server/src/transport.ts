@@ -163,6 +163,8 @@ interface RoomState {
   reconnectTimers: Map<string, ReturnType<typeof setTimeout>>
   seedTimer: ReturnType<typeof setTimeout> | null
   turnTimer: ReturnType<typeof setTimeout> | null
+  /** Deals the next hand after the one that just finished. */
+  nextHandTimer: ReturnType<typeof setTimeout> | null
   socialActions: Map<string, number[]>
   speakingPlayers: Set<string>
   activeEmotes: Set<string>
@@ -1261,6 +1263,7 @@ export class RoomHub {
       botCast: new Map(),
       lastSpokeAtMs: new Map(),
       speechTimers: new Set(),
+      nextHandTimer: null,
     }
     this.rooms.set(roomId, created)
     return created
@@ -1473,6 +1476,49 @@ export class RoomHub {
     this.interruptEmotes(state, events)
     this.broadcastAvatarVo(state, events)
     this.speakAboutIt(state, events)
+    this.keepDealing(state, events)
+  }
+
+  /**
+   * Deal the next hand.
+   *
+   * The room has always announced a countdown when a hand ends - a `between`
+   * event carrying `countdownMs` - and nothing anywhere acted on it. So River
+   * dealt exactly one hand and then sat there forever, showing a settled pot
+   * and a table full of people who would never be dealt to again. The number
+   * was published, displayed, and obeyed by nobody.
+   *
+   * It lives in broadcast because a hand can end down several paths - the last
+   * player acting, a turn timing out, everyone folding to one - and all of them
+   * arrive here. Scheduling it at the command site would have covered the first
+   * and missed the rest.
+   *
+   * A refusal is not retried: if the table has emptied to one player, the room
+   * says no and the next hand starts when somebody sits down and asks for it.
+   */
+  private keepDealing(state: RoomState, events: RoomEvent[]): void {
+    if (events.some((event) => event.kind === 'handStarted')) {
+      this.clearNextHand(state)
+      return
+    }
+    const between = events.find((event) => event.kind === 'between')
+    if (between === undefined) return
+    this.clearNextHand(state)
+    const delay = state.room.config.countdownMs
+    state.nextHandTimer = setTimeout(() => {
+      void this.enqueue(state, async () => {
+        state.nextHandTimer = null
+        this.seatBots(state)
+        const result = state.room.submit({ kind: 'startHand' })
+        if (result.ok) this.broadcast(state, null, result.events)
+      })
+    }, delay)
+  }
+
+  private clearNextHand(state: RoomState): void {
+    if (state.nextHandTimer === null) return
+    clearTimeout(state.nextHandTimer)
+    state.nextHandTimer = null
   }
 
   private interruptEmotes(state: RoomState, events: RoomEvent[]): void {

@@ -1085,6 +1085,47 @@ describe('bots at the table', () => {
     expect(solo.peer.last('snapshot')).toMatchObject({ botSeats: 0 })
   })
 
+  it('deals the next hand instead of stopping after one', async () => {
+    // River dealt exactly one hand and then sat there. The room had always
+    // announced a countdown when a hand ended - a `between` event carrying
+    // countdownMs - and nothing anywhere acted on it, so the number was
+    // published, displayed, and obeyed by nobody.
+    vi.useFakeTimers()
+    const { hub } = withBots()
+    const { peer, connection } = await sitAndStart(hub)
+
+    function view() {
+      const snapshot = peer.last('snapshot')
+      if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+      return snapshot.view
+    }
+
+    expect(view().handNumber).toBe(1)
+
+    // Play the first hand out the cheap way.
+    for (let step = 0; step < 400 && view().phase === 'hand'; step += 1) {
+      const current = view()
+      if (current.currentActor?.playerId === ALICE && current.legal !== null) {
+        const kind = current.legal.check.enabled ? 'check' : 'call'
+        await connection.receive(
+          JSON.stringify({
+            kind: 'command',
+            requestId: `n-${step}`,
+            command: { kind: 'act', action: { kind } },
+          }),
+        )
+        continue
+      }
+      await vi.advanceTimersByTimeAsync(2_000)
+    }
+    expect(view().phase).toBe('between')
+
+    // The countdown the room announced actually runs now.
+    await vi.advanceTimersByTimeAsync(6_000)
+    expect(view().handNumber).toBeGreaterThan(1)
+    expect(view().phase).not.toBe('between')
+  })
+
   it('never returns a bot its stack when the server goes down', async () => {
     const { hub, ledger } = withBots()
     await sitAndStart(hub)
