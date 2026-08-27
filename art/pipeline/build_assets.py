@@ -206,7 +206,7 @@ def remap_character_uv(obj, region, face_region=None):
         uv.uv.y = active_v0 + active_inset_v + source_v * (active_height - active_inset_v * 2.0)
 
 
-def apply_seated_rest_pose(armature):
+def apply_seated_rest_pose(armature, pose_legs=False):
     for side, rotation in (('L', -0.38), ('R', 0.38)):
         bone = armature.pose.bones.get('upperarm01.' + side)
         if bone is not None:
@@ -216,6 +216,15 @@ def apply_seated_rest_pose(armature):
         if forearm is not None:
             forearm.rotation_mode = 'XYZ'
             forearm.rotation_euler = (math.radians(8.0), 0.0, 0.0)
+        if pose_legs:
+            thigh = armature.pose.bones.get('upperleg02.' + side)
+            if thigh is not None:
+                thigh.rotation_mode = 'XYZ'
+                thigh.rotation_euler = (math.radians(-70.0), 0.0, 0.0)
+            shin = armature.pose.bones.get('lowerleg01.' + side)
+            if shin is not None:
+                shin.rotation_mode = 'XYZ'
+                shin.rotation_euler = (math.radians(75.0), 0.0, 0.0)
     bpy.ops.object.select_all(action='DESELECT')
     armature.select_set(True)
     bpy.context.view_layer.objects.active = armature
@@ -507,7 +516,7 @@ def build_garment_material():
     return material
 
 
-def import_character_templates(atlas_material):
+def import_character_templates(atlas_material, pose_legs=False):
     templates = {}
     animation_actions = []
     for variant in CHARACTER_VARIANTS:
@@ -541,7 +550,7 @@ def import_character_templates(atlas_material):
             apply_seated_lod(obj)
         armature = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
         if body is not None and armature is not None:
-            apply_seated_rest_pose(armature)
+            apply_seated_rest_pose(armature, pose_legs)
             shape_seated_arms(body)
             smooth_mesh_by_angle(body.data)
         if variant == 'male' and armature is not None:
@@ -647,7 +656,7 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
 def build_venue_characters(venue):
     atlas_material = build_character_atlas()
     garment_material = build_garment_material()
-    templates, animation_actions = import_character_templates(atlas_material)
+    templates, animation_actions = import_character_templates(atlas_material, venue['id'] == 'rooftop')
     positions = character_seat_positions(venue)
     for seat_index, (x, y) in enumerate(positions):
         variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]

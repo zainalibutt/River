@@ -284,14 +284,14 @@ def card_body():
 
 def chair_swivel():
     leather = [
-        cylinder(0.27, SEAT_H, SEAT_H - 0.08, CHAIR_SEG),
-        translate_geo(torus(0.215, 0.014, CHAIR_SEG, 4), 0.0, 0.0, SEAT_H),
+        cylinder(0.20, SEAT_H, SEAT_H - 0.08, CHAIR_SEG),
+        translate_geo(torus(0.157, 0.014, CHAIR_SEG, 4), 0.0, 0.0, SEAT_H),
         chair_back_shell(),
     ]
     chrome = [
         cylinder(0.033, SEAT_H - 0.08, 0.07, 8),
-        cylinder(0.16, 0.07, 0.025, 16),
-        translate_geo(torus(0.20, 0.017, 16, 4), 0.0, 0.0, 0.145),
+        cylinder(0.12, 0.07, 0.025, 16),
+        translate_geo(torus(0.145, 0.017, 16, 4), 0.0, 0.0, 0.145),
         crown_emblem(),
     ]
     leather_geo = concat(leather)
@@ -302,10 +302,10 @@ def chair_swivel():
 def chair_back_shell():
     segments = 12
     levels = [
-        (SEAT_H - 0.01, 0.25, 0.25),
-        (SEAT_H + 0.10, 0.29, 0.27),
-        (SEAT_H + 0.62, 0.28, 0.28),
-        (SEAT_H + 0.74, 0.19, 0.30),
+        (SEAT_H - 0.04, 0.17, 0.17),
+        (SEAT_H + 0.04, 0.20, 0.19),
+        (SEAT_H + 0.34, 0.19, 0.20),
+        (SEAT_H + 0.42, 0.14, 0.21),
     ]
     verts = []
     for z, half_width, centre_y in levels:
@@ -346,10 +346,10 @@ def chair_back_shell():
 
 def crown_emblem():
     return concat([
-        box((-0.075, 0.237, SEAT_H + 0.28), (0.15, 0.018, 0.024)),
-        box((-0.065, 0.237, SEAT_H + 0.304), (0.03, 0.018, 0.065)),
-        box((-0.015, 0.237, SEAT_H + 0.304), (0.03, 0.018, 0.095)),
-        box((0.035, 0.237, SEAT_H + 0.304), (0.03, 0.018, 0.065)),
+        box((-0.052, 0.197, SEAT_H + 0.16), (0.104, 0.018, 0.020)),
+        box((-0.044, 0.197, SEAT_H + 0.18), (0.024, 0.018, 0.045)),
+        box((-0.012, 0.197, SEAT_H + 0.18), (0.024, 0.018, 0.067)),
+        box((0.020, 0.197, SEAT_H + 0.18), (0.024, 0.018, 0.045)),
     ])
 
 
