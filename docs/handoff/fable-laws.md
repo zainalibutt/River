@@ -27,6 +27,19 @@ There is a fixed budget and it is the user's own money. Work like it.
 - **Do not re-read a file you have already read** unless you have changed it.
 - One deliverable per packet. Finish it, report, stop. Do not pick up the next
   thing you noticed.
+- **Your brief carries a tool-call ceiling. When you reach it, stop and report,
+  finished or not.** A packet that stops at the ceiling with an honest account
+  of where it got to is worth more than one that quietly spends double. If the
+  brief has no ceiling on it, treat forty as the number and say so in your
+  report.
+- **Do not build a measurement harness.** If the brief asks for numbers it hands
+  you the code to get them. If it does not, write the smallest thing that
+  answers the question once, and reuse it rather than rewriting it per check.
+
+*Why:* packet 6A cost around fifteen pounds for about an hour of work. It ran to
+118 tool calls against a brief that carried three jobs, named no ceiling, and
+asked for a DOM sweep that already existed. None of that was the model's doing
+and all of it was avoidable in the brief.
 
 ## 2. The git index is shared state
 
@@ -56,13 +69,31 @@ its kind.
 a file had not compiled since the developer role was added. The first automated
 deploy caught it. A verification that cannot fail is not a verification.
 
-## 4. You cannot take screenshots. Measure the DOM instead
+## 4. Check the environment before you trust the brief about it
 
-The browser pane does not composite frames unless it is displayed, so
-`computer{action:"screenshot"}` times out. Do not spend turns trying.
+If the brief says a server is running, a session is seeded, or a file is in a
+particular state, **verify it in one command before building on it** and say
+what you found. A brief is written by someone who is not looking at your
+machine.
 
-Everything else works and is better anyway: `navigate`, `read_page`,
-`javascript_tool`. Measure what you changed:
+If the environment is wrong, say so and fix it if that is cheap, or stop if it
+is not. Do not spend a packet's budget working around a false premise.
+
+*Why:* packet 6A was told the dev server was up on localhost:3000. It was not,
+and `dev:web` alone cannot serve the app in any case - only
+`apps/server/src/main.ts` loads the root environment and serves Next plus the
+websocket on 3000. The agent worked that out correctly, and paid for the
+privilege.
+
+## 5. Measure the DOM. Use Chrome, and stop if you cannot
+
+**Use the Chrome extension (`mcp__claude-in-chrome__*`).** It screenshots, and
+seeing the thing is usually faster than inferring it. The in-app Browser pane
+does not composite unless displayed - screenshots time out there and stage
+rectangles come back as zero, which is worse than an error because it looks like
+data. If the extension is not connected, stop and say so.
+
+Measure what you changed:
 
 - Element rectangles via `getBoundingClientRect`, and pairwise intersection to
   find overlaps.
@@ -72,7 +103,7 @@ Everything else works and is better anyway: `navigate`, `read_page`,
 Report numbers, not adjectives. "HUD coverage 18.7 percent of frame, two
 elements crossing the felt" is a finding. "Looks cleaner" is not.
 
-## 5. Do not ship a control that does nothing
+## 6. Do not ship a control that does nothing
 
 If a screen offers an action that is not wired, it says so and cannot be
 pressed. A disabled item must state which it is — not built yet, or not
@@ -80,14 +111,14 @@ available to you — because a greyed-out control with no explanation reads as
 punishment. The first person to use the menu asked why he had been banned from
 the wardrobe.
 
-## 6. Say what you did not do
+## 7. Say what you did not do
 
 A packet that is three quarters finished and reported as finished costs more
 than one that stops and says where it stopped. If you could not verify
 something, name it. If a claim in your brief turned out to be wrong, say so
 plainly rather than working around it quietly.
 
-## 7. House rules
+## 8. House rules
 
 - Commits are authored by Zain alone. **No `Co-Authored-By`, no tool
   attribution, no "generated with" line, in any commit, ever.**
