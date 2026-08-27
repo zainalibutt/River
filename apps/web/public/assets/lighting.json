@@ -48,13 +48,13 @@
         "name": "sky_fill",
         "type": "area",
         "colour": "#5C74B8",
-        "energy": 300.0,
-        "size": 14.0,
+        "energy": 180.0,
+        "size": 10.0,
         "shadow": false,
         "position": [
           0.0,
-          1.0,
-          7.0
+          0.8,
+          4.8
         ],
         "rotation_deg": [
           0,
@@ -66,13 +66,13 @@
         "name": "fire_key",
         "type": "area",
         "colour": "#FF7A22",
-        "energy": 320.0,
-        "size": 6.0,
+        "energy": 140.0,
+        "size": 4.0,
         "shadow": false,
         "position": [
-          -4.2,
-          3.0,
-          1.6
+          -2.4,
+          1.7,
+          2.2
         ],
         "rotation_deg": [
           64,
@@ -83,17 +83,17 @@
       {
         "name": "pool",
         "type": "area",
-        "colour": "#3F9BFF",
-        "energy": 190.0,
-        "size": 5.0,
+        "colour": "#5B88A5",
+        "energy": 80.0,
+        "size": 3.0,
         "shadow": false,
         "position": [
-          -5.0,
-          5.6,
-          0.9
+          0.0,
+          2.55,
+          2.1
         ],
         "rotation_deg": [
-          20,
+          0,
           0,
           0
         ]
@@ -102,13 +102,13 @@
         "name": "back_fill",
         "type": "area",
         "colour": "#6E5C9E",
-        "energy": 130.0,
-        "size": 7.0,
+        "energy": 70.0,
+        "size": 4.5,
         "shadow": false,
         "position": [
           0.0,
-          6.5,
-          3.2
+          3.05,
+          2.8
         ],
         "rotation_deg": [
           -58,
