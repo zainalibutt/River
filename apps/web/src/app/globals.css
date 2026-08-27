@@ -229,12 +229,15 @@ input:focus-visible {
 }
 
 .pot-readout {
+  /* The reference floats the pot as a small amber numeral beside the felt. A
+     52px readout centred on the table was the largest text on screen and it
+     reads zero for most of a hand's life. */
   position: absolute;
-  top: 300px;
-  left: 660px;
+  top: 232px;
+  left: 810px;
   display: grid;
-  width: 600px;
-  height: 120px;
+  width: 300px;
+  height: 60px;
   place-items: center;
   text-align: center;
 }
@@ -249,8 +252,8 @@ input:focus-visible {
 }
 
 .pot-readout strong {
-  color: var(--river-cream);
-  font-size: 52px;
+  color: var(--river-amber-bright);
+  font-size: 30px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -375,23 +378,26 @@ input:focus-visible {
 }
 
 .status-line {
+  /* "Waiting for next hand" belongs low and quiet. At 800x56 and 26px this ran
+     a lit bar straight across the felt, which is the one thing the reference
+     never does with a persistent element. */
   position: absolute;
-  top: 644px;
-  left: 560px;
+  top: 892px;
+  left: 660px;
   display: grid;
-  width: 800px;
-  height: 56px;
+  width: 600px;
+  height: 34px;
   place-items: center;
   border-radius: 999px;
-  color: var(--river-cream);
-  font-size: 26px;
+  color: var(--river-cream-dim);
+  font-size: 16px;
   font-weight: 500;
 }
 
 .status-line.populated,
 .status-line:has(.countdown) {
-  border: 1px solid var(--river-room-edge);
-  background: rgb(27 35 32 / 72%);
+  border: 1px solid rgb(42 52 47 / 70%);
+  background: rgb(19 25 22 / 62%);
 }
 
 .countdown {
@@ -1151,8 +1157,11 @@ input:focus-visible {
   bottom: 26px;
   left: 50%;
   z-index: 22;
-  width: 420px;
-  height: 420px;
+  /* The reference's betting dial is ~330px in a 1920 frame and sits at the
+     bottom edge over the player's own back, never over the felt. 420 put its
+     top edge across the near table rail. */
+  width: 340px;
+  height: 340px;
   border: 1px solid rgb(232 169 60 / 38%);
   border-radius: 50%;
   background: radial-gradient(
@@ -1304,9 +1313,20 @@ input:focus-visible {
 }
 
 .ram-waiting {
+  /* Not an action surface. There is nothing to aim at here, so it stops being
+     a dial and becomes a caption - the single largest element on screen used
+     to be this, in its dead state, sitting over the felt. */
   display: grid;
+  width: 300px;
+  height: 46px;
+  border: 1px solid var(--river-room-edge);
+  border-radius: 999px;
+  background: rgb(19 25 22 / 82%);
+  box-shadow: none;
   place-items: center;
-  border-radius: 50%;
+}
+.ram-waiting span {
+  font-size: 13px;
 }
 
 .ram-waiting span {
@@ -1880,24 +1900,28 @@ input:focus-visible {
 /* Daily challenges. Ambient progress at the edge of the HUD - never a prompt,
    never something to dismiss, and never in the way of a decision. */
 .challenge-strip {
+  /* Ambient progress, not a panel. The reference shows nothing like this while
+     a hand is live, so it earns its place only by staying out of the way. */
   position: absolute;
-  top: 210px;
-  right: 96px;
+  top: 168px;
+  right: 72px;
   z-index: 21;
-  width: 300px;
+  width: 196px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
+  opacity: 0.72;
 }
 
 .challenge {
   display: grid;
   grid-template-columns: 1fr max-content;
-  gap: 4px 10px;
-  padding: 10px 14px;
-  border: 1px solid var(--river-room-edge);
-  border-radius: 12px;
-  background: rgb(19 25 22 / 78%);
+  gap: 3px 8px;
+  padding: 6px 10px;
+  border: 1px solid rgb(42 52 47 / 60%);
+  border-radius: 9px;
+  background: rgb(19 25 22 / 62%);
+  font-size: 11px;
 }
 
 .challenge.complete {
