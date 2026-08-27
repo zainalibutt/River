@@ -26,6 +26,8 @@ describe('config', () => {
     for (const shape of TABLE_SHAPES) {
       expect(SEATS_PER_SHAPE[shape]).toBeGreaterThan(1)
     }
-    expect(SEATS_PER_SHAPE[DEFAULT_TABLE_SHAPE]).toBe(9)
+    // Eight, because the ninth place around the felt is the dealer's. The
+    // venue lays nine slots and stands its dealer in the first.
+    expect(SEATS_PER_SHAPE[DEFAULT_TABLE_SHAPE]).toBe(8)
   })
 })

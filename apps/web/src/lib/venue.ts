@@ -207,6 +207,15 @@ export function venueOf(id: VenueId): Venue {
 /** Kept for the existing scene import; the Rooftop remains the default room. */
 export const rooftopCamera = VENUES.rooftop.camera
 
+/**
+ * How many places the venue lays around the felt.
+ *
+ * Nine, of which the dealer occupies the first. This is a property of the built
+ * asset - the chairs are baked on this ring - so it does not follow the number
+ * of players and must match character_seat_positions in the pipeline.
+ */
+export const SEAT_SLOTS = 9
+
 export type WorldSeat = {
   id: string
   x: number
@@ -223,7 +232,10 @@ export function worldSeats(
     // (Rx cos a, Ry sin a) from a quarter turn, and (x, y, z) becomes
     // (x, z, -y) - so the z sign flips and the ring is not a circle. Getting
     // either wrong leaves every chip count hovering beside the wrong chair.
-    const angle = Math.PI / 2 + (index * Math.PI * 2) / ids.length
+    // Slots 1 to 8 of a nine-slot ring. Slot 0 is the dealer's, and the ring
+    // must divide by nine however many players are sitting or the chips land
+    // between the chairs the venue actually baked.
+    const angle = Math.PI / 2 + ((index + 1) * Math.PI * 2) / SEAT_SLOTS
     return {
       id,
       x: ring.x * Math.cos(angle),

@@ -25,8 +25,18 @@ export const DEFAULT_STAKE = STAKE_250_500
 export const TABLE_SHAPES = ['full', 'six', 'heads-up'] as const
 export type TableShape = (typeof TABLE_SHAPES)[number]
 
+/**
+ * Eight, not nine, because the ninth place at the table belongs to the dealer.
+ *
+ * The venue lays nine positions around the felt and the dealer stands in the
+ * first of them. Nine playable seats meant a player was placed at that exact
+ * coordinate too, so somebody was always inside the dealer.
+ *
+ * The ring keeps its nine slots - the spacing is baked into the venue and the
+ * chairs sit on it - and the players take the eight that are left.
+ */
 export const SEATS_PER_SHAPE: Record<TableShape, number> = {
-  full: 9,
+  full: 8,
   six: 6,
   'heads-up': 2,
 }

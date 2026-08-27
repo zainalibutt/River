@@ -4,8 +4,8 @@ import {
   awaitingHuman,
   bustHand,
   deckOf,
+  fullSeats,
   huSeats,
-  nineSeats,
   showdownHand,
   splitPotHand,
   uncontestedWinHand,
@@ -222,13 +222,13 @@ describe('solo session', () => {
     expect(session.view().handNumber).toBe(0)
   })
 
-  it('supports a nine-seat projection without leaking bot cards', () => {
+  it('supports a full-table projection without leaking bot cards', () => {
     const session = new SoloSession({
-      seats: nineSeats('novice'),
+      seats: fullSeats('novice'),
       rngSeed: 'nine-seat',
     })
     session.start()
-    expect(session.view().seats).toHaveLength(9)
+    expect(session.view().seats).toHaveLength(8)
     expect(
       session
         .view()
@@ -239,7 +239,7 @@ describe('solo session', () => {
 
   it('terminates deterministically across skills, seeds, and table sizes', () => {
     for (const skill of ['rookie', 'novice', 'og'] as const) {
-      for (const seats of [huSeats(skill), nineSeats(skill)]) {
+      for (const seats of [huSeats(skill), fullSeats(skill)]) {
         for (let seed = 0; seed < 5; seed++) {
           const session = new SoloSession({ seats, rngSeed: `${skill}-${seats.length}-${seed}` })
           const total = session.totalChips()
@@ -281,7 +281,7 @@ describe('solo session', () => {
     expect(session.view().seats.map((seat) => seat.stack)).toEqual([12_000, 34_000])
   })
 
-  it('rejects duplicate ids and tables above nine seats', () => {
+  it('rejects duplicate ids and tables above the seat count', () => {
     expect(
       () =>
         new SoloSession({
@@ -302,7 +302,7 @@ describe('solo session', () => {
           })),
           rngSeed: 'too-many',
         }),
-    ).toThrow(/at most 9/)
+    ).toThrow(/at most 8/)
   })
 
   it('returns view snapshots that cannot mutate session cards', () => {

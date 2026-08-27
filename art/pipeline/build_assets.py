@@ -763,7 +763,9 @@ def build_venue_characters(venue):
     atlas_material = build_character_atlas()
     garment_material = build_garment_material()
     templates, animation_actions = import_character_templates(atlas_material, venue['id'] == 'rooftop')
-    positions = character_seat_positions(venue)
+    # Slot 0 belongs to the dealer, so the players take the other eight.
+    # Placing a character in every slot put one of them inside the dealer.
+    positions = character_seat_positions(venue)[1:]
     for seat_index, (x, y) in enumerate(positions):
         variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]
         angle = math.atan2(-x, y)

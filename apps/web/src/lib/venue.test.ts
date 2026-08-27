@@ -1,3 +1,4 @@
+import { SEATS_PER_SHAPE } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import { blenderToThree } from '@/lib/lighting'
 import {
@@ -5,6 +6,7 @@ import {
   DEFAULT_VENUE,
   isVenueId,
   ORBIT_POLAR_DEGREES,
+  SEAT_SLOTS,
   TABLE_SURFACE_HEIGHT,
   VENUE_ORDER,
   VENUES,
@@ -178,12 +180,27 @@ describe('seat ring', () => {
     // then (x, y, z) becomes (x, z, -y). A circle here puts the side seats a
     // metre off the chairs they label, which is what a single radius did.
     const ring = VENUES.rooftop.seatRing
-    const seats = worldSeats(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'], ring)
+    const seats = worldSeats(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], ring)
+    // The ring keeps nine slots however many players are sitting, because the
+    // chairs are baked on it. Players take slots 1 to 8; slot 0 is the dealer's.
     seats.forEach((seat, index) => {
-      const angle = Math.PI / 2 + (index * Math.PI * 2) / seats.length
+      const angle = Math.PI / 2 + ((index + 1) * Math.PI * 2) / SEAT_SLOTS
       expect(seat.x).toBeCloseTo(ring.x * Math.cos(angle), 9)
       expect(seat.z).toBeCloseTo(-ring.y * Math.sin(angle), 9)
     })
+  })
+
+  it('leaves the dealer their slot rather than seating somebody inside them', () => {
+    // The venue stands its dealer in the first slot of the ring. A ninth
+    // playable seat put a player at that exact coordinate, so somebody was
+    // always inside the dealer.
+    const ring = VENUES.rooftop.seatRing
+    const dealerAngle = Math.PI / 2
+    const dealer = { x: ring.x * Math.cos(dealerAngle), z: -ring.y * Math.sin(dealerAngle) }
+    for (const seat of worldSeats(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], ring)) {
+      expect(Math.hypot(seat.x - dealer.x, seat.z - dealer.z)).toBeGreaterThan(0.4)
+    }
+    expect(SEATS_PER_SHAPE.full).toBeLessThan(SEAT_SLOTS)
   })
 
   it('is an ellipse, not a circle', () => {
@@ -194,17 +211,16 @@ describe('seat ring', () => {
     }
   })
 
-  it('starts the ring across the table, the way the pipeline seats it', () => {
+  it('starts the ring one slot past the dealer, the way the pipeline seats it', () => {
     const ring = VENUES.rooftop.seatRing
     const [first] = worldSeats(['a', 'b', 'c', 'd'], ring)
     if (first === undefined) throw new Error('expected a seat')
-    const camera = cameraPlacement(VENUES.rooftop).position
-    // Seat zero sits opposite the camera, because the pipeline starts its ring
-    // at a quarter turn. Which seat the local player occupies is a separate
-    // question; what matters here is that the labels agree with the chairs.
-    expect(first.x).toBeCloseTo(0, 9)
-    expect(first.z).toBeCloseTo(-ring.y, 9)
-    expect(Math.sign(first.z)).toBe(-Math.sign(camera[2]))
+    // Slot 0 is across the table and belongs to the dealer, so the first
+    // player sits one slot round from it. What matters is that the labels agree
+    // with the chairs the pipeline baked, not which absolute point they land on.
+    const angle = Math.PI / 2 + (Math.PI * 2) / SEAT_SLOTS
+    expect(first.x).toBeCloseTo(ring.x * Math.cos(angle), 9)
+    expect(first.z).toBeCloseTo(-ring.y * Math.sin(angle), 9)
   })
 
   it('keeps every seat inside the ring it was given', () => {
