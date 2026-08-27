@@ -68,6 +68,7 @@ import {
   type SocialFeedEntry,
 } from '@/lib/social'
 import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib/socket'
+import { initialRoomTarget, LAST_TABLE_KEY, type RememberedTable } from '@/lib/table-target'
 import {
   DEFAULT_VENUE,
   VENUE_ORDER,
@@ -94,25 +95,6 @@ const seatPositions = [
 type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'offline'
 type UpgradeState = 'idle' | 'editing' | 'sent' | 'expired' | 'error' | 'complete'
 type KickState = { reason: 'host' | 'idle' | 'duplicate-session' } | null
-
-function initialRoomTarget(): {
-  roomId: string
-  inviteCode?: string
-  expired: boolean
-  venueId: VenueId
-} {
-  if (typeof window === 'undefined')
-    return { roomId: 'river-table', expired: false, venueId: DEFAULT_VENUE }
-  const params = new URLSearchParams(window.location.search)
-  const roomId = params.get('room')?.trim() || `river-${crypto.randomUUID().slice(0, 8)}`
-  const inviteCode = params.get('code')?.trim() || undefined
-  return {
-    roomId,
-    ...(inviteCode === undefined ? {} : { inviteCode }),
-    expired: params.has('error') || params.has('error_code'),
-    venueId: venueFromParams(params),
-  }
-}
 
 function emptyView(selfId = 'pending', venueId: VenueId = DEFAULT_VENUE): RoomView {
   return {
@@ -645,6 +627,42 @@ export function RiverRoomTable() {
       setNotice('Reconnecting…')
     }
   }
+
+  /**
+   * Put the table in the address bar, and remember it.
+   *
+   * Without this a reload has no idea where you were sitting, mints a new room
+   * and leaves your buy-in at a table you can no longer reach. Waits for the
+   * invite code, because a URL carrying the room without the code rejoins a
+   * table you are then refused entry to.
+   *
+   * replaceState rather than pushState: the back button should leave River,
+   * not walk backwards through your own reloads.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined' || view.inviteCode.length === 0) return
+    try {
+      const url = new URL(window.location.href)
+      url.search = new URLSearchParams({
+        room: roomId,
+        code: view.inviteCode,
+        venue: venueId,
+      }).toString()
+      window.history.replaceState(null, '', url.toString())
+      window.localStorage.setItem(
+        LAST_TABLE_KEY,
+        JSON.stringify({
+          roomId,
+          inviteCode: view.inviteCode,
+          venueId,
+          atMs: Date.now(),
+        } satisfies RememberedTable),
+      )
+    } catch {
+      // Storage can be unavailable and history can be blocked. Neither is worth
+      // interrupting a hand over - it costs a rejoin, not a game.
+    }
+  }, [roomId, venueId, view.inviteCode])
 
   const share = async () => {
     const url = joinUrl(roomId, view.inviteCode, venueId)
