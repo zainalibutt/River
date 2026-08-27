@@ -1,6 +1,13 @@
 import { randomBytes } from 'node:crypto'
 import type { BotPersonality, TableSummary, TurnAction } from '@river/engine'
-import { tableStatus } from '@river/engine'
+import {
+  nextUtterance,
+  type SpeechCandidate,
+  scheduleTableSpeech,
+  tableStatus,
+  VOICE_PACK,
+  type VoiceEvent,
+} from '@river/engine'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
 import {
   actionFor,
@@ -126,6 +133,62 @@ interface RoomState {
   botTimer: ReturnType<typeof setTimeout> | null
   /** Which character is in which bot seat, so a table keeps its cast. */
   botCast: Map<string, BotPersonality>
+  /** When each bot last spoke, so the table is not a crowd all shouting. */
+  lastSpokeAtMs: Map<number, number>
+  /** Timers for lines that have been scheduled but not yet said. */
+  speechTimers: Set<ReturnType<typeof setTimeout>>
+}
+
+/** How loudly each moment deserves to be spoken about. */
+const VOICE_PRIORITY: Partial<Record<VoiceEvent, number>> = {
+  bad_beat: 60,
+  win_big: 50,
+  all_in: 50,
+  lose_big: 40,
+  bluff_caught: 40,
+  raise: 30,
+  win_small: 20,
+  lose_small: 20,
+  fold_pressured: 20,
+  opponent_stalling: 10,
+  greeting: 5,
+  idle_banter: 0,
+}
+
+/**
+ * What a bot in this seat would speak about, given what just happened.
+ *
+ * Returns null far more often than not. Most events are nobody's business to
+ * comment on, and a table where every bot reacts to every event is the crowd
+ * the scheduler exists to prevent - this is the first filter before it.
+ */
+function voiceEventFor(event: RoomEvent, listenerId: string): VoiceEvent | null {
+  switch (event.kind) {
+    case 'handStarted':
+      return 'greeting'
+    case 'acted': {
+      if (event.playerId !== listenerId) {
+        return event.action.kind === 'raiseTo' ? 'opponent_stalling' : null
+      }
+      if (event.action.kind === 'allIn') return 'all_in'
+      if (event.action.kind === 'raiseTo') return 'raise'
+      if (event.action.kind === 'fold') return 'fold_pressured'
+      return null
+    }
+    case 'uncontested':
+      return event.playerId === listenerId ? 'win_small' : null
+    case 'showdown': {
+      const won = event.awards.some((award) => award.playerId === listenerId)
+      if (won) return 'win_big'
+      // Only somebody who actually reached the showdown lost anything there.
+      const reached = event.awards.length > 0
+      return reached ? 'lose_big' : null
+    }
+    case 'bust':
+      return event.playerId === listenerId ? 'lose_big' : null
+    default:
+      return null
+  }
 }
 
 /**
@@ -1035,6 +1098,8 @@ export class RoomHub {
       activeEmotes: new Set(),
       botTimer: null,
       botCast: new Map(),
+      lastSpokeAtMs: new Map(),
+      speechTimers: new Set(),
     }
     this.rooms.set(roomId, created)
     return created
@@ -1205,6 +1270,7 @@ export class RoomHub {
     this.scheduleBotTurn(state)
     this.interruptEmotes(state, events)
     this.broadcastAvatarVo(state, events)
+    this.speakAboutIt(state, events)
   }
 
   private interruptEmotes(state: RoomState, events: RoomEvent[]): void {
@@ -1251,6 +1317,86 @@ export class RoomHub {
         requestId: connection === this.activePlayers.get(event.playerId) ? requestId : null,
         event,
       })
+    }
+  }
+
+  /**
+   * What the table says about what just happened.
+   *
+   * Three finished modules sat behind this with nothing calling them: 480
+   * written lines, a per-personality chatter model that decides whether someone
+   * speaks at all, and a table scheduler that stops nine bots answering the
+   * same event on the same frame. The bots have never said a word.
+   *
+   * Lines go out on the existing chat wire rather than a new one. It is already
+   * rate limited, already refused during a player's own decision window, and
+   * already rendered in a panel - a second path would have been a second set of
+   * those rules to keep in step.
+   */
+  private speakAboutIt(state: RoomState, events: RoomEvent[]): void {
+    // A new hand cancels anything still queued from the last one. A bad-beat
+    // line landing three seconds into the next deal reads as a bot talking to
+    // itself about a hand nobody is still playing.
+    if (events.some((event) => event.kind === 'handStarted')) {
+      for (const timer of state.speechTimers) clearTimeout(timer)
+      state.speechTimers.clear()
+    }
+    if (state.botCast.size === 0) return
+    const now = state.room.config.nowMs()
+    const view = state.room.viewFor('')
+    const seatOf = new Map<string, number>()
+    for (const seat of view.seats) {
+      if (seat.playerId !== null) seatOf.set(seat.playerId, seat.seat)
+    }
+
+    const candidates: SpeechCandidate[] = []
+    for (const event of events) {
+      for (const [playerId, personality] of state.botCast) {
+        const seat = seatOf.get(playerId)
+        if (seat === undefined) continue
+        const voice = voiceEventFor(event, playerId)
+        if (voice === null) continue
+        candidates.push({
+          seat,
+          personalityId: personality.id,
+          chatter: personality.chatter,
+          event: voice,
+          priority: VOICE_PRIORITY[voice] ?? 0,
+        })
+      }
+    }
+    if (candidates.length === 0) return
+
+    const seatToPlayer = new Map<number, string>()
+    for (const [playerId, seat] of seatOf) seatToPlayer.set(seat, playerId)
+
+    for (const slot of scheduleTableSpeech(candidates, state.lastSpokeAtMs, now)) {
+      const playerId = seatToPlayer.get(slot.seat)
+      if (playerId === undefined) continue
+      const personality = state.botCast.get(playerId)
+      if (personality === undefined) continue
+      const line = nextUtterance(
+        VOICE_PACK,
+        personality,
+        slot.event,
+        state.lastSpokeAtMs.get(slot.seat) ?? null,
+        now,
+        this.botRng(),
+      )
+      // A silent character often has nothing to say, and that is the model
+      // working rather than a failure to find a line.
+      if (line === null || line.text.trim().length === 0) continue
+      state.lastSpokeAtMs.set(slot.seat, now + slot.delayMs)
+      const timer = setTimeout(() => {
+        state.speechTimers.delete(timer)
+        this.broadcastSocial(state, null, {
+          kind: 'chat',
+          playerId,
+          text: line.text,
+          sentAtMs: state.room.config.nowMs(),
+        })
+      }, slot.delayMs)
+      state.speechTimers.add(timer)
     }
   }
 
