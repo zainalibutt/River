@@ -195,25 +195,44 @@ def paint_line(pixels, x0, y0, x1, y1, thickness, colour):
         paint_ellipse(pixels, x, y, thickness, thickness, colour)
 
 
+def skin_tone(female):
+    """One skin colour, for every island that is skin.
+
+    The face island had its own, eleven points lighter than the one the skin and
+    hands islands used, so the face met the head at a hard colour step and read
+    as a mask laid over it. Same fault as the two atlas painters and the two
+    camera tables: one property written twice, and the copies drifting.
+    """
+    return (202, 153, 122) if female else (194, 145, 108)
+
+
 def paint_face_cell(pixels, female):
     width = ATLAS_SIZE // ATLAS_COLUMNS
     height = ATLAS_SIZE // ATLAS_ROWS
     x0 = 3 * width
-    skin = (204, 158, 121, 255) if not female else (210, 164, 132, 255)
-    fill_gradient(pixels, 3, 0, tuple(max(0, channel - 16) for channel in skin[:3]), skin[:3])
+    skin = skin_tone(female) + (255,)
+    # Flat, not graded. A gradient across the face island is a second value
+    # gradient fighting the shading below, and its top edge lands where the face
+    # meets the scalp.
+    fill_gradient(pixels, 3, 0, skin[:3], skin[:3])
     eye_y = round(height * 0.58)
     brow_y = round(height * 0.67)
     lip_y = round(height * 0.31)
     centre_x = x0 + width // 2
 
-    # Form first, features second. These are the masses a face keeps when it is
-    # ninety pixels tall: darker sides, a band under the brow ridge, a socket
-    # around each eye, a shadow beside and beneath the nose, and one under the
-    # lower lip. Everything painted after this sits on top of that structure.
-    shade_ellipse(pixels, x0 + round(width * 0.06), round(height * 0.55), round(width * 0.30), round(height * 0.40), 0.30, 0.05)
-    shade_ellipse(pixels, x0 + round(width * 0.94), round(height * 0.55), round(width * 0.30), round(height * 0.40), 0.30, 0.05)
-    shade_ellipse(pixels, centre_x, round(height * 0.10), round(width * 0.46), round(height * 0.16), 0.26, 0.05)
-    shade_ellipse(pixels, centre_x, brow_y - 4, round(width * 0.44), round(height * 0.045), 0.24, 0.30)
+    # Features, not form.
+    #
+    # The head is geometry and it is lit, so the renderer already shades the
+    # sides of a face. Painting side and crown masses into the texture as well
+    # shaded it twice - and worse, those masses darkened the outermost texels of
+    # the island, which are exactly where the face wraps round and meets the
+    # head's skin UVs. A thirty-point colour step at that boundary is what made
+    # every character look like it was wearing a mask; it is one point now.
+    #
+    # What is left is what geometry at this triangle count cannot give: a band
+    # under the brow ridge, a socket around each eye, shadow beside and beneath
+    # the nose, and one under the lip. All of them sit well inside the island.
+    shade_ellipse(pixels, centre_x, brow_y - 4, round(width * 0.40), round(height * 0.045), 0.20, 0.30)
     for fraction in (0.32, 0.68):
         shade_ellipse(pixels, x0 + round(width * fraction), eye_y + 2, 22, 15, 0.22, 0.20)
     shade_ellipse(pixels, centre_x - 7, round(height * 0.47), 9, round(height * 0.09), 0.20, 0.20)
@@ -263,7 +282,7 @@ def create_character_atlas(name, female):
             lower = tuple(max(0, channel - 16 + shift) for channel in colour)
             upper = tuple(min(255, channel + 14 + shift) for channel in colour)
             fill_gradient(pixels, column, row, lower, upper)
-    skin = (194, 145, 108) if not female else (202, 153, 122)
+    skin = skin_tone(female)
     fill_gradient(pixels, 0, 0, tuple(max(0, channel - 12) for channel in skin), tuple(min(255, channel + 10) for channel in skin))
     paint_garment_cell(pixels, female)
     fill_gradient(pixels, 2, 0, (37, 25, 21), (72, 49, 36))
