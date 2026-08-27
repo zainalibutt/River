@@ -21,6 +21,14 @@ const FORBIDDEN: readonly { pattern: RegExp; why: string }[] = [
   { pattern: /prominence/i, why: 'names the reference game' },
   { pattern: /\bclone of\b/i, why: 'frames River as a reproduction' },
   { pattern: /\b(a|the)\s+\w+\s+clone\b/i, why: 'frames River as a reproduction' },
+  // A bare twenty-letter run also matches ordinary English - the word
+  // "internationalisation" is exactly twenty - so match the context a project
+  // ref actually appears in rather than its shape. A gate that fires on prose
+  // is worse than no gate, and this one did before it was checked.
+  { pattern: /[a-z0-9]{20}\.supabase\.(co|com)/, why: 'a project ref in a URL' },
+  { pattern: /project_ref\s*[=:]\s*['"]?[a-z0-9]{20}/, why: 'a project ref in config' },
+  { pattern: /eyJhbGciOi[A-Za-z0-9_-]{6,}/, why: 'looks like a signed token' },
+  { pattern: /sb_(publishable|secret)_[A-Za-z0-9_-]{12,}/, why: 'looks like a Supabase key' },
 ]
 
 /** Binary and generated paths where a match would be meaningless. */
