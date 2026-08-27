@@ -112,7 +112,7 @@
  * carries the gradient rather than the rail carrying a border.
  */
 .club-stage::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(
@@ -127,7 +127,7 @@
 
 /* Vignette and grain. Felt before it is seen. */
 .club-stage::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: radial-gradient(120% 88% at 62% 44%, transparent 42%, rgba(0, 0, 0, 0.62) 100%);
@@ -178,7 +178,7 @@
 
 .club-wordmark-rule::before,
 .club-wordmark-rule::after {
-  content: '';
+  content: "";
   flex: 1;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--club-hairline-strong));
@@ -227,7 +227,7 @@
 /* One selection rule: a brass bar, a lift in the ground, and the type warming
    to ivory. Three signals of the same state, no fourth. */
 .club-nav-item::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   top: 12%;
@@ -246,13 +246,13 @@
   outline: none;
 }
 
-.club-nav-item[aria-current='true'] {
+.club-nav-item[aria-current="true"] {
   color: var(--club-ivory);
   background-color: rgba(198, 164, 105, 0.07);
   padding-left: calc(clamp(1.6rem, 3vw, 2.8rem) + 0.4rem);
 }
 
-.club-nav-item[aria-current='true']::before,
+.club-nav-item[aria-current="true"]::before,
 .club-nav-item:focus-visible::before {
   transform: scaleY(1);
 }
@@ -265,12 +265,27 @@
   transition: opacity var(--club-focus) var(--club-glide);
 }
 
-.club-nav-item[aria-current='true'] .club-nav-mark {
+.club-nav-item[aria-current="true"] .club-nav-mark {
   opacity: 1;
 }
 
 .club-nav-label {
   flex: 1;
+}
+
+/*
+ * "Soon", not silence.
+ *
+ * A greyed-out item with no explanation does not read as unbuilt. It reads as
+ * withheld - the first person to use this menu asked why he was banned from the
+ * wardrobe. A disabled control has to say which of the two it is.
+ */
+.club-nav-soon {
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  color: var(--club-brass-deep);
+  border: 1px solid var(--club-hairline);
+  padding: 0.14rem 0.4rem;
 }
 
 /* A nav item whose destination is not built yet says so rather than lying. */
@@ -302,7 +317,7 @@
 
 .club-rail-footer-rule::before,
 .club-rail-footer-rule::after {
-  content: '';
+  content: "";
   flex: 1;
   height: 1px;
   background: var(--club-hairline);

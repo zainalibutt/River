@@ -1662,7 +1662,11 @@ input:focus-visible {
 
 .social-panel {
   position: absolute;
-  top: 130px;
+  /* Clears the toggle row above it, the way .shop-panel already does. At 130 it
+     opened directly on top of the ITEMS button - 420 by 620 of panel over a
+     control the player was still meant to be able to reach - so opening chat
+     buried the shop. Two panels, one anchor, and only one of them knew. */
+  top: 196px;
   right: 96px;
   z-index: 22;
   width: 420px;
@@ -2775,4 +2779,55 @@ input:focus-visible {
   font-size: 26px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
+}
+
+/*
+ * The top-right corner.
+ *
+ * The hand-history pill, the invite strip and the chat toggle were each pinned
+ * to top 54px / right 96px independently, so all three occupied the same 43px
+ * band and the corner rendered as one illegible stack - COPY INVITE was under
+ * CHAT, and the history pill was entirely underneath the table code.
+ *
+ * They are laid out now rather than anchored. Their own absolute positioning is
+ * neutralised inside this container rather than deleted, because the same
+ * classes are used elsewhere and a rule removed is a rule that has to be found
+ * again.
+ */
+.hud-corner {
+  position: absolute;
+  z-index: 22;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hud-corner-right {
+  top: 54px;
+  right: 96px;
+}
+
+.hud-corner > .verify-pill,
+.hud-corner > .invite-strip,
+.hud-corner > .social-toggle {
+  position: static;
+  top: auto;
+  right: auto;
+  left: auto;
+  bottom: auto;
+}
+
+/*
+ * The challenge strip steps back while an overlay is up.
+ *
+ * It shares the right edge with the shop and chat panels, so an open panel
+ * covered two thirds of it and left a third poking out - the worst of both,
+ * since a partly covered readout is neither readable nor absent. The reference
+ * treats overlays as a quick folio over a game that keeps running: fast in,
+ * fast out, one at a time, and nothing competing with them while they are open.
+ */
+.challenge-strip.behind {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }

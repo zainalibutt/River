@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRiverAuthClient, ensureRiverSession, loadBrowserAuthConfig } from '@/lib/auth'
@@ -145,6 +146,7 @@ export function ClubMenu() {
                 &diams;
               </span>
               <span className="club-nav-label">{item.label}</span>
+              {item.pending === true ? <span className="club-nav-soon">Soon</span> : null}
             </button>
           ))}
         </div>
@@ -158,8 +160,21 @@ export function ClubMenu() {
 
       <div className="club-stage">
         {/* Decorative: the room behind the menu carries no information the
-            navigation does not already say. */}
-        <img className="club-stage-image" src="/menu/rooftop.jpg" alt="" aria-hidden="true" />
+            navigation does not already say.
+
+            next/image rather than a bare tag, so the backdrop is served in a
+            modern format at the size the viewport actually needs. It is the
+            largest thing on the first screen anybody sees, and priority stops
+            it arriving after the type it sits behind. */}
+        <Image
+          className="club-stage-image"
+          src="/menu/rooftop.jpg"
+          alt=""
+          aria-hidden="true"
+          fill
+          priority
+          sizes="100vw"
+        />
 
         {me !== null ? (
           <div className="club-capsule club-capsule-player club-scene">

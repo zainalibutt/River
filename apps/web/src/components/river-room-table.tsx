@@ -69,14 +69,7 @@ import {
 } from '@/lib/social'
 import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib/socket'
 import { initialRoomTarget, LAST_TABLE_KEY, type RememberedTable } from '@/lib/table-target'
-import {
-  DEFAULT_VENUE,
-  VENUE_ORDER,
-  type VenueId,
-  venueFromParams,
-  venueOf,
-  worldSeats,
-} from '@/lib/venue'
+import { DEFAULT_VENUE, VENUE_ORDER, type VenueId, venueOf, worldSeats } from '@/lib/venue'
 import { type VerifyResult, verifyHand } from '@/lib/verify'
 
 const boardSlots = ['flop-one', 'flop-two', 'flop-three', 'turn', 'river'] as const
@@ -735,15 +728,6 @@ export function RiverRoomTable() {
               <span>VERIFY</span>
               <strong>{view.commit?.slice(0, 8) ?? '--------'}</strong>
             </button>
-            <button
-              type="button"
-              className="verify-pill history-pill"
-              aria-label={`Hand history, ${hands.length} hands recorded`}
-              onClick={() => setHistoryOpen(true)}
-            >
-              <span>HANDS</span>
-              <strong>{hands.length}</strong>
-            </button>
             {historyOpen ? (
               <RiverHandHistory
                 hands={hands}
@@ -851,7 +835,11 @@ export function RiverRoomTable() {
               </output>
             )}
             {view.challenges.length === 0 ? null : (
-              <section className="challenge-strip" aria-label="Today's challenges">
+              <section
+                className={`challenge-strip${socialOpen || shopOpen ? ' behind' : ''}`}
+                aria-label="Today's challenges"
+                aria-hidden={socialOpen || shopOpen}
+              >
                 {view.challenges.map((entry) => (
                   <div
                     key={entry.challenge.id}
@@ -910,7 +898,10 @@ export function RiverRoomTable() {
               type="button"
               className={`shop-toggle${shopOpen ? ' open' : ''}`}
               aria-expanded={shopOpen}
-              onClick={() => setShopOpen((open) => !open)}
+              onClick={() => {
+                setShopOpen((open) => !open)
+                setSocialOpen(false)
+              }}
             >
               ITEMS
             </button>
@@ -1004,17 +995,50 @@ export function RiverRoomTable() {
                 )}
               </aside>
             ) : null}
-            <section className="invite-strip" aria-label="Private table invite">
-              <span>TABLE CODE</span>
-              <strong>{view.inviteCode || '------'}</strong>
+            {/* One corner, one container.
+
+                These three were each positioned absolutely at top 54, right 96,
+                with no layout relationship to one another, so they stacked: the
+                hand-history pill sat entirely inside the invite strip and the
+                chat button sat on top of both. Every one of them was correct in
+                isolation and they were added at different times, which is how a
+                corner ends up with three things nailed to the same nail.
+
+                The left side never had the problem because it is one positioned
+                element with flex children. This is that. */}
+            <div className="hud-corner hud-corner-right">
               <button
                 type="button"
-                disabled={view.inviteCode.length === 0}
-                onClick={() => void share()}
+                className="verify-pill history-pill"
+                aria-label={`Hand history, ${hands.length} hands recorded`}
+                onClick={() => setHistoryOpen(true)}
               >
-                COPY INVITE
+                <span>HANDS</span>
+                <strong>{hands.length}</strong>
               </button>
-            </section>
+              <section className="invite-strip" aria-label="Private table invite">
+                <span>TABLE CODE</span>
+                <strong>{view.inviteCode || '------'}</strong>
+                <button
+                  type="button"
+                  disabled={view.inviteCode.length === 0}
+                  onClick={() => void share()}
+                >
+                  COPY INVITE
+                </button>
+              </section>
+              <button
+                type="button"
+                className={`social-toggle${socialOpen ? ' open' : ''}`}
+                aria-expanded={socialOpen}
+                onClick={() => {
+                  setSocialOpen((open) => !open)
+                  setShopOpen(false)
+                }}
+              >
+                CHAT
+              </button>
+            </div>
             <div className="pot-readout" role="status" aria-label={`Pot ${view.pot}`}>
               <span>POT</span>
               <strong>{formatAmount(view.pot, false)}</strong>
@@ -1085,14 +1109,6 @@ export function RiverRoomTable() {
               </HoldAction>
             ) : null}
             {connection !== 'connected' ? <div className="network-bar">Reconnecting…</div> : null}
-            <button
-              type="button"
-              className={`social-toggle${socialOpen ? ' open' : ''}`}
-              aria-expanded={socialOpen}
-              onClick={() => setSocialOpen((open) => !open)}
-            >
-              CHAT
-            </button>
             {socialOpen ? (
               <aside className="social-panel" aria-label="Table chat and emotes">
                 <ol className="social-feed" aria-live="polite" aria-relevant="additions">
