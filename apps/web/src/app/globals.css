@@ -403,7 +403,9 @@ input:focus-visible {
 .status-line.populated,
 .status-line:has(.countdown) {
   border: 1px solid rgb(42 52 47 / 70%);
-  background: rgb(19 25 22 / 62%);
+  /* Opaque enough that a seat marker passing behind does not read through it.
+     At 62 percent the projected SIT plaques ghosted through the text. */
+  background: rgb(19 25 22 / 92%);
 }
 
 .countdown {
@@ -414,6 +416,18 @@ input:focus-visible {
 
 .seat-ring {
   position: absolute;
+  /*
+   * Beneath every fixed panel, explicitly.
+   *
+   * These markers are placed from the seats' projected 3D positions, so as the
+   * camera orbits they travel anywhere in frame - including underneath the
+   * chat button and the challenge strip. With no z-index of their own their
+   * stacking was incidental, decided by document order, and a SIT marker
+   * showed through a panel that is only 62 percent opaque. World-space things
+   * go behind screen-space things; there is no camera angle where that is
+   * wrong.
+   */
+  z-index: 5;
   inset: 0;
 }
 
