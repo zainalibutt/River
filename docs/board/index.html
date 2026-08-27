@@ -504,6 +504,10 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>Somebody finally looked at the shot</b> &mdash; the browser pane will not composite WebGL unless it is displayed, so the 3D had gone unseen for the whole project. Blender does not need the pane, or the MCP, or a window: <code>blender --background --python</code> renders the shipped GLB from the exact play camera in venue.ts. Three faults were visible in the first frame, none of which any existing gate could have caught, because every gate reads the file and none of them look at the picture.</span></li>
+          <li><span class="dot done"></span><span><b>The table had a hole in every second facet</b> &mdash; both quad bands of <code>wood_pedestal</code> were triangulated as <code>(a, b, d)</code> and <code>(b, c, d)</code>. For a quad a-b-d-c the second triangle never touches a, so the pair cross through the middle and leave the corner by a with <em>no surface on it</em>. Every other band in <code>geo.py</code> uses <code>(a, d, c)</code>. From a low, close camera with the base filling the bottom third of frame it read as a ring of black zigzag teeth, and it had been read as a lighting or material problem for weeks.</span></li>
+          <li><span class="dot done"></span><span><b>The terrace was walled inside a glowing box</b> &mdash; the &ldquo;lit parapet edge&rdquo; was the entire parapet ring built a second time, at full height, made emissive and raised 1.1m. An 8.2m luminous wall standing from 1.1m to 2.22m, dead level with a camera at 1.5m. It filled the top sixth of every frame with a flat tan band and hid the skyline behind it &mdash; 85m wide, 26m out, and completely invisible. The venue read as a beige studio cyclorama because it was standing in one. It is a 5cm strip now.</span></li>
+          <li><span class="dot done"></span><span><b>The chairs were wearing poker chips</b> &mdash; <code>build_chairs</code> reached for the <code>chip_100_rim</code> material by name to use as chrome, so every chair pedestal and foot ring in the venue was painted whatever colour the 100 chip happened to be. Restyling the chips would have silently restyled the furniture. The palette had defined <code>chrome</code> the whole time. Costs one material, taking the Rooftop to 25 &mdash; paid for rather than absorbed, with draw calls at 58 of 120. The budget lived in two places, so raising it where it is documented left the build still failing on a hardcoded copy.</span></li>
           <li><span class="dot done"></span><span><b>Every colour in every venue was wrong, and had been from the start</b> &mdash; the pipeline wrote sRGB hex straight into Blender's colour inputs and into glTF's <code>baseColorFactor</code>, and both are linear. That is not a uniform brightening: the sRGB curve is steep in the shadows, so it lifted dark albedos by up to <b>thirteen times</b> and light ones by almost nothing, compressing an entire venue toward one middle grey. The Rooftop was painted with a near-black navy felt at <code>0A121E</code> and shipped a felt reading <code>#384b60</code>; its floor, rail, chairs, parapet, mountains and skyline all landed within a factor of three of each other, and <em>the table was measurably darker than the floor it stood on</em>. This is the flat plastic look, and no lighting pass could ever have fixed it &mdash; the contrast was lost in the albedos, where light cannot reach. Two conversions had been sitting side by side, one correct and used for lights, one wrong and used for every material. The proof it was this: the shipped felt is exactly what <code>0A121E</code> becomes when sRGB is read as linear, to the byte, and so is every other surface.</span></li>
           <li><span class="dot done"></span><span><b>The lighting had been detuned to hide it</b> &mdash; <code>ENERGY_TO_INTENSITY</code> was cut from 0.06 to 0.008 because &ldquo;a pale concrete floor went white&rdquo;. That floor is authored <code>121A1D</code>, near-black rock, and only ever looked pale because of the colour-space fault. Correcting the albedos costs the venues <b>8.34x</b> of their reflected light, measured area-weighted across all three, and 0.008 x 8.34 is 0.0667 &mdash; within ten percent of where it started. The first calibration was right, and had been bent to compensate for a bug two layers below it. Turning the lights down hid the symptom and made the flatness permanent.</span></li>
           <li><span class="dot done"></span><span><b>The palette gate earned itself within a minute</b> &mdash; correcting the colour space made the Rooftop's real palette visible for the first time, and the gate immediately failed it: floor and parapet, the two largest surfaces in the venue, sat within <b>1.11 contrast</b> and read as one shape. They had only appeared to separate because the bug lifted them by different amounts. The reference terrace is pale lavender-grey stone, which <code>22-shot-composition.md</code> had recorded and the asset never reflected.</span></li>
@@ -660,17 +664,15 @@
     </p>
     <div class="steps">
       <article class="step">
-        <h4>1 &middot; Look at it</h4>
+        <h4>1 &middot; The characters</h4>
         <p>
-          Three faults landed today that each change every pixel of the render:
-          the albedos are in the right colour space for the first time, the
-          lighting is back to the calibration that was correct before it was
-          bent, and the terrace floor is the stone the reference actually uses.
-          <b>None of it has been seen.</b> The browser pane does not composite
-          WebGL unless it is displayed, and Blender is not running, so all three
-          are verified by measurement and by gates and not by eye. The next
-          thing worth doing is opening it and deciding whether the numbers were
-          right.
+          With the room fixed, the people are what is wrong with the frame.
+          Every garment has a shredded hem and torn sleeves, which is real
+          broken geometry and not a texture. Every face carries dark seams. All
+          nine sit in the same pose with their arms spread on the felt. And the
+          chairs' chrome is now the brightest thing in the lower half of the
+          shot, pulling the eye to the floor when the felt should hold it &mdash;
+          there is still no pool of light on the table.
         </p>
       </article>
       <article class="step">
