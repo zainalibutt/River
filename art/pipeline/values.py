@@ -166,8 +166,13 @@ VENUE_LIGHTS = {
 # model is common; these numbers are not. clear_radius is the annulus that must
 # stay free of anything over 2m tall - the Rooftop camera once rendered from
 # inside a palm tree because a prop sat at 6.0m against a 6.1m orbit.
+# Kept in step with apps/web/src/lib/venue.ts, which is what the browser
+# actually reads. This carried 6.1m out and 4.05m up long after the client moved
+# to 3.2 and 1.5, so lighting.json shipped a camera nothing used and anyone
+# reading the pipeline for the truth got the old shot. Two places holding one
+# number is how the colour space went wrong; the fix is the same both times.
 VENUE_CAMERA = {
-    'rooftop':  {'radius': 6.1, 'height': 4.05, 'pitch': 62.0, 'fov': 64.0, 'clear_radius': 8.4},
+    'rooftop':  {'radius': 3.2, 'height': 1.5, 'pitch': 73.5, 'fov': 64.0, 'clear_radius': 8.4},
     'basement': {'radius': 3.6, 'height': 2.45, 'pitch': 72.0, 'fov': 66.0, 'clear_radius': 6.0},
     'suite':    {'radius': 3.9, 'height': 2.85, 'pitch': 68.0, 'fov': 66.0, 'clear_radius': 5.4},
 }

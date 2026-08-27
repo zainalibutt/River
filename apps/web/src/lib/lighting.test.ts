@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ambientFor,
   blenderToThree,
   FILL_ATTENUATION,
   intensityFor,
@@ -206,5 +207,34 @@ describe('fill attenuation', () => {
   it('keeps the key brighter than an equal-energy fill, so the table leads', () => {
     const [key, fill] = toSceneLights(rig)
     expect(key?.intensity ?? 0).toBeGreaterThan(fill?.intensity ?? 0)
+  })
+})
+
+/**
+ * The browser and the lookdev have to be lighting the same room.
+ *
+ * Blender's world colour lights the scene; three.js scene.background does not,
+ * so the ambient stands in for it. When the two disagree, every comparison
+ * between a render and a screenshot is a comparison of two different rigs -
+ * which is what made "why does the browser look nothing like the render" so
+ * hard to answer.
+ */
+describe('the world as ambient light', () => {
+  it('takes both its colour and its strength from the rig', () => {
+    const rig = {
+      world: { colour: '#101613', strength: 1.5 },
+      camera: { radius: 3.2, height: 1.5, pitch: 73.5, fov: 64, clear_radius: 8.4 },
+      lights: [],
+    } as unknown as Parameters<typeof ambientFor>[0]
+    expect(ambientFor(rig)).toEqual({ colour: '#101613', intensity: 1.5 })
+  })
+
+  it('never falls back to a neutral white, which is what washed the venue out', () => {
+    // A flat white 0.11 was twelve times the radiance of a green-black world at
+    // strength 1.5, and ambient is the one light nothing can occlude.
+    const fallback = ambientFor(undefined)
+    expect(fallback.colour).not.toBe('#ffffff')
+    expect(fallback.colour.toLowerCase()).toBe('#101613')
+    expect(fallback.intensity).toBeGreaterThan(0)
   })
 })

@@ -163,6 +163,34 @@ export function worldColourOf(rig: VenueRig | undefined, fallback = '#101613'): 
   return rig?.world.colour ?? fallback
 }
 
+/**
+ * What the world is worth as light.
+ *
+ * Blender's world colour lights the scene. three.js `scene.background` does
+ * not - it is a backdrop and contributes nothing - so an ambient light has to
+ * stand in for it, and the two have to agree or the browser and the lookdev are
+ * rendering different rooms.
+ *
+ * They did not agree. The ambient was a flat white 0.11 while the Rooftop's
+ * world is 101613 at strength 1.5, which is a green-black worth about 0.009 of
+ * linear radiance. Twelve times too strong, and neutral where it should be
+ * tinted - and ambient is the one light nothing can occlude, so every part of
+ * that excess was contrast removed from every surface in the venue at once.
+ *
+ * Derived rather than dialled: three.js multiplies the ambient colour by its
+ * intensity, and Blender multiplies the world colour by its strength, so
+ * handing over both makes the two expressions the same expression.
+ */
+export function ambientFor(rig: VenueRig | undefined): { colour: string; intensity: number } {
+  return {
+    colour: worldColourOf(rig),
+    intensity: rig?.world.strength ?? DEFAULT_WORLD_STRENGTH,
+  }
+}
+
+/** The Rooftop's measured world strength, used when the sidecar is missing. */
+const DEFAULT_WORLD_STRENGTH = 1.5
+
 export async function loadLightingSidecar(
   fetchImpl: typeof fetch = fetch,
 ): Promise<LightingSidecar> {

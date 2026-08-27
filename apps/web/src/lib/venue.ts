@@ -57,10 +57,16 @@ export const TABLE_SURFACE_HEIGHT = 0.76
  * never goes bird's eye, and going there is what turns the seats back into open
  * cylinders.
  *
- * The floor of 55 is currently set by the Executive Suite, whose default still
- * sits at 59.5 from before the reference was measured. It should rise once the
- * Suite and the Laundromat get the same treatment as the Rooftop; until then a
- * tighter floor would silently clamp them on their first frame.
+ * The floor was 55, which let the orbit reach a bird's eye looking down into the
+ * open tops of the seats - the exact framing that made nine dressed characters
+ * read as people standing in tubs, and the first thing anybody dragging the
+ * camera found.
+ *
+ * 61 is the tightest floor that clears every venue's own opening shot. Measured
+ * rather than chosen: the Rooftop opens at 76.98 degrees from vertical, the
+ * Laundromat at 64.85 and the Suite at 61.81. 62 was tried first and the gate
+ * refused it, because the Suite would have been silently clamped on its first
+ * frame - which is precisely the failure the gate was written for.
  *
  * Exported because the controls and the test that guards them were carrying
  * the same two numbers as separate literals. A default outside this range is
@@ -68,7 +74,7 @@ export const TABLE_SURFACE_HEIGHT = 0.76
  * sees it - which is worth a gate, and worth the gate reading the same source
  * the controls do.
  */
-export const ORBIT_POLAR_DEGREES = { min: 55, max: 85 } as const
+export const ORBIT_POLAR_DEGREES = { min: 61, max: 85 } as const
 
 export interface Venue {
   id: VenueId

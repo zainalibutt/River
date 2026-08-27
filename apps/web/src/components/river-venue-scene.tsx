@@ -23,6 +23,7 @@ import { type OrbitControls as OrbitControlsImpl, RectAreaLightUniformsLib } fro
 import { type AnimationCue, idleCueFor, missingClips } from '@/lib/animation'
 import { frameMetrics, TABLE_REGIONS } from '@/lib/frame-metrics'
 import {
+  ambientFor,
   type LightingSidecar,
   loadLightingSidecar,
   type SceneLight,
@@ -626,7 +627,13 @@ function CasterLight({ light }: { light: SceneLight }) {
   )
 }
 
-function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
+function VenueLights({
+  lights,
+  ambient,
+}: {
+  lights: readonly SceneLight[]
+  ambient: { colour: string; intensity: number }
+}) {
   useEffect(() => {
     // RectAreaLight renders black until its uniform tables are initialised.
     RectAreaLightUniformsLib.init()
@@ -635,12 +642,15 @@ function VenueLights({ lights }: { lights: readonly SceneLight[] }) {
   return (
     <>
       {/*
-        Low enough that an unlit corner reads as dim rather than as a hole, and
-        no higher. Ambient is the one light that cannot be occluded by
-        anything, so every point of it is a point of contrast removed from the
-        whole venue.
+        The world, standing in for Blender's environment light.
+
+        This was a flat white 0.11 while the venue's world is a green-black at
+        strength 1.5 - twelve times too strong and the wrong colour. Ambient is
+        the one light nothing can occlude, so all of that excess was contrast
+        removed from every surface at once, and it is why the browser and the
+        lookdev never showed the same room. Both numbers come from the rig now.
       */}
-      <ambientLight intensity={0.11} />
+      <ambientLight color={ambient.colour} intensity={ambient.intensity} />
       {lights.map((light) =>
         light.kind === 'spot' ? (
           <CasterLight key={light.name} light={light} />
@@ -675,11 +685,12 @@ function Scene({
   const rig = sidecar[venueId]
   const lights = useMemo(() => toSceneLights(rig), [rig])
   const worldColour = worldColourOf(rig)
+  const ambient = useMemo(() => ambientFor(rig), [rig])
 
   return (
     <>
       <color attach="background" args={[worldColour]} />
-      <VenueLights lights={lights} />
+      <VenueLights lights={lights} ambient={ambient} />
       <Suspense fallback={null}>
         <VenueAsset venueId={venueId} cues={cues} occupiedSeats={occupiedSeats} />
       </Suspense>
