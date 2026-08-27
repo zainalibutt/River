@@ -4,6 +4,7 @@ import {
   cameraPlacement,
   DEFAULT_VENUE,
   isVenueId,
+  ORBIT_POLAR_DEGREES,
   TABLE_SURFACE_HEIGHT,
   VENUE_ORDER,
   VENUES,
@@ -124,8 +125,8 @@ describe('camera placement', () => {
       const rise = placement.position[1] - placement.target[1]
       const run = Math.hypot(placement.position[0], placement.position[2])
       const polarDegrees = (Math.atan2(run, rise) * 180) / Math.PI
-      expect(polarDegrees).toBeGreaterThanOrEqual(50)
-      expect(polarDegrees).toBeLessThanOrEqual(70)
+      expect(polarDegrees).toBeGreaterThanOrEqual(ORBIT_POLAR_DEGREES.min)
+      expect(polarDegrees).toBeLessThanOrEqual(ORBIT_POLAR_DEGREES.max)
     }
   })
 

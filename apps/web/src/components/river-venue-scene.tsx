@@ -25,6 +25,7 @@ import {
 } from '@/lib/lighting'
 import {
   cameraPlacement,
+  ORBIT_POLAR_DEGREES,
   VENUE_ORDER,
   type VenueId,
   venueOf,
@@ -345,8 +346,8 @@ function CameraOrbit({ venueId }: { venueId: VenueId }) {
       enableZoom={false}
       minDistance={placement.distance}
       maxDistance={placement.distance}
-      minPolarAngle={THREE.MathUtils.degToRad(50)}
-      maxPolarAngle={THREE.MathUtils.degToRad(70)}
+      minPolarAngle={THREE.MathUtils.degToRad(ORBIT_POLAR_DEGREES.min)}
+      maxPolarAngle={THREE.MathUtils.degToRad(ORBIT_POLAR_DEGREES.max)}
       target={placement.target}
     />
   )

@@ -29,6 +29,26 @@ export interface CameraPlacement {
  */
 export const TABLE_SURFACE_HEIGHT = 0.55
 
+/**
+ * How far the orbit may tilt, measured from straight up.
+ *
+ * 85 degrees is nearly level with the felt; 55 is a raised view. The reference
+ * never goes bird's eye, and going there is what turns the seats back into open
+ * cylinders.
+ *
+ * The floor of 55 is currently set by the Executive Suite, whose default still
+ * sits at 59.5 from before the reference was measured. It should rise once the
+ * Suite and the Laundromat get the same treatment as the Rooftop; until then a
+ * tighter floor would silently clamp them on their first frame.
+ *
+ * Exported because the controls and the test that guards them were carrying
+ * the same two numbers as separate literals. A default outside this range is
+ * silently clamped on the first frame, so the framing is lost before anyone
+ * sees it - which is worth a gate, and worth the gate reading the same source
+ * the controls do.
+ */
+export const ORBIT_POLAR_DEGREES = { min: 55, max: 85 } as const
+
 export interface Venue {
   id: VenueId
   name: string
@@ -57,7 +77,21 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     name: 'The Rooftop',
     tagline: 'City lights, open air, and a skyline that watches you lose.',
     asset: '/assets/rooftop_assets.glb',
-    camera: { radius: 6.1, height: 4.05, pitchDegrees: 62, fov: 64, clearRadius: 8.4 },
+    // Set against the reference rather than against the lookdev render - see
+    // docs/design/22-shot-composition.md, which measures all three numbers off
+    // a frame of the game this one is cloning.
+    //
+    // It was 6.1m out and 4.05m up, looking down 29.9 degrees. Three
+    // consequences, all of them visible: the terrace is only 4.0m across, so
+    // the camera stood outside the parapet looking in; half the frame was
+    // floor; and from that height you look down into the open tops of the seat
+    // cylinders, which is why nine dressed characters read as people standing
+    // in tubs.
+    //
+    // The tell to check any future change against is the felt's foreshortening.
+    // The reference reads the table as a flattened band about 18 percent of
+    // frame height. A round ellipse means the camera has crept back up.
+    camera: { radius: 3.2, height: 1.5, pitchDegrees: 73.5, fov: 64, clearRadius: 8.4 },
     seatRing: { x: FELT_RX * 1.42, y: FELT_RY * 1.58 },
     shadowCasters: /^(river_rooftop_wood|river_rooftop_felt|river_rooftop_rail)$/,
   },
