@@ -1,9 +1,15 @@
 'use client'
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createRiverAuthClient, ensureRiverSession, loadBrowserAuthConfig } from '@/lib/auth'
+import {
+  createRiverAuthClient,
+  ensureRiverSession,
+  loadBrowserAuthConfig,
+  upgradeRiverSession,
+} from '@/lib/auth'
 
 /**
  * The front door.
@@ -51,6 +57,10 @@ export function ClubMenu() {
   const [inviteLink, setInviteLink] = useState('')
   const [inviteError, setInviteError] = useState<string | null>(null)
   const inviteRef = useRef<HTMLInputElement>(null)
+  const authRef = useRef<SupabaseClient | null>(null)
+  const [signIn, setSignIn] = useState<'idle' | 'editing' | 'sent' | 'error'>('idle')
+  const [email, setEmail] = useState('')
+  const emailRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -58,6 +68,7 @@ export function ClubMenu() {
       try {
         const config = await loadBrowserAuthConfig()
         const client = createRiverAuthClient(config)
+        authRef.current = client
         const session = await ensureRiverSession(client)
         const response = await fetch('/api/me', {
           headers: { authorization: `Bearer ${session.access_token}` },
@@ -79,6 +90,35 @@ export function ClubMenu() {
   useEffect(() => {
     if (joining) inviteRef.current?.focus()
   }, [joining])
+
+  useEffect(() => {
+    if (signIn === 'editing') emailRef.current?.focus()
+  }, [signIn])
+
+  /**
+   * Turn the anonymous session into a saved one.
+   *
+   * Every visitor gets an anonymous session on load - that is the zero-friction
+   * guest play the spec asks for - and there was no way at all to keep it. The
+   * only sign-in in the product was a SAVE button on the table, so somebody who
+   * had not sat down yet could not have an account, and the menu greeted a
+   * developer as a guest.
+   *
+   * The magic link keeps the same player id, so a bankroll built as a guest
+   * survives the upgrade rather than being left behind in an account nobody can
+   * reach again.
+   */
+  const sendMagicLink = useCallback(async () => {
+    const client = authRef.current
+    const address = email.trim()
+    if (client === null || address.length === 0) return
+    try {
+      await upgradeRiverSession(client, address, window.location.origin)
+      setSignIn('sent')
+    } catch {
+      setSignIn('error')
+    }
+  }, [email])
 
   const openInvite = useCallback(() => {
     const raw = inviteLink.trim()
@@ -178,17 +218,61 @@ export function ClubMenu() {
 
         {me !== null ? (
           <div className="club-capsule club-capsule-player club-scene">
-            <div>
-              <div className="club-capsule-name">{me.anonymous ? 'Guest' : 'River'}</div>
-              <div className="club-capsule-sub">
-                {me.admin ? 'Developer' : me.anonymous ? 'Unsaved session' : 'Member'}
-              </div>
+            <div className="club-capsule-identity">
+              <div className="club-capsule-name">{me.anonymous ? 'Guest' : 'Member'}</div>
+              {me.anonymous ? (
+                signIn === 'sent' ? (
+                  <div className="club-capsule-sub">Check your email</div>
+                ) : (
+                  <button
+                    type="button"
+                    className="club-link"
+                    onClick={() => setSignIn(signIn === 'editing' ? 'idle' : 'editing')}
+                  >
+                    Sign in to keep this
+                  </button>
+                )
+              ) : (
+                <div className="club-capsule-sub">{me.admin ? 'Developer' : 'Signed in'}</div>
+              )}
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div className="club-capsule-figure">
               <div className="club-capsule-value">
                 {me.balance === null ? '—' : me.balance.toLocaleString('en-GB')}
               </div>
               <div className="club-capsule-label">Chips</div>
+            </div>
+          </div>
+        ) : null}
+
+        {signIn === 'editing' || signIn === 'error' ? (
+          <div className="club-capsule club-capsule-signin club-scene">
+            <div className="club-field">
+              <label className="club-capsule-label" htmlFor="club-email">
+                Email a sign-in link
+              </label>
+              <input
+                ref={emailRef}
+                id="club-email"
+                className="club-input"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value)
+                  if (signIn === 'error') setSignIn('editing')
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void sendMagicLink()
+                  if (event.key === 'Escape') setSignIn('idle')
+                }}
+                placeholder="you@example.com"
+              />
+              {signIn === 'error' ? (
+                <span className="club-capsule-sub club-error">That did not send. Try again.</span>
+              ) : (
+                <span className="club-capsule-sub">Your chips and streaks come with you.</span>
+              )}
             </div>
           </div>
         ) : null}

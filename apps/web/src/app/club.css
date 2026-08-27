@@ -397,6 +397,62 @@
   transition: width var(--club-screen) var(--club-glide);
 }
 
+/* -------------------------------------------------------------- sign in --- */
+
+.club-capsule-identity {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.club-capsule-figure {
+  text-align: right;
+}
+
+.club-capsule-signin {
+  bottom: clamp(1.4rem, 3vh, 2.4rem);
+  right: calc(clamp(1.4rem, 2.6vw, 2.6rem) + 320px);
+}
+
+.club-field {
+  display: grid;
+  gap: 0.55rem;
+}
+
+/*
+ * A text button, not a chrome one.
+ *
+ * Signing in is an offer rather than the screen's decision, so it reads as a
+ * line of type with a brass rule under it. The dominant action on this screen
+ * is Play, and a second filled button would argue with it.
+ */
+.club-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--club-hairline-strong);
+  background: transparent;
+  color: var(--club-brass);
+  font: inherit;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--club-focus) var(--club-glide);
+}
+
+.club-link:hover,
+.club-link:focus-visible {
+  color: var(--club-brass-bright);
+  outline: none;
+}
+
+@media (max-width: 720px) {
+  .club-capsule-signin {
+    right: clamp(1.4rem, 2.6vw, 2.6rem);
+    bottom: calc(clamp(1.4rem, 3vh, 2.4rem) + 96px);
+  }
+}
+
 /* ---------------------------------------------------------------- input --- */
 
 .club-input {
