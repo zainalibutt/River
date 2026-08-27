@@ -91,9 +91,21 @@ finds them because they are bright.
   duplicate-session handover doing its job against three tabs I did not know
   were open on the same table. The client says so plainly - "this table is open
   in another window" - and I read my own interference as a defect.
-- The in-app browser pane still reports `visibilityState: hidden` when fronted,
-  so R3F sizes its canvas at 300x150 and nothing renders. Real Chrome remains
-  the only instrument for anything visual.
+- **A hidden tab cannot be used to inspect the 3D scene at all**, and this cost
+  several rounds before it was pinned down. R3F initialises its root from a
+  `ResizeObserver`, which does not fire while `document.visibilityState` is
+  `hidden`, so `onCreated` never runs, `window.riverScene` is never set and
+  `riverFrame` does not exist. The canvas element is present the whole time,
+  which is what makes it look like a scene fault rather than an instrument one.
+
+  Chrome's screenshot path has the same root cause from the other side: a
+  background tab paints DOM but never composites the WebGL layer, so the HUD
+  appears over an empty background.
+
+  **Neither is a defect in River.** Reading pixels out through the page is also
+  blocked, so from an agent's side the scene can only be measured when somebody
+  has the tab fronted. Codex's Blender proof renders and the numbers from
+  `riverFrame` are the reliable instruments; a screenshot is not.
 
 ## What to do, in order
 
