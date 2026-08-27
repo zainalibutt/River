@@ -519,14 +519,27 @@ input:focus-visible {
   white-space: nowrap;
 }
 
+/*
+ * Sized to what actually goes in them.
+ *
+ * The plaque gives these about 78px and the name was set at 24px, which needs
+ * 101px for "Hyacinth" - so every player at the table was ellipsised, and the
+ * stack beneath at 34px needed 100px for "98.9K" and lost its last character
+ * too. A readout that truncates the two things it exists to show is not a
+ * readout. Measured in a live hand against the widest bot names the cast
+ * actually contains.
+ */
 .seat-copy > span {
   color: var(--river-cream-dim);
-  font-size: 24px;
+  font-size: 19px;
 }
 
 .seat-copy > strong {
   margin-top: 4px;
-  font-size: 34px;
+  /* 22 rather than 25 because a six-figure stack is six characters: "102.7K"
+     needed 89px of the 80 the plaque gives it and lost its last one. Sized to
+     the longest value the game can actually produce, not the common one. */
+  font-size: 22px;
   font-variant-numeric: tabular-nums;
 }
 
