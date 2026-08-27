@@ -2688,3 +2688,39 @@ input:focus-visible {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* A glyph pin: checked, folded, away, sitting out.
+
+   Small and quiet by design. The reference marks a seat with a mark about the
+   size of a fingertip and nothing else, and the rule that only one marker ever
+   floats over a seat is enforced in the engine rather than here. */
+.seat-glyph {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  display: grid;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgb(42 52 47 / 80%);
+  border-radius: 999px;
+  background: rgb(19 25 22 / 88%);
+  color: var(--river-cream-dim);
+  font-size: 13px;
+  line-height: 1;
+  place-items: center;
+  transform: translateX(-50%);
+}
+
+.seat-glyph.fold {
+  color: var(--river-cream-faint);
+  opacity: 0.7;
+}
+
+.seat-glyph.away,
+.seat-glyph.sittingOut {
+  color: var(--river-amber);
+}
+
+.remote-timer.urgent {
+  border-color: var(--river-amber-bright);
+}

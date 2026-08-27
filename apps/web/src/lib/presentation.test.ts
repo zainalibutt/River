@@ -56,7 +56,9 @@ describe('presentation reducer', () => {
     const view = session.view()
     view.seats.reverse()
     expect(orderedSeats(view)[0]?.id).toBe('you')
-    expect(formatAmount(87_250, true)).toBe('87.3K')
+    // Two decimals, not one: the reference writes 22.07K and 8.73K, and a
+    // stack moving by a hundred chips should visibly change.
+    expect(formatAmount(87_250, true)).toBe('87.25K')
     expect(formatAmount(87_250, false)).toBe('87,250')
   })
 })

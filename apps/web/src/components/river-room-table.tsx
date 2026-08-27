@@ -8,8 +8,11 @@ import {
   type HandRecord,
   itemCatalogue,
   type Street,
+  seatMood,
+  seatPin,
   type TableSummary,
   type TurnAction,
+  turnClock,
 } from '@river/engine'
 import type { RoomEvent, RoomSeatView, RoomView } from '@river/server'
 import type { ClientRoomCommand, ServerMessage } from '@river/server/wire'
@@ -1166,6 +1169,21 @@ function CardBack() {
   )
 }
 
+/** What a glyph pin draws, and what a screen reader hears instead. */
+const GLYPH_MARK: Record<'check' | 'fold' | 'away' | 'sittingOut', string> = {
+  check: '✓',
+  fold: '✕',
+  away: '⏸',
+  sittingOut: '—',
+}
+
+const GLYPH_LABEL: Record<'check' | 'fold' | 'away' | 'sittingOut', string> = {
+  check: 'Checked',
+  fold: 'Folded',
+  away: 'Away',
+  sittingOut: 'Sitting out',
+}
+
 function RoomSeat({
   seat,
   index,
@@ -1190,6 +1208,26 @@ function RoomSeat({
   anchorRef: (element: HTMLElement | null) => void
 }) {
   const position = seatPositions[index] ?? seatPositions[0]
+  // One rule decides what floats over this seat. The engine owns it so the
+  // world-space pins and this DOM layer cannot drift apart.
+  const pin = seatPin({
+    mood: seatMood({
+      occupied: seat.playerId !== null,
+      stack: seat.stack,
+      hasHole: seat.hasHole,
+      folded: seat.folded,
+      allIn: seat.allIn,
+      busted: seat.busted,
+      sittingOut: seat.sittingOut,
+      disconnected: seat.disconnected,
+      isActor: active,
+      wonLastHand: false,
+      handLive: seat.hasHole || seat.betStreet > 0,
+    }),
+    committed: seat.betStreet,
+    isActing: active,
+    clock: timer === null ? null : turnClock(timer, 0, Math.max(1, timerTotal)),
+  })
   const label = seat.disconnected
     ? 'RECONNECTING'
     : seat.folded
@@ -1251,19 +1289,30 @@ function RoomSeat({
         <strong>{formatAmount(seat.stack, !local)}</strong>
         <small>{label}</small>
       </div>
-      {active && !local && timer !== null ? (
+      {seat.dealer ? <div className="dealer-button">D</div> : null}
+      {/* Exactly one marker floats over a seat, never two.
+
+          The clock and the bet used to render independently, so the acting
+          player showed a timer ring and a chip stack at once - the reference
+          never stacks them, and seatPin makes the precedence a rule rather
+          than two conditionals that happen not to overlap most of the time. */}
+      {pin.kind === 'clock' && !local ? (
         <div
-          className="remote-timer"
-          style={{ '--timer-progress': `${Math.max(0, timer / timerTotal)}` } as CSSProperties}
+          className={`remote-timer${pin.urgent ? ' urgent' : ''}`}
+          style={{ '--timer-progress': `${pin.fraction ?? 0}` } as CSSProperties}
         >
           TURN
         </div>
       ) : null}
-      {seat.dealer ? <div className="dealer-button">D</div> : null}
-      {seat.betStreet > 0 ? (
+      {pin.kind === 'amount' && pin.amount !== null ? (
         <div className="seat-bet">
           <i />
-          <b>{formatAmount(seat.betStreet, !local)}</b>
+          <b>{formatAmount(pin.amount, !local)}</b>
+        </div>
+      ) : null}
+      {pin.kind === 'glyph' && pin.glyph !== null ? (
+        <div className={`seat-glyph ${pin.glyph}`} role="img" aria-label={GLYPH_LABEL[pin.glyph]}>
+          {GLYPH_MARK[pin.glyph]}
         </div>
       ) : null}
     </article>

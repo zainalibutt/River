@@ -6,6 +6,7 @@ import type {
   TurnAction,
   ViewSeat,
 } from '@river/engine'
+import { formatChips } from '@river/engine'
 
 const BOT_DWELL: Record<BotSkill, { min: number; max: number; aggression: number }> = {
   rookie: { min: 400, max: 800, aggression: 0 },
@@ -187,11 +188,22 @@ function outcomeMessage(
   return `${seatById(view, winnerId)?.name ?? 'Player'} wins ${formatAmount(amount, false)}`
 }
 
+/**
+ * A chip count, for the HUD.
+ *
+ * `abbreviated` means "somebody else's money": another player's stack is short
+ * form, your own is shown in full. The short-form rules themselves live in the
+ * engine now, because the world-space pins beside each seat need exactly the
+ * same ones and the alternative was importing this module into the 3D scene or
+ * writing them a second time.
+ *
+ * The engine also carries two decimals where this carried one. Two is what the
+ * reference uses - 22.07K, 8.73K, 4.68K - and a stack that jumps by a hundred
+ * chips should visibly change.
+ */
 export function formatAmount(value: number, abbreviated: boolean): string {
-  if (!abbreviated || value < 10_000) return value.toLocaleString('en-GB')
-  const divisor = value >= 1_000_000 ? 1_000_000 : 1_000
-  const suffix = divisor === 1_000_000 ? 'M' : 'K'
-  return `${(value / divisor).toFixed(1).replace(/\.0$/, '')}${suffix}`
+  if (!abbreviated) return Math.trunc(value).toLocaleString('en-GB')
+  return formatChips(value)
 }
 
 export function orderedSeats(view: SoloTableView): ViewSeat[] {
