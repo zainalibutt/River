@@ -35,7 +35,7 @@ interface MenuItem {
 
 const ITEMS: readonly MenuItem[] = [
   { id: 'play', label: 'Play', action: 'play' },
-  { id: 'private', label: 'Private Table', pending: true },
+  { id: 'private', label: 'Private Table', href: '/play' },
   { id: 'join', label: 'Join Friends', action: 'join' },
   { id: 'wardrobe', label: 'Wardrobe', pending: true },
   { id: 'collection', label: 'Collection', pending: true },

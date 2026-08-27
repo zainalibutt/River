@@ -482,6 +482,193 @@
   filter: brightness(1.7);
 }
 
+/* ---------------------------------------------------------------- folio --- */
+
+/*
+ * A folio, not a dashboard.
+ *
+ * One panel holding one decision, sitting on the room rather than replacing it.
+ * It keeps to the right so the venue stays legible between it and the rail -
+ * the whole reason for choosing a venue is being able to see the one you chose.
+ */
+.club-folio {
+  position: absolute;
+  top: 50%;
+  right: clamp(1.6rem, 4vw, 4.5rem);
+  transform: translateY(-50%);
+  z-index: 3;
+  display: grid;
+  gap: 0.9rem;
+  width: clamp(300px, 27vw, 400px);
+  padding: clamp(1.4rem, 2.4vw, 2.1rem);
+  background: var(--club-glass);
+  border: 1px solid var(--club-hairline);
+  backdrop-filter: blur(16px) saturate(0.9);
+}
+
+.club-folio-head {
+  display: grid;
+  gap: 0.3rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--club-hairline);
+}
+
+.club-folio-title {
+  margin: 0;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 300;
+  font-size: clamp(1.4rem, 1.9vw, 1.8rem);
+  letter-spacing: 0.12em;
+  color: var(--club-ivory);
+}
+
+.club-folio-sub {
+  margin: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--club-brass-deep);
+}
+
+.club-folio-tagline {
+  margin: -0.3rem 0 0.3rem;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--club-ivory-dim);
+  font-style: italic;
+}
+
+.club-folio-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.66rem;
+  line-height: 1.6;
+  color: var(--club-ivory-faint);
+}
+
+/* The value row: label left, control right. The one input this layer needs. */
+.club-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(198, 164, 105, 0.08);
+}
+
+.club-row-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--club-ivory-dim);
+}
+
+.club-row-value {
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  color: var(--club-ivory);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A row that reports rather than sets. Dimmer, so the difference is visible
+   before it is discovered. */
+.club-row-fixed .club-row-value {
+  color: var(--club-ivory-dim);
+}
+
+.club-row-control {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.club-row-control .club-row-value {
+  min-width: 10ch;
+  text-align: center;
+}
+
+.club-step {
+  padding: 0.2rem 0.45rem;
+  border: 0;
+  background: transparent;
+  color: var(--club-brass-deep);
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: color var(--club-focus) var(--club-glide);
+}
+
+.club-step:hover,
+.club-step:focus-visible {
+  color: var(--club-brass-bright);
+  outline: none;
+}
+
+/*
+ * The one filled control in the layer.
+ *
+ * Brass is focus and progress everywhere else; here it is also the single
+ * dominant decision, which is the only place a filled button earns its weight.
+ */
+.club-primary {
+  margin-top: 0.5rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--club-brass-deep);
+  background: linear-gradient(180deg, rgba(198, 164, 105, 0.18), rgba(198, 164, 105, 0.07));
+  color: var(--club-brass-bright);
+  font: inherit;
+  font-size: 0.76rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background var(--club-focus) var(--club-glide),
+    color var(--club-focus) var(--club-glide);
+}
+
+.club-primary:hover:not(:disabled),
+.club-primary:focus-visible:not(:disabled) {
+  background: linear-gradient(180deg, rgba(198, 164, 105, 0.3), rgba(198, 164, 105, 0.14));
+  color: var(--club-ivory);
+  outline: none;
+}
+
+.club-primary:disabled {
+  color: var(--club-ivory-faint);
+  cursor: progress;
+}
+
+/* Swapping the room should be a dissolve, not a cut. */
+.club-stage-swap {
+  animation:
+    club-fade-in var(--club-screen) var(--club-glide) both,
+    club-drift 48s var(--club-glide) infinite alternate;
+}
+
+@keyframes club-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .club-stage-swap {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .club-folio {
+    top: auto;
+    bottom: clamp(1rem, 3vh, 2rem);
+    right: clamp(1rem, 3vw, 2rem);
+    left: clamp(1rem, 3vw, 2rem);
+    width: auto;
+    transform: none;
+  }
+}
+
 /* ------------------------------------------------------------- scene in --- */
 
 /*
