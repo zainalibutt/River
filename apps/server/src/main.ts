@@ -86,8 +86,21 @@ async function start(): Promise<void> {
       void upgrade(request, socket, head)
     })
   }
+  // Stop taking connections first, then hand every seated stack back before
+  // the process that is holding those tables in memory goes away. Sockets close
+  // first so nobody can buy in to a table that is about to stop existing.
+  let settling = false
   const shutdown = (): void => {
-    sockets.close(() => server.close())
+    if (settling) return
+    settling = true
+    sockets.close(() => {
+      void hub
+        .settleAllTables()
+        .catch((error: unknown) => {
+          console.error('shutdown: could not settle every table', error)
+        })
+        .finally(() => server.close())
+    })
   }
   process.once('SIGINT', shutdown)
   process.once('SIGTERM', shutdown)

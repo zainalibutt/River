@@ -1204,6 +1204,47 @@ export class RoomHub {
     return created
   }
 
+  /**
+   * Return every seated stack to the bankroll that paid for it.
+   *
+   * Tables live in this process's memory and nowhere else, so a restart takes
+   * every seat with it - while the buy-in that funded the seat stays debited in
+   * a database that does not restart. The player comes back to a table that no
+   * longer exists, minus the chips it cost them, with nothing to show for it.
+   *
+   * There was already careful handling for the two ways a seat ends while the
+   * server is alive, a kick and an expired reconnect grace, and none at all for
+   * the server simply stopping. Two accounts finished a session on exactly zero
+   * that way: signup grant in, buy-in out, nothing back. On a deployed server
+   * that is every seated player, every deploy.
+   *
+   * Idempotent by ref, so a second call during the same hand settles once. A
+   * hard kill still loses them - the fix for that is reconciliation on startup,
+   * not a longer shutdown.
+   */
+  async settleAllTables(): Promise<void> {
+    for (const [roomId, state] of this.rooms) {
+      const view = state.room.viewFor('')
+      for (const seat of view.seats) {
+        const playerId = seat.playerId
+        // Bots have no bankroll to return anything to, and crediting one would
+        // mint chips against an id no account owns.
+        if (playerId === null || seat.stack <= 0 || state.botCast.has(playerId)) continue
+        try {
+          await this.ledger.apply({
+            playerId,
+            delta: seat.stack,
+            reason: 'table_shutdown_cash_out',
+            ref: `${roomId}:shutdown:${playerId}:${view.handNumber}`,
+          })
+        } catch (error) {
+          // One player's failure must not strand the rest of the table.
+          this.onError('settleAllTables: could not return a stack', error)
+        }
+      }
+    }
+  }
+
   private scheduleReconnectExpiry(state: RoomState, playerId: string): void {
     const existing = state.reconnectTimers.get(playerId)
     if (existing !== undefined) clearTimeout(existing)

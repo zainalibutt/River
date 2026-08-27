@@ -754,6 +754,31 @@ describe('which room a table is in', () => {
   })
 })
 
+describe('a table that stops existing', () => {
+  it('hands every seated stack back when the server goes down', async () => {
+    // The seat lives in this process and the bankroll lives in a database.
+    // Restart the process and the seat is gone while the buy-in that paid for
+    // it is not, which is how an account ends a session on exactly zero.
+    const { hub, ledger } = setup()
+    const { connection } = await connectAndEnter(hub, 'alice', 'Alice')
+    await connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'sit',
+        command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+      }),
+    )
+    expect(await ledger.balance(ALICE)).toBe(50_000)
+
+    await hub.settleAllTables()
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+
+    // Called twice - a second signal, or a close racing a timeout - settles once.
+    await hub.settleAllTables()
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
+})
+
 describe('the developer account', () => {
   async function send(hub: RoomHub, token: string, action: unknown, requestId = 'admin-1') {
     const peer = new TestPeer()
@@ -994,6 +1019,17 @@ describe('bots at the table', () => {
     const { hub: quiet } = setup()
     const solo = await sitAndStart(quiet)
     expect(solo.peer.last('snapshot')).toMatchObject({ botSeats: 0 })
+  })
+
+  it('never returns a bot its stack when the server goes down', async () => {
+    const { hub, ledger } = withBots()
+    await sitAndStart(hub)
+    await hub.settleAllTables()
+    // Bots buy in without touching the ledger, so crediting one on the way out
+    // mints chips against an id that owns no account.
+    for (const entry of ledger.entries) {
+      expect(entry.playerId.startsWith('bot:')).toBe(false)
+    }
   })
 
   it('acts for a bot when the turn reaches it', async () => {

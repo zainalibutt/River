@@ -504,6 +504,7 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>A restart used to eat every stack on the table</b> &mdash; tables live in the server process and bankrolls live in a database, and only one of those restarts. There was careful handling for both ways a seat ends while the server is alive, a kick and an expired reconnect grace, and <em>none at all</em> for the server simply stopping: the seat vanished and the buy-in that paid for it stayed debited. Confirmed against the live ledger, where two accounts sat on exactly zero with two entries each &mdash; signup grant in, buy-in out, nothing back. On a deployed server that is every seated player, every deploy. Stacks are handed back on shutdown now, idempotently. A hard kill still loses them; that wants reconciliation on startup rather than a longer shutdown.</span></li>
           <li><span class="dot done"></span><span><b>A person can sit down alone and deal</b> &mdash; the headline question, and it was deadlocked. Bots take their seats <em>on the deal</em>, deliberately, so they do not race arriving people for chairs. The client only offered a DEAL button once two seats were already taken. Alone at a bot table there was therefore no button to press and nobody coming to make it appear, and the server-side tests all passed because they submit <code>startHand</code> over the wire and never touch the control that is missing. Found by driving the actual browser client rather than the harness.</span></li>
           <li><span class="dot done"></span><span><b>A developer account exists</b> &mdash; there was no <code>admin</code>, no <code>ban</code>, no role anywhere in the codebase; the answer to &ldquo;can my account change chips and remove people&rdquo; was no, in the strict sense that the concept was absent. The role now rides in the signed token, read from <code>app_metadata</code> and <b>never</b> from <code>user_metadata</code> &mdash; the second is writable by the account holder through <code>auth.updateUser</code>, so a role kept there is one browser-console call from anybody granting themselves every power in the game. Grants are idempotent, capped, refused below zero, and a developer cannot ban themselves out of their own game.</span></li>
           <li><span class="dot done"></span><span><b>A buy-in is a stack of chips, not one chip</b> &mdash; the ladder topped out at a 100,000 chip and the default buy-in is 100,000, so every player sat behind <em>exactly one token</em>. Arithmetic correct, table wrong. Capped at 5,000 it is a twenty-chip column. A chip was also modelled 3.6x too thick &mdash; 12mm against a real 3.3mm &mdash; so a stack stood 24cm off the felt, taller than the gap between the table and a seated player's chin. Six tests named 100,000 directly and broke with it; they assert the invariant now rather than the number.</span></li>
@@ -659,11 +660,12 @@
         <p>
           The play loop works &mdash; deal, four streets, showdown, payout, chips
           conserved &mdash; and is now gated. What does not work is sitting down
-          twice. Every page load opens a <em>new</em> table, each buy-in debits
-          the full 100,000 bankroll, and the chips stay at the abandoned table
-          until the reconnect grace expires. Reload once and the next sit is
-          refused for insufficient funds. Rejoining the table you were already at
-          is the fix, and it is worth more than any render.
+          twice. Every page load opens a <em>new</em> table and each buy-in debits
+          the full 100,000 bankroll, so two reloads spend it and the third sit is
+          refused for insufficient funds. Shutdown now returns the stacks, which
+          covers the restart case; the reload case wants the client to rejoin the
+          table it was already at rather than open another. Worth more than any
+          render.
         </p>
       </article>
       <article class="step">
