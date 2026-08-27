@@ -54,6 +54,15 @@ def reveal_all():
         obj.hide_render = False
 
 
+def hide_player_characters():
+    for root in bpy.context.scene.objects:
+        if not root.name.startswith('river_character_'):
+            continue
+        root.hide_render = True
+        for child in root.children_recursive:
+            child.hide_render = True
+
+
 os.makedirs(PROOFS, exist_ok=True)
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=ASSET)
@@ -79,13 +88,7 @@ render('rooftop-chair-isolated.png')
 reveal_all()
 camera.location = (0.0, -3.2, 1.5)
 look_at(camera, (0.0, 0.0, 0.76))
-for root in ('river_character_04', 'river_character_05'):
-    obj = bpy.data.objects.get(root)
-    if obj is None:
-        raise SystemExit('FAIL: proof character %s was not imported' % root)
-    obj.hide_render = True
-    for child in obj.children_recursive:
-        child.hide_render = True
+hide_player_characters()
 render('rooftop-chairs-empty.png')
 reveal_all()
 render('rooftop-chairs-occupied.png')

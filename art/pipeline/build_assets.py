@@ -151,6 +151,14 @@ COSMETIC_PREVIEW_LOADOUTS = (
     },
 )
 
+DEALER_LOADOUT = {
+    'head': 'cap-navy',
+    'face': 'glasses-round',
+    'torso': 'jacket-bomb',
+    'hands': 'ring-silver',
+    'accent': 'bandana-red',
+}
+
 
 def atlas_cell(column, row):
     return (
@@ -584,7 +592,7 @@ def apply_garment_palette(obj, colour):
     obj.data.color_attributes.render_color_index = 0
 
 
-def duplicate_character(template, animation_actions, seat_index, variant, x, y, angle, atlas_material, garment_material, loadout):
+def duplicate_character(template, animation_actions, seat_index, variant, x, y, angle, atlas_material, garment_material, loadout, root_name=None, role='player'):
     mapping = {}
     face_cosmetic_id = loadout.get('face') or loadout.get('head')
     body_region = atlas_region_for_cosmetic(face_cosmetic_id) if face_cosmetic_id is not None else atlas_region_for_slot('skin')
@@ -644,7 +652,7 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
             clone['atlasRegion'] = list(atlas_region_for_cosmetic(cosmetic_id)) if cosmetic_id is not None else list(atlas_region_for_slot('skin'))
             clone['atlasMaterial'] = atlas_material.name if not is_garment else ''
             clone['garmentMaterial'] = garment_material.name if is_garment else ''
-    root = bpy.data.objects.new('river_character_%02d' % seat_index, None)
+    root = bpy.data.objects.new(root_name or 'river_character_%02d' % seat_index, None)
     bpy.context.scene.collection.objects.link(root)
     for source, clone in mapping.items():
         if source.parent is None:
@@ -652,7 +660,10 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
     root.location = (x, y, CHARACTER_SEAT_Z)
     root.rotation_euler = (0.0, 0.0, angle)
     root.scale = (CHARACTER_SCALE, CHARACTER_SCALE, CHARACTER_SCALE)
-    root['seatIndex'] = seat_index
+    if seat_index is not None:
+        root['seatIndex'] = seat_index
+    if role != 'player':
+        root['role'] = role
     root['variant'] = variant
     root['paletteIndex'] = body_palette_index
     root['paletteIndices'] = json.dumps({
@@ -662,6 +673,48 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
     root['loadout'] = json.dumps(loadout, sort_keys=True, separators=(',', ':'))
     root['atlasMaterial'] = atlas_material.name
     return root
+
+
+def build_dealer_uniform(root, garment_material):
+    waistcoat = concat([
+        box((-0.205, -0.245, 0.74), (0.165, 0.035, 0.50)),
+        box((0.040, -0.245, 0.74), (0.165, 0.035, 0.50)),
+        box((-0.165, -0.245, 1.18), (0.330, 0.035, 0.06)),
+    ])
+    bow_tie = concat([
+        box((-0.150, -0.275, 1.255), (0.115, 0.025, 0.065)),
+        box((0.035, -0.275, 1.255), (0.115, 0.025, 0.065)),
+        box((-0.035, -0.285, 1.265), (0.070, 0.030, 0.045)),
+    ])
+    for name, geometry, colour in (
+        ('river_dealer_waistcoat', waistcoat, (0.025, 0.035, 0.050, 1.0)),
+        ('river_dealer_bow_tie', bow_tie, (0.48, 0.025, 0.035, 1.0)),
+    ):
+        mesh = build_mesh_from_geo(name, geometry)
+        mesh.materials.append(garment_material)
+        uniform = object_at(name, mesh, parent=root)
+        apply_garment_palette(uniform, colour)
+        uniform['role'] = 'dealer'
+
+
+def build_rooftop_dealer(templates, animation_actions, atlas_material, garment_material):
+    position = character_seat_positions({'id': 'rooftop'})[0]
+    dealer = duplicate_character(
+        templates['male'],
+        animation_actions,
+        None,
+        'male',
+        position[0],
+        position[1],
+        0.0,
+        atlas_material,
+        garment_material,
+        DEALER_LOADOUT,
+        root_name='river_dealer',
+        role='dealer',
+    )
+    build_dealer_uniform(dealer, garment_material)
+    return dealer
 
 
 def build_venue_characters(venue):
@@ -686,6 +739,8 @@ def build_venue_characters(venue):
             garment_material,
             loadout,
         )
+    if venue['id'] == 'rooftop':
+        build_rooftop_dealer(templates, animation_actions, atlas_material, garment_material)
     for template in templates.values():
         for obj in template:
             bpy.data.objects.remove(obj, do_unlink=True)
