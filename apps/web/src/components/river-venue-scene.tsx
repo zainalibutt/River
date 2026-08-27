@@ -350,8 +350,72 @@ const CHIP_COLOURS: ReadonlyMap<number, string> = new Map(
   denominations().map((entry) => [entry.value, `#${entry.colour}`]),
 )
 
+/**
+ * A casino chip is 39mm across and 3.3mm thick. Both numbers are measured, not
+ * chosen, and the second one was wrong by 3.6x: at 12mm a chip was the
+ * thickness of four, so a twenty-chip buy-in stood 24cm off the felt - a tower
+ * taller than the gap between the table and a seated player's chin. Stacks read
+ * as columns of poker chips at 3.3mm and as stacked hockey pucks at 12mm.
+ */
 const CHIP_RADIUS = 0.0195
-const CHIP_HEIGHT = 0.012
+const CHIP_HEIGHT = 0.0033
+
+/**
+ * The edge spots.
+ *
+ * A chip without them is a coloured disc, and a stack of coloured discs is one
+ * extruded cylinder - which is exactly what the felt has been showing. The
+ * bright dashes break the side of the stack up so the eye counts chips.
+ *
+ * Drawn rather than shipped: it is 128x16 of two colours, and a PNG in the
+ * assets folder would be a build step and a network request for something a
+ * canvas produces in under a millisecond. Values, not hues - the instance
+ * colour supplies the hue, so this multiplies against every denomination.
+ */
+function chipEdgeTexture(): THREE.Texture | null {
+  if (typeof document === 'undefined') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 16
+  const context = canvas.getContext('2d')
+  if (context === null) return null
+  context.fillStyle = '#8c8c8c'
+  context.fillRect(0, 0, 128, 16)
+  context.fillStyle = '#ffffff'
+  // Six spots around the rim, each about a third of its own arc. Three or four
+  // reads as a mistake; twelve turns back into a solid band at this size.
+  for (let spot = 0; spot < 6; spot += 1) {
+    context.fillRect(spot * (128 / 6) + 128 / 18, 0, 128 / 9, 16)
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+  return texture
+}
+
+/** The face: an inner disc with a ring, which is all that is legible of the top chip. */
+function chipFaceTexture(): THREE.Texture | null {
+  if (typeof document === 'undefined') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = 64
+  canvas.height = 64
+  const context = canvas.getContext('2d')
+  if (context === null) return null
+  context.fillStyle = '#8c8c8c'
+  context.fillRect(0, 0, 64, 64)
+  context.strokeStyle = '#ffffff'
+  context.lineWidth = 4
+  context.beginPath()
+  context.arc(32, 32, 19, 0, Math.PI * 2)
+  context.stroke()
+  context.fillStyle = '#d8d8d8'
+  context.beginPath()
+  context.arc(32, 32, 11, 0, Math.PI * 2)
+  context.fill()
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
 const CARD_WIDTH = 0.126
 const CARD_LENGTH = 0.176
 const CARD_THICKNESS = 0.004
@@ -361,6 +425,26 @@ function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }
   const cards = useRef<THREE.InstancedMesh>(null)
   const matrix = useMemo(() => new THREE.Matrix4(), [])
   const tint = useMemo(() => new THREE.Color(), [])
+  // Cylinder groups are side, top cap, bottom cap - so the rim and the face get
+  // different art off one geometry and one draw call.
+  const chipMaterials = useMemo(() => {
+    const edge = chipEdgeTexture()
+    const face = chipFaceTexture()
+    const side = new THREE.MeshStandardMaterial({ metalness: 0.04, roughness: 0.62 })
+    if (edge !== null) side.map = edge
+    const cap = new THREE.MeshStandardMaterial({ metalness: 0.04, roughness: 0.58 })
+    if (face !== null) cap.map = face
+    return [side, cap, cap]
+  }, [])
+  useEffect(
+    () => () => {
+      for (const material of chipMaterials) {
+        material.map?.dispose()
+        material.dispose()
+      }
+    },
+    [chipMaterials],
+  )
 
   useLayoutEffect(() => {
     const mesh = chips.current
@@ -379,7 +463,12 @@ function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }
         for (const column of columns) {
           for (let height = 0; height < column.count; height += 1) {
             if (placed >= MAX_CHIPS) break
-            matrix.makeTranslation(
+            // Spin each chip a different way. Without this every spot lines up
+            // and the stack grows six vertical seams down its side, which is
+            // the one thing a real stack never has. Hashed off the index rather
+            // than Math.random so a chip does not jump on re-render.
+            matrix.makeRotationY(((placed * 2654435761) % 1024) * (Math.PI / 512))
+            matrix.setPosition(
               baseX + column.offsetX,
               TABLE_SURFACE_HEIGHT + CHIP_HEIGHT / 2 + height * CHIP_HEIGHT,
               baseZ + column.offsetZ,
@@ -416,11 +505,11 @@ function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }
       <instancedMesh
         ref={chips}
         args={[undefined, undefined, MAX_CHIPS]}
+        material={chipMaterials}
         castShadow={false}
         receiveShadow
       >
-        <cylinderGeometry args={[CHIP_RADIUS, CHIP_RADIUS, CHIP_HEIGHT, 16]} />
-        <meshStandardMaterial metalness={0.12} roughness={0.55} />
+        <cylinderGeometry args={[CHIP_RADIUS, CHIP_RADIUS, CHIP_HEIGHT, 24]} />
       </instancedMesh>
       <instancedMesh ref={cards} args={[undefined, undefined, 5]} castShadow={false} receiveShadow>
         <boxGeometry args={[CARD_WIDTH, CARD_THICKNESS, CARD_LENGTH]} />

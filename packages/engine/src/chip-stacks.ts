@@ -9,16 +9,27 @@ export interface ChipStack {
   count: number
 }
 
+/**
+ * The chip ladder, in casino order: white and red at the bottom, green and
+ * yellow through the middle, black at the top.
+ *
+ * It used to run up to a 100,000 chip, and the default buy-in is 100,000 - so
+ * every player sat down behind exactly one token. The maths was right and the
+ * table looked wrong. Capped at 5,000, a buy-in is twenty black chips, which
+ * is a stack.
+ *
+ * The 1 and the 5 stay even though blinds of 250/500 mean nobody bets them.
+ * They are what makes every amount exactly representable, and a breakdown that
+ * cannot make change is a breakdown that loses chips.
+ */
 const DENOMINATIONS: readonly Denomination[] = [
-  { value: 1, label: '1', colour: 'f8f8f8' },
-  { value: 5, label: '5', colour: 'c62828' },
-  { value: 25, label: '25', colour: '2e7d32' },
-  { value: 100, label: '100', colour: '263238' },
-  { value: 500, label: '500', colour: '7b1fa2' },
-  { value: 1000, label: '1K', colour: '1565c0' },
-  { value: 5000, label: '5K', colour: 'ef6c00' },
-  { value: 25000, label: '25K', colour: '9e9e9e' },
-  { value: 100000, label: '100K', colour: 'c9a227' },
+  { value: 1, label: '1', colour: 'f2efe6' },
+  { value: 5, label: '5', colour: 'b02a2a' },
+  { value: 25, label: '25', colour: '1f6b3a' },
+  { value: 100, label: '100', colour: '24457f' },
+  { value: 500, label: '500', colour: '5b2a72' },
+  { value: 1000, label: '1K', colour: 'c9a227' },
+  { value: 5000, label: '5K', colour: '16161b' },
 ]
 
 const DEFAULT_MAX_STACK = 40

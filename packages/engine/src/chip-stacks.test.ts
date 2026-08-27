@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest'
 import type { ChipStack } from './chip-stacks.js'
 import { breakStack, denominations, readableStacks, stackCount, stackValue } from './chip-stacks.js'
 
+/**
+ * The ladder is a product decision and it has already changed once - it used to
+ * top out at a 100,000 chip, which meant a default buy-in of 100,000 sat on the
+ * felt as a single token. These tests named that number in six places and all
+ * six broke when it moved. They assert the invariant now: whatever the top of
+ * the ladder is, it gets used first and it respects the column cap.
+ */
+function largestDenomination(): number {
+  return Math.max(...denominations().map((denomination) => denomination.value))
+}
+
 describe('denominations', () => {
   it('are ascending, unique, and the smallest divides every larger value', () => {
     const values = denominations().map((denomination) => denomination.value)
@@ -39,7 +50,7 @@ describe('breakStack', () => {
 
   it('uses the largest denominations first', () => {
     const stacks = breakStack(137_500)
-    expect(stacks[0]?.denomination.value).toBe(100_000)
+    expect(stacks[0]?.denomination.value).toBe(largestDenomination())
     for (let i = 1; i < stacks.length; i += 1) {
       expect((stacks[i] as ChipStack).denomination.value).toBeLessThanOrEqual(
         (stacks[i - 1] as ChipStack).denomination.value,
@@ -49,20 +60,24 @@ describe('breakStack', () => {
 
   it('splits a single amount of one very rich stack into affordable stacks', () => {
     const stacks = breakStack(1_000_000, 4)
-    const hundreds = stacks.filter((stack) => stack.denomination.value === 100_000)
-    expect(hundreds).toHaveLength(3)
-    for (const stack of hundreds) {
+    for (const stack of stacks) {
       expect(stack.count).toBeLessThanOrEqual(4)
     }
+    // A million at the top of the ladder is far more than one column holds, so
+    // the split has to have happened at all rather than handing back one tall
+    // stack with a count that ignores the cap.
+    expect(stacks.length).toBeGreaterThan(1_000_000 / largestDenomination() / 4 - 1)
     expect(stackValue(stacks)).toBe(1_000_000)
   })
 
   it('never exceeds maxPerStack per column and overflows into more stacks', () => {
     const stacks = breakStack(4_100_000, 40)
-    const hundreds = stacks.filter((stack) => stack.denomination.value === 100_000)
-    expect(hundreds).toHaveLength(2)
-    expect(hundreds[0]?.count).toBe(40)
-    expect(hundreds[1]?.count).toBe(1)
+    const top = stacks.filter((stack) => stack.denomination.value === largestDenomination())
+    // Every full column but the last, and then a remainder column.
+    expect(top.length).toBeGreaterThan(1)
+    for (const stack of top.slice(0, -1)) expect(stack.count).toBe(40)
+    expect(top.at(-1)?.count).toBeLessThanOrEqual(40)
+    for (const stack of stacks) expect(stack.count).toBeLessThanOrEqual(40)
     expect(stackValue(stacks)).toBe(4_100_000)
   })
 
@@ -113,7 +128,11 @@ describe('readableStacks', () => {
   it('chooses the closest representation under a tight cap', () => {
     const stacks = readableStacks(99_999, 5)
     const represented = stackValue(stacks)
-    expect(represented).toBe(85_000)
+    // Five chips cannot reach 99,999, so it spends the whole budget on the top
+    // of the ladder and gets as close as five chips can get. Under it, never
+    // over - a readable stack may round down but must never invent money.
+    expect(represented).toBe(largestDenomination() * 5)
+    expect(represented).toBeLessThanOrEqual(99_999)
     expect(stackCount(stacks)).toBe(5)
   })
 

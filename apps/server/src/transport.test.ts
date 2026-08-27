@@ -823,6 +823,79 @@ describe('bots at the table', () => {
     expect(seats[1]?.playerId).toBe(BOB)
   })
 
+  /**
+   * The question this answers is "can somebody actually sit down and play a
+   * hand against the bots", and until now nothing asserted it. There were tests
+   * that bots take seats, that bots act, that buy-ins hit the ledger - each one
+   * a slice, none of them the loop. A table can pass all three and still wedge
+   * on the turn, or pay a pot to nobody.
+   */
+  it('plays a whole hand against the bots and pays the pot out', async () => {
+    vi.useFakeTimers()
+    const { hub } = withBots()
+    const { peer, connection } = await sitAndStart(hub)
+
+    function view() {
+      const snapshot = peer.last('snapshot')
+      if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+      return snapshot.view
+    }
+
+    const seated = () => view().seats.filter((seat) => seat.playerId !== null)
+    // Everything anybody has, wherever it currently sits.
+    //
+    // `pot` already counts the chips sitting in front of players on the current
+    // street - `betStreet` is a display copy of money the pot has, not money
+    // beside it. Adding both double-counts, which is how this first read 750
+    // chips high: exactly one small blind plus one big blind.
+    const chipsInPlay = () =>
+      view().pot + seated().reduce((total, seat) => total + seat.stack, 0)
+
+    const opened = chipsInPlay()
+    expect(view().phase).toBe('hand')
+    expect(seated().length).toBeGreaterThan(1)
+
+    // Play it out. Alice takes the cheapest line that stays in the hand, so the
+    // hand runs the full four streets to a showdown rather than ending on a
+    // fold two actions in.
+    let actions = 0
+    for (let step = 0; step < 400 && view().phase === 'hand'; step += 1) {
+      const current = view()
+      if (current.currentActor?.playerId === ALICE && current.legal !== null) {
+        const legal = current.legal
+        const kind = legal.check.enabled ? 'check' : legal.call.enabled ? 'call' : 'fold'
+        await connection.receive(
+          JSON.stringify({
+            kind: 'command',
+            requestId: `act-${step}`,
+            command: { kind: 'act', action: { kind } },
+          }),
+        )
+        actions += 1
+        continue
+      }
+      // Otherwise it is a bot's turn, and a bot acts on a timer.
+      await vi.advanceTimersByTimeAsync(2_000)
+    }
+
+    // The hand ended, rather than the loop running out of patience on a table
+    // waiting for an actor that never moves. Checking and calling down reaches
+    // the river, so this is a real showdown and not a hand that folded out.
+    expect(view().phase).toBe('between')
+    expect(view().street).toBe('river')
+    expect(actions).toBeGreaterThan(0)
+
+    // Nothing was minted and nothing evaporated. The pot is settled and every
+    // chip that was on the table at the deal is still on it, in somebody's
+    // stack. This is the assertion that a payout bug cannot survive.
+    expect(view().pot).toBe(0)
+    expect(chipsInPlay()).toBe(opened)
+
+    // Somebody won it: at least one stack moved.
+    const movedSeats = seated().filter((seat) => seat.stack !== 50_000)
+    expect(movedSeats.length).toBeGreaterThan(0)
+  })
+
   it('acts for a bot when the turn reaches it', async () => {
     vi.useFakeTimers()
     const { hub } = withBots()
