@@ -177,17 +177,6 @@ function verifyCopy(status: VerifyResult['status']): string {
  * so it can never say something the player is not entitled to see - the hole
  * cards are only in the view at all when they are theirs.
  */
-function HandReadout({ view }: { view: RoomView }) {
-  const hero = view.seats.find((seat) => seat.playerId === view.selfId)
-  const readout = readoutFor(hero?.hole ?? [], view.board)
-  if (readout === null) return null
-  return (
-    <p className="hand-readout" role="status" aria-live="polite">
-      <span>{readout.full}</span>
-    </p>
-  )
-}
-
 function orderedSeats(view: RoomView): RoomSeatView[] {
   const heroIndex = view.seats.findIndex((seat) => seat.playerId === view.selfId)
   if (heroIndex < 0) return view.seats
@@ -1068,7 +1057,7 @@ export function RiverRoomTable() {
                 ) : null}
               </div>
             )}
-            <HandReadout view={view} />
+            <HeroHand view={view} />
             <div className="status-line populated" aria-live="polite">
               {kick === null
                 ? (notice ?? view.message ?? waitingCopy(view, seatedCount, botSeats, isHost))
@@ -1291,6 +1280,42 @@ function Board({ cards, street }: { cards: Card[]; street: Street }) {
   )
 }
 
+/**
+ * Your own hand, in one place.
+ *
+ * These used to hang off the hero's seat marker at left: -278px, and the seat
+ * marker is positioned from the seat's projected 3D position - so orbiting the
+ * camera swung your own cards across the screen and sometimes off the edge of
+ * it. The two things a player looks at most, their hole cards and what those
+ * cards currently make, were the two things that would not hold still.
+ *
+ * docs/design/22-shot-composition.md measured this off the reference and asked
+ * for it explicitly: a bottom-left block carrying the hole cards, and hero
+ * cards DOM-only rather than tracked in world space. Everyone else keeps card
+ * backs at their seat, because whose cards those are is exactly the
+ * information a world-space position carries.
+ */
+function HeroHand({ view }: { view: RoomView }) {
+  const hero = view.seats.find((seat) => seat.playerId === view.selfId)
+  if (hero === undefined || !hero.hasHole) return null
+  const readout = readoutFor(hero.hole ?? [], view.board)
+  return (
+    <section className="hero-hand" aria-label="Your hand">
+      <div className="hero-hand-cards">
+        {hero.hole === null ? (
+          <>
+            <CardBack />
+            <CardBack />
+          </>
+        ) : (
+          hero.hole.map((card) => <PlayingCard key={`${card.rank}${card.suit}`} card={card} peek />)
+        )}
+      </div>
+      {readout === null ? null : <p className="hero-hand-readout">{readout.full}</p>}
+    </section>
+  )
+}
+
 function PlayingCard({ card, peek = false }: { card: Card; peek?: boolean }) {
   const symbol = { s: '♠', h: '♥', d: '♦', c: '♣' }[card.suit]
   return (
@@ -1413,8 +1438,10 @@ function RoomSeat({
         onClick={onSelect}
         aria-label={`Inspect ${seat.name}`}
       />
+      {/* The hero's hand lives in the fixed block, not on a marker that moves
+          with the camera. Their seat still shows the turn state and the stack. */}
       <div className="seat-cards">
-        {seat.hasHole && seat.hole === null ? (
+        {local ? null : seat.hasHole && seat.hole === null ? (
           <>
             <CardBack />
             <CardBack />

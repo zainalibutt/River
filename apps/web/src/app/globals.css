@@ -629,15 +629,49 @@ input:focus-visible {
   font-size: 28px;
 }
 
-.hero-seat .seat-cards {
-  top: -18px;
-  left: -278px;
-  translate: 0 0;
+/*
+ * Your hand, bottom left, and it does not move.
+ *
+ * This block used to be `.hero-seat .seat-cards` at left: -278px from the
+ * hero's seat marker, and that marker sits at the seat's projected 3D
+ * position - so orbiting the camera swung your own cards across the screen.
+ * The two things a player reads most were the two that would not hold still.
+ *
+ * The measured position from docs/design/22-shot-composition.md: a bottom-left
+ * block, clear of the action rail, holding the hole cards and what they make.
+ * Coordinates are in the HUD's authored 1920x1080 space.
+ */
+.hero-hand {
+  position: absolute;
+  left: 96px;
+  bottom: 188px;
+  z-index: 16;
+  display: grid;
+  gap: 14px;
+  pointer-events: none;
 }
 
-.hero-seat .hero-card {
+.hero-hand-cards {
+  display: flex;
+  gap: 12px;
+}
+
+.hero-hand .playing-card,
+.hero-hand .card-back {
   width: 120px;
   height: 168px;
+  border-radius: 12px;
+}
+
+.hero-hand-readout {
+  margin: 0;
+  max-width: 264px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--river-amber);
+  text-shadow: 0 2px 10px rgb(0 0 0 / 70%);
 }
 
 .action-rail {
