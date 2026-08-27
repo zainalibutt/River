@@ -6,12 +6,33 @@ from values import SEAT_RING_X, SEAT_RING_Y
 
 
 def hex_to_rgb(hex_value):
+    """Convert an sRGB hex colour to the linear values Blender actually wants.
+
+    Every colour input this pipeline touches is linear: a Principled BSDF's
+    Base Color, an Emission node's Color, a colour ramp element, an object's
+    diffuse_color, and the float buffer behind image.pixels. glTF's
+    baseColorFactor is linear too. The palette in values.py is written the way
+    a person reads colour, which is sRGB.
+
+    This used to divide by 255 and stop, which feeds an sRGB number into a
+    linear input. The sRGB transfer curve is steep in the shadows, so that does
+    not darken or brighten evenly - it lifts dark values by around ten times
+    while barely moving light ones, which pulls every surface in a venue toward
+    the same middle grey and flattens the contrast between them.
+
+    The Rooftop was authored with a near-black navy felt at 0A121E and shipped
+    a GLB whose felt reads 384B60. Its floor, rail, chairs, parapet, mountains
+    and skyline all landed within a factor of three of each other and of the
+    felt - the table was measurably darker than the ground it stood on. No
+    amount of relighting could separate surfaces that had no contrast left to
+    separate, which is why several passes at the lighting never helped.
+    """
     value = hex_value.lstrip('#')
-    return (
-        int(value[0:2], 16) / 255.0,
-        int(value[2:4], 16) / 255.0,
-        int(value[4:6], 16) / 255.0,
-    )
+    out = []
+    for index in (0, 2, 4):
+        channel = int(value[index:index + 2], 16) / 255.0
+        out.append(channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4)
+    return tuple(out)
 
 
 def clear_scene(keep=()):

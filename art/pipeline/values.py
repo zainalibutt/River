@@ -61,7 +61,14 @@ ROOFTOP = {
     'wood': '141210',
     'chair': '17181B',
     'chrome': 'B9BEC4',
-    'floor': '121A1D',
+    # Pale lavender-grey stone, which is what the reference terrace is made of
+    # and what docs/design/22-shot-composition.md recorded. It was 121A1D -
+    # near-black rock, within 1.11 contrast of a near-black parapet, so the two
+    # largest surfaces in the venue read as one shape. They only ever appeared
+    # to separate because the sRGB-as-linear bug lifted them by different
+    # amounts; correcting the colour space made the room's real palette visible
+    # for the first time, and the palette gate caught this within a minute.
+    'floor': '3A3742',
     'floor_pattern': 'B9B2A4',
     'parapet': '0A0C0E',
     'parapet_lit': 'FFD9A0',

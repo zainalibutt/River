@@ -90,11 +90,25 @@ export function blenderToThree(position: readonly number[]): [number, number, nu
  * web renderer drifted apart in the first place. If the venues read too dark or
  * too hot, change this number, not the individual energies.
  *
- * It came down from 0.06 to 0.008 once the lamps were aimed. The old value was
- * calibrated against a rig throwing most of its light at the back wall, so the
- * moment the sources pointed at the terrace a pale concrete floor went white.
+ * It went 0.06 -> 0.008 -> 0.0667, and the round trip is the story.
+ *
+ * The cut to 0.008 was made because "a pale concrete floor went white". That
+ * floor was authored as 121A1D, which is near-black rock, and it shipped
+ * reading #4b5a5f. Every material in every venue went through a conversion
+ * that fed an sRGB number into a linear input, lifting dark albedos by up to
+ * thirteen times and light ones barely at all - so the room was not overlit,
+ * it was painted in surfaces eight times more reflective than anyone chose,
+ * all crushed toward the same middle grey. Turning the lights down hid the
+ * symptom and made the flatness permanent, because the contrast that was lost
+ * was lost in the albedos, where no lighting change can reach it.
+ *
+ * With the albedos corrected the venues lose 8.34x of their reflected light,
+ * measured area-weighted across all three by art/relinearise-venues.mjs. 0.008
+ * times 8.34 is 0.0667, which is within ten percent of the value this started
+ * at - the first calibration was right, and had been detuned to compensate for
+ * a bug two layers below it.
  */
-export const ENERGY_TO_INTENSITY = 0.008
+export const ENERGY_TO_INTENSITY = 0.0667
 
 /**
  * How much a shadowless fill is worth.

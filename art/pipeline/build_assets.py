@@ -19,6 +19,7 @@ from buildkit import (
     build_mesh_from_geo,
     clear_scene,
     colorramp_material,
+    hex_to_rgb,
     make_checker_material,
     object_at,
     retint,
@@ -1066,11 +1067,12 @@ def build_suite(venue):
 
 
 def hex_to_linear(hex_rgb):
-    out = []
-    for i in (0, 2, 4):
-        c = int(hex_rgb[i:i + 2], 16) / 255.0
-        out.append(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4)
-    return tuple(out)
+    # Kept as a name because the lighting code reads better for it, but the
+    # conversion lives in one place now. There were two of these - this one,
+    # correct, used for lights and the world; and buildkit's hex_to_rgb, which
+    # skipped the transfer curve entirely and was used for every material in
+    # every venue. Two functions for one job is how one of them stays wrong.
+    return hex_to_rgb(hex_rgb)
 
 
 def build_lighting(venue_id):
