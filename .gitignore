@@ -47,3 +47,8 @@ docs/images/**/*.mp4
 docs/images/**/*.mov
 docs/images/**/*.mkv
 docs/images/**/*.webm
+
+# Competitor reference material - studied, not redistributed
+docs/images/menus/
+docs/images/3_main/
+docs/*-behaviour-reference.md

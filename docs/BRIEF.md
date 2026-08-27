@@ -1,7 +1,7 @@
 # Brief
 
-River is a social 3D poker room — a reference reproduction, built better in the
-places that matter.
+River is a social 3D poker room for friend groups: couch-multiplayer poker,
+rebuilt for the browser and better in the places that matter.
 
 It is also a measured experiment, and that is the more interesting half.
 
@@ -9,7 +9,7 @@ It is also a measured experiment, and that is the more interesting half.
 
 ## The wager
 
-the reference took a studio. Pipeline artists, engine programmers, a
+A game of this shape took a studio. Pipeline artists, engine programmers, a
 backend team, designers, QA — months to years of coordinated work by a lot of
 people.
 
@@ -67,16 +67,17 @@ the experiment works, the artefact and the evidence are the same thing.
 
 ## What "better in the places that matter" means
 
-River is not a faithful reproduction. Deliberate divergences from the reference:
+River is not a faithful reproduction of anything. Deliberate divergences from
+the genre reference:
 
-- **Typed text chat.** the reference has none.
+- **Typed text chat.** The reference has none.
 - **Provably fair shuffling** with a client-verifiable commit and reveal.
 - **Chips are unbuyable and uncashoutable.** No purchase path exists anywhere
   in the codebase.
-- **Three launch venues**, not the full set, with the reference's roster kept as
+- **Three launch venues**, not the full set, with the reference roster kept as
   general law for what a venue should be.
 
 Everything else — the radial action menu, preset actions with public gestures,
 the muck-or-show personality, venue ambience, REP layered on top — is
-the reference's design working as intended, and is reproduced rather than
+the reference design working as intended, and is reproduced rather than
 reinvented.
