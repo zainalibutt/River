@@ -15,29 +15,39 @@ call - they are how this was reviewed.
 
 Three things the proofs also show, which is why they were worth rendering.
 
-## 1. Scale — the headline
+## 1. RETRACTED — the chair is not too big
 
-In `rooftop-chairs-empty.png` the chairs read as **standing stones**, not
-furniture. Each back is about as tall and as wide as a seated person, and each
-seat pad is wider than the person sitting on it.
+**This packet originally said the chairs were about three times too large and
+should be scaled down. That was wrong and it was my error.** If you have already
+scaled them, revert it.
 
-The reference is unambiguous: a chair back is roughly **shoulder width**, and a
-seated player **occludes most of it**. The chair is furniture behind a person,
-never a slab beside one.
+Measured in world space in the running scene, not judged from a render:
 
-Target proportions, against the character rather than in absolutes so they
-survive any future rescale:
+| | Width | Height | Y span |
+|---|---|---|---|
+| `rooftop_chair_0` (both primitives) | 0.400 m | **0.855 m** | 0.025 → 0.880 |
+| seated character | 0.392 m | 0.587 m | 0.384 → 0.971 |
 
-- Back **width** ≈ the character's shoulder width, not more
-- Back **height** ≈ from the seat pad to the character's mid-back, so the head
-  and shoulders clear it entirely
-- Seat pad **diameter** ≈ hip width plus a little, not wider than the shoulders
-- Pedestal runs **from the floor to the seat**. In the isolated proof it is a
-  short thin stalk and the whole assembly floats.
-- Foot ring sits low on the pedestal and **reads as attached to it**
+The chair is 0.855m tall and 0.40m wide. That is a real chair. It is the same
+width as the character's shoulders and their head clears the back by 9cm, which
+is precisely the relationship the reference has. **Do not change the chair's
+scale.**
 
-The test: at the current camera, a seated character should hide most of their
-own chair. If you can read the chair better than the person, it is too big.
+## 1b. What is actually wrong: the table is too low
+
+The seat sits at **0.384m** and the felt at **0.55m**, so the table surface is
+just **17cm above the seat**. A real poker table clears a seat by around 30cm.
+Everyone at this table is sitting with the felt at mid-thigh, which is why the
+chairs read as looming over it and the whole set looks mis-scaled.
+
+**This is the defect to fix.** Raise the felt - and the rail, the chip pools and
+the card positions with it - so the table clears the seat by roughly 0.30m,
+putting the felt near 0.68-0.72m.
+
+`TABLE_SURFACE_HEIGHT` in `apps/web/src/lib/venue.ts` is the client's copy of
+that number and it is mine. **Tell me the value you land on and I will move it
+in the same session**; if the two disagree the camera aims at the wrong height
+and the whole venue tips out of frame, which has happened here before.
 
 ## 2. The back is detached from the seat
 
