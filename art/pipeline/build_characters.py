@@ -118,10 +118,64 @@ def reduce_body(obj):
     cut = zmin + (zmax - zmin) * CHARACTER_CULL_FRACTION
     bm = bmesh.new()
     bm.from_mesh(obj.data)
-    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < cut], context='VERTS')
+    bmesh.ops.bisect_plane(
+        bm,
+        geom=list(bm.verts) + list(bm.edges) + list(bm.faces),
+        dist=0.0001,
+        plane_co=(0.0, 0.0, cut),
+        plane_no=(0.0, 0.0, 1.0),
+        clear_inner=True,
+        clear_outer=False,
+        use_snap_center=False,
+    )
     bm.to_mesh(obj.data)
     bm.free()
     return obj
+
+
+def strip_opaque_hair_planes(obj):
+    mesh = obj.data
+    adjacency = [[] for _ in mesh.vertices]
+    for edge in mesh.edges:
+        first, second = edge.vertices
+        adjacency[first].append(second)
+        adjacency[second].append(first)
+    components = []
+    seen = set()
+    for vertex in mesh.vertices:
+        if vertex.index in seen:
+            continue
+        component = set()
+        pending = [vertex.index]
+        while pending:
+            current = pending.pop()
+            if current in component:
+                continue
+            component.add(current)
+            seen.add(current)
+            pending.extend(adjacency[current])
+        components.append(component)
+    hair_vertices = set()
+    hair_faces = 0
+    hair_components = 0
+    for component in components:
+        points = [mesh.vertices[index].co for index in component]
+        z_min = min(point.z for point in points)
+        z_max = max(point.z for point in points)
+        faces = sum(1 for face in mesh.polygons if all(index in component for index in face.vertices))
+        if len(component) <= 18 and faces <= 16 and z_max >= 1.62 and z_max - z_min >= 0.18:
+            hair_vertices.update(component)
+            hair_faces += faces
+            hair_components += 1
+    if not hair_vertices:
+        return 0, 0, 0
+    mesh_data = bmesh.new()
+    mesh_data.from_mesh(mesh)
+    mesh_data.verts.ensure_lookup_table()
+    bmesh.ops.delete(mesh_data, geom=[mesh_data.verts[index] for index in sorted(hair_vertices)], context='VERTS')
+    mesh_data.to_mesh(mesh)
+    mesh_data.free()
+    return hair_components, hair_faces, len(hair_vertices)
 
 
 def shape_hash(obj):
@@ -273,6 +327,32 @@ def weld_garment_sources(source, indices, distance):
     return list(clusters.values())
 
 
+def smooth_garment_boundaries(obj, iterations=4):
+    mesh_data = bmesh.new()
+    mesh_data.from_mesh(obj.data)
+    boundary = {vertex for edge in mesh_data.edges if len(edge.link_faces) == 1 for vertex in edge.verts}
+    for _ in range(iterations):
+        bmesh.ops.smooth_vert(
+            mesh_data,
+            verts=list(boundary),
+            factor=0.45,
+            use_axis_x=True,
+            use_axis_y=True,
+            use_axis_z=True,
+        )
+    mesh_data.to_mesh(obj.data)
+    mesh_data.free()
+    return len(boundary)
+
+
+def boundary_edge_count(mesh):
+    mesh_data = bmesh.new()
+    mesh_data.from_mesh(mesh)
+    count = sum(1 for edge in mesh_data.edges if len(edge.link_faces) == 1)
+    mesh_data.free()
+    return count
+
+
 def build_garment(obj, thickness=0.020, fabric_hex='3A2B26', threshold=0.25):
     weights = garment_weights(obj)
     indices = {i for i, w in weights.items() if w >= threshold}
@@ -350,11 +430,13 @@ def main():
         obj = create_base(gender, name, female)
         obj = apply_character_materials(obj)
         obj = reduce_body(obj)
+        hair_components, hair_faces, hair_vertices = strip_opaque_hair_planes(obj)
         # after the bake, not before - bake_shapekeys rewrites vertex positions
         # from the shapekey mix and would discard these edits
         if female:
             apply_female_proportions(obj)
         garment = build_garment(obj)
+        garment_boundary_vertices = smooth_garment_boundaries(garment) if garment is not None else 0
         smooth_mesh_by_angle(obj.data)
         if garment is not None:
             smooth_mesh_by_angle(garment.data)
@@ -364,6 +446,7 @@ def main():
         garment_verts = len(garment.data.vertices) if garment is not None else 0
         garment_tris = sum((1 if len(poly.vertices) == 3 else 2) for poly in garment.data.polygons) if garment is not None else 0
         garment_ratio = garment_verts / garment_tris if garment_tris else 0.0
+        garment_boundary_edges = boundary_edge_count(garment.data) if garment is not None else 0
         shape = shape_hash(obj)
         glb = export_glb(obj, extra=(garment,))
         manifest['characters'].append({
@@ -380,6 +463,8 @@ def main():
             'garment_verts': garment_verts,
             'garment_tris': garment_tris,
             'garment_vertex_ratio': garment_ratio,
+            'garment_boundary_edges': garment_boundary_edges,
+            'garment_boundary_vertices': garment_boundary_vertices,
             'garment_groups': len(garment.vertex_groups) if garment is not None else 0,
             'shape_hash': shape,
         })
@@ -390,6 +475,12 @@ def main():
         ))
         print('GARMENT %s vertices=%d triangles=%d vertices_per_triangle=%.3f' % (
             name, garment_verts, garment_tris, garment_ratio
+        ))
+        print('GARMENT_BOUNDARY %s edges=%d vertices=%d' % (
+            name, garment_boundary_edges, garment_boundary_vertices
+        ))
+        print('HAIR %s components=%d faces=%d vertices=%d' % (
+            name, hair_components, hair_faces, hair_vertices
         ))
     with open(os.path.join(OUT_DIR, 'char_manifest.json'), 'w') as handle:
         json.dump(manifest, handle, indent=2)
