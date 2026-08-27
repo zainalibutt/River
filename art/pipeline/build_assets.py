@@ -348,9 +348,21 @@ def build_chairs(venue, chair_fn, chair_mat, count=9):
     positions = seat_positions(count)
     for index, (x, y) in enumerate(positions):
         chair_geo = chair_fn()
+        leather_faces = None
+        if venue['id'] == 'rooftop':
+            chair_geo, leather_faces = chair_geo
         mesh = build_mesh_from_geo('%s_chair_%d' % (venue['id'], index), chair_geo)
         mesh.materials.append(chair_mat)
-        angle = math.atan2(-y, -x)
+        if leather_faces is not None:
+            chrome = bpy.data.materials.get('chip_100_rim')
+            if chrome is None:
+                raise SystemExit('FAIL: rooftop chair chrome material is missing')
+            mesh.materials.append(chrome)
+            for polygon in mesh.polygons[leather_faces:]:
+                polygon.material_index = 1
+            angle = math.atan2(-x, y)
+        else:
+            angle = math.atan2(-y, -x)
         object_at(
             '%s_chair_%d' % (venue['id'], index),
             mesh,
@@ -641,7 +653,19 @@ def build_venue_characters(venue):
         variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]
         angle = math.atan2(-x, y)
         loadout = COSMETIC_PREVIEW_LOADOUTS[seat_index % len(COSMETIC_PREVIEW_LOADOUTS)]
-        duplicate_character(templates[variant], animation_actions, seat_index, variant, x, y, angle, atlas_material, garment_material, loadout)
+        seat_offset = 0.12 if venue['id'] == 'rooftop' else 0.0
+        duplicate_character(
+            templates[variant],
+            animation_actions,
+            seat_index,
+            variant,
+            x + math.sin(angle) * seat_offset,
+            y - math.cos(angle) * seat_offset,
+            angle,
+            atlas_material,
+            garment_material,
+            loadout,
+        )
     for template in templates.values():
         for obj in template:
             bpy.data.objects.remove(obj, do_unlink=True)

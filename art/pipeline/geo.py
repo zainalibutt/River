@@ -283,15 +283,74 @@ def card_body():
 
 
 def chair_swivel():
-    parts = []
-    parts.append(cylinder(0.03, SEAT_H - 0.02, 0.04, 6))
-    for i in range(5):
-        angle = 2.0 * math.pi * i / 5
-        foot = box((0.18 * math.cos(angle) - 0.02, 0.18 * math.sin(angle) - 0.02, 0.0), (0.05, 0.05, 0.04))
-        parts.append(foot)
-    parts.append(cylinder(0.24, SEAT_H, SEAT_H - 0.045, CHAIR_SEG))
-    parts.append(cylinder(0.21, SEAT_H + 0.5, SEAT_H, CHAIR_SEG))
-    return concat(parts)
+    leather = [
+        cylinder(0.27, SEAT_H, SEAT_H - 0.08, CHAIR_SEG),
+        translate_geo(torus(0.215, 0.014, CHAIR_SEG, 4), 0.0, 0.0, SEAT_H),
+        chair_back_shell(),
+    ]
+    chrome = [
+        cylinder(0.033, SEAT_H - 0.08, 0.07, 8),
+        cylinder(0.16, 0.07, 0.025, 16),
+        translate_geo(torus(0.20, 0.017, 16, 4), 0.0, 0.0, 0.145),
+        crown_emblem(),
+    ]
+    leather_geo = concat(leather)
+    chrome_geo = concat(chrome)
+    return concat([leather_geo, chrome_geo]), len(leather_geo[1])
+
+
+def chair_back_shell():
+    segments = 12
+    levels = [
+        (SEAT_H - 0.01, 0.25, 0.25),
+        (SEAT_H + 0.10, 0.29, 0.27),
+        (SEAT_H + 0.62, 0.28, 0.28),
+        (SEAT_H + 0.74, 0.19, 0.30),
+    ]
+    verts = []
+    for z, half_width, centre_y in levels:
+        for layer in (0.0, 0.045):
+            for index in range(segments + 1):
+                fraction = index / segments * 2.0 - 1.0
+                x = fraction * half_width
+                y = centre_y + abs(fraction) ** 2 * 0.10 + layer
+                verts.append((x, y, z))
+    faces = []
+    row = (segments + 1) * 2
+    for level in range(len(levels) - 1):
+        current = level * row
+        following = (level + 1) * row
+        for index in range(segments):
+            faces.extend((
+                (current + index, following + index, following + index + 1),
+                (current + index, following + index + 1, current + index + 1),
+                (current + segments + 1 + index + 1, following + segments + 1 + index + 1, following + segments + 1 + index),
+                (current + segments + 1 + index + 1, following + segments + 1 + index, current + segments + 1 + index),
+            ))
+        for index in (0, segments):
+            faces.extend((
+                (current + index, following + index, following + segments + 1 + index),
+                (current + index, following + segments + 1 + index, current + segments + 1 + index),
+            ))
+    bottom = 0
+    top = (len(levels) - 1) * row
+    for index in range(segments):
+        faces.extend((
+            (bottom + index, bottom + index + 1, bottom + segments + 1 + index + 1),
+            (bottom + index, bottom + segments + 1 + index + 1, bottom + segments + 1 + index),
+            (top + index + 1, top + index, top + segments + 1 + index),
+            (top + index + 1, top + segments + 1 + index, top + segments + 1 + index + 1),
+        ))
+    return verts, faces
+
+
+def crown_emblem():
+    return concat([
+        box((-0.075, 0.237, SEAT_H + 0.28), (0.15, 0.018, 0.024)),
+        box((-0.065, 0.237, SEAT_H + 0.304), (0.03, 0.018, 0.065)),
+        box((-0.015, 0.237, SEAT_H + 0.304), (0.03, 0.018, 0.095)),
+        box((0.035, 0.237, SEAT_H + 0.304), (0.03, 0.018, 0.065)),
+    ])
 
 
 def chair_folding():
