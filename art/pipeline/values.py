@@ -4,7 +4,12 @@ BUDGET = {
     'environment_triangles': 80000,
     'texture_mb': 128,
     'max_texture_dim': 2048,
-    'max_materials': 24,
+    # 25 since the Rooftop chairs stopped borrowing a poker chip's rim as their
+    # chrome and were given a chrome material of their own. Paid for
+    # deliberately rather than absorbed: draw calls, the number that actually
+    # costs frame time, sit at 58 of 120, and a material shared between a chair
+    # pedestal and a 100 chip means restyling the chips restyles the furniture.
+    'max_materials': 25,
     'max_draw_calls': 120,
     'character_triangles': 15000,
     'character_quad_min': 0.85,

@@ -176,6 +176,19 @@ def felt_oval():
 
 
 def wood_pedestal():
+    """The table body, from the felt down to the floor.
+
+    Both of its quad bands used to be triangulated as (a, b, d) and (b, c, d).
+    For a quad a-b-d-c that second triangle never touches a: the two triangles
+    cross each other through the middle of the quad and leave the corner by a
+    with no surface on it at all. Every other band in this file uses (a, b, d)
+    and (a, d, c), which is the tiling that actually covers a quad.
+
+    The table therefore had a hole in every second facet all the way around its
+    skirt, and from the play camera - low, close, with the base filling the
+    bottom third of frame - it read as a ring of black zigzag teeth. It was the
+    single ugliest thing in the render and it was never a material or a light.
+    """
     top = ring(FELT_RX, FELT_RY, TABLE_TOP, TABLE_SEG)
     mid = ring(FELT_RX * 0.85, FELT_RY * 0.85, TABLE_TOP - 0.35, TABLE_SEG)
     bottom = ring(FELT_RX * 0.95, FELT_RY * 0.95, 0.0, TABLE_SEG)
@@ -190,7 +203,7 @@ def wood_pedestal():
         c = base + TABLE_SEG + i
         d = base + TABLE_SEG + (i + 1) % TABLE_SEG
         faces.append((a, b, d))
-        faces.append((b, c, d))
+        faces.append((a, d, c))
     second = len(verts)
     verts.extend(mid)
     verts.extend(bottom)
@@ -200,7 +213,7 @@ def wood_pedestal():
         c = second + TABLE_SEG + i
         d = second + TABLE_SEG + (i + 1) % TABLE_SEG
         faces.append((a, b, d))
-        faces.append((b, c, d))
+        faces.append((a, d, c))
     centre = len(verts)
     verts.append((0.0, 0.0, 0.0))
     bbase = len(verts)

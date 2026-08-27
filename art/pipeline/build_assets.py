@@ -71,6 +71,7 @@ from geo import (
     wood_pedestal,
 )
 from values import (
+    BUDGET,
     VENUE_CAMERA,
     VENUE_LIGHTS,
     CHIP_DENOMS,
@@ -372,9 +373,14 @@ def build_chairs(venue, chair_fn, chair_mat, count=9):
         mesh = build_mesh_from_geo('%s_chair_%d' % (venue['id'], index), chair_geo)
         mesh.materials.append(chair_mat)
         if leather_faces is not None:
-            chrome = bpy.data.materials.get('chip_100_rim')
+            # The chair's chrome is the chair's own. This used to reach for
+            # 'chip_100_rim' - a poker chip's edge - so every chair pedestal and
+            # foot ring in the venue was painted whatever colour the 100 chip
+            # happened to be, and restyling the chips would silently restyle the
+            # furniture. The palette has defined 'chrome' the whole time.
+            chrome = bpy.data.materials.get('rooftop_chrome')
             if chrome is None:
-                raise SystemExit('FAIL: rooftop chair chrome material is missing')
+                chrome = add_material('rooftop_chrome', venue['chrome'])
             mesh.materials.append(chrome)
             for polygon in mesh.polygons[leather_faces:]:
                 polygon.material_index = 1
@@ -879,10 +885,21 @@ def build_rooftop(venue):
     parapet = build_mesh_from_geo('rooftop_parapet', parapet_ring())
     parapet.materials.append(parapet_mat)
     object_at('rooftop_parapet', parapet, (0.0, 0.0, 0.0))
+    # A strip of light along the top of the parapet, which is what an edge is.
+    #
+    # This was the whole parapet ring built a second time, at full height, made
+    # emissive and raised 1.1m - so the terrace was walled in by an 8.2m glowing
+    # box standing from 1.1m to 2.22m, directly at eye level for a camera at
+    # 1.5m. It filled the top sixth of every frame with a flat tan band and hid
+    # the skyline, which sits 26m further out and is 85m wide. The room read as
+    # a beige studio cyclorama because it was standing inside one.
+    PARAPET_TOP = 1.12
+    LIT_EDGE_HEIGHT = 0.05
     lit_mat = add_emissive_material('rooftop_lit_edge', venue['parapet_lit'], 0.35)
     lit = build_mesh_from_geo('rooftop_lit_edge', parapet_ring())
     lit.materials.append(lit_mat)
-    object_at('rooftop_lit_edge', lit, (0.0, 0.0, 1.1))
+    lit_object = object_at('rooftop_lit_edge', lit, (0.0, 0.0, PARAPET_TOP - LIT_EDGE_HEIGHT))
+    lit_object.scale = (1.001, 1.001, LIT_EDGE_HEIGHT / PARAPET_TOP)
     planter_mat = add_material('rooftop_planter', venue['planter'])
     for index in range(6):
         angle = 2.0 * math.pi * index / 6
@@ -1517,7 +1534,11 @@ def checker_check_fail(venue_id, report, failures, gltf):
         failures.append('download budget exceeded: %.0fKB > %dKB' % (report.glb_kb, DOWNLOAD_BUDGET_KB))
     if report.total_triangles > 250000:
         failures.append('scene triangle budget exceeded: %d' % report.total_triangles)
-    if report.materials > 24:
+    # Read the budget rather than restating it. This was a hardcoded 24 while
+    # values.py held the real number, so raising the budget in the one place it
+    # is documented left the build still failing on a copy of it - two numbers
+    # for one rule, which is the same fault as two colour conversions.
+    if report.materials > BUDGET['max_materials']:
         failures.append('material budget exceeded: %d' % report.materials)
     if report.draw_calls > 120:
         failures.append('draw-call budget exceeded: %d' % report.draw_calls)
