@@ -1797,9 +1797,13 @@ input:focus-visible {
 /* Venue picker. Shown only before the first hand - changing rooms mid-hand
    would move the table out from under a live decision. */
 .venue-picker {
+  /* Shares a row with the lobby toggle, which is absolutely positioned at the
+     same top. The two used to overlap at left 96 and 240, so the toggle sat on
+     top of the second venue and "The Laundromat" read as "...omat" in every
+     screenshot taken this month. */
   position: absolute;
   top: 130px;
-  left: 96px;
+  left: 228px;
   z-index: 22;
   display: flex;
   gap: 10px;
@@ -2134,7 +2138,7 @@ input:focus-visible {
 .lobby-toggle-button {
   position: absolute;
   top: 130px;
-  left: 240px;
+  left: 96px;
   z-index: 22;
   padding: 10px 20px;
   border: 1px solid var(--river-room-edge);
