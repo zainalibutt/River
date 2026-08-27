@@ -8,7 +8,7 @@ import {
   createRiverAuthClient,
   ensureRiverSession,
   loadBrowserAuthConfig,
-  upgradeRiverSession,
+  signInToRiver,
 } from '@/lib/auth'
 
 /**
@@ -59,6 +59,7 @@ export function ClubMenu() {
   const inviteRef = useRef<HTMLInputElement>(null)
   const authRef = useRef<SupabaseClient | null>(null)
   const [signIn, setSignIn] = useState<'idle' | 'editing' | 'sent' | 'error'>('idle')
+  const [returning, setReturning] = useState(false)
   const [email, setEmail] = useState('')
   const emailRef = useRef<HTMLInputElement>(null)
 
@@ -113,7 +114,8 @@ export function ClubMenu() {
     const address = email.trim()
     if (client === null || address.length === 0) return
     try {
-      await upgradeRiverSession(client, address, window.location.origin)
+      const outcome = await signInToRiver(client, address, window.location.origin)
+      setReturning(outcome === 'returning')
       setSignIn('sent')
     } catch {
       setSignIn('error')
@@ -241,6 +243,19 @@ export function ClubMenu() {
                 {me.balance === null ? '—' : me.balance.toLocaleString('en-GB')}
               </div>
               <div className="club-capsule-label">Chips</div>
+            </div>
+          </div>
+        ) : null}
+
+        {signIn === 'sent' ? (
+          <div className="club-capsule club-capsule-signin club-scene">
+            <div className="club-field">
+              <span className="club-capsule-label">Check your email</span>
+              <span className="club-capsule-sub">
+                {returning
+                  ? 'A link to sign back into your account is on its way.'
+                  : 'A link to keep this session is on its way.'}
+              </span>
             </div>
           </div>
         ) : null}

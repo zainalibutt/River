@@ -48,6 +48,54 @@ export async function ensureRiverSession(client: SupabaseClient): Promise<Sessio
   return anonymous.data.session
 }
 
+/**
+ * What actually happens when somebody types their email in.
+ *
+ * There are two different people behind that box and the product only ever
+ * handled one of them.
+ *
+ * A guest who has never had an account wants their anonymous session *kept* -
+ * their chips, streaks and cosmetics are on it, and `updateUser({ email })`
+ * attaches an address to that same player id so nothing is left behind.
+ *
+ * A player who already has an account and is on a new browser wants to be let
+ * back into it. For them `updateUser` fails with 422, "a user with this email
+ * address has already been registered", because the address belongs to a
+ * different row - and that is exactly what a returning player looks like. The
+ * answer is a one-time link that signs them in to the account they already
+ * have. Their throwaway guest session is discarded, which is right: the chips
+ * they care about are on the real account.
+ *
+ * Trying the upgrade first matters. Doing it the other way round would sign a
+ * genuine first-timer into a fresh account and silently strand the bankroll
+ * they just built.
+ */
+export type SignInOutcome = 'upgraded' | 'returning'
+
+export async function signInToRiver(
+  client: SupabaseClient,
+  email: string,
+  emailRedirectTo?: string,
+): Promise<SignInOutcome> {
+  try {
+    await upgradeRiverSession(client, email, emailRedirectTo)
+    return 'upgraded'
+  } catch (error) {
+    if (!isAlreadyRegistered(error)) throw error
+  }
+  const options = emailRedirectTo === undefined ? {} : { emailRedirectTo }
+  const sent = await client.auth.signInWithOtp({ email, options })
+  if (sent.error !== null) throw sent.error
+  return 'returning'
+}
+
+function isAlreadyRegistered(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const status = 'status' in error ? error.status : undefined
+  const message = 'message' in error && typeof error.message === 'string' ? error.message : ''
+  return status === 422 || /already been registered|already registered/i.test(message)
+}
+
 export async function upgradeRiverSession(
   client: SupabaseClient,
   email: string,
