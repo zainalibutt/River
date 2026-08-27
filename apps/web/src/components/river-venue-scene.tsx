@@ -15,6 +15,7 @@ import {
 import * as THREE from 'three'
 import { type OrbitControls as OrbitControlsImpl, RectAreaLightUniformsLib } from 'three-stdlib'
 import { type AnimationCue, idleCueFor, missingClips } from '@/lib/animation'
+import { frameMetrics, TABLE_REGIONS } from '@/lib/frame-metrics'
 import {
   type LightingSidecar,
   loadLightingSidecar,
@@ -482,7 +483,33 @@ export function RiverScene({ seatIds, seatRefs, venueId, cues = [] }: SceneProps
         // measure it failed because there was nothing to read it from. This is
         // the instrument: camera, controls and scene graph, in development.
         if (process.env.NODE_ENV !== 'production') {
-          Object.assign(window, { riverScene: state })
+          Object.assign(window, {
+            riverScene: state,
+            // The rendered frame, as numbers. Every visual judgement on this
+            // project so far has been made against Blender or against the
+            // asset bytes, and two confident wrong answers came out of that -
+            // linear base colours read as sRGB, and rect-area nits compared
+            // against spot candela. Neither survives a look at actual pixels.
+            //
+            // The render and the read have to sit in one synchronous block.
+            // The context is created without preserveDrawingBuffer, so the
+            // buffer is valid until the browser composites and empty after -
+            // reading it a tick later returns black, which reads exactly like
+            // a scene that failed to draw.
+            riverFrame: (samples = 480) => {
+              state.gl.render(state.scene, state.camera)
+              const source = state.gl.domElement
+              const height = Math.max(1, Math.round((samples * source.height) / source.width))
+              const surface = document.createElement('canvas')
+              surface.width = samples
+              surface.height = height
+              const context = surface.getContext('2d')
+              if (context === null) return null
+              context.drawImage(source, 0, 0, samples, height)
+              const { data } = context.getImageData(0, 0, samples, height)
+              return frameMetrics(data, samples, height, TABLE_REGIONS)
+            },
+          })
         }
       }}
       gl={{
