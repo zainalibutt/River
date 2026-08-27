@@ -403,7 +403,7 @@
     <p class="sub">
       Where the build actually stands, measured against the tree rather than
       against memory. Phases 1&ndash;4 are complete and in production; Phase&nbsp;5 &mdash; art, characters
-      and the long tail &mdash; is the active phase. 792 tests green, the full stack authenticated end to end, and the browser finally renders the room the venues were measured for.
+      and the long tail &mdash; is the active phase. 823 tests green, the full stack authenticated end to end, and the browser finally renders the room the venues were measured for.
     </p>
   </header>
 
@@ -504,6 +504,9 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>Nameplates are held, not worn</b> &mdash; nine lit cards floated over the table permanently, competing with every face behind them. They appear on hold now. It also turned up a real leak: a key held when the window loses focus never sends its keyup, so alt-tabbing left the card peek up <em>showing your hand to the room</em>.</span></li>
+          <li><span class="dot done"></span><span><b>The repository reads as River</b> &mdash; 53 mentions of the reference game cleaned out of fourteen files, the study and the stills untracked, and a gate added so it cannot come back. It caught two "clone" phrasings a name search had missed, and a later pass caught the live database project ref sitting in a tracked ops note. The gate's own first pattern matched the word "internationalisation", which is the lesson it exists to teach.</span></li>
+          <li><span class="dot fail"></span><span><b>Three claims retracted in one day</b> &mdash; the chairs were never oversized, the table was never too low, and the lighting imbalance was never 88x. Each was judged from a render or from mismatched units and then asserted as measurement, and one reached another lane as a packet. <b>Codex caught two of them by checking the asset and declining to act</b>, which is exactly what the laws are for and the strongest single argument that the review discipline works.</span></li>
           <li><span class="dot done"></span><span><b>The HUD is off the felt</b> &mdash; the radial menu drew a <b>420px disc even with no action to take</b>, purely to hold the words "choose an open seat", so the largest element on screen was a dead control lying across the near table rail. The pot was 52px cream numerals centred on the table and reads zero for most of a hand. Measured after: HUD coverage <b>3.7 percent</b> of the stage and <b>zero persistent elements intersecting the felt</b>, which is the reference's one hard rule.</span></li>
           <li><span class="dot done"></span><span><b>A seat nobody sits in no longer has a body in it</b> &mdash; the venue bakes nine characters in as geometry, so the table showed nine strangers whatever the room said. Occupancy now comes off the room view. The chair stays either way: an empty chair is set dressing, an empty seat with a person in it is a lie about who is at the table. Lint caught the wiring half-done, where the prop was accepted and never passed on.</span></li>
           <li><span class="dot done"></span><span><b>The camera sits where a player would</b> &mdash; 3.2m out and 1.5m up at 16 degrees, against 6.1m and 4.05m at 30. The old placement stood <em>outside the parapet</em>, since the terrace is only 4.0m across, and looked down into the open tops of the seat cylinders.</span></li>
@@ -717,8 +720,8 @@
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> 44e45d6</span>
-    <span><b>Tests</b> 792 green</span>
+    <span><b>HEAD</b> 4d2b9f1</span>
+    <span><b>Tests</b> 823 green</span>
     <span><b>Lint &amp; typecheck</b> clean</span>
     <span><b>Production</b> live</span>
     <span><b>Design docs</b> 19</span>
