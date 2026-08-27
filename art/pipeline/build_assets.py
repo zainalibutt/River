@@ -684,8 +684,35 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
                 clone.data.name = 'char_' + variant + '_body'
             else:
                 clone.data.name = 'char_' + variant + '_garment'
+            # Keep the atlas the character arrived wearing.
+            #
+            # There are two atlas painters on this project. The character build
+            # paints a real one - brows, eye sockets, a nose, a lip line, and
+            # the soft shadow masses that let a face read at ninety pixels - and
+            # this file painted a second one that is flat colour per island,
+            # 'face' being a single orange-brown. Assembly then assigned the
+            # flat one over the top, so every face in the game was blank no
+            # matter how carefully the character build drew it.
+            #
+            # The venue's atlas stays as the fallback for a character that
+            # arrives without one, because a mesh with no material is worse than
+            # a flat one. But if the character brought a texture, that is the
+            # authored article and it wins.
+            inherited = next(
+                (
+                    material
+                    for material in source.data.materials
+                    if material is not None
+                    and material.use_nodes
+                    and any(node.type == 'TEX_IMAGE' for node in material.node_tree.nodes)
+                ),
+                None,
+            )
             clone.data.materials.clear()
-            clone.data.materials.append(garment_material if is_garment else atlas_material)
+            if is_garment:
+                clone.data.materials.append(garment_material)
+            else:
+                clone.data.materials.append(inherited or atlas_material)
             slot = source.get('cosmeticSlot')
             cosmetic_id = loadout.get(slot) if slot is not None else None
             clone['paletteIndex'] = body_palette_index
@@ -788,6 +815,17 @@ def build_venue_characters(venue):
     for template in templates.values():
         for obj in template:
             bpy.data.objects.remove(obj, do_unlink=True)
+    # The venue's flat atlas is a fallback, so it only ships if something fell
+    # back to it. Every character now arrives wearing its own painted one, and
+    # leaving the spare behind put the Rooftop over its material budget with a
+    # texture nothing sampled.
+    if not any(
+        material is atlas_material
+        for mesh in bpy.data.meshes
+        for material in mesh.materials
+        if material is not None
+    ):
+        bpy.data.materials.remove(atlas_material)
     for action in list(bpy.data.actions):
         if action.users == 0:
             bpy.data.actions.remove(action)

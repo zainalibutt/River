@@ -9,7 +9,15 @@ BUDGET = {
     # deliberately rather than absorbed: draw calls, the number that actually
     # costs frame time, sit at 58 of 120, and a material shared between a chair
     # pedestal and a 100 chip means restyling the chips restyles the furniture.
-    'max_materials': 25,
+    # 26 since the characters wear the atlas they were painted with rather
+    # than a flat one the assembly painted over the top. Male and female carry
+    # a face each, which is two textured materials where there had been one
+    # untextured; the flat spare is dropped when nothing falls back to it.
+    # Two 1024 atlases is 8MB against a 128MB budget and draw calls sit at 65
+    # of 120, so the cost is a material slot and nothing else. Merging the two
+    # faces into one atlas would buy the slot back and is the obvious next
+    # economy if this ever gets tight.
+    'max_materials': 26,
     'max_draw_calls': 120,
     'character_triangles': 15000,
     'character_quad_min': 0.85,

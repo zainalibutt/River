@@ -141,6 +141,42 @@ def fill_gradient(pixels, cell_x, cell_y, lower, upper):
         fill_rect(pixels, x0, y0 + local_y, x0 + width, y0 + local_y + 1, colour)
 
 
+def shade_ellipse(pixels, centre_x, centre_y, radius_x, radius_y, darken, softness=0.45):
+    """Darken a soft-edged oval, rather than drawing a line on top of the skin.
+
+    A face at this camera is about ninety pixels tall, and the atlas cell that
+    paints it is 128 by 256 - so every texel is downsampled roughly three to one
+    on its way to the screen. Line work does not survive that. A two-pixel brow
+    and a three-pixel lip average back into flat skin, which is why the faces
+    read as blank ovals with two dots however carefully the features were drawn.
+
+    What survives downsampling is mass: broad regions of value with soft edges.
+    A head reads as a lit oval with darker sockets, a darker band under the brow
+    ridge and darker sides, and that structure is legible at any size because
+    averaging preserves it. This darkens rather than paints a colour, so it
+    works over any skin tone the palette supplies.
+    """
+    for y in range(centre_y - radius_y, centre_y + radius_y + 1):
+        normal_y = (y - centre_y) / max(1, radius_y)
+        for x in range(centre_x - radius_x, centre_x + radius_x + 1):
+            normal_x = (x - centre_x) / max(1, radius_x)
+            distance = math.sqrt(normal_x * normal_x + normal_y * normal_y)
+            if distance > 1.0:
+                continue
+            # Full strength in the middle, easing to nothing at the rim.
+            falloff = 1.0 if distance < softness else (1.0 - distance) / max(1e-6, 1.0 - softness)
+            amount = darken * falloff
+            if x < 0 or y < 0 or x >= ATLAS_SIZE or y >= ATLAS_SIZE:
+                continue
+            # Same row order as set_pixel: the buffer's first row is the bottom
+            # of the image. Indexing without the flip writes every shadow into
+            # the mirrored cell, which put this one silently in the palette
+            # swatches and left the face exactly as it was.
+            index = ((ATLAS_SIZE - 1 - y) * ATLAS_SIZE + x) * 4
+            for channel in range(3):
+                pixels[index + channel] = max(0, min(255, int(pixels[index + channel] * (1.0 - amount))))
+
+
 def paint_ellipse(pixels, centre_x, centre_y, radius_x, radius_y, colour):
     for y in range(centre_y - radius_y, centre_y + radius_y + 1):
         normal_y = (y - centre_y) / max(1, radius_y)
@@ -168,6 +204,21 @@ def paint_face_cell(pixels, female):
     eye_y = round(height * 0.58)
     brow_y = round(height * 0.67)
     lip_y = round(height * 0.31)
+    centre_x = x0 + width // 2
+
+    # Form first, features second. These are the masses a face keeps when it is
+    # ninety pixels tall: darker sides, a band under the brow ridge, a socket
+    # around each eye, a shadow beside and beneath the nose, and one under the
+    # lower lip. Everything painted after this sits on top of that structure.
+    shade_ellipse(pixels, x0 + round(width * 0.06), round(height * 0.55), round(width * 0.30), round(height * 0.40), 0.30, 0.05)
+    shade_ellipse(pixels, x0 + round(width * 0.94), round(height * 0.55), round(width * 0.30), round(height * 0.40), 0.30, 0.05)
+    shade_ellipse(pixels, centre_x, round(height * 0.10), round(width * 0.46), round(height * 0.16), 0.26, 0.05)
+    shade_ellipse(pixels, centre_x, brow_y - 4, round(width * 0.44), round(height * 0.045), 0.24, 0.30)
+    for fraction in (0.32, 0.68):
+        shade_ellipse(pixels, x0 + round(width * fraction), eye_y + 2, 22, 15, 0.22, 0.20)
+    shade_ellipse(pixels, centre_x - 7, round(height * 0.47), 9, round(height * 0.09), 0.20, 0.20)
+    shade_ellipse(pixels, centre_x, round(height * 0.375), 15, 6, 0.24, 0.25)
+    shade_ellipse(pixels, centre_x, round(height * 0.265), round(width * 0.16), 7, 0.20, 0.25)
     for fraction in (0.32, 0.68):
         eye_x = x0 + round(width * fraction)
         paint_ellipse(pixels, eye_x, eye_y, 12, 7, (91, 59, 43, 255))
