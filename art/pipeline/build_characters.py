@@ -23,6 +23,7 @@ MPFB_MODULE = 'bl_ext.blender_org.mpfb'
 
 POISON_NAMES = ('body', 'left', 'right', 'helpergeometry')
 GARMENT_BONES = ('spine', 'clavicle', 'shoulder', 'upperarm', 'breast', 'pelvis')
+GARMENT_WELD_DISTANCE = 0.0005
 
 
 def have_mpfb():
@@ -237,6 +238,41 @@ def garment_vert_indices(obj, threshold=0.25):
     return {index for index, weight in garment_weights(obj).items() if weight >= threshold}
 
 
+def weld_garment_sources(source, indices, distance):
+    source_indices = sorted(indices)
+    parents = list(range(len(source_indices)))
+    coordinates = [source.vertices[index].co.copy() for index in source_indices]
+    buckets = {}
+    distance_squared = distance * distance
+
+    def root(index):
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    def join(left, right):
+        left = root(left)
+        right = root(right)
+        if left != right:
+            parents[right] = left
+
+    for local_index, coordinate in enumerate(coordinates):
+        cell = tuple(math.floor(component / distance) for component in coordinate)
+        for x in range(cell[0] - 1, cell[0] + 2):
+            for y in range(cell[1] - 1, cell[1] + 2):
+                for z in range(cell[2] - 1, cell[2] + 2):
+                    for candidate in buckets.get((x, y, z), ()):
+                        if (coordinate - coordinates[candidate]).length_squared <= distance_squared:
+                            join(local_index, candidate)
+        buckets.setdefault(cell, []).append(local_index)
+
+    clusters = {}
+    for local_index, source_index in enumerate(source_indices):
+        clusters.setdefault(root(local_index), []).append(source_index)
+    return list(clusters.values())
+
+
 def build_garment(obj, thickness=0.020, fabric_hex='3A2B26', threshold=0.25):
     weights = garment_weights(obj)
     indices = {i for i, w in weights.items() if w >= threshold}
@@ -247,17 +283,27 @@ def build_garment(obj, thickness=0.020, fabric_hex='3A2B26', threshold=0.25):
     garment_mesh = bpy.data.meshes.new(garment_name)
     new_verts = []
     vertex_map = {}
-    for index in sorted(indices):
-        v = source.vertices[index]
-        co = v.co
-        n = v.normal
-        new_verts.append((co[0] + n[0] * thickness, co[1] + n[1] * thickness, co[2] + n[2] * thickness))
-        vertex_map[index] = len(new_verts) - 1
+    for cluster in weld_garment_sources(source, indices, GARMENT_WELD_DISTANCE):
+        coordinates = [source.vertices[index].co for index in cluster]
+        normals = [source.vertices[index].normal for index in cluster]
+        coordinate = sum(coordinates, start=coordinates[0].copy() * 0.0) / len(coordinates)
+        normal = sum(normals, start=normals[0].copy() * 0.0)
+        if normal.length > 0.0:
+            normal.normalize()
+        new_verts.append(tuple(coordinate + normal * thickness))
+        target_index = len(new_verts) - 1
+        for source_index in cluster:
+            vertex_map[source_index] = target_index
     new_faces = []
+    seen_faces = set()
     for poly in source.polygons:
         verts = list(poly.vertices)
         if all(i in indices for i in verts):
-            new_faces.append([vertex_map[i] for i in verts])
+            face = [vertex_map[i] for i in verts]
+            face_key = tuple(sorted(face))
+            if len(set(face)) >= 3 and face_key not in seen_faces:
+                new_faces.append(face)
+                seen_faces.add(face_key)
     garment_mesh.from_pydata(new_verts, [], new_faces)
     garment_mat = add_diffuse_material(garment_name + '_mat', fabric_hex)
     garment_mesh.materials.append(garment_mat)
@@ -316,6 +362,8 @@ def main():
         actions = build_animations(armature) if armature else []
         stats = checks_for(obj)
         garment_verts = len(garment.data.vertices) if garment is not None else 0
+        garment_tris = sum((1 if len(poly.vertices) == 3 else 2) for poly in garment.data.polygons) if garment is not None else 0
+        garment_ratio = garment_verts / garment_tris if garment_tris else 0.0
         shape = shape_hash(obj)
         glb = export_glb(obj, extra=(garment,))
         manifest['characters'].append({
@@ -330,6 +378,8 @@ def main():
             'garment': garment is not None,
             'checks': stats['checks'],
             'garment_verts': garment_verts,
+            'garment_tris': garment_tris,
+            'garment_vertex_ratio': garment_ratio,
             'garment_groups': len(garment.vertex_groups) if garment is not None else 0,
             'shape_hash': shape,
         })
@@ -337,6 +387,9 @@ def main():
             name, stats['faces'], stats['tris'], stats['quad'],
             stats['groups'], stats['bones'], len(garment_vert_indices(obj)),
             len(actions), stats['checks']
+        ))
+        print('GARMENT %s vertices=%d triangles=%d vertices_per_triangle=%.3f' % (
+            name, garment_verts, garment_tris, garment_ratio
         ))
     with open(os.path.join(OUT_DIR, 'char_manifest.json'), 'w') as handle:
         json.dump(manifest, handle, indent=2)

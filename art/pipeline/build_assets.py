@@ -548,6 +548,17 @@ def import_character_templates(atlas_material, pose_legs=False):
             ))
         for obj in imported:
             apply_seated_lod(obj)
+            if obj.type == 'MESH' and (obj.name.startswith('garment_') or obj.data.name.startswith('garment_')):
+                evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+                mesh = evaluated.to_mesh()
+                try:
+                    triangles = sum(1 if len(poly.vertices) == 3 else 2 for poly in mesh.polygons)
+                    ratio = len(mesh.vertices) / triangles if triangles else 0.0
+                    print('GARMENT %s vertices=%d triangles=%d vertices_per_triangle=%.3f' % (
+                        variant, len(mesh.vertices), triangles, ratio
+                    ))
+                finally:
+                    evaluated.to_mesh_clear()
         armature = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
         if body is not None and armature is not None:
             apply_seated_rest_pose(armature, pose_legs)
