@@ -262,6 +262,7 @@ export function RiverRoomTable() {
   const [upgradeEmail, setUpgradeEmail] = useState('')
   const [kick, setKick] = useState<KickState>(null)
   const [peek, setPeek] = useState(false)
+  const [platesHeld, setPlatesHeld] = useState(false)
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
   const [raiseTo, setRaiseTo] = useState(0)
   const [dialBand, setDialBand] = useState(0)
@@ -465,6 +466,11 @@ export function RiverRoomTable() {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return
       if (event.code === 'Space') setPeek(true)
+      // Hold to read the table. The reference uses Tab for this; Tab is focus
+      // navigation in a browser and packet 2D tested that path, so River holds
+      // Shift instead. Nameplates are otherwise absent entirely - a permanent
+      // plate over every seat is the thing this replaces.
+      if (event.key === 'Shift') setPlatesHeld(true)
       if (event.key.toLowerCase() === 'c') {
         if (view.legal?.check.enabled) command({ kind: 'act', action: { kind: 'check' } })
         else if (view.legal?.call.enabled) command({ kind: 'act', action: { kind: 'call' } })
@@ -473,12 +479,21 @@ export function RiverRoomTable() {
     }
     const up = (event: KeyboardEvent) => {
       if (event.code === 'Space') setPeek(false)
+      if (event.key === 'Shift') setPlatesHeld(false)
+    }
+    // A key held when the window loses focus never sends its keyup, so the
+    // plates would stay up for good after an alt-tab.
+    const drop = () => {
+      setPeek(false)
+      setPlatesHeld(false)
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
+    window.addEventListener('blur', drop)
     return () => {
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', drop)
     }
   }, [command, view.legal])
 
@@ -917,7 +932,7 @@ export function RiverRoomTable() {
                 ? (notice ?? view.message ?? waitingCopy(view, seatedCount, isHost))
                 : kickCopy(kick.reason)}
             </div>
-            <div className="seat-ring">
+            <div className={`seat-ring${platesHeld ? ' plates-held' : ''}`}>
               {seats.map((seat, index) => (
                 <RoomSeat
                   key={seat.seat}

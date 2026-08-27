@@ -2664,3 +2664,27 @@ input:focus-visible {
   text-align: center;
   white-space: nowrap;
 }
+
+/* Nameplates are held, not worn.
+
+   The reference carries no persistent plate over a seat: a player is identified
+   by their silhouette, and the name, stack and rank appear only while a key is
+   down. River showed all of it permanently, so nine lit cards floated over the
+   table at all times and competed with every face behind them.
+
+   The bet amount and the turn marker stay visible - those are the small
+   world-space pins the reference does keep. */
+.seat .seat-copy,
+.seat .avatar {
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+  pointer-events: none;
+}
+
+.seat-ring.plates-held .seat .seat-copy,
+.seat-ring.plates-held .seat .avatar,
+.seat.hero-seat .seat-copy,
+.seat.hero-seat .avatar {
+  opacity: 1;
+  pointer-events: auto;
+}
