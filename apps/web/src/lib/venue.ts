@@ -26,8 +26,17 @@ export interface CameraPlacement {
  *
  * Aiming at the origin points the camera at the underside of the table and
  * tips the whole venue up out of frame.
+ *
+ * 0.76 is measured, not chosen. Read out of the shipped GLB: the felt plane
+ * sits at y 0.76, the rail runs 0.76 to 0.82, and a chair spans 0.38 to 0.88 -
+ * so the table clears its seats by about 0.30m, which is what a real one does.
+ *
+ * This was 0.55 for months and nothing in the asset was ever at 0.55. The
+ * camera has been aiming 21cm under the felt, and because it is also the pivot
+ * the orbit controls turn around, the whole room rotated about a point in the
+ * air beneath the table.
  */
-export const TABLE_SURFACE_HEIGHT = 0.55
+export const TABLE_SURFACE_HEIGHT = 0.76
 
 /**
  * How far the orbit may tilt, measured from straight up.
