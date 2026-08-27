@@ -825,9 +825,16 @@ export function RiverRoomTable() {
             )}
             {view.challenges.length === 0 ? null : (
               <section
-                className={`challenge-strip${socialOpen || shopOpen ? ' behind' : ''}`}
+                /* Between hands, not during one.
+
+                   Challenge progress is not play information. The reference
+                   shows nothing like it while a hand is live: the in-hand
+                   layer is an icon row, a bottom-left block, small world pins
+                   and a transient betting dial, and everything else waits.
+                   This sat top-right through every hand saying 0/25. */
+                className={`challenge-strip${socialOpen || shopOpen || view.phase === 'hand' ? ' behind' : ''}`}
                 aria-label="Today's challenges"
-                aria-hidden={socialOpen || shopOpen}
+                aria-hidden={socialOpen || shopOpen || view.phase === 'hand'}
               >
                 {view.challenges.map((entry) => (
                   <div
@@ -1057,7 +1064,7 @@ export function RiverRoomTable() {
                 ) : null}
               </div>
             )}
-            <HeroHand view={view} />
+            <HeroHand view={view} peek={peek} />
             <div className="status-line populated" aria-live="polite">
               {kick === null
                 ? (notice ?? view.message ?? waitingCopy(view, seatedCount, botSeats, isHost))
@@ -1071,7 +1078,6 @@ export function RiverRoomTable() {
                   index={index}
                   active={seat.playerId === view.currentActor?.playerId}
                   local={seat.playerId === view.selfId}
-                  peek={peek}
                   timer={seat.playerId === view.currentActor?.playerId ? turnRemaining : null}
                   timerTotal={view.turnBudgetMs ?? 1}
                   onSit={() =>
@@ -1295,7 +1301,7 @@ function Board({ cards, street }: { cards: Card[]; street: Street }) {
  * backs at their seat, because whose cards those are is exactly the
  * information a world-space position carries.
  */
-function HeroHand({ view }: { view: RoomView }) {
+function HeroHand({ view, peek }: { view: RoomView; peek: boolean }) {
   const hero = view.seats.find((seat) => seat.playerId === view.selfId)
   if (hero === undefined || !hero.hasHole) return null
   const readout = readoutFor(hero.hole ?? [], view.board)
@@ -1308,7 +1314,9 @@ function HeroHand({ view }: { view: RoomView }) {
             <CardBack />
           </>
         ) : (
-          hero.hole.map((card) => <PlayingCard key={`${card.rank}${card.suit}`} card={card} peek />)
+          hero.hole.map((card) => (
+            <PlayingCard key={`${card.rank}${card.suit}`} card={card} peek={peek} />
+          ))
         )}
       </div>
       {readout === null ? null : <p className="hero-hand-readout">{readout.full}</p>}
@@ -1359,7 +1367,6 @@ function RoomSeat({
   index,
   active,
   local,
-  peek,
   timer,
   timerTotal,
   onSit,
@@ -1370,7 +1377,6 @@ function RoomSeat({
   index: number
   active: boolean
   local: boolean
-  peek: boolean
   timer: number | null
   timerTotal: number
   onSit: () => void
@@ -1438,21 +1444,20 @@ function RoomSeat({
         onClick={onSelect}
         aria-label={`Inspect ${seat.name}`}
       />
-      {/* The hero's hand lives in the fixed block, not on a marker that moves
-          with the camera. Their seat still shows the turn state and the stack. */}
-      <div className="seat-cards">
-        {local ? null : seat.hasHole && seat.hole === null ? (
-          <>
-            <CardBack />
-            <CardBack />
-          </>
-        ) : null}
-        {local
-          ? seat.hole?.map((card) => (
-              <PlayingCard card={card} peek={peek} key={`${card.rank}${card.suit}`} />
-            ))
-          : null}
-      </div>
+      {/* Nobody's cards float over their head.
+
+          Eighteen card backs hovered above the table - two per seat, on every
+          seat, for the whole hand, including seats that had folded. The
+          reference has none: hole cards lie flat on the felt in front of the
+          player, and the only cards that ever float are the ones revealed at a
+          showdown, which is what makes that moment read as a reveal.
+
+          Whether somebody is still in the hand is said by their pin, which is
+          the size of a fingertip and already carries the fold, check, away and
+          sitting-out states. Eighteen billboards said the same thing eighteen
+          times and said it loudest for the players it no longer applied to.
+
+          The hero's own hand is the fixed bottom-left block, not here. */}
       <div className="avatar" aria-hidden="true">
         {seat.name?.slice(0, 1) ?? '?'}
       </div>
