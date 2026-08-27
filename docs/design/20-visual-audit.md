@@ -13,35 +13,37 @@ tone curve and a camera. Three of those four are unexamined.
 
 The art assets measure correctly. The render does not.
 
-## The root cause: one light is doing all the work
+## RETRACTED: "one light is doing all the work"
 
-The Blender rig authors five lights with energies from 130 to 320 - a 2.5x
-spread, balanced deliberately. Read out of the running scene, the conversion
-produces this:
+**This section claimed a 2.5x authored light spread became an 88x rendered
+spread. That was wrong, and the error was mine.**
 
-| Light | Blender energy | three.js intensity | Ratio to weakest |
-|---|---|---|---|
-| LGT-table (shadow caster) | 240 | **49.92** | 88x |
-| LGT-fire-key | 320 | 1.41 | 2.5x |
-| LGT-sky-fill | 300 | 1.32 | 2.3x |
-| LGT-pool | 190 | 0.84 | 1.5x |
-| LGT-back-fill | 130 | 0.57 | 1x |
+In three.js `RectAreaLight.intensity` is in nits (cd/m2) and
+`SpotLight.intensity` is in candela. They are different units. Putting 49.92
+next to 1.41 and calling it an 88x ratio compares a luminance to a luminous
+intensity, which means nothing.
 
-**A 2.5x authored spread becomes an 88x rendered spread.** The rig is
-functionally one hot overhead spot with four tints that contribute almost
-nothing.
+Worked correctly, illuminance at a surface is `L * A / d2` for an area light and
+`I / d2` for a spot:
 
-Two separate scales are being applied. `intensityFor` in
-`apps/web/src/lib/lighting.ts` is `energy * 0.008` for everything, then fills
-take a further `* 0.55` attenuation, while the one shadow-casting light becomes
-a `SpotLight` carrying roughly 26x that. The authored balance does not survive
-the conversion.
+| Light | Relative illuminance delivered |
+|---|---|
+| LGT-sky-fill | 1.32 nits x 196 m2 / 7^2 = **5.3** |
+| LGT-table (spot) | 49.92 cd / 3.9^2 = **3.3** |
+| LGT-fire-key | 1.41 x 36 / 5^2 = **2.0** |
 
-`ENERGY_TO_INTENSITY` was already flagged in the lane log as a first guess never
-verified by eye, with the note "tune that one number, never the individual light
-energies". That note is not enough. **The problem is not the magnitude of one
-constant, it is that area lights and the spot go through different scales**, so
-no value of that constant recovers the ratios the rig was authored with.
+The sky fill delivers *more* light to the terrace than the spot does. The rig is
+far more balanced than the retracted section claimed, and the `* 26` on the
+caster is approximately a nits-to-candela bridge - the fills average around
+30 m2 - rather than the hand-tuned fudge it was called.
+
+**Do not tune `ENERGY_TO_INTENSITY` or the `* 26` on the strength of the
+original claim.** Nothing here established that the conversion is wrong.
+
+This is the second units error in one session, after reading glTF's linear
+`baseColorFactor` as sRGB in the palette gate. Both had the same shape: a number
+read in the wrong space, reported confidently, and acted on before it was
+checked.
 
 ## What that produces on screen
 
@@ -95,10 +97,11 @@ finds them because they are bright.
 
 ## What to do, in order
 
-1. **Fix the light conversion so the authored ratios survive it.** One scale for
-   all light types, derived rather than guessed, checked against the lookdev
-   render at the same exposure. This is the single change with the most effect
-   on the picture.
+1. **Measure the rendered frame before changing any constant.** Nothing in this
+   repository measures what a player actually sees, which is how both of this
+   session's units errors survived long enough to be written down. Until a
+   rendered-frame measurement exists, every lighting change is a guess with a
+   confident number attached.
 2. **Re-grade the terrace.** A mid-grey floor is wrong for a night rooftop
    whatever the lighting does.
 3. **Give the palms a light that has green in it**, or accept blue foliage as a
