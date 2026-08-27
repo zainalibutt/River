@@ -542,13 +542,39 @@ def import_character_templates(atlas_material, pose_legs=False):
         before = set(bpy.data.objects)
         bpy.ops.import_scene.gltf(filepath=path)
         imported_all = [obj for obj in bpy.data.objects if obj not in before]
+        # Take what the character file ships, rather than guessing its names.
+        #
+        # This used to keep meshes whose data name began with "base" or whose
+        # object name began with "garment_", which was a filter written against
+        # what MPFB happened to call things. The moment the character export
+        # gained a proper body mesh and real hair geometry - char_male_body and
+        # char_male_hair - both were silently dropped, and only the garment
+        # matched. The venue lost 59,000 triangles and every texture, built
+        # without complaint, and nine skinned garments walked around with no
+        # bodies inside them.
+        #
+        # It is not the venue's business what the characters are called, but it
+        # is the venue's business whether a thing is art. A mesh carrying no
+        # material is not something anybody authored: MPFB leaves helper
+        # primitives behind at several points and a two-metre Icosphere with no
+        # material has reached this file before. Trusting the character export
+        # to have stripped its own scaffolding was tried and it put ten of them
+        # in the room, each a two-metre cone through the middle of frame.
+        #
+        # Material-bearing is the rule because it survives renaming, which the
+        # name prefixes did not, and it excludes scaffolding by what scaffolding
+        # actually is rather than by what it happens to be called this week.
         imported = [
             obj for obj in bpy.data.objects
-            if obj not in before and (
+            if obj not in before
+            and (
                 obj.type == 'ARMATURE'
-                or (obj.type == 'MESH' and (obj.data is not None and (
-                    obj.data.name.startswith('base') or obj.name.startswith('garment_')
-                )))
+                or (
+                    obj.type == 'MESH'
+                    and obj.data is not None
+                    and len(obj.data.materials) > 0
+                    and any(slot is not None for slot in obj.data.materials)
+                )
             )
         ]
         if not imported:
