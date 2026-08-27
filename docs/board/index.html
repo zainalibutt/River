@@ -504,6 +504,10 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>Every colour in every venue was wrong, and had been from the start</b> &mdash; the pipeline wrote sRGB hex straight into Blender's colour inputs and into glTF's <code>baseColorFactor</code>, and both are linear. That is not a uniform brightening: the sRGB curve is steep in the shadows, so it lifted dark albedos by up to <b>thirteen times</b> and light ones by almost nothing, compressing an entire venue toward one middle grey. The Rooftop was painted with a near-black navy felt at <code>0A121E</code> and shipped a felt reading <code>#384b60</code>; its floor, rail, chairs, parapet, mountains and skyline all landed within a factor of three of each other, and <em>the table was measurably darker than the floor it stood on</em>. This is the flat plastic look, and no lighting pass could ever have fixed it &mdash; the contrast was lost in the albedos, where light cannot reach. Two conversions had been sitting side by side, one correct and used for lights, one wrong and used for every material. The proof it was this: the shipped felt is exactly what <code>0A121E</code> becomes when sRGB is read as linear, to the byte, and so is every other surface.</span></li>
+          <li><span class="dot done"></span><span><b>The lighting had been detuned to hide it</b> &mdash; <code>ENERGY_TO_INTENSITY</code> was cut from 0.06 to 0.008 because &ldquo;a pale concrete floor went white&rdquo;. That floor is authored <code>121A1D</code>, near-black rock, and only ever looked pale because of the colour-space fault. Correcting the albedos costs the venues <b>8.34x</b> of their reflected light, measured area-weighted across all three, and 0.008 x 8.34 is 0.0667 &mdash; within ten percent of where it started. The first calibration was right, and had been bent to compensate for a bug two layers below it. Turning the lights down hid the symptom and made the flatness permanent.</span></li>
+          <li><span class="dot done"></span><span><b>The palette gate earned itself within a minute</b> &mdash; correcting the colour space made the Rooftop's real palette visible for the first time, and the gate immediately failed it: floor and parapet, the two largest surfaces in the venue, sat within <b>1.11 contrast</b> and read as one shape. They had only appeared to separate because the bug lifted them by different amounts. The reference terrace is pale lavender-grey stone, which <code>22-shot-composition.md</code> had recorded and the asset never reflected.</span></li>
+          <li><span class="dot done"></span><span><b>A reload cost a bankroll</b> &mdash; opening River minted a fresh random room id on <em>every page load</em>, because nothing ever wrote the room into the address bar. A reload did not rejoin your table, it abandoned it and opened another beside it, and the seat left behind holds the entire buy-in until the reconnect grace expires. Two reloads spent a bankroll and the third sit was refused for insufficient funds, with nothing on screen to say why. The chips were never lost; they were at a table with no door back to it. Two economy numbers made the same trap easier to fall into: the signup bankroll and the default buy-in were both exactly 100,000, and the rescue grant that exists to get a broke player seated paid 25,000 against a 50,000 minimum buy-in &mdash; half the price of a chair, so it could never once have worked.</span></li>
           <li><span class="dot done"></span><span><b>A restart used to eat every stack on the table</b> &mdash; tables live in the server process and bankrolls live in a database, and only one of those restarts. There was careful handling for both ways a seat ends while the server is alive, a kick and an expired reconnect grace, and <em>none at all</em> for the server simply stopping: the seat vanished and the buy-in that paid for it stayed debited. Confirmed against the live ledger, where two accounts sat on exactly zero with two entries each &mdash; signup grant in, buy-in out, nothing back. On a deployed server that is every seated player, every deploy. Stacks are handed back on shutdown now, idempotently. A hard kill still loses them; that wants reconciliation on startup rather than a longer shutdown.</span></li>
           <li><span class="dot done"></span><span><b>A person can sit down alone and deal</b> &mdash; the headline question, and it was deadlocked. Bots take their seats <em>on the deal</em>, deliberately, so they do not race arriving people for chairs. The client only offered a DEAL button once two seats were already taken. Alone at a bot table there was therefore no button to press and nobody coming to make it appear, and the server-side tests all passed because they submit <code>startHand</code> over the wire and never touch the control that is missing. Found by driving the actual browser client rather than the harness.</span></li>
           <li><span class="dot done"></span><span><b>A developer account exists</b> &mdash; there was no <code>admin</code>, no <code>ban</code>, no role anywhere in the codebase; the answer to &ldquo;can my account change chips and remove people&rdquo; was no, in the strict sense that the concept was absent. The role now rides in the signed token, read from <code>app_metadata</code> and <b>never</b> from <code>user_metadata</code> &mdash; the second is writable by the account holder through <code>auth.updateUser</code>, so a role kept there is one browser-console call from anybody granting themselves every power in the game. Grants are idempotent, capped, refused below zero, and a developer cannot ban themselves out of their own game.</span></li>
@@ -656,20 +660,34 @@
     </p>
     <div class="steps">
       <article class="step">
-        <h4>1 &middot; A session that survives a refresh</h4>
+        <h4>1 &middot; Look at it</h4>
         <p>
-          The play loop works &mdash; deal, four streets, showdown, payout, chips
-          conserved &mdash; and is now gated. What does not work is sitting down
-          twice. Every page load opens a <em>new</em> table and each buy-in debits
-          the full 100,000 bankroll, so two reloads spend it and the third sit is
-          refused for insufficient funds. Shutdown now returns the stacks, which
-          covers the restart case; the reload case wants the client to rejoin the
-          table it was already at rather than open another. Worth more than any
-          render.
+          Three faults landed today that each change every pixel of the render:
+          the albedos are in the right colour space for the first time, the
+          lighting is back to the calibration that was correct before it was
+          bent, and the terrace floor is the stone the reference actually uses.
+          <b>None of it has been seen.</b> The browser pane does not composite
+          WebGL unless it is displayed, and Blender is not running, so all three
+          are verified by measurement and by gates and not by eye. The next
+          thing worth doing is opening it and deciding whether the numbers were
+          right.
         </p>
       </article>
       <article class="step">
-        <h4>2 &middot; The developer panel</h4>
+        <h4>2 &middot; A session that survives a refresh</h4>
+        <p>
+          The play loop works &mdash; deal, four streets, showdown, payout, chips
+          conserved &mdash; and is gated. A reload rejoins the table it left, a
+          shutdown hands the stacks back, and the signup bankroll is no longer
+          exactly one buy-in. What is still open is the hard kill: a process that
+          dies without running its shutdown takes every seated stack with it.
+          That wants reconciliation on startup &mdash; a buy-in with no matching
+          cash-out, for a room that no longer exists, is a refund &mdash; rather
+          than a longer shutdown.
+        </p>
+      </article>
+      <article class="step">
+        <h4>3 &middot; The developer panel</h4>
         <p>
           The server surface is built and tested: grant chips, take chips, ban,
           lift, list. The role is granted with one SQL call and travels in the
@@ -680,7 +698,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>3 &middot; Chairs that are chairs</h4>
+        <h4>4 &middot; Chairs that are chairs</h4>
         <p>
           Every reference seat is black leather with a high curved back, a crown
           emblem, a chrome pedestal and a foot ring, and the player sits
@@ -691,7 +709,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>4 &middot; Dress the set</h4>
+        <h4>5 &middot; Dress the set</h4>
         <p>
           The reference rooftop is a place: a bar with a working bartender,
           statues, framed portraits, a staircase, foil curtains, fire runs along a
