@@ -1,4 +1,4 @@
-import { DEFAULT_VENUE, isVenueId, type VenueId, venueFromParams } from './venue.js'
+import { DEFAULT_VENUE, isVenueId, type VenueId, venueFromParams } from './venue'
 
 export type RoomTarget = {
   roomId: string

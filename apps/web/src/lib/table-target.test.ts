@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { initialRoomTarget, LAST_TABLE_KEY, LAST_TABLE_TTL_MS } from './table-target.js'
+import { initialRoomTarget, LAST_TABLE_KEY, LAST_TABLE_TTL_MS } from './table-target'
 
 /**
  * Which table a page load opens is worth a test, because getting it wrong does
