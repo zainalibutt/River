@@ -113,17 +113,17 @@ BASE_ATLAS_CELLS = {
 }
 
 COSMETIC_ATLAS = {
-    'cap-grey': {'slot': 'head', 'paletteIndex': 0, 'colour': (0.22, 0.24, 0.25, 1.0)},
-    'cap-navy': {'slot': 'head', 'paletteIndex': 1, 'colour': (0.08, 0.14, 0.25, 1.0)},
-    'cap-tan': {'slot': 'head', 'paletteIndex': 2, 'colour': (0.58, 0.38, 0.18, 1.0)},
-    'cap-silk': {'slot': 'head', 'paletteIndex': 3, 'colour': (0.25, 0.08, 0.12, 1.0)},
+    'cap-grey': {'slot': 'head', 'paletteIndex': 0, 'colour': (0.20, 0.20, 0.21, 1.0)},
+    'cap-navy': {'slot': 'head', 'paletteIndex': 1, 'colour': (0.055, 0.038, 0.030, 1.0)},
+    'cap-tan': {'slot': 'head', 'paletteIndex': 2, 'colour': (0.115, 0.055, 0.032, 1.0)},
+    'cap-silk': {'slot': 'head', 'paletteIndex': 3, 'colour': (0.022, 0.020, 0.020, 1.0)},
     'glasses-round': {'slot': 'face', 'paletteIndex': 4, 'colour': (0.08, 0.08, 0.09, 1.0)},
     'glasses-shade': {'slot': 'face', 'paletteIndex': 5, 'colour': (0.04, 0.18, 0.20, 1.0)},
     'glasses-mono': {'slot': 'face', 'paletteIndex': 6, 'colour': (0.67, 0.48, 0.16, 1.0)},
     'jacket-leather': {'slot': 'torso', 'paletteIndex': 7, 'colour': (0.06, 0.07, 0.08, 1.0)},
-    'jacket-bomb': {'slot': 'torso', 'paletteIndex': 8, 'colour': (0.28, 0.31, 0.34, 1.0)},
+    'jacket-bomb': {'slot': 'torso', 'paletteIndex': 8, 'colour': (0.115, 0.130, 0.145, 1.0)},
     'jacket-pinstripe': {'slot': 'torso', 'paletteIndex': 9, 'colour': (0.12, 0.13, 0.15, 1.0)},
-    'jacket-cardinal': {'slot': 'torso', 'paletteIndex': 10, 'colour': (0.46, 0.05, 0.07, 1.0)},
+    'jacket-cardinal': {'slot': 'torso', 'paletteIndex': 10, 'colour': (0.145, 0.028, 0.042, 1.0)},
     'ring-signet': {'slot': 'hands', 'paletteIndex': 11, 'colour': (0.75, 0.48, 0.10, 1.0)},
     'ring-silver': {'slot': 'hands', 'paletteIndex': 12, 'colour': (0.63, 0.67, 0.70, 1.0)},
     'ring-jade': {'slot': 'hands', 'paletteIndex': 13, 'colour': (0.06, 0.42, 0.25, 1.0)},
@@ -133,7 +133,7 @@ COSMETIC_ATLAS = {
     'watch-brass': {'slot': 'accent', 'paletteIndex': 17, 'colour': (0.55, 0.31, 0.08, 1.0)},
     'scarf-plaid': {'slot': 'accent', 'paletteIndex': 18, 'colour': (0.19, 0.32, 0.20, 1.0)},
     'pin-diamond': {'slot': 'accent', 'paletteIndex': 19, 'colour': (0.26, 0.62, 0.68, 1.0)},
-    'beanie-wool': {'slot': 'head', 'paletteIndex': 20, 'colour': (0.35, 0.16, 0.24, 1.0)},
+    'beanie-wool': {'slot': 'head', 'paletteIndex': 20, 'colour': (0.070, 0.060, 0.075, 1.0)},
     'scarf-silk': {'slot': 'accent', 'paletteIndex': 21, 'colour': (0.42, 0.16, 0.38, 1.0)},
 }
 
@@ -215,6 +215,41 @@ def remap_character_uv(obj, region, face_region=None):
             source_v = float(uv.uv.y) % 1.0
         uv.uv.x = active_u0 + active_inset_u + source_u * (active_width - active_inset_u * 2.0)
         uv.uv.y = active_v0 + active_inset_v + source_v * (active_height - active_inset_v * 2.0)
+
+
+def project_garment_uv(obj, region):
+    """Map the garment front-on, so painted structure lands where it belongs.
+
+    The garment carries the UVs it was born with, and they occupy a strip about
+    nine percent of a cell wide, off to one side. Anything painted into that
+    cell as a shape - a collar, a lapel, the wedge of shirt a jacket leaves
+    open - is then sampled by a sliver that misses it entirely, so the cloth
+    comes out one flat colour and the paint is never seen by anybody. The face
+    is projected from vertex position for exactly this reason; the torso needs
+    the same treatment and never got it.
+
+    The vertical map is set so the collar lands at the top of the wedge and the
+    sternum at its point, rather than stretching the wedge over the whole
+    garment. The back of the garment is sent to the lower part of the cell,
+    which is plain jacket, because a shirt front on somebody's back would be
+    worse than no shirt front at all.
+    """
+    if obj.type != 'MESH' or obj.data is None or not obj.data.uv_layers:
+        return
+    u0, v0, width, height = region
+    inset_u = width * 0.08
+    inset_v = height * 0.08
+    uv_layer = obj.data.uv_layers[0]
+    for loop_index, uv in enumerate(uv_layer.data):
+        vertex = obj.data.vertices[obj.data.loops[loop_index].vertex_index].co
+        across = max(-1.0, min(1.0, vertex.x / 0.40))
+        source_u = 0.5 + across * 0.5
+        if vertex.y < -0.02:
+            source_v = max(0.02, min(0.98, 0.63 + (vertex.z - 1.22) * 1.6))
+        else:
+            source_v = max(0.02, min(0.55, 0.05 + (vertex.z - 0.92) * 0.5))
+        uv.uv.x = u0 + inset_u + source_u * (width - inset_u * 2.0)
+        uv.uv.y = v0 + inset_v + source_v * (height - inset_v * 2.0)
 
 
 def apply_seated_rest_pose(armature, pose_legs=False):
@@ -431,7 +466,56 @@ def atlas_blend(a, b, amount):
     return tuple(a[index] * (1.0 - amount) + b[index] * amount for index in range(3)) + (1.0,)
 
 
-def atlas_pixel(base, x, y, male, variant, face_details=True):
+def garment_pixel(jacket, x, y):
+    """A jacket swatch: dark mass, ivory wedge, lapels bounding it.
+
+    Torso cells used to come out of `atlas_pixel` like every other cell - a skin
+    tone with a face painted into it, tinted thirteen percent towards the
+    garment colour. So a jacket was mostly the colour of a cheek, and every
+    person at the table sat within a few points of value of every other one.
+    That is the whole reason nine characters read as one grey-pink mass at
+    playing distance, and no amount of work on the geometry could have fixed it.
+
+    The shape is the one River settled on: the wedge of shirt a jacket leaves
+    open, widest at the collar and closed at the sternum, with the lapel riding
+    its boundary. Nothing below the button stance.
+    """
+    ivory = (0.74, 0.68, 0.56)
+    lapel = (0.02, 0.025, 0.03)
+    top = 0.95
+    apex = 0.63
+    half_at_collar = 0.17
+    feather = 0.022
+    colour = jacket[:3]
+    if apex - feather < y < top + feather:
+        down = (top - y) / (top - apex)
+        half = half_at_collar * (1.0 - max(0.0, min(1.0, down)))
+        across = abs(x - 0.5)
+        if y > top:
+            vertical = max(0.0, 1.0 - (y - top) / feather)
+        elif y < apex:
+            vertical = max(0.0, 1.0 - (apex - y) / feather)
+        else:
+            vertical = 1.0
+        coverage = max(0.0, min(1.0, (half - across) / feather + 0.5)) * vertical
+        colour = atlas_blend(colour, ivory, coverage)[:3]
+        edge = max(0.0, 1.0 - abs(half - across) / feather) * 0.85 * vertical
+        colour = atlas_blend(colour, lapel, edge)[:3]
+    if y > 0.955:
+        colour = atlas_blend(colour, lapel, 0.9)[:3]
+    return tuple(colour) + (1.0,)
+
+
+def atlas_pixel(base, x, y, male, variant, face_details=True, slot=None):
+    # A garment is a garment and hair is hair. Both used to be painted as skin
+    # with a face on it and a faint wash of their own colour on top.
+    if base is not None and slot == 'torso':
+        return garment_pixel(base, x, y)
+    if base is not None and slot == 'head':
+        # Hair takes the light along the crown and loses it at the hairline,
+        # which is the cheapest thing that stops a shell reading as a helmet.
+        shade = 0.82 + 0.26 * y
+        return tuple(min(1.0, channel * shade) for channel in base[:3]) + (1.0,)
     skin_warm = (0.72, 0.43, 0.29)
     skin_cool = (0.36, 0.28, 0.27)
     skin = atlas_blend(skin_cool, skin_warm, 0.34 + 0.32 * (variant % 3) / 2.0)
@@ -485,13 +569,26 @@ def build_character_atlas():
             cell_y = (y % cell_height) / cell_height
             if row == 0 and column in (0, 4):
                 pixels.extend(atlas_pixel(base_colours['skin'], cell_x, cell_y, False, column, False))
-            elif row == 0 and column in (1, 2, 3, 5):
+            elif row == 0 and column == 1:
+                # The torso cell every garment samples, whatever cosmetic the
+                # rest of the character is wearing - the garment is excluded
+                # from the cosmetic remap on purpose, so this one cell dresses
+                # every person at every table.
+                pixels.extend(garment_pixel(base_colours['torso'], cell_x, cell_y))
+            elif row == 0 and column in (2, 3, 5):
                 slot = next(name for name, cell in BASE_ATLAS_CELLS.items() if cell == (column, row))
                 pixels.extend(base_colours[slot])
             elif row > 0 and column < CHARACTER_ATLAS_COLUMNS:
                 palette_index = (row - 1) * CHARACTER_ATLAS_COLUMNS + column
                 cosmetic = next((item for item in COSMETIC_ATLAS.values() if item['paletteIndex'] == palette_index), None)
-                pixels.extend(atlas_pixel(cosmetic['colour'] if cosmetic else None, cell_x, cell_y, palette_index % 2 == 1, palette_index))
+                pixels.extend(atlas_pixel(
+                    cosmetic['colour'] if cosmetic else None,
+                    cell_x,
+                    cell_y,
+                    palette_index % 2 == 1,
+                    palette_index,
+                    slot=cosmetic['slot'] if cosmetic else None,
+                ))
             else:
                 pixels.extend((0.025, 0.025, 0.03, 1.0))
     for y in range(8):
@@ -643,12 +740,32 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
     for source in template:
         clone = source.copy()
         garment = source.type == 'MESH' and (source.name.startswith('garment_') or source.data.name.startswith('garment_'))
+        # Hair carries no cosmetic slot, so it fell through to the body branch
+        # and was remapped onto the skin cell along with the arms and the neck.
+        # It was therefore painted the exact colour of the face it sat above,
+        # which is what made a shell on the skull read as a flesh-coloured cap
+        # no matter what shape it was given.
+        # Matched as a substring, not a suffix: Blender appends .001 to any name
+        # it has already seen, and every character after the first is a copy.
+        hair = source.type == 'MESH' and (
+            '_hair' in source.name or '_hair' in source.data.name
+        )
         if source.data is not None:
             slot = source.get('cosmeticSlot')
             cosmetic_id = loadout.get(slot) if slot is not None else None
             clone.data = source.data.copy() if source.type == 'MESH' else source.data
-            if cosmetic_id is not None and not garment:
+            if hair:
+                head_cosmetic = loadout.get('head')
+                remap_character_uv(clone, atlas_region_for_cosmetic(head_cosmetic)
+                                   if head_cosmetic is not None
+                                   else atlas_region_for_slot('head'))
+            elif cosmetic_id is not None and not garment:
                 remap_character_uv(clone, atlas_region_for_cosmetic(cosmetic_id))
+            elif garment:
+                torso_cosmetic = loadout.get('torso')
+                project_garment_uv(clone, atlas_region_for_cosmetic(torso_cosmetic)
+                                   if torso_cosmetic is not None
+                                   else atlas_region_for_slot('torso'))
         bpy.context.scene.collection.objects.link(clone)
         mapping[source] = clone
     for source, clone in mapping.items():
@@ -672,9 +789,15 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
                 modifier.object = mapping[modifier.object]
         if clone.type == 'MESH':
             is_garment = source.name.startswith('garment_') or source.data.name.startswith('garment_')
+            # Hair is excluded alongside the garment. This pass sends everything
+            # else to the skin cell with a body projection, and it runs after the
+            # per-slot remap above - so the hair was given its head colour and
+            # then had it taken away again a few lines later, which is why three
+            # separate attempts to darken it changed nothing at all.
+            is_hair = '_hair' in source.name or '_hair' in source.data.name
             if clone.data.uv_layers and not is_garment:
                 clone.data.uv_layers[0].name = 'UVMap'
-            if not is_garment:
+            if not is_garment and not is_hair:
                 remap_character_uv(clone, atlas_region_for_slot('skin'), body_region)
             if is_garment:
                 apply_garment_palette(clone, garment_colour)
@@ -709,10 +832,12 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
                 None,
             )
             clone.data.materials.clear()
-            if is_garment:
-                clone.data.materials.append(garment_material)
-            else:
-                clone.data.materials.append(inherited or atlas_material)
+            # The garment used to take a flat, untextured material, so whatever
+            # was painted for it could never arrive - a jacket was a single
+            # colour by construction. It takes the character's own atlas now,
+            # projected onto its jacket swatch, which is where the collar, the
+            # lapels and the wedge of shirt actually live.
+            clone.data.materials.append(inherited or atlas_material)
             slot = source.get('cosmeticSlot')
             cosmetic_id = loadout.get(slot) if slot is not None else None
             clone['paletteIndex'] = body_palette_index

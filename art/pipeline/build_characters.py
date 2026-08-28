@@ -125,6 +125,23 @@ def set_pixel(pixels, x, y, colour):
     pixels[offset:offset + 4] = bytes(colour)
 
 
+def blend_pixel(pixels, x, y, colour, amount):
+    """Mix a colour into what is already there, rather than replacing it.
+
+    Every painter here wrote whole bytes, so any shape with an edge that was not
+    axis-aligned came out as a staircase - and the atlas cell is 128 by 256
+    magnified across a whole chest, so each of those steps is several pixels
+    wide on screen. Coverage has to be carried as a fraction and mixed in.
+    """
+    if amount <= 0.0 or x < 0 or y < 0 or x >= ATLAS_SIZE or y >= ATLAS_SIZE:
+        return
+    amount = min(1.0, amount)
+    offset = ((ATLAS_SIZE - 1 - y) * ATLAS_SIZE + x) * 4
+    for channel in range(3):
+        current = pixels[offset + channel]
+        pixels[offset + channel] = round(current + (colour[channel] - current) * amount)
+
+
 def fill_rect(pixels, x0, y0, x1, y1, colour):
     row = bytes(colour) * max(0, x1 - x0)
     for y in range(max(0, y0), min(ATLAS_SIZE, y1)):
@@ -257,19 +274,86 @@ def paint_face_cell(pixels, female):
                     paint_ellipse(pixels, x, y, 1, 1, (119, 87, 70, 255))
 
 
-def paint_garment_cell(pixels, female):
+def paint_garment_cell(pixels, base, cell_x=1, cell_y=0):
+    """Paint one jacket swatch: dark mass, ivory wedge, lapels bounding it.
+
+    This used to paint a single cell, because the character it was written for
+    was the only one anybody looked at. Every character actually seated at a
+    table has its UVs remapped onto a cosmetic swatch in rows 1 to 3 by
+    `remap_character_uv` in the venue build, and those swatches were flat
+    gradients - so the structure painted here reached the proof render and
+    nothing else. Nine people at a table wore plain rectangles of colour while
+    the character in the lookdev shot wore a shirt.
+
+    So the cell is a parameter and every jacket swatch gets the same treatment.
+    """
     width = ATLAS_SIZE // ATLAS_COLUMNS
     height = ATLAS_SIZE // ATLAS_ROWS
-    x0 = width
-    base = (70, 35, 42) if female else (30, 43, 54)
-    fill_gradient(pixels, 1, 0, tuple(max(0, channel - 14) for channel in base), tuple(min(255, channel + 12) for channel in base))
-    edge = (68, 73, 76, 255)
-    paint_line(pixels, x0 + width // 2, round(height * 0.18), x0 + width // 2, round(height * 0.72), 1, edge)
-    paint_line(pixels, x0 + round(width * 0.35), round(height * 0.84), x0 + width // 2, round(height * 0.72), 2, edge)
-    paint_line(pixels, x0 + round(width * 0.65), round(height * 0.84), x0 + width // 2, round(height * 0.72), 2, edge)
-    paint_line(pixels, x0 + 8, round(height * 0.13), x0 + width - 9, round(height * 0.13), 1, edge)
-    paint_line(pixels, x0 + 8, round(height * 0.31), x0 + 8, round(height * 0.45), 2, edge)
-    paint_line(pixels, x0 + width - 9, round(height * 0.31), x0 + width - 9, round(height * 0.45), 2, edge)
+    x0 = cell_x * width
+    y0 = cell_y * height
+    # A character is three values at this distance: a dark garment mass, an
+    # ivory triangle, and the head. Every previous version of this cell was a
+    # midtone, so skin, cloth and hair all sat within a few points of each other
+    # and the whole figure collapsed into one grey-pink shape the moment it was
+    # seen from the table. The garment is the largest area on screen, so it is
+    # the one that has to go dark for the other two to mean anything.
+    fill_gradient(pixels, cell_x, cell_y, tuple(max(0, channel - 8) for channel in base), tuple(min(255, channel + 9) for channel in base))
+
+    # The shirt front, as a shape rather than a stripe.
+    #
+    # This was a pair of thin near-white lines meeting in a Y whose stem ran the
+    # full height of the cell, which put a bright seam down to the navel and read
+    # as a decal printed on a t-shirt. What the eye is looking for is the wedge
+    # of shirt a jacket leaves open, so that is what is painted: widest at the
+    # collar, closing at the sternum, and stopping there. Nothing below the
+    # button stance.
+    #
+    # Painted top-down in cell space, which is bottom-up on the model - the atlas
+    # writer flips rows - so the wide end sits at the high v where the collar is.
+    ivory = (223, 213, 191)
+    lapel = (13, 15, 19)
+    centre = x0 + width / 2.0
+    top = height * 0.95
+    apex = height * 0.58
+    half_at_collar = width * 0.21
+    feather = 2.4
+
+    for local_y in range(height):
+        # 0 at the collar, 1 at the sternum, outside that range beyond the wedge.
+        down = (top - local_y) / (top - apex)
+        if down < -0.3 or down > 1.3:
+            continue
+        half = half_at_collar * (1.0 - max(0.0, min(1.0, down)))
+        if local_y > top:
+            vertical = max(0.0, 1.0 - (local_y - top) / feather)
+        elif local_y < apex:
+            vertical = max(0.0, 1.0 - (apex - local_y) / feather)
+        else:
+            vertical = 1.0
+        if vertical <= 0.0:
+            continue
+        for local_x in range(width):
+            x = x0 + local_x
+            across = abs((x + 0.5) - centre)
+            # Coverage falls off over `feather` texels, so a diagonal edge
+            # arrives as a gradient rather than as a staircase.
+            coverage = max(0.0, min(1.0, (half - across) / feather + 0.5)) * vertical
+            if coverage > 0.0:
+                blend_pixel(pixels, x, y0 + local_y, ivory, coverage)
+            # The lapel edge rides the boundary of the ivory, so it stays a
+            # bounding line rather than a stripe drawn near one.
+            edge_amount = max(0.0, 1.0 - abs(half - across) / feather) * 0.85 * vertical
+            if edge_amount > 0.0:
+                blend_pixel(pixels, x, y0 + local_y, lapel, edge_amount)
+
+    # The placket, barely present: a seam is a change of plane, not a highlight.
+    for local_y in range(round(apex), round(top)):
+        blend_pixel(pixels, round(centre), y0 + local_y, (198, 188, 168), 0.55)
+
+    # The collar band across the top of the chest.
+    for local_y in range(round(height * 0.95), round(height * 0.99)):
+        for local_x in range(8, width - 8):
+            blend_pixel(pixels, x0 + local_x, y0 + local_y, lapel, 0.9)
 
 
 def create_character_atlas(name, female):
@@ -286,8 +370,50 @@ def create_character_atlas(name, female):
             fill_gradient(pixels, column, row, lower, upper)
     skin = skin_tone(female)
     fill_gradient(pixels, 0, 0, tuple(max(0, channel - 12) for channel in skin), tuple(min(255, channel + 10) for channel in skin))
-    paint_garment_cell(pixels, female)
-    fill_gradient(pixels, 2, 0, (37, 25, 21), (72, 49, 36))
+    paint_garment_cell(pixels, (42, 18, 24) if female else (22, 26, 32))
+
+    # The swatches a seated character is actually remapped onto.
+    #
+    # This atlas is the one that ships: the venue build keeps each character's
+    # own material and only falls back to its own when there is none, so these
+    # cells are what nine people at a table are wearing. `remap_character_uv`
+    # sends every head to one of the four cap cosmetics and every torso to one
+    # of the four jackets, and both sets were flat gradients from the palette
+    # list below - which is why hair came out tan. It was the colour of a cap
+    # because it was literally painted with one.
+    #
+    # Columns come from paletteIndex in build_assets.py: index modulo eight
+    # across, one plus index over eight down. They are written out here rather
+    # than imported because the venue build imports this module, not the other
+    # way round.
+    for cell, jacket in (
+        ((7, 1), (24, 26, 30)),
+        ((0, 2), (18, 30, 27)),
+        ((1, 2), (18, 24, 40)),
+        ((2, 2), (46, 18, 22)),
+    ):
+        paint_garment_cell(pixels, jacket, cell[0], cell[1])
+
+    # Hair reads as hair when it is darker than the skin it sits against.
+    for cell, strands in (
+        ((0, 1), (24, 22, 22)),
+        ((1, 1), (46, 33, 26)),
+        ((2, 1), (74, 42, 28)),
+        ((3, 1), (96, 84, 74)),
+        ((4, 3), (30, 26, 32)),
+    ):
+        fill_gradient(
+            pixels,
+            cell[0],
+            cell[1],
+            tuple(max(0, channel - 7) for channel in strands),
+            tuple(min(255, channel + 10) for channel in strands),
+        )
+
+    # Hair, and the third value of the three. At (72, 49, 36) it was a tan that
+    # landed between the skin and the shirt, which is most of why a shell over
+    # the skull read as a cap rather than as hair - it was the colour of one.
+    fill_gradient(pixels, 2, 0, (16, 12, 11), (38, 28, 23))
     paint_face_cell(pixels, female)
     fill_gradient(pixels, 4, 0, tuple(max(0, channel - 10) for channel in skin), tuple(min(255, channel + 12) for channel in skin))
     fill_gradient(pixels, 5, 0, (118, 89, 46), (205, 169, 93))
@@ -369,7 +495,7 @@ def apply_garment_atlas(obj, material):
 
 def build_hair(obj, material, female):
     segments = 16
-    ring_angles = (0.18, 0.46, 0.74, 1.02, 1.28)
+    rings = 6
     centre_y = -0.044
     centre_z = 1.558
     radius_x = 0.108
@@ -377,50 +503,37 @@ def build_hair(obj, material, female):
     radius_z = 0.122
     vertices = []
     faces = []
-    for angle in ring_angles:
+    # A hairline, rather than a bowl with a peak on it.
+    #
+    # Every ring used to stop at the same angle from the crown all the way
+    # round, so the shell met the forehead at the same height it met the nape.
+    # That is a hat, and a swept tube across the brow made it unmistakably a
+    # flat cap. Real hair sits high at the forehead and runs down at the back
+    # and sides, and at this distance that boundary is most of what says hair.
+    #
+    # -Y is the direction the face looks, so the limit is pulled up where the
+    # forehead is and let down everywhere else. Squaring the bias keeps the
+    # temples low instead of tapering them away with the brow.
+    for ring in range(rings):
+        span = ring / (rings - 1)
         for segment in range(segments):
             around = 2.0 * math.pi * segment / segments
+            front = max(0.0, -math.sin(around))
+            limit = (1.82 if female else 1.66) - 0.62 * front * front
+            angle = 0.16 + span * (limit - 0.16)
             vertices.append((
                 radius_x * math.sin(angle) * math.cos(around),
                 centre_y + radius_y * math.sin(angle) * math.sin(around),
                 centre_z + radius_z * math.cos(angle),
             ))
     faces.append(tuple(range(segments - 1, -1, -1)))
-    for ring in range(len(ring_angles) - 1):
+    for ring in range(rings - 1):
         first = ring * segments
         second = (ring + 1) * segments
         for segment in range(segments):
             following = (segment + 1) % segments
             faces.append((first + segment, first + following, second + following, second + segment))
 
-    def add_sweep():
-        start = len(vertices)
-        sections = 5
-        sides = 6
-        for section in range(sections):
-            blend = section / (sections - 1)
-            x = -0.082 + blend * 0.164
-            arch = math.sin(math.pi * blend)
-            sweep_y = centre_y - radius_y - 0.002 - arch * 0.012
-            sweep_z = 1.625 + arch * (0.03 if female else 0.024)
-            for side in range(sides):
-                around = 2.0 * math.pi * side / sides
-                vertices.append((
-                    x,
-                    sweep_y + math.cos(around) * 0.016,
-                    sweep_z + math.sin(around) * 0.017,
-                ))
-        faces.append(tuple(start + side for side in range(sides - 1, -1, -1)))
-        for section in range(sections - 1):
-            first = start + section * sides
-            second = first + sides
-            for side in range(sides):
-                following = (side + 1) % sides
-                faces.append((first + side, first + following, second + following, second + side))
-        final = start + (sections - 1) * sides
-        faces.append(tuple(final + side for side in range(sides)))
-
-    add_sweep()
     hair_mesh = bpy.data.meshes.new(obj.name + '_hair')
     hair_mesh.from_pydata(vertices, [], faces)
     hair_mesh.materials.append(material)
