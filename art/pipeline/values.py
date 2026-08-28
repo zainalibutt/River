@@ -25,7 +25,19 @@ BUDGET = {
     'character_bones_min': 60,
 }
 
-CHARACTER_CULL_FRACTION = 0.34
+# Where the body stops.
+#
+# The base mesh is an anatomically complete nude human, and the garment is
+# derived from the body's own vertices - so whatever the body has, the cloth is
+# moulded around. At 0.34 the cut fell at mid-thigh, which left the groin, and
+# it showed both as bare skin and, once the cloth was pushed out over it, as a
+# shape through the cloth.
+#
+# 0.56 cuts just above it, at the line where the garment wraps rather than
+# tapers. These people are seated at a table with a top at 0.76m and the cut is
+# under it, so nothing below was ever going to be seen; it is triangles saved as
+# well as the only defensible place to stop.
+CHARACTER_CULL_FRACTION = 0.56
 CHARACTER_MESH_PREFIX = 'char_'
 
 FELT_RX = 1.24
