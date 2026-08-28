@@ -704,12 +704,123 @@ def smooth_garment_boundaries(obj, iterations=4):
     return len(boundary)
 
 
+def drape_garment(obj, iterations=6, factor=0.5):
+    """Let the cloth hang instead of shrink-wrapping the anatomy.
+
+    The garment is built by pushing body vertices along their own normals, so it
+    inherits every contour the body has - including the ones a shirt does not
+    show. On the rendered character that is legible as pectorals and a navel
+    through an opaque shirt, which reads as a wet t-shirt and was mistaken twice
+    for the body poking through the cloth. It is not: it is the cloth, correctly
+    drawn, in the shape of a torso.
+
+    Real cloth spans between the points that carry it - shoulders, chest, the
+    hem - and ignores everything shallower than its own stiffness. Laplacian
+    smoothing on the interior is the cheapest expression of that: it flattens
+    high-frequency detail while leaving the overall mass alone, because a
+    smoothed vertex moves towards the average of its neighbours, and on a broad
+    curve that average is already where it sits.
+
+    Only interior vertices move. The boundary is the hem, the collar and the
+    sleeve openings, and those are shaped deliberately.
+
+    Smoothing shrinks a surface slightly, which would once have pulled the cloth
+    back inside the body. Over the torso it cannot do any harm now, because
+    `uncover_body_under_garment` has taken the body out from under it. The
+    sleeves are the limit: they wrap an arm that is still there, and at fourteen
+    iterations they shrink far enough to sit inside it, putting a patch of bare
+    shoulder through each one. Six is the most this takes before that shows.
+    """
+    mesh_data = bmesh.new()
+    mesh_data.from_mesh(obj.data)
+    boundary = {
+        vertex for edge in mesh_data.edges if len(edge.link_faces) == 1 for vertex in edge.verts
+    }
+    interior = [vertex for vertex in mesh_data.verts if vertex not in boundary]
+    if not interior:
+        mesh_data.free()
+        return 0, 0.0
+    before = {vertex.index: vertex.co.copy() for vertex in interior}
+    for _ in range(iterations):
+        bmesh.ops.smooth_vert(
+            mesh_data,
+            verts=interior,
+            factor=factor,
+            use_axis_x=True,
+            use_axis_y=True,
+            use_axis_z=True,
+        )
+    moved = sum((vertex.co - before[vertex.index]).length for vertex in interior) / len(interior)
+    mesh_data.to_mesh(obj.data)
+    mesh_data.free()
+    return len(interior), moved
+
+
 def boundary_edge_count(mesh):
     mesh_data = bmesh.new()
     mesh_data.from_mesh(mesh)
     count = sum(1 for edge in mesh_data.edges if len(edge.link_faces) == 1)
     mesh_data.free()
     return count
+
+
+def uncover_body_under_garment(obj, indices, margin=1):
+    """Delete the body faces the cloth covers.
+
+    The clearance pass below pushes garment vertices out of the body, but it
+    cannot finish the job: in a crevice narrower than twice the cloth thickness
+    there is no position that clears both walls, so a residue of points stays
+    behind the surface no matter how many passes run. Measured on the shipped
+    character that residue is 29 of 2,112, and it sits exactly where the body is
+    most convex - the pectorals and the navel. Those are the points that show,
+    and they read as a wet shirt.
+
+    Chasing them with a larger offset makes the cloth balloon. The cheaper and
+    more honest fix is the same one that dressed the character in the first
+    place: geometry that is not there cannot push through anything. The body
+    under the cloth is never seen, so it is deleted.
+
+    A margin of face rings around the opening is kept, because the garment sits
+    20mm outside the body and the two boundaries do not coincide. Without it the
+    hem and the sleeve ends would look into an open torso, and the material is
+    double-sided, so that interior would render rather than disappear.
+
+    Vertices are kept - only faces are removed - so vertex indices stay valid for
+    the weight transfer that has already run against them.
+    """
+    mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+
+    covered = {face for face in bm.faces if all(v.index in indices for v in face.verts)}
+    if not covered:
+        bm.free()
+        return 0, 0
+
+    # Where the cloth stops: a covered vertex that also belongs to an uncovered
+    # face is on the rim, and everything within `margin` rings of it stays.
+    rim = {
+        v.index
+        for face in bm.faces
+        if face not in covered
+        for v in face.verts
+        if v.index in indices
+    }
+    for _ in range(margin):
+        rim |= {
+            v.index
+            for face in bm.faces
+            if any(v.index in rim for v in face.verts)
+            for v in face.verts
+        }
+
+    doomed = [face for face in covered if not any(v.index in rim for v in face.verts)]
+    before = len(bm.faces)
+    if doomed:
+        bmesh.ops.delete(bm, geom=doomed, context='FACES_ONLY')
+    bm.to_mesh(mesh)
+    bm.free()
+    return len(doomed), before
 
 
 def build_garment(obj, material, thickness=0.020, threshold=0.25):
@@ -819,6 +930,12 @@ def build_garment(obj, material, thickness=0.020, threshold=0.25):
         modifier = garment_obj.modifiers.new('armature', 'ARMATURE')
         modifier.object = armature
 
+    # Last, because it invalidates the polygon list the weight transfer above
+    # reads. Faces only, so the vertex indices that transfer used stay valid.
+    removed, total = uncover_body_under_garment(obj, indices)
+    print('BODY %s: %d of %d faces removed from under the garment'
+          % (obj.name, removed, total))
+
     return garment_obj
 
 
@@ -850,6 +967,10 @@ def main():
         if garment is not None:
             apply_garment_atlas(garment, material)
         hair = build_hair(obj, material, female)
+        if garment is not None:
+            draped, drape_shift = drape_garment(garment)
+            print('DRAPE %s: %d interior vertices, mean shift %.4fm'
+                  % (garment.name, draped, drape_shift))
         garment_boundary_vertices = smooth_garment_boundaries(garment) if garment is not None else 0
         smooth_mesh_by_angle(obj.data)
         if garment is not None:
