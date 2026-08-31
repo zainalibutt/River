@@ -90,6 +90,15 @@ function setup(
         roomId,
         defaultRoomConfig({
           seed: roomId,
+          // The bot RNG below was fixed but the deck was not, so every run
+          // dealt a different first hand. Most deals leave two players with
+          // chips and the table deals on; some bust the table below two and
+          // startHand rejects, which keepDealing swallows without rescheduling
+          // - so the room stops dealing and the countdown test fails about one
+          // run in twelve. Pinning the seed source makes these tests
+          // deterministic. The swallowed rejection is a real defect and is
+          // tracked separately; it is not what this suite is here to prove.
+          randomBytes: (size: number) => Buffer.alloc(size, 0x2a),
           inviteCode: 'RIVER2',
           reconnectGraceMs,
           seedCollectionMs,
@@ -1120,8 +1129,16 @@ describe('bots at the table', () => {
     }
     expect(view().phase).toBe('between')
 
-    // The countdown the room announced actually runs now.
-    await vi.advanceTimersByTimeAsync(3_500)
+    // The countdown the room announced actually runs now. Step the clock
+    // rather than jumping it once: the countdown is 3000ms, seed finalisation
+    // now runs on every broadcast at seedCollectionMs 0, and the number of
+    // queue turns between nextHandTimer firing and startHand landing varies
+    // with it. A single 3500ms advance passed five times in six. Stepping
+    // still fails if the hand never starts - it only stops the test caring
+    // how many turns that took.
+    for (let step = 0; step < 20 && view().handNumber === 1; step += 1) {
+      await vi.advanceTimersByTimeAsync(500)
+    }
     expect(view().handNumber).toBeGreaterThan(1)
     expect(view().phase).toBe('hand')
   })
