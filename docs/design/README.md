@@ -15,7 +15,7 @@ This directory is the design equivalent of `docs/spec.md`: it is canonical. Wher
 | Author | Claude (Opus tier) |
 | Reviewer | Zain |
 | Behaviour baseline | `docs/behaviour-reference.md` |
-| Engine baseline | `9717339` and later |
+| Engine baseline | `d8fa7f0` and later |
 | Consumer | Packet 5B-R (Codex), 5B-P2 (DeepSeek) |
 
 ## Documents

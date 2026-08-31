@@ -1,6 +1,6 @@
 # 15 — Acceptance review, Packet 5B-R
 
-R3F venue renderer, committed at `529b73d`. Reviewed by Claude 2026-08-24 against `docs/design/06-interaction.md`, `10-art-direction.md` and `14-venue-build-spec.md`.
+R3F venue renderer, committed at `e2eb936`. Reviewed by Claude 2026-08-24 against `docs/design/06-interaction.md`, `10-art-direction.md` and `14-venue-build-spec.md`.
 
 Codex shipped this without a visual pass — its browser tooling was unavailable and it said so honestly. This is that pass, run against a live dev server at 1280x720.
 

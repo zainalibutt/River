@@ -1,6 +1,6 @@
 # 08 — Handoff to Packet 2C
 
-Binding constraints for Codex, plus the contract gaps found by running the engine against this design. Baseline `9717339` includes the approved all-in run-out repair and has 81 green tests. Each remaining gap has a decided handling so 2C is never blocked.
+Binding constraints for Codex, plus the contract gaps found by running the engine against this design. Baseline `d8fa7f0` includes the approved all-in run-out repair and has 81 green tests. Each remaining gap has a decided handling so 2C is never blocked.
 
 ## Binding constraints
 
@@ -45,7 +45,7 @@ handStarted > blind > blind > await > action > board > await > action > board > 
 
 The hero receives an `await` on the flop, turn and river despite no betting being possible — the only opponent has no chips behind. Real poker runs the remaining board out automatically. As it stands, every all-in hand costs the player three meaningless checks, which directly contradicts the Blackjackist-pace pillar.
 
-**Resolution:** Zain approved automatic run-outs. Commit `9717339` now advances through the remaining streets once no further betting is possible, while preserving a real call/fold decision whenever the final player with chips has not matched the outstanding wager. 2C must never auto-act on the player's behalf.
+**Resolution:** Zain approved automatic run-outs. Commit `d8fa7f0` now advances through the remaining streets once no further betting is possible, while preserving a real call/fold decision whenever the final player with chips has not matched the outstanding wager. 2C must never auto-act on the player's behalf.
 
 ### Gap 5 — `sittingOut` is true for all-in players
 

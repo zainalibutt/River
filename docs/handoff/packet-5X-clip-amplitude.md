@@ -4,7 +4,7 @@
 
 Read `docs/handoff/codex-laws.md` first.
 
-5W is committed at `877c841`. Good work, and it has not reached anybody yet —
+5W is committed at `08f5d58`. Good work, and it has not reached anybody yet —
 see step 0.
 
 ---

@@ -1,6 +1,6 @@
 # 05 — State tables
 
-Every state below was captured by running the real fixtures from `packages/engine/src/scenarios.ts` against the engine at `9717339`, not inferred from the type definitions. Values in the "observed" columns are actual output.
+Every state below was captured by running the real fixtures from `packages/engine/src/scenarios.ts` against the engine at `d8fa7f0`, not inferred from the type definitions. Values in the "observed" columns are actual output.
 
 **This document is the 2C acceptance checklist.** Packet 2C does not exit until every row has a rendered result verified in a browser.
 
@@ -152,7 +152,7 @@ A refused rebuy renders as the invalid-action state below. It is never a modal.
 
 ### Automatic all-in run-out
 
-When every live opponent is all-in and the last player with chips has matched the outstanding wager, the engine at `9717339` advances directly to the river and settles. The renderer receives board and showdown steps with no dead `await` steps between streets. If the remaining player still owes chips, the engine correctly emits one `await` so they can call or fold before the automatic run-out begins.
+When every live opponent is all-in and the last player with chips has matched the outstanding wager, the engine at `d8fa7f0` advances directly to the river and settles. The renderer receives board and showdown steps with no dead `await` steps between streets. If the remaining player still owes chips, the engine correctly emits one `await` so they can call or fold before the automatic run-out begins.
 
 ## Invalid action states
 
@@ -220,7 +220,7 @@ Phase 2 is a local solo session, so there is no network. These states are specif
 
 # Revision — behavioural states (2026-08-24)
 
-Added from `docs/behaviour-reference.md`. The engine at `9717339` does not yet expose these; they are Phase 3/4 states specified now so the HUD reserves space and 5B-R does not have to be redesigned around them.
+Added from `docs/behaviour-reference.md`. The engine at `d8fa7f0` does not yet expose these; they are Phase 3/4 states specified now so the HUD reserves space and 5B-R does not have to be redesigned around them.
 
 ## Turn indication
 

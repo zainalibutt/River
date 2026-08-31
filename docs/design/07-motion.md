@@ -107,7 +107,7 @@ The 2D equivalent, in order:
 4. `ALL IN` sets in `--fs-display` over the felt centre for 700ms, then clears.
 5. Remaining streets deal at the normal board dwell, with no action prompts if no betting is possible.
 
-Step 5 is supported by the automatic all-in run-out landed in `9717339`; see `08-handoff-2c.md`, gap 4.
+Step 5 is supported by the automatic all-in run-out landed in `d8fa7f0`; see `08-handoff-2c.md`, gap 4.
 
 ## Reduced motion
 

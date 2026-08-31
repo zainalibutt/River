@@ -1,6 +1,6 @@
 # 19 — Acceptance review, Packet 4F (fairness)
 
-Commit `d1fc23f`. Reviewed by Claude against `16-phase4-contract.md` section 1.
+Commit `72e52be`. Reviewed by Claude against `16-phase4-contract.md` section 1.
 
 **Verdict: ACCEPTED.** The security defect is closed and the construction is
 sound. 160 tests pass, up from 137.

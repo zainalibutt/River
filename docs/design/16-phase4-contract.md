@@ -1,6 +1,6 @@
 # 16 — Phase 4 contract: timers, fairness, economy, social
 
-Written against the engine and server as implemented at `df14421`. Codex implements from this once 2E lands; DeepSeek owns the deterministic economy state machine.
+Written against the engine and server as implemented at `3e58cd1`. Codex implements from this once 2E lands; DeepSeek owns the deterministic economy state machine.
 
 Phase 4 is where River stops being a poker program and becomes trustable. One item in it is a genuine security defect, so it leads.
 

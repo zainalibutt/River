@@ -24,7 +24,7 @@ One thing you could not have known: the picker you wrote those weights for was
 broken. The roll deciding whether a bot speaks was also choosing its line, so a
 silent character returned its first line one hundred percent of the time and
 your weight-3 signature lines were unreachable for the four quietest
-characters. Fixed at `732f089`. Your pack now measures correctly end to end -
+characters. Fixed at `17d9be5`. Your pack now measures correctly end to end -
 Albie reaches both his `bad_beat` lines at 75/25, Lilah all four of hers at
 50/17/17/17.
 

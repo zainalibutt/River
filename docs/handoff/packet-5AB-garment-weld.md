@@ -8,7 +8,7 @@ Read `docs/handoff/codex-laws.md`.
 
 ## 5AA is accepted, and it settled the question
 
-You proved from `801129e` that the shattered garments predate 5Z, and that the
+You proved from `85817da` that the shattered garments predate 5Z, and that the
 nine garment meshes carry identical skin, joint and weight mappings before and
 after your change. That was the right first move and it means the binding is not
 the fault. **The shards are mine to own, not yours.**
