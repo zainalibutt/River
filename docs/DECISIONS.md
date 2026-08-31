@@ -233,3 +233,86 @@ deferring an afternoon's work on the strength of an assumption nobody checked.
 
 *Rule this belongs to:* the cost of a thing is a number, not a feeling. It took
 one search to turn "defer voice lines to v2" into "voice lines cost a penny".
+
+## A public repository has no drafts
+
+This repository has been public since the day it was created. That was not
+noticed for eight days, and the assumption that there was a window before
+anyone could read it shaped several earlier choices badly.
+
+Two things had been removed at HEAD and were still readable in history: the
+reference game's name, in 183 of 265 commits, and the live database project
+ref, in 111. Both had been deleted in good faith by a later commit. Deleting a
+file at HEAD does nothing to the commits that carried it.
+
+**Rewrite, not squash.** Squashing to a single clean commit would have taken
+minutes and destroyed the thing the repository exists to show. The log carries
+the retractions, the false hypotheses ruled out, the gate that turned out to be
+fake - that is the evidence of judgement, and it is worth more than the code.
+`git filter-repo` kept all 265 commits, their messages, and their author and
+committer timestamps byte-identical while rewriting the content. The commit
+citations across thirteen files were remapped from the commit-map afterwards,
+because a record that cites commits which no longer exist is not checkable.
+
+**Delete and recreate, not wait.** Force-pushing was not enough, and this was
+tested rather than assumed: GitHub kept serving the old commits by SHA, and a
+freshly cloned copy pulled the removed file back off the server in full. The
+Actions run history publishes the head SHA of every run, so the old commits
+were enumerable without guessing. The residue only goes when the repository
+does.
+
+*Rule this belongs to:* removal is not deletion, and neither is a force-push.
+Verify what a stranger can actually fetch, from outside, before believing
+something is gone.
+
+## A gate that cannot see history is not protection
+
+`hygiene.test.ts` fails the suite if any tracked file names the reference game,
+frames the project as a reproduction, or carries something shaped like a
+project ref or a key. It works, it has caught real violations, and it was green
+for the entire period both leaks were live.
+
+It reads `git ls-files` and the working tree. It sees HEAD. It cannot see one
+commit backwards. Green meant "clean right now", and it was read as "clean".
+
+**The fix was structural, not more rules.** The ignore list named specific
+paths, so material arriving under a slightly different name was unguarded by
+default - which is exactly how 2.7GB of third-party capture material came to be
+untracked but not ignored, one `git add -A` from a public commit that would
+also have named the reference in the directory path. `docs/reference/` and
+`docs/private/` are now default-deny: everything inside is ignored forever and
+no new rule is needed when new material arrives. `PUBLISHING.md` states the
+standing rule, and states the gate's blind spot in the same breath, so the
+limitation is written down rather than invisible.
+
+**The gate still names what it blocks**, and that was deliberate. Obfuscating
+the pattern would hide the word from a search of the repository at the cost of
+a gate nobody can audit at a glance. This project has already shipped a check
+that read stale data and passed everything; a readable gate is worth more than
+a clever one.
+
+*Rule this belongs to:* know what your check does not cover, and write that
+down next to the check. A gate believed to be complete is worse than a gate
+known to be partial.
+
+## One number for the Node floor
+
+CI failed on every push for four days - 124 red runs against 3 green, the last
+green being the third commit of the project - and the cause was four sources of
+truth disagreeing about one number. `package.json` declared `engines >= 22`.
+The README said 20. The CI matrix tested both. The deploy pinned 22.
+
+`socket.ts` reads the global `WebSocket`, which Node exposes unflagged from 22,
+and the web tests run under `environment: 'node'`. So the matrix was testing a
+version the package already refused to support, against code that could not run
+on it. Node 20 reached end of life in April 2026 and GitHub deprecates it on
+its runners, so it was a configuration nobody could ship to.
+
+Dropping 20 was chosen over patching `socket.ts` to avoid the global: the
+declared floor was already 22, three of four sources agreed on it, and widening
+support to a dead runtime to keep a red job green is the wrong direction. 24
+replaced it, because that is what the work is actually done on.
+
+*Rule this belongs to:* when a value is stated in four places, it is stated in
+zero. This is the same fault as the two colour conversions and the two camera
+tables, wearing a build badge instead of a render.
