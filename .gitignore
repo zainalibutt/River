@@ -17,6 +17,7 @@ Thumbs.db
 
 # Blender asset pipeline output (generated)
 art/out/
+apps/web/public/dev-proofs/
 **/__pycache__/
 *.pyc
 
