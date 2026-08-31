@@ -10,7 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [20, 22]
+        # package.json declares engines >= 22, and socket.ts reads the global
+        # WebSocket, which Node only exposes unflagged from 22. Testing 20
+        # against that failed every push from 2026-08-24 onward - 124 red runs
+        # for a version the package already refused to support. Node 20 reached
+        # end of life in April 2026 and GitHub deprecates it on runners.
+        # 24 is what the work is actually done on.
+        node: [22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

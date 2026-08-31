@@ -30,4 +30,4 @@ Server-authoritative Texas Hold'em in TypeScript. A pure engine package owns eve
 
 Copy `.env.example` to `.env.local` for local Supabase config (data-layer work only; nothing reads it yet).
 
-Requires Node >= 20. Tests, typechecking and CI run on every push and PR against Node 20 and 22.
+Requires Node >= 22. Tests, typechecking and CI run on every push and PR against Node 22 and 24.
