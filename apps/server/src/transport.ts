@@ -982,11 +982,6 @@ export class RoomHub {
       return
     }
     this.broadcast(state, requestId, result.events, connection)
-    if (result.events.some((event) => event.kind === 'handStarted')) {
-      this.clearSeedFinalization(state)
-    } else if (result.events.some((event) => event.kind === 'seedCommitted')) {
-      this.scheduleSeedFinalization(state)
-    }
     const reply: ServerMessage = {
       kind: 'snapshot',
       roomId: connection.roomId,
@@ -1476,6 +1471,11 @@ export class RoomHub {
     this.interruptEmotes(state, events)
     this.broadcastAvatarVo(state, events)
     this.speakAboutIt(state, events)
+    if (events.some((event) => event.kind === 'handStarted')) {
+      this.clearSeedFinalization(state)
+    } else if (events.some((event) => event.kind === 'seedCommitted')) {
+      this.scheduleSeedFinalization(state)
+    }
     this.keepDealing(state, events)
   }
 

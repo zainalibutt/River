@@ -34,6 +34,7 @@ import {
   cameraPlacement,
   FELT_LIGHT_REACH,
   ORBIT_POLAR_DEGREES,
+  seatCameraAzimuth,
   TABLE_SURFACE_HEIGHT,
   VENUE_ORDER,
   type VenueId,
@@ -71,6 +72,10 @@ type SceneProps = {
   occupiedSeats?: readonly number[] | undefined
   /** What each occupied seat has in front of it, for the chip stacks. */
   seatChips?: readonly SeatChips[] | undefined
+  /** The local player's seat. The opening camera starts behind it. */
+  heroSeat?: number | null | undefined
+  /** Dev-review seat framed from inside the table for a face-side close read. */
+  reviewSeat?: number | null | undefined
 }
 
 function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
@@ -205,6 +210,16 @@ function VenueAsset({
   useLayoutEffect(() => {
     asset.scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return
+      // These nodes carry source geometry for the runtime instanced chips and
+      // cards. Rendering the source as well parked loose chips and two cards
+      // below the table at the GLB origin.
+      if (
+        object.name === 'board_card_pool' ||
+        (object.name.includes('chip') && object.name.includes('pool'))
+      ) {
+        object.visible = false
+        return
+      }
       object.castShadow = venue.shadowCasters.test(object.name)
       object.receiveShadow = object.name !== 'river_card'
     })
@@ -458,7 +473,12 @@ function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }
         const columns = stackLayout(seat.amount)
         // Sit them on the felt between the player and the board, so a stack
         // reads as that player's without covering the cards.
-        const inward = 0.62
+        // The seat ring is wider than the felt. At 0.62 the near-seat stack
+        // landed on the rail and projected against the black table apron.
+        // Measured in Chrome against the raised near rail, 0.25 keeps even the
+        // camera-side stack visible on the felt rather than projecting across
+        // the black table apron.
+        const inward = 0.25
         const baseX = seat.x * inward
         const baseZ = seat.z * inward
         for (const column of columns) {
@@ -520,17 +540,63 @@ function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }
   )
 }
 
-function CameraOrbit({ venueId }: { venueId: VenueId }) {
+function CameraOrbit({
+  venueId,
+  heroSeat = null,
+  reviewSeat = null,
+}: {
+  venueId: VenueId
+  heroSeat?: number | null
+  reviewSeat?: number | null
+}) {
   const venue = venueOf(venueId)
   const placement = useMemo(() => cameraPlacement(venue), [venue])
+  const reviewPlacement = useMemo(() => {
+    if (reviewSeat === null) return null
+    const seat = worldSeats(
+      Array.from({ length: 8 }, (_, index) => String(index)),
+      venue.seatRing,
+    )[reviewSeat]
+    if (seat === undefined) return null
+    const radius = Math.hypot(seat.x, seat.z)
+    if (radius === 0) return null
+    const inwardX = -seat.x / radius
+    const inwardZ = -seat.z / radius
+    // The source head is about 1.55m, then the venue applies its measured 0.73
+    // character scale and 5cm seat lift. Aim below the face so the proof keeps
+    // hair, neckline, hands and rail in one frame instead of clipping the chin.
+    const target: [number, number, number] = [seat.x, 1.04, seat.z]
+    const position: [number, number, number] = [
+      seat.x + inwardX * 1.45,
+      1.14,
+      seat.z + inwardZ * 1.45,
+    ]
+    return { position, target, distance: 1.453 }
+  }, [reviewSeat, venue.seatRing])
   const controls = useRef<OrbitControlsImpl>(null)
   const { camera, size } = useThree()
 
   useEffect(() => {
     if (!(camera instanceof THREE.PerspectiveCamera) || size.height === 0) return
-    camera.fov = verticalFov(venue.camera.fov, size.width / size.height)
+    camera.fov = verticalFov(
+      reviewPlacement === null ? venue.camera.fov : 52,
+      size.width / size.height,
+    )
     camera.updateProjectionMatrix()
-  }, [camera, size.width, size.height, venue.camera.fov])
+  }, [camera, reviewPlacement, size.width, size.height, venue.camera.fov])
+
+  useEffect(() => {
+    if (controls.current === null || reviewPlacement === null) return
+    camera.position.set(...reviewPlacement.position)
+    controls.current.target.set(...reviewPlacement.target)
+    controls.current.update()
+  }, [camera, reviewPlacement])
+
+  useEffect(() => {
+    if (controls.current === null || heroSeat === null) return
+    controls.current.setAzimuthalAngle(seatCameraAzimuth(heroSeat, venue.seatRing))
+    controls.current.update()
+  }, [heroSeat, venue.seatRing])
 
   useFrame((_, delta) => {
     const gamepad = navigator.getGamepads().find((candidate) => candidate !== null)
@@ -557,11 +623,11 @@ function CameraOrbit({ venueId }: { venueId: VenueId }) {
       makeDefault
       enablePan={false}
       enableZoom={false}
-      minDistance={placement.distance}
-      maxDistance={placement.distance}
+      minDistance={reviewPlacement?.distance ?? placement.distance}
+      maxDistance={reviewPlacement?.distance ?? placement.distance}
       minPolarAngle={THREE.MathUtils.degToRad(ORBIT_POLAR_DEGREES.min)}
       maxPolarAngle={THREE.MathUtils.degToRad(ORBIT_POLAR_DEGREES.max)}
-      target={placement.target}
+      target={reviewPlacement?.target ?? placement.target}
     />
   )
 }
@@ -669,6 +735,8 @@ function Scene({
   cues = [],
   occupiedSeats,
   seatChips = [],
+  heroSeat,
+  reviewSeat,
 }: SceneProps) {
   const [sidecar, setSidecar] = useState<LightingSidecar>({})
 
@@ -696,7 +764,7 @@ function Scene({
       </Suspense>
       <InstancedTablePieces seatChips={seatChips} />
       <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
-      <CameraOrbit venueId={venueId} />
+      <CameraOrbit venueId={venueId} heroSeat={heroSeat ?? null} reviewSeat={reviewSeat ?? null} />
     </>
   )
 }
@@ -708,6 +776,8 @@ export function RiverScene({
   cues = [],
   occupiedSeats,
   seatChips,
+  heroSeat,
+  reviewSeat,
 }: SceneProps) {
   const venue = venueOf(venueId)
   return (
@@ -730,7 +800,7 @@ export function RiverScene({
         // The scene is only judged in a browser, and four separate attempts to
         // measure it failed because there was nothing to read it from. This is
         // the instrument: camera, controls and scene graph, in development.
-        if (process.env.NODE_ENV !== 'production') {
+        if (window.location.pathname.startsWith('/dev/')) {
           Object.assign(window, {
             riverScene: state,
             // The rendered frame, as numbers. Every visual judgement on this
@@ -780,6 +850,8 @@ export function RiverScene({
         cues={cues}
         occupiedSeats={occupiedSeats}
         seatChips={seatChips}
+        heroSeat={heroSeat}
+        reviewSeat={reviewSeat}
       />
     </Canvas>
   )

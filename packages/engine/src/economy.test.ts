@@ -6,8 +6,8 @@ const DAY_MS = 86_400_000
 const BASE_DAY = Date.UTC(2026, 7, 24)
 
 const CONFIG: EconomyConfig = {
-  signupBankroll: 100_000,
-  rescueFloor: 25_000,
+  signupBankroll: 150_000,
+  rescueFloor: 50_000,
   rescueThreshold: 1_000,
   rescueDailyCap: 3,
   dailyBase: 10_000,
@@ -116,17 +116,17 @@ describe('claimDaily', () => {
 })
 
 describe('claimRescue', () => {
-  it('tops balance 0 up to the floor', () => {
+  it('tops balance 0 up to one legal minimum buy-in', () => {
     const decision = mustGrant(claimRescue(state(), ELIGIBLE_CONFIG, dayN(1)))
-    expect(decision.delta).toBe(25_000)
-    expect(decision.nextState.balance).toBe(25_000)
+    expect(decision.delta).toBe(50_000)
+    expect(decision.nextState.balance).toBe(50_000)
   })
 
-  it('tops balance 24000 to the floor with a 1000 delta, not 25000', () => {
+  it('tops a partial balance to the floor rather than adding the full floor', () => {
     const decision = mustGrant(claimRescue(state({ balance: 24_000 }), ELIGIBLE_CONFIG, dayN(1)))
-    expect(decision.delta).toBe(1_000)
-    expect(decision.delta).not.toBe(25_000)
-    expect(decision.nextState.balance).toBe(25_000)
+    expect(decision.delta).toBe(26_000)
+    expect(decision.delta).not.toBe(50_000)
+    expect(decision.nextState.balance).toBe(50_000)
   })
 
   it('returns null while seated', () => {
@@ -156,7 +156,7 @@ describe('claimRescue', () => {
   it('resets the daily counter on a new UTC day', () => {
     const exhausted = state({ rescuesToday: 3, rescueDay: '2026-08-24' })
     const decision = mustGrant(claimRescue(exhausted, CONFIG, dayN(2)))
-    expect(decision.delta).toBe(25_000)
+    expect(decision.delta).toBe(50_000)
     expect(decision.nextState.rescueDay).toBe('2026-08-25')
     expect(decision.nextState.rescuesToday).toBe(1)
   })

@@ -22,6 +22,8 @@ type RiverVenueProps = {
   occupiedSeats?: readonly number[] | undefined
   /** What each occupied seat has in front of it, for the chip stacks. */
   seatChips?: readonly SeatChips[] | undefined
+  heroSeat?: number | null | undefined
+  reviewSeat?: number | null | undefined
 }
 
 export function RiverVenue({
@@ -31,6 +33,8 @@ export function RiverVenue({
   cues,
   occupiedSeats,
   seatChips,
+  heroSeat,
+  reviewSeat,
 }: RiverVenueProps) {
   return (
     <RiverScene
@@ -40,6 +44,8 @@ export function RiverVenue({
       cues={cues}
       occupiedSeats={occupiedSeats}
       seatChips={seatChips}
+      heroSeat={heroSeat}
+      reviewSeat={reviewSeat}
     />
   )
 }

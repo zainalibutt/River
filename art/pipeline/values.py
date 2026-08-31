@@ -19,25 +19,15 @@ BUDGET = {
     # economy if this ever gets tight.
     'max_materials': 26,
     'max_draw_calls': 120,
-    'character_triangles': 15000,
+    # Full legs replaced the old upper-thigh cut after the permitted orbit
+    # camera proved that the lower body is visible. The source is allowed 23k;
+    # venue LOD and the 250k scene ceiling remain the shipping gates.
+    'character_triangles': 23000,
     'character_quad_min': 0.85,
     'character_groups_min': 100,
     'character_bones_min': 60,
 }
 
-# Where the body stops.
-#
-# The base mesh is an anatomically complete nude human, and the garment is
-# derived from the body's own vertices - so whatever the body has, the cloth is
-# moulded around. At 0.34 the cut fell at mid-thigh, which left the groin, and
-# it showed both as bare skin and, once the cloth was pushed out over it, as a
-# shape through the cloth.
-#
-# 0.56 cuts just above it, at the line where the garment wraps rather than
-# tapers. These people are seated at a table with a top at 0.76m and the cut is
-# under it, so nothing below was ever going to be seen; it is triangles saved as
-# well as the only defensible place to stop.
-CHARACTER_CULL_FRACTION = 0.56
 CHARACTER_MESH_PREFIX = 'char_'
 
 FELT_RX = 1.24
@@ -83,7 +73,7 @@ ROOFTOP = {
     'felt': '0A121E',
     'felt_pattern': 'D9B45B',
     'rail': '12161C',
-    'wood': '141210',
+    'wood': '21150E',
     'chair': '17181B',
     'chrome': 'B9BEC4',
     # Pale lavender-grey stone, which is what the reference terrace is made of
@@ -98,10 +88,10 @@ ROOFTOP = {
     'parapet': '0A0C0E',
     'parapet_lit': 'FFD9A0',
     'planter': '3A4046',
-    'foliage': '16241C',
+    'foliage': '223328',
     'fire': 'FF7A3C',
     'water': '2A4A6A',
-    'skyline': '1B2230',
+    'skyline': '30384A',
     'mountain': '141A26',
 }
 

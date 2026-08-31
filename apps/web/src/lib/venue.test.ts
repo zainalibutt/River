@@ -7,6 +7,7 @@ import {
   isVenueId,
   ORBIT_POLAR_DEGREES,
   SEAT_SLOTS,
+  seatCameraAzimuth,
   TABLE_SURFACE_HEIGHT,
   VENUE_ORDER,
   VENUES,
@@ -175,6 +176,16 @@ describe('field of view', () => {
 })
 
 describe('seat ring', () => {
+  it('places the camera behind whichever seat the player took', () => {
+    const ring = VENUES.rooftop.seatRing
+    const seats = worldSeats(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], ring)
+    seats.forEach((seat, index) => {
+      const azimuth = seatCameraAzimuth(index, ring)
+      const cameraDirection = { x: Math.sin(azimuth), z: Math.cos(azimuth) }
+      expect(cameraDirection.x * seat.x + cameraDirection.z * seat.z).toBeGreaterThan(0)
+    })
+  })
+
   it('lays seats on the same ellipse the pipeline seats characters on', () => {
     // art/pipeline: seat_positions(count, FELT_RX * 1.42, FELT_RY * 1.58),
     // then (x, y, z) becomes (x, z, -y). A circle here puts the side seats a

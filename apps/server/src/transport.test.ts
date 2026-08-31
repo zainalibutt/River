@@ -601,8 +601,8 @@ describe('room hub', () => {
 
 describe('economy grants over the wire', () => {
   const CONFIG: EconomyConfig = {
-    signupBankroll: 100_000,
-    rescueFloor: 25_000,
+    signupBankroll: 150_000,
+    rescueFloor: 50_000,
     rescueThreshold: 1_000,
     rescueDailyCap: 3,
     dailyBase: 10_000,
@@ -1121,9 +1121,9 @@ describe('bots at the table', () => {
     expect(view().phase).toBe('between')
 
     // The countdown the room announced actually runs now.
-    await vi.advanceTimersByTimeAsync(6_000)
+    await vi.advanceTimersByTimeAsync(3_500)
     expect(view().handNumber).toBeGreaterThan(1)
-    expect(view().phase).not.toBe('between')
+    expect(view().phase).toBe('hand')
   })
 
   it('never returns a bot its stack when the server goes down', async () => {

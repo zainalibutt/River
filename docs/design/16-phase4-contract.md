@@ -117,8 +117,8 @@ All values live in `private.economy_config`, already created in the schema with 
 
 | Grant | Value | Rule |
 |---|---|---|
-| Signup bankroll | 100,000 | once, on account creation. Already implemented |
-| Bust rescue | top up to 25,000 | when broke; capped claims per day |
+| Signup bankroll | 150,000 | once, on account creation. Already implemented |
+| Bust rescue | top up to 50,000 | when broke; capped claims per day; exactly one legal minimum entry buy-in |
 | Daily login | flat grant + streak | day 7 largest, roughly 100,000. **Flat plus streak, never percentage-compounding** |
 
 Percentage compounding was rejected in the spec: 15%/day turns 10k into ~400k in six weeks and warps every table.

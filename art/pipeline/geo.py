@@ -48,7 +48,7 @@ def polygon_disc(vertices_ring):
     verts = []
     faces = []
     centre = len(verts)
-    verts.append((vertices_ring[0][0], vertices_ring[0][1], vertices_ring[0][2]))
+    verts.append((0.0, 0.0, vertices_ring[0][2]))
     verts.extend(vertices_ring)
     n = len(vertices_ring)
     for i in range(n):
@@ -175,84 +175,93 @@ def felt_oval():
     return polygon_disc(ring(FELT_RX, FELT_RY, TABLE_TOP, TABLE_SEG))
 
 
+def oval_band(inner_rx, inner_ry, outer_rx, outer_ry, z, segments):
+    inner = ring(inner_rx, inner_ry, z, segments)
+    outer = ring(outer_rx, outer_ry, z, segments)
+    verts = inner + outer
+    faces = []
+    for i in range(segments):
+        following = (i + 1) % segments
+        faces.append((i, segments + i, segments + following))
+        faces.append((i, segments + following, following))
+    return verts, faces
+
+
+def felt_inlay_oval():
+    return oval_band(
+        FELT_RX * 0.78,
+        FELT_RY * 0.68,
+        FELT_RX * 0.79,
+        FELT_RY * 0.69,
+        TABLE_TOP + 0.002,
+        TABLE_SEG,
+    )
+
+
+def oval_loft(profiles, segments, close_profile=False, cap_bottom=False, cap_top=False):
+    verts = []
+    faces = []
+    for rx, ry, z in profiles:
+        verts.extend(ring(rx, ry, z, segments))
+    profile_pairs = len(profiles) if close_profile else len(profiles) - 1
+    for level in range(profile_pairs):
+        following_level = (level + 1) % len(profiles)
+        current = level * segments
+        following = following_level * segments
+        for i in range(segments):
+            next_i = (i + 1) % segments
+            a = current + i
+            b = current + next_i
+            c = following + i
+            d = following + next_i
+            faces.append((a, b, d))
+            faces.append((a, d, c))
+    if cap_bottom:
+        centre = len(verts)
+        verts.append((0.0, 0.0, profiles[0][2]))
+        for i in range(segments):
+            faces.append((centre, (i + 1) % segments, i))
+    if cap_top:
+        centre = len(verts)
+        top = (len(profiles) - 1) * segments
+        verts.append((0.0, 0.0, profiles[-1][2]))
+        for i in range(segments):
+            faces.append((centre, top + i, top + (i + 1) % segments))
+    return verts, faces
+
+
 def wood_pedestal():
     """The table body, from the felt down to the floor.
 
-    Both of its quad bands used to be triangulated as (a, b, d) and (b, c, d).
-    For a quad a-b-d-c that second triangle never touches a: the two triangles
-    cross each other through the middle of the quad and leave the corner by a
-    with no surface on it at all. Every other band in this file uses (a, b, d)
-    and (a, d, c), which is the tiling that actually covers a quad.
-
-    The table therefore had a hole in every second facet all the way around its
-    skirt, and from the play camera - low, close, with the base filling the
-    bottom third of frame - it read as a ring of black zigzag teeth. It was the
-    single ugliest thing in the render and it was never a material or a light.
+    The old body carried the full felt oval almost to the floor, so the gameplay
+    camera saw one black wall. The profile now keeps the load-bearing apron,
+    narrows into a central stem and opens back into a low foot. Its bands use
+    the same oval-loft triangulation as the upholstered rail, so the earlier
+    alternating open-facet defect cannot return through a second formula.
     """
-    top = ring(FELT_RX, FELT_RY, TABLE_TOP, TABLE_SEG)
-    mid = ring(FELT_RX * 0.85, FELT_RY * 0.85, TABLE_TOP - 0.35, TABLE_SEG)
-    bottom = ring(FELT_RX * 0.95, FELT_RY * 0.95, 0.0, TABLE_SEG)
-    verts = []
-    faces = []
-    base = 0
-    verts.extend(top)
-    verts.extend(mid)
-    for i in range(TABLE_SEG):
-        a = base + i
-        b = base + (i + 1) % TABLE_SEG
-        c = base + TABLE_SEG + i
-        d = base + TABLE_SEG + (i + 1) % TABLE_SEG
-        faces.append((a, b, d))
-        faces.append((a, d, c))
-    second = len(verts)
-    verts.extend(mid)
-    verts.extend(bottom)
-    for i in range(TABLE_SEG):
-        a = second + i
-        b = second + (i + 1) % TABLE_SEG
-        c = second + TABLE_SEG + i
-        d = second + TABLE_SEG + (i + 1) % TABLE_SEG
-        faces.append((a, b, d))
-        faces.append((a, d, c))
-    centre = len(verts)
-    verts.append((0.0, 0.0, 0.0))
-    bbase = len(verts)
-    verts.extend(bottom)
-    for i in range(TABLE_SEG):
-        a = bbase + i
-        b = bbase + (i + 1) % TABLE_SEG
-        faces.append((centre, b, a))
-    return verts, faces
+    return oval_loft([
+        (FELT_RX, FELT_RY, TABLE_TOP),
+        (FELT_RX, FELT_RY, TABLE_TOP - 0.08),
+        (FELT_RX * 0.86, FELT_RY * 0.86, TABLE_TOP - 0.14),
+        (FELT_RX * 0.62, FELT_RY * 0.68, TABLE_TOP - 0.27),
+        (FELT_RX * 0.46, FELT_RY * 0.55, 0.18),
+        (FELT_RX * 0.68, FELT_RY * 0.72, 0.06),
+        (FELT_RX * 0.70, FELT_RY * 0.74, 0.0),
+    ], TABLE_SEG, cap_bottom=True)
 
 
 def rail_ring_oval():
-    verts = []
-    faces = []
-    ib = ring(RAIL_X, RAIL_Y, TABLE_TOP, TABLE_SEG)
-    ob = ring(FELT_RX + 0.05, FELT_RY + 0.05, TABLE_TOP, TABLE_SEG)
-    it = ring(RAIL_X, RAIL_Y, TABLE_TOP + RAIL_T, TABLE_SEG)
-    ot = ring(FELT_RX + 0.05, FELT_RY + 0.05, TABLE_TOP + RAIL_T, TABLE_SEG)
-    verts.extend(ib)
-    verts.extend(ob)
-    verts.extend(it)
-    verts.extend(ot)
-    n = TABLE_SEG
-    for i in range(n):
-        a = i
-        b = (i + 1) % n
-        c = n + (i + 1) % n
-        d = n + i
-        faces.append((a, b, c))
-        faces.append((a, c, d))
-        e = 2 * n + i
-        f = 2 * n + (i + 1) % n
-        g = 3 * n + (i + 1) % n
-        h = 3 * n + i
-        faces.append((e, f, g))
-        faces.append((e, g, h))
-        faces.append((f, h, g))
-        faces.append((b, f, e))
-    return verts, faces
+    inner_rx = FELT_RX * 0.985
+    inner_ry = FELT_RY * 0.985
+    outer_rx = max(RAIL_X, FELT_RX + 0.08)
+    outer_ry = max(RAIL_Y, FELT_RY + 0.08)
+    return oval_loft([
+        (inner_rx, inner_ry, TABLE_TOP - 0.012),
+        (inner_rx + 0.018, inner_ry + 0.018, TABLE_TOP + RAIL_T * 0.62),
+        (outer_rx - 0.028, outer_ry - 0.028, TABLE_TOP + RAIL_T * 1.05),
+        (outer_rx, outer_ry, TABLE_TOP + RAIL_T * 0.58),
+        (outer_rx - 0.012, outer_ry - 0.012, TABLE_TOP - 0.018),
+    ], TABLE_SEG, close_profile=True)
 
 
 def chip_face():
@@ -297,8 +306,13 @@ def card_body():
 
 def chair_swivel():
     leather = [
-        cylinder(0.20, SEAT_H, SEAT_H - 0.08, CHAIR_SEG),
-        translate_geo(torus(0.157, 0.014, CHAIR_SEG, 4), 0.0, 0.0, SEAT_H),
+        oval_loft([
+            (0.19, 0.18, SEAT_H - 0.09),
+            (0.225, 0.21, SEAT_H - 0.06),
+            (0.23, 0.215, SEAT_H - 0.015),
+            (0.205, 0.19, SEAT_H),
+        ], CHAIR_SEG, cap_bottom=True, cap_top=True),
+        translate_geo(torus(0.205, 0.012, CHAIR_SEG, 4), 0.0, 0.0, SEAT_H - 0.004),
         chair_back_shell(),
     ]
     chrome = [
@@ -315,14 +329,15 @@ def chair_swivel():
 def chair_back_shell():
     segments = 12
     levels = [
-        (SEAT_H - 0.04, 0.17, 0.17),
-        (SEAT_H + 0.04, 0.20, 0.19),
-        (SEAT_H + 0.34, 0.19, 0.20),
-        (SEAT_H + 0.42, 0.14, 0.21),
+        (SEAT_H - 0.04, 0.18, 0.17),
+        (SEAT_H + 0.05, 0.225, 0.18),
+        (SEAT_H + 0.28, 0.235, 0.19),
+        (SEAT_H + 0.40, 0.205, 0.20),
+        (SEAT_H + 0.46, 0.145, 0.21),
     ]
     verts = []
     for z, half_width, centre_y in levels:
-        for layer in (0.0, 0.045):
+        for layer in (0.0, 0.055):
             for index in range(segments + 1):
                 fraction = index / segments * 2.0 - 1.0
                 x = fraction * half_width
@@ -394,6 +409,13 @@ def planter():
 
 def terrace_disc(radius=4.0, segments=32):
     return polygon_disc(ring(radius, radius, 0.0, segments))
+
+
+def terrace_inlay():
+    return concat([
+        oval_band(2.46, 2.46, 2.48, 2.48, 0.004, 48),
+        oval_band(3.38, 3.38, 3.40, 3.40, 0.004, 56),
+    ])
 
 
 def parapet_ring():
@@ -640,27 +662,51 @@ def skyline_towers(count=27, inner_radius=20.8, outer_radius=45.4, seed=20260824
         width = 2.4 + 5.2 * rand()
         depth = 2.4 + 4.4 * rand()
         height = 7.0 + 21.0 * rand()
-        x = radius * math.cos(angle) - width * 0.5
-        y = radius * math.sin(angle) - depth * 0.5
-        mass.append(box((x, y, base_z), (width, depth, height)))
+        x = radius * math.cos(angle)
+        y = radius * math.sin(angle)
+        rotation = angle - math.pi * 0.5
+        mass.append(transform_geo(
+            box((-width * 0.5, -depth * 0.5, base_z), (width, depth, height)),
+            x,
+            y,
+            0.0,
+            rotation,
+        ))
 
         # A stepped setback on the taller towers reads as a skyline rather than
         # a row of slabs.
         if height > 18.0:
             inset = width * 0.22
-            mass.append(
+            mass.append(transform_geo(
                 box(
-                    (x + inset, y + inset, base_z + height),
+                    (-width * 0.5 + inset, -depth * 0.5 + inset, base_z + height),
                     (width - inset * 2.0, depth - inset * 2.0, 2.0 + 4.0 * rand()),
-                )
-            )
+                ),
+                x,
+                y,
+                0.0,
+                rotation,
+            ))
 
-        rows = int(4 + 9 * rand())
+        rows = int(5 + 10 * rand())
+        columns = max(2, min(5, int(width / 1.25)))
+        window_width = min(0.42, width * 0.56 / columns)
+        column_gap = width * 0.56 / columns
         for row in range(rows):
             wz = base_z + height * (0.25 + 0.68 * (row / max(rows - 1, 1)))
-            inward = 1.0 if math.cos(angle) < 0 else -1.0
-            wy = y + (depth + 0.06 if inward < 0 else -0.06)
-            windows.append(box((x + width * 0.18, wy, wz), (width * 0.64, 0.06, 0.30)))
+            for column in range(columns):
+                # Dark rooms break the facade into a believable night grid;
+                # one wide strip per floor read as a stack of floating bars.
+                if rand() < 0.30:
+                    continue
+                wx = -width * 0.28 + column_gap * (column + 0.5) - window_width * 0.5
+                windows.append(transform_geo(
+                    box((wx, -depth * 0.5 - 0.06, wz), (window_width, 0.06, 0.20)),
+                    x,
+                    y,
+                    0.0,
+                    rotation,
+                ))
     return concat(mass), concat(windows)
 
 

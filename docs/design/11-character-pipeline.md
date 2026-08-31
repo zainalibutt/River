@@ -24,7 +24,7 @@ Parametric human generator (MakeHuman or an equivalent Blender addon), driven by
 
 ### Stage 2 — Seated pose adaptation
 
-Characters never walk. The mesh is authored and weighted for a seated pose; below-waist geometry is simplified since it is occluded by the table in every camera position from the camera table.
+Characters never walk. The mesh is authored and weighted for a seated pose. Below-waist geometry remains simplified, but it is not removed: the permitted orbit exposes thighs, knees and shins at the side and near seats, and the all-in stand-up needs one continuous rig.
 
 **Gate:** at the default camera, no occluded geometry is being drawn. Silhouette above table height is unchanged from stage 1.
 
@@ -152,19 +152,19 @@ Two traps, both now documented:
 | Raw base mesh | 36,972 | 100% |
 | UNSUBDIV x1 | 18,440 | 85% |
 | UNSUBDIV x2 | 10,536 | **60%** |
-| **UNSUBDIV x1 + occluded leg cull** | **14,114** | **85%** |
+| **UNSUBDIV x1 + occluded leg cull** | **14,114** | **85%** — retired 2026-08-28 after Chrome proved the legs visible |
 
 Two unsubdiv passes hit the budget but dropped quad quality to 60%, which is poor for a mesh that has to deform. One pass plus cutting the mesh at upper thigh — geometry that is occluded by the table at every permitted orbit pitch — keeps 85% quads at 14,114 triangles.
 
 ## Budget revision — 12,000 to 15,000 per character
 
-The 12,000 figure was **my estimate, written before a real character existed**. It is now measurable and it was too tight.
+The 12,000 figure was **my estimate, written before a real character existed**. It was first revised to 15,000 for the upper-body source. On 2026-08-28 the permitted orbit proved that the upper-thigh cut removed visible anatomy, so the source ceiling moved to 23,000 while the scene ceiling stayed fixed at 250,000.
 
 | | Value |
 |---|---|
 | Measured, one character at game res | 14,114 tris |
-| Revised per-character budget | **15,000** |
-| Nine seated characters | 135,000 |
+| Revised source-character budget | **23,000** |
+| Integrated seated character after LOD | **11,406** measured on 2026-08-28 |
 | Venue, measured | 24,000 - 64,000 |
 | Total worst case | ~199,000 |
 | Scene ceiling | 250,000 |

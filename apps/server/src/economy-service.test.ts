@@ -9,8 +9,8 @@ const BASE_DAY = Date.UTC(2026, 7, 24)
 const PLAYER_ID = '323c30d2-9e36-4c4d-96c8-a315322b113d'
 
 const CONFIG: EconomyConfig = {
-  signupBankroll: 100_000,
-  rescueFloor: 25_000,
+  signupBankroll: 150_000,
+  rescueFloor: 50_000,
   rescueThreshold: 1_000,
   rescueDailyCap: 3,
   dailyBase: 10_000,
@@ -94,7 +94,7 @@ describe('deriveEconomyState', () => {
 
   it('counts only today rescue refs and records the rescue day', () => {
     const rows = [
-      row(rescueRef(1, 1), 'bust_rescue', 25_000),
+      row(rescueRef(1, 1), 'bust_rescue', 50_000),
       row(rescueRef(1, 2), 'bust_rescue', 0),
     ]
     const state = deriveEconomyState(rows, false, BASE_DAY)
@@ -103,7 +103,7 @@ describe('deriveEconomyState', () => {
   })
 
   it('drops the rescue counter on a new UTC day', () => {
-    const rows = [row(rescueRef(1, 1), 'bust_rescue', 25_000)]
+    const rows = [row(rescueRef(1, 1), 'bust_rescue', 50_000)]
     const state = deriveEconomyState(rows, false, BASE_DAY + DAY_MS)
     expect(state.rescuesToday).toBe(0)
     expect(state.rescueDay).toBeNull()
@@ -167,8 +167,8 @@ describe('claimRescueFor', () => {
     const outcome = await claimRescueFor(PLAYER_ID, deps, BASE_DAY)
     expect(outcome).toEqual({
       kind: 'granted',
-      delta: 25_000,
-      balance: 25_000,
+      delta: 50_000,
+      balance: 50_000,
       ref: rescueRef(1, 1),
     })
   })

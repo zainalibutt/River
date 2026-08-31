@@ -27,7 +27,7 @@ from buildkit import (
     seat_positions,
     smooth_mesh_by_angle,
 )
-from build_characters import build_animations
+from build_characters import FACE_RECIPE_CELLS, HAIR_STYLES, OUTFIT_RECIPE_CELLS, build_animations
 from geo import (
     concat,
     mountain_range,
@@ -51,6 +51,7 @@ from geo import (
     chip_rim,
     crate_stack,
     felt_oval,
+    felt_inlay_oval,
     machine_unit,
     ceiling_pipes,
     room_walls,
@@ -67,6 +68,7 @@ from geo import (
     stepladder,
     string_light_run,
     terrace_disc,
+    terrace_inlay,
     wall_panel,
     wall_sconce,
     wood_pedestal,
@@ -96,20 +98,31 @@ VENUE_CHAIR = {
 CHARACTER_SCALE = 0.73
 CHARACTER_SEAT_Z = 0.05
 CHARACTER_VARIANTS = ('male', 'female')
-CHARACTER_BODY_LOD_RATIO = 0.42
-CHARACTER_GARMENT_LOD_RATIO = 0.24
+CHARACTER_BODY_LOD_RATIO = 0.60
+CHARACTER_GARMENT_LOD_RATIO = 0.32
+CHARACTER_HAIR_LOD_RATIO = 1.0
 DOWNLOAD_BUDGET_KB = 6144
 CHARACTER_ATLAS_SIZE = 1024
 CHARACTER_ATLAS_COLUMNS = 8
 CHARACTER_ATLAS_ROWS = 4
 
+
+def tune_surface(material, roughness):
+    if material.node_tree is None:
+        return
+    bsdf = next((node for node in material.node_tree.nodes if node.type == 'BSDF_PRINCIPLED'), None)
+    if bsdf is not None:
+        bsdf.inputs['Roughness'].default_value = roughness
+
 BASE_ATLAS_CELLS = {
     'skin': (0, 0),
     'torso': (1, 0),
     'head': (2, 0),
-    'face': (3, 0),
-    'hands': (4, 0),
-    'accent': (5, 0),
+    'face': (3, 0, 2, 1),
+    'hands': (5, 0),
+    'accent': (7, 3),
+    'legs': (6, 0),
+    'shoes': (7, 0),
 }
 
 COSMETIC_ATLAS = {
@@ -154,7 +167,29 @@ COSMETIC_PREVIEW_LOADOUTS = (
     },
 )
 
+CHARACTER_CAST = (
+    {'variant': 'female', 'bodyPreset': 'slight', 'age': 'young', 'presentation': 'glamorous', 'hairStyle': 'bob', 'outfitStyle': 'f1_cocktail', 'head': 'cap-silk', 'face': 'glasses-round', 'torso': 'jacket-cardinal', 'hands': 'ring-signet', 'accent': 'chain-gold'},
+    {'variant': 'male', 'bodyPreset': 'broad', 'age': 'older', 'presentation': 'everyday', 'hairStyle': 'side_part', 'outfitStyle': 'm5_leather', 'head': 'cap-grey', 'face': 'glasses-round', 'torso': 'jacket-leather', 'hands': 'ring-silver', 'accent': 'watch-brass'},
+    {'variant': 'female', 'bodyPreset': 'standard', 'age': 'established', 'presentation': 'everyday', 'hairStyle': 'bun', 'outfitStyle': 'f1_cocktail', 'head': 'cap-tan', 'face': 'glasses-round', 'torso': 'jacket-bomb', 'hands': 'ring-pearl', 'accent': 'scarf-silk'},
+    {'variant': 'male', 'bodyPreset': 'slight', 'age': 'young', 'presentation': 'glamorous', 'hairStyle': 'quiff', 'outfitStyle': 'm1_dinner', 'head': 'cap-silk', 'face': 'glasses-round', 'torso': 'jacket-pinstripe', 'hands': 'ring-jade', 'accent': 'chain-gold'},
+    {'variant': 'female', 'bodyPreset': 'broad', 'age': 'older', 'presentation': 'glamorous', 'hairStyle': 'crop', 'outfitStyle': 'f1_cocktail', 'head': 'cap-grey', 'face': 'glasses-round', 'torso': 'jacket-cardinal', 'hands': 'ring-silver', 'accent': 'scarf-silk'},
+    {'variant': 'male', 'bodyPreset': 'standard', 'age': 'established', 'presentation': 'everyday', 'hairStyle': 'slick_back', 'outfitStyle': 'm5_leather', 'head': 'cap-navy', 'face': 'glasses-round', 'torso': 'jacket-leather', 'hands': 'ring-signet', 'accent': 'watch-brass'},
+    {'variant': 'female', 'bodyPreset': 'slight', 'age': 'young', 'presentation': 'everyday', 'hairStyle': 'bald', 'outfitStyle': 'f1_cocktail', 'head': 'cap-tan', 'face': 'glasses-round', 'torso': 'jacket-bomb', 'hands': 'ring-pearl', 'accent': 'scarf-silk'},
+    {'variant': 'male', 'bodyPreset': 'broad', 'age': 'established', 'presentation': 'glamorous', 'hairStyle': 'crop', 'outfitStyle': 'm1_dinner', 'head': 'cap-silk', 'face': 'glasses-round', 'torso': 'jacket-pinstripe', 'hands': 'ring-jade', 'accent': 'chain-gold'},
+)
+
+BODY_PRESET_SCALE = {
+    'slight': (0.94, 0.95, 0.98),
+    'standard': (1.0, 1.0, 1.0),
+    'broad': (1.08, 1.10, 1.02),
+}
+
 DEALER_LOADOUT = {
+    'bodyPreset': 'standard',
+    'age': 'established',
+    'presentation': 'everyday',
+    'hairStyle': 'slick_back',
+    'outfitStyle': 'dealer_ivory',
     'head': 'cap-navy',
     'face': 'glasses-round',
     'torso': 'jacket-bomb',
@@ -163,12 +198,12 @@ DEALER_LOADOUT = {
 }
 
 
-def atlas_cell(column, row):
+def atlas_cell(column, row, column_span=1, row_span=1):
     return (
         column / CHARACTER_ATLAS_COLUMNS,
         row / CHARACTER_ATLAS_ROWS,
-        1.0 / CHARACTER_ATLAS_COLUMNS,
-        1.0 / CHARACTER_ATLAS_ROWS,
+        column_span / CHARACTER_ATLAS_COLUMNS,
+        row_span / CHARACTER_ATLAS_ROWS,
     )
 
 
@@ -192,7 +227,7 @@ def cosmetic_metadata(cosmetic_id):
     }
 
 
-def remap_character_uv(obj, region, face_region=None):
+def remap_character_uv(obj, region, face_region=None, hand_region=None, leg_region=None, shoe_region=None):
     if obj.type != 'MESH':
         return
     uv_layer = obj.data.uv_layers[0] if obj.data.uv_layers else obj.data.uv_layers.new(name='UVMap')
@@ -202,19 +237,39 @@ def remap_character_uv(obj, region, face_region=None):
     for loop_index, uv in enumerate(uv_layer.data):
         vertex = obj.data.vertices[obj.data.loops[loop_index].vertex_index].co
         active_region = region
-        if face_region is not None and vertex.z > 1.34 and abs(vertex.x) < 0.18 and -0.159 < vertex.y < -0.08:
+        if hand_region is not None and abs(vertex.x) > 0.37 and vertex.z < 1.12:
+            active_region = hand_region
+        elif shoe_region is not None and vertex.z < 0.18:
+            active_region = shoe_region
+        elif leg_region is not None and vertex.z < 0.96:
+            active_region = leg_region
+        elif face_region is not None and vertex.z > 1.34 and abs(vertex.x) < 0.18 and -0.159 < vertex.y < -0.08:
             active_region = face_region
         active_u0, active_v0, active_width, active_height = active_region
         active_inset_u = active_width * 0.08
         active_inset_v = active_height * 0.08
-        if active_region == face_region:
-            source_u = 0.5 + max(-0.5, min(0.5, vertex.x / 0.62)) * 0.42
-            source_v = 0.18 + max(0.0, min(1.0, (vertex.z - 1.0) / 0.67)) * 0.66
+        if face_region is not None and active_region == face_region:
+            source_u = max(0.02, min(0.98, (vertex.x + 0.115) / 0.23))
+            source_v = max(0.02, min(0.98, (vertex.z - 1.475) / 0.17))
         else:
             source_u = float(uv.uv.x) % 1.0
             source_v = float(uv.uv.y) % 1.0
         uv.uv.x = active_u0 + active_inset_u + source_u * (active_width - active_inset_u * 2.0)
         uv.uv.y = active_v0 + active_inset_v + source_v * (active_height - active_inset_v * 2.0)
+
+
+def remap_face_recipe_uv(obj, recipe):
+    if recipe not in FACE_RECIPE_CELLS or not obj.data.uv_layers:
+        return
+    source_u0, source_v0, source_width, source_height = atlas_cell(3, 0, 2, 1)
+    target_u0, target_v0, target_width, target_height = atlas_cell(*FACE_RECIPE_CELLS[recipe], 2, 1)
+    for uv in obj.data.uv_layers[0].data:
+        if not (source_u0 <= uv.uv.x <= source_u0 + source_width and source_v0 <= uv.uv.y <= source_v0 + source_height):
+            continue
+        local_u = (uv.uv.x - source_u0) / source_width
+        local_v = (uv.uv.y - source_v0) / source_height
+        uv.uv.x = target_u0 + local_u * target_width
+        uv.uv.y = target_v0 + local_v * target_height
 
 
 def project_garment_uv(obj, region):
@@ -252,48 +307,77 @@ def project_garment_uv(obj, region):
         uv.uv.y = v0 + inset_v + source_v * (height - inset_v * 2.0)
 
 
-def apply_seated_rest_pose(armature, pose_legs=False):
-    for side, rotation in (('L', -0.38), ('R', 0.38)):
+def apply_seated_rest_pose(armature, pose_legs=True):
+    ik_items = []
+    for bone_name, degrees in (('spine01', 4.0), ('spine02', 2.0), ('head', -2.0)):
+        bone = armature.pose.bones.get(bone_name)
+        if bone is not None:
+            bone.rotation_mode = 'XYZ'
+            bone.rotation_euler = (math.radians(degrees), 0.0, 0.0)
+    for side, rotation, leg_spread in (('L', -0.68, math.radians(6.0)), ('R', 0.68, math.radians(-6.0))):
+        sign = 1.0 if side == 'L' else -1.0
         bone = armature.pose.bones.get('upperarm01.' + side)
         if bone is not None:
             bone.rotation_mode = 'XYZ'
-            bone.rotation_euler = (math.radians(-7.0), 0.0, rotation)
+            bone.rotation_euler = (math.radians(-10.0), 0.0, rotation)
         forearm = armature.pose.bones.get('lowerarm01.' + side)
         if forearm is not None:
             forearm.rotation_mode = 'XYZ'
-            forearm.rotation_euler = (math.radians(8.0), 0.0, 0.0)
+            forearm.rotation_euler = (math.radians(56.0), 0.0, 0.0)
+        wrist = armature.pose.bones.get('wrist.' + side)
+        if wrist is not None:
+            wrist.rotation_mode = 'XYZ'
+            wrist.rotation_euler = (math.radians(10.0), 0.0, math.radians(-sign * 55.0))
+        for joint, curl in ((1, 12.0), (2, 24.0), (3, 30.0)):
+            thumb = armature.pose.bones.get('finger1-%d.%s' % (joint, side))
+            if thumb is not None:
+                thumb.rotation_mode = 'XYZ'
+                thumb.rotation_euler = (math.radians(curl), 0.0, 0.0)
+        for finger in range(2, 6):
+            for joint in range(1, 4):
+                digit = armature.pose.bones.get('finger%d-%d.%s' % (finger, joint, side))
+                if digit is None:
+                    continue
+                digit.rotation_mode = 'XYZ'
+                digit.rotation_euler = (math.radians(15.0 + joint * 8.0), 0.0, 0.0)
+        if forearm is not None:
+            target = bpy.data.objects.new('seated_wrist_target.' + side, None)
+            pole = bpy.data.objects.new('seated_elbow_pole.' + side, None)
+            bpy.context.scene.collection.objects.link(target)
+            bpy.context.scene.collection.objects.link(pole)
+            # Measured against the Rooftop rail proof: wrists sit just inside
+            # shoulder width on the near rail, with elbows held outside them.
+            target.location = armature.matrix_world @ Vector((sign * 0.10, -0.58, 0.84))
+            pole.location = armature.matrix_world @ Vector((sign * 0.42, -0.20, 1.00))
+            constraint = forearm.constraints.new('IK')
+            constraint.target = target
+            constraint.pole_target = pole
+            constraint.chain_count = 2
+            ik_items.append((forearm, constraint, target, pole))
         if pose_legs:
-            thigh = armature.pose.bones.get('upperleg02.' + side)
+            thigh = armature.pose.bones.get('upperleg01.' + side)
             if thigh is not None:
                 thigh.rotation_mode = 'XYZ'
-                thigh.rotation_euler = (math.radians(-70.0), 0.0, 0.0)
+                thigh.rotation_euler = (math.radians(-82.0), 0.0, leg_spread)
             shin = armature.pose.bones.get('lowerleg01.' + side)
             if shin is not None:
                 shin.rotation_mode = 'XYZ'
-                shin.rotation_euler = (math.radians(75.0), 0.0, 0.0)
+                shin.rotation_euler = (math.radians(78.0), 0.0, 0.0)
+    bpy.context.view_layer.update()
     bpy.ops.object.select_all(action='DESELECT')
     armature.select_set(True)
     bpy.context.view_layer.objects.active = armature
     bpy.ops.object.mode_set(mode='POSE')
+    bpy.ops.pose.select_all(action='SELECT')
+    bpy.ops.pose.visual_transform_apply()
+    bpy.ops.object.mode_set(mode='OBJECT')
+    for forearm, constraint, target, pole in ik_items:
+        forearm.constraints.remove(constraint)
+        bpy.data.objects.remove(target, do_unlink=True)
+        bpy.data.objects.remove(pole, do_unlink=True)
+    bpy.ops.object.mode_set(mode='POSE')
     bpy.ops.pose.armature_apply(selected=False)
     bpy.ops.object.mode_set(mode='OBJECT')
-
-
-def shape_seated_arms(obj):
-    if obj.type != 'MESH':
-        return
-    arm_groups = {
-        group.index
-        for group in obj.vertex_groups
-        if any(token in group.name.lower() for token in ('upperarm', 'lowerarm', 'wrist', 'finger', 'metacarpal'))
-    }
-    if not arm_groups:
-        return
-    for vertex in obj.data.vertices:
-        if any(element.group in arm_groups and element.weight > 0.2 for element in vertex.groups):
-            vertex.co.x *= 0.70
-            vertex.co.y -= 0.07
-            vertex.co.z -= 0.015
 
 
 def strip_opaque_hair_planes(obj):
@@ -388,9 +472,17 @@ def add_board_cards(card_mesh, count=5):
 
 def build_table(venue, rail_mat, wood_mat):
     felt_mat, _ramp = colorramp_material(venue['id'] + '_felt', [(0.0, venue['felt']), (1.0, venue['felt'])])
+    tune_surface(felt_mat, 0.92)
+    tune_surface(rail_mat, 0.72)
+    tune_surface(wood_mat, 0.38)
     felt = build_mesh_from_geo('river_' + venue['id'] + '_felt', felt_oval())
     felt.materials.append(felt_mat)
     object_at('river_' + venue['id'] + '_table_felt', felt, (0.0, 0.0, 0.0))
+    if venue['id'] == 'rooftop':
+        inlay_mat = add_metal_material('rooftop_felt_inlay', venue['felt_pattern'], roughness=0.48)
+        inlay = build_mesh_from_geo('river_rooftop_felt_inlay', felt_inlay_oval())
+        inlay.materials.append(inlay_mat)
+        object_at('river_rooftop_table_felt_inlay', inlay, (0.0, 0.0, 0.0))
     rail = build_mesh_from_geo('river_' + venue['id'] + '_rail', rail_ring_oval())
     rail.materials.append(rail_mat)
     object_at('river_' + venue['id'] + '_table_rail', rail, (0.0, 0.0, 0.0))
@@ -400,6 +492,7 @@ def build_table(venue, rail_mat, wood_mat):
 
 
 def build_chairs(venue, chair_fn, chair_mat, count=9):
+    tune_surface(chair_mat, 0.42 if venue['id'] == 'rooftop' else 0.58)
     positions = seat_positions(count)
     for index, (x, y) in enumerate(positions):
         chair_geo = chair_fn()
@@ -445,10 +538,23 @@ def character_seat_positions(venue, count=9):
     return seat_positions(count, FELT_RX * 1.42, FELT_RY * 1.58)
 
 
-def apply_seated_lod(obj):
+def apply_seated_lod(obj, ratio_override=None):
     if obj.type != 'MESH':
         return
-    ratio = CHARACTER_BODY_LOD_RATIO if obj.data.name.startswith('base') else CHARACTER_GARMENT_LOD_RATIO
+    if obj.data.shape_keys is not None and len(obj.data.shape_keys.key_blocks) > 1:
+        obj['seatedLodSkipped'] = 'facial_morph_targets'
+        return
+    names = (obj.name.lower(), obj.data.name.lower())
+    if ratio_override is not None:
+        ratio = ratio_override
+    elif any('garment_' in name for name in names):
+        ratio = CHARACTER_GARMENT_LOD_RATIO
+    elif any('_hair' in name for name in names):
+        ratio = CHARACTER_HAIR_LOD_RATIO
+    else:
+        ratio = CHARACTER_BODY_LOD_RATIO
+    if ratio >= 1.0:
+        return
     modifier = obj.modifiers.new('river_seated_lod', 'DECIMATE')
     modifier.ratio = ratio
     modifier.use_collapse_triangulate = False
@@ -512,9 +618,14 @@ def atlas_pixel(base, x, y, male, variant, face_details=True, slot=None):
     if base is not None and slot == 'torso':
         return garment_pixel(base, x, y)
     if base is not None and slot == 'head':
-        # Hair takes the light along the crown and loses it at the hairline,
-        # which is the cheapest thing that stops a shell reading as a helmet.
-        shade = 0.82 + 0.26 * y
+        hairline = min(1.0, y / (6.0 / (CHARACTER_ATLAS_SIZE / CHARACTER_ATLAS_ROWS)))
+        hairline = hairline * hairline * (3.0 - 2.0 * hairline)
+        crown = 0.84 + 0.18 * y
+        sweep = 0.0
+        for centre in (0.24, 0.50, 0.76):
+            distance = abs(x - (centre + 0.08 * (y - 0.5)))
+            sweep += 0.075 * max(0.0, 1.0 - distance / 0.10) ** 2
+        shade = (0.78 + 0.06 * hairline) + (crown - 0.84) + sweep * hairline
         return tuple(min(1.0, channel * shade) for channel in base[:3]) + (1.0,)
     skin_warm = (0.72, 0.43, 0.29)
     skin_cool = (0.36, 0.28, 0.27)
@@ -527,11 +638,13 @@ def atlas_pixel(base, x, y, male, variant, face_details=True, slot=None):
         eye = ((x < 0.47 and 0.585 < y < 0.64) or (x > 0.53 and 0.585 < y < 0.64))
         nose = 0.46 < x < 0.54 and 0.47 < y < 0.58
         lips = 0.43 < x < 0.57 and 0.39 < y < 0.45
-        hairline = y > 0.875 - 0.018 * math.cos((x - 0.5) * 14.0)
+        hairline_start = 0.875 - 0.018 * math.cos((x - 0.5) * 14.0)
+        hairline = max(0.0, min(1.0, (y - hairline_start) / (6.0 / (CHARACTER_ATLAS_SIZE / CHARACTER_ATLAS_ROWS))))
+        hairline = hairline * hairline * (3.0 - 2.0 * hairline)
         stubble = male and 0.34 < x < 0.66 and 0.28 < y < 0.46
-        if hairline:
+        if hairline > 0.0:
             hair = (0.08 + 0.06 * (variant % 4), 0.035, 0.025)
-            colour = atlas_blend(colour, hair, 0.92)
+            colour = atlas_blend(colour, hair, 0.92 * hairline)
         elif brow or lashes:
             colour = atlas_blend(colour, (0.07, 0.025, 0.02), 0.94)
         elif eye:
@@ -557,6 +670,8 @@ def build_character_atlas():
         'face': (0.63, 0.42, 0.15, 1.0),
         'hands': (0.60, 0.40, 0.29, 1.0),
         'accent': (0.63, 0.42, 0.15, 1.0),
+        'legs': (0.14, 0.17, 0.23, 1.0),
+        'shoes': (0.04, 0.045, 0.055, 1.0),
     }
     cell_width = CHARACTER_ATLAS_SIZE // CHARACTER_ATLAS_COLUMNS
     cell_height = CHARACTER_ATLAS_SIZE // CHARACTER_ATLAS_ROWS
@@ -567,7 +682,7 @@ def build_character_atlas():
             row = y // cell_height
             cell_x = (x % cell_width) / cell_width
             cell_y = (y % cell_height) / cell_height
-            if row == 0 and column in (0, 4):
+            if row == 0 and column == 0:
                 pixels.extend(atlas_pixel(base_colours['skin'], cell_x, cell_y, False, column, False))
             elif row == 0 and column == 1:
                 # The torso cell every garment samples, whatever cosmetic the
@@ -575,9 +690,17 @@ def build_character_atlas():
                 # from the cosmetic remap on purpose, so this one cell dresses
                 # every person at every table.
                 pixels.extend(garment_pixel(base_colours['torso'], cell_x, cell_y))
-            elif row == 0 and column in (2, 3, 5):
-                slot = next(name for name, cell in BASE_ATLAS_CELLS.items() if cell == (column, row))
-                pixels.extend(base_colours[slot])
+            elif row == 0 and column == 2:
+                pixels.extend(base_colours['head'])
+            elif row == 0 and column in (3, 4):
+                face_x = ((column - 3) + cell_x) / 2.0
+                pixels.extend(atlas_pixel(base_colours['face'], face_x, cell_y, False, 0, True))
+            elif row == 0 and column == 5:
+                pixels.extend(base_colours['hands'])
+            elif row == 0 and column == 6:
+                pixels.extend(base_colours['legs'])
+            elif row == 0 and column == 7:
+                pixels.extend(base_colours['shoes'])
             elif row > 0 and column < CHARACTER_ATLAS_COLUMNS:
                 palette_index = (row - 1) * CHARACTER_ATLAS_COLUMNS + column
                 cosmetic = next((item for item in COSMETIC_ATLAS.values() if item['paletteIndex'] == palette_index), None)
@@ -601,6 +724,7 @@ def build_character_atlas():
     image.save_render(image.filepath_raw)
     material = bpy.data.materials.new('river_character_atlas_material')
     material.use_nodes = True
+    material.use_backface_culling = True
     nodes = material.node_tree.nodes
     links = material.node_tree.links
     texture = nodes.new('ShaderNodeTexImage')
@@ -637,7 +761,7 @@ def build_garment_material():
     return material
 
 
-def import_character_templates(atlas_material, pose_legs=False):
+def import_character_templates(atlas_material):
     templates = {}
     animation_actions = []
     for variant in CHARACTER_VARIANTS:
@@ -687,15 +811,30 @@ def import_character_templates(atlas_material, pose_legs=False):
         for obj in imported_all:
             if obj not in imported:
                 bpy.data.objects.remove(obj, do_unlink=True)
-        body = next((obj for obj in imported if obj.type == 'MESH'), None)
+        body = next(
+            (
+                obj for obj in imported
+                if obj.type == 'MESH'
+                and not (obj.name.startswith('garment_') or obj.data.name.startswith('garment_'))
+                and '_hair' not in obj.name
+                and '_hair' not in obj.data.name
+            ),
+            None,
+        )
         if body is not None:
             components, faces, vertices = strip_opaque_hair_planes(body)
             print('CHAR %s stripped hair components=%d faces=%d vertices=%d' % (
                 variant, components, faces, vertices
             ))
         for obj in imported:
-            apply_seated_lod(obj)
-            if obj.type == 'MESH' and (obj.name.startswith('garment_') or obj.data.name.startswith('garment_')):
+            garment = obj.type == 'MESH' and (
+                obj.name.startswith('garment_') or obj.data.name.startswith('garment_')
+            )
+            if not garment:
+                apply_seated_lod(obj)
+            if obj.type == 'MESH':
+                smooth_mesh_by_angle(obj.data, 180.0)
+            if garment:
                 evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
                 mesh = evaluated.to_mesh()
                 try:
@@ -708,9 +847,8 @@ def import_character_templates(atlas_material, pose_legs=False):
                     evaluated.to_mesh_clear()
         armature = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
         if body is not None and armature is not None:
-            apply_seated_rest_pose(armature, pose_legs)
-            shape_seated_arms(body)
-            smooth_mesh_by_angle(body.data)
+            apply_seated_rest_pose(armature)
+            smooth_mesh_by_angle(body.data, 180.0)
         if variant == 'male' and armature is not None:
             for action in list(bpy.data.actions):
                 bpy.data.actions.remove(action, do_unlink=True)
@@ -733,13 +871,28 @@ def apply_garment_palette(obj, colour):
 
 def duplicate_character(template, animation_actions, seat_index, variant, x, y, angle, atlas_material, garment_material, loadout, root_name=None, role='player'):
     mapping = {}
+    keep_gold_detail = seat_index == 0 and variant == 'female' and role == 'player'
+    hair_style = loadout.get('hairStyle', 'side_part')
+    if hair_style not in HAIR_STYLES:
+        raise ValueError('unknown hair style ' + hair_style)
+    face_recipe = loadout.get('age', 'young') + '_' + loadout.get('presentation', 'everyday')
+    if face_recipe not in FACE_RECIPE_CELLS:
+        raise ValueError('unknown face recipe ' + face_recipe)
+    outfit_style = loadout.get('outfitStyle', 'f1_cocktail' if variant == 'female' else 'm1_dinner')
+    outfit_recipe = (
+        outfit_style + '_' + loadout.get('presentation', 'everyday')
+        if outfit_style == 'f1_cocktail'
+        else outfit_style
+    )
+    if outfit_recipe not in OUTFIT_RECIPE_CELLS:
+        raise ValueError('unknown outfit recipe ' + outfit_recipe)
     face_cosmetic_id = loadout.get('face') or loadout.get('head')
-    body_region = atlas_region_for_cosmetic(face_cosmetic_id) if face_cosmetic_id is not None else atlas_region_for_slot('skin')
     body_palette_index = COSMETIC_ATLAS[face_cosmetic_id]['paletteIndex'] if face_cosmetic_id is not None else 0
     garment_colour = COSMETIC_ATLAS[loadout['torso']]['colour']
     for source in template:
-        clone = source.copy()
         garment = source.type == 'MESH' and (source.name.startswith('garment_') or source.data.name.startswith('garment_'))
+        if garment and source.get('outfitStyle') != outfit_style:
+            continue
         # Hair carries no cosmetic slot, so it fell through to the body branch
         # and was remapped onto the skin cell along with the arms and the neck.
         # It was therefore painted the exact colour of the face it sat above,
@@ -750,23 +903,32 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
         hair = source.type == 'MESH' and (
             '_hair' in source.name or '_hair' in source.data.name
         )
+        if hair and source.get('hairStyle') != hair_style:
+            continue
+        clone = source.copy()
         if source.data is not None:
             slot = source.get('cosmeticSlot')
-            cosmetic_id = loadout.get(slot) if slot is not None else None
+            selected = loadout.get(slot) if slot is not None else None
+            cosmetic_id = selected if selected in COSMETIC_ATLAS else None
             clone.data = source.data.copy() if source.type == 'MESH' else source.data
             if hair:
-                head_cosmetic = loadout.get('head')
-                remap_character_uv(clone, atlas_region_for_cosmetic(head_cosmetic)
-                                   if head_cosmetic is not None
-                                   else atlas_region_for_slot('head'))
+                # Hair ships with authored strand-direction UVs. Remapping it
+                # onto the headwear slot painted cap/scalp swatches over the
+                # crown, which looked like missing geometry in close camera.
+                pass
             elif cosmetic_id is not None and not garment:
                 remap_character_uv(clone, atlas_region_for_cosmetic(cosmetic_id))
             elif garment:
-                torso_cosmetic = loadout.get('torso')
-                project_garment_uv(clone, atlas_region_for_cosmetic(torso_cosmetic)
-                                   if torso_cosmetic is not None
-                                   else atlas_region_for_slot('torso'))
+                project_garment_uv(clone, atlas_cell(*OUTFIT_RECIPE_CELLS[outfit_recipe]))
         bpy.context.scene.collection.objects.link(clone)
+        if garment:
+            apply_seated_lod(clone, ratio_override=1.0 if keep_gold_detail else None)
+            smooth_mesh_by_angle(clone.data, 180.0)
+        keep_gold_morphs = keep_gold_detail
+        if clone.type == 'MESH' and clone.data.shape_keys is not None and not keep_gold_morphs:
+            for key in list(clone.data.shape_keys.key_blocks)[::-1]:
+                clone.shape_key_remove(key)
+            apply_seated_lod(clone)
         mapping[source] = clone
     for source, clone in mapping.items():
         clone.parent = mapping.get(source.parent)
@@ -789,16 +951,15 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
                 modifier.object = mapping[modifier.object]
         if clone.type == 'MESH':
             is_garment = source.name.startswith('garment_') or source.data.name.startswith('garment_')
-            # Hair is excluded alongside the garment. This pass sends everything
-            # else to the skin cell with a body projection, and it runs after the
-            # per-slot remap above - so the hair was given its head colour and
-            # then had it taken away again a few lines later, which is why three
-            # separate attempts to darken it changed nothing at all.
             is_hair = '_hair' in source.name or '_hair' in source.data.name
             if clone.data.uv_layers and not is_garment:
                 clone.data.uv_layers[0].name = 'UVMap'
+            # Body UVs arrive authored across face, hands, legs and shoes. Venue
+            # assembly must not project them again: the second projection turned
+            # the accepted face masses into bands and made forearm boundaries
+            # jagged. Hair and garments still remap through their own branches.
             if not is_garment and not is_hair:
-                remap_character_uv(clone, atlas_region_for_slot('skin'), body_region)
+                remap_face_recipe_uv(clone, face_recipe)
             if is_garment:
                 apply_garment_palette(clone, garment_colour)
             if source.get('characterFeature'):
@@ -853,7 +1014,8 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
             clone.parent = root
     root.location = (x, y, CHARACTER_SEAT_Z)
     root.rotation_euler = (0.0, 0.0, angle)
-    root.scale = (CHARACTER_SCALE, CHARACTER_SCALE, CHARACTER_SCALE)
+    body_scale = BODY_PRESET_SCALE[loadout.get('bodyPreset', 'standard')]
+    root.scale = tuple(CHARACTER_SCALE * value for value in body_scale)
     if seat_index is not None:
         root['seatIndex'] = seat_index
     if role != 'player':
@@ -863,32 +1025,11 @@ def duplicate_character(template, animation_actions, seat_index, variant, x, y, 
     root['paletteIndices'] = json.dumps({
         slot: COSMETIC_ATLAS[cosmetic_id]['paletteIndex']
         for slot, cosmetic_id in loadout.items()
+        if cosmetic_id in COSMETIC_ATLAS
     }, sort_keys=True, separators=(',', ':'))
     root['loadout'] = json.dumps(loadout, sort_keys=True, separators=(',', ':'))
     root['atlasMaterial'] = atlas_material.name
     return root
-
-
-def build_dealer_uniform(root, garment_material):
-    waistcoat = concat([
-        box((-0.205, -0.245, 0.74), (0.165, 0.035, 0.50)),
-        box((0.040, -0.245, 0.74), (0.165, 0.035, 0.50)),
-        box((-0.165, -0.245, 1.18), (0.330, 0.035, 0.06)),
-    ])
-    bow_tie = concat([
-        box((-0.150, -0.275, 1.255), (0.115, 0.025, 0.065)),
-        box((0.035, -0.275, 1.255), (0.115, 0.025, 0.065)),
-        box((-0.035, -0.285, 1.265), (0.070, 0.030, 0.045)),
-    ])
-    for name, geometry, colour in (
-        ('river_dealer_waistcoat', waistcoat, (0.025, 0.035, 0.050, 1.0)),
-        ('river_dealer_bow_tie', bow_tie, (0.48, 0.025, 0.035, 1.0)),
-    ):
-        mesh = build_mesh_from_geo(name, geometry)
-        mesh.materials.append(garment_material)
-        uniform = object_at(name, mesh, parent=root)
-        apply_garment_palette(uniform, colour)
-        uniform['role'] = 'dealer'
 
 
 def build_rooftop_dealer(templates, animation_actions, atlas_material, garment_material):
@@ -907,21 +1048,20 @@ def build_rooftop_dealer(templates, animation_actions, atlas_material, garment_m
         root_name='river_dealer',
         role='dealer',
     )
-    build_dealer_uniform(dealer, garment_material)
     return dealer
 
 
 def build_venue_characters(venue):
     atlas_material = build_character_atlas()
     garment_material = build_garment_material()
-    templates, animation_actions = import_character_templates(atlas_material, venue['id'] == 'rooftop')
+    templates, animation_actions = import_character_templates(atlas_material)
     # Slot 0 belongs to the dealer, so the players take the other eight.
     # Placing a character in every slot put one of them inside the dealer.
     positions = character_seat_positions(venue)[1:]
     for seat_index, (x, y) in enumerate(positions):
-        variant = CHARACTER_VARIANTS[seat_index % len(CHARACTER_VARIANTS)]
+        loadout = CHARACTER_CAST[seat_index % len(CHARACTER_CAST)]
+        variant = loadout['variant']
         angle = math.atan2(-x, y)
-        loadout = COSMETIC_PREVIEW_LOADOUTS[seat_index % len(COSMETIC_PREVIEW_LOADOUTS)]
         seat_offset = 0.12 if venue['id'] == 'rooftop' else 0.0
         duplicate_character(
             templates[variant],
@@ -1081,6 +1221,9 @@ def build_rooftop(venue):
     floor = build_mesh_from_geo('rooftop_terrace', terrace_disc())
     floor.materials.append(floor_mat)
     object_at('rooftop_terrace', floor, (0.0, 0.0, -0.02))
+    floor_inlay = build_mesh_from_geo('rooftop_terrace_inlay', terrace_inlay())
+    floor_inlay.materials.append(bpy.data.materials['rooftop_felt_inlay'])
+    object_at('rooftop_terrace_inlay', floor_inlay, (0.0, 0.0, -0.02))
     parapet_mat = add_material('rooftop_parapet', venue['parapet'])
     parapet = build_mesh_from_geo('rooftop_parapet', parapet_ring())
     parapet.materials.append(parapet_mat)
@@ -1138,12 +1281,11 @@ def build_rooftop(venue):
     # The skyline is the venue's identity - a rooftop without a city is a patio.
     # Built as merged meshes: 27 towers and their windows cost two draw calls
     # rather than fifty-four, which matters against a budget of 120.
-    mountain_mat = add_material('rooftop_mountain', venue['mountain'])
+    skyline_mat = add_material('rooftop_skyline', venue['skyline'])
     mountains = build_mesh_from_geo('rooftop_mountains', mountain_range())
-    mountains.materials.append(mountain_mat)
+    mountains.materials.append(skyline_mat)
     object_at('rooftop_mountains', mountains, (0.0, 0.0, 0.0))
 
-    skyline_mat = add_material('rooftop_skyline', venue['skyline'])
     tower_geo, window_geo = skyline_towers()
     towers = build_mesh_from_geo('rooftop_skyline', tower_geo)
     towers.materials.append(skyline_mat)
@@ -1796,7 +1938,16 @@ def main():
     card_mesh = build_cards()
     manifest = {}
     overall_failures = []
-    for venue in VENUES:
+    requested = {
+        venue.strip()
+        for venue in os.environ.get('RIVER_VENUES', '').split(',')
+        if venue.strip()
+    }
+    venues = [venue for venue in VENUES if not requested or venue['id'] in requested]
+    if requested and {venue['id'] for venue in venues} != requested:
+        unknown = sorted(requested - {venue['id'] for venue in venues})
+        raise SystemExit('unknown RIVER_VENUES: ' + ', '.join(unknown))
+    for venue in venues:
         glb, report, failures = build_venue(venue, chip_meshes, card_mesh)
         manifest[venue['id']] = report.to_dict(glb)
         if failures:
@@ -1820,4 +1971,5 @@ def main():
     print('OUT ' + os.path.join(OUT_DIR, 'manifest.json'))
 
 
-main()
+if __name__ == '__main__':
+    main()

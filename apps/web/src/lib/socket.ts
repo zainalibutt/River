@@ -31,7 +31,15 @@ export type RiverSocketStateListener = (state: RiverSocketState) => void
 function parseServerMessage(value: unknown): ServerMessage | null {
   if (typeof value !== 'object' || value === null || !('kind' in value)) return null
   const kind = value.kind
-  return kind === 'authenticated' || kind === 'snapshot' || kind === 'error'
+  return kind === 'authenticated' ||
+    kind === 'snapshot' ||
+    kind === 'social' ||
+    kind === 'tables' ||
+    kind === 'cosmetic' ||
+    kind === 'grant' ||
+    kind === 'tableItem' ||
+    kind === 'adminResult' ||
+    kind === 'error'
     ? (value as ServerMessage)
     : null
 }
@@ -146,6 +154,14 @@ export class RiverSocket {
 
   equipTableItem(itemId: string): string {
     return this.send({ kind: 'equipTableItem', requestId: this.requestId(), itemId })
+  }
+
+  claimDaily(): string {
+    return this.send({ kind: 'claimDaily', requestId: this.requestId() })
+  }
+
+  claimRescue(): string {
+    return this.send({ kind: 'claimRescue', requestId: this.requestId() })
   }
 
   resync(): string {

@@ -39,6 +39,7 @@ import {
   loadBrowserAuthConfig,
   upgradeRiverSession,
 } from '@/lib/auth'
+import { affordableBuyIn } from '@/lib/buy-in'
 import { readoutFor } from '@/lib/hand-readout'
 import { formatAmount } from '@/lib/presentation'
 import {
@@ -88,6 +89,10 @@ const seatPositions = [
 type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'offline'
 type UpgradeState = 'idle' | 'editing' | 'sent' | 'expired' | 'error' | 'complete'
 type KickState = { reason: 'host' | 'idle' | 'duplicate-session' } | null
+type SeatActionFlag = {
+  label: 'CHECK' | 'CALL' | 'RAISE' | 'ALL IN' | 'FOLD'
+  tone: 'quiet' | 'commit' | 'danger'
+}
 
 function emptyView(selfId = 'pending', venueId: VenueId = DEFAULT_VENUE): RoomView {
   return {
@@ -200,6 +205,46 @@ function eventNotice(events: RoomEvent[], selfId: string): string | null {
   return null
 }
 
+function flagForAction(action: TurnAction): SeatActionFlag {
+  switch (action.kind) {
+    case 'check':
+      return { label: 'CHECK', tone: 'quiet' }
+    case 'call':
+      return { label: 'CALL', tone: 'commit' }
+    case 'raiseTo':
+      return { label: 'RAISE', tone: 'commit' }
+    case 'allIn':
+      return { label: 'ALL IN', tone: 'danger' }
+    case 'fold':
+      return { label: 'FOLD', tone: 'danger' }
+  }
+}
+
+function actionFlagsAfter(
+  current: ReadonlyMap<string, SeatActionFlag>,
+  events: readonly RoomEvent[],
+): ReadonlyMap<string, SeatActionFlag> {
+  let next: Map<string, SeatActionFlag> | null = null
+  const writable = () => {
+    next ??= new Map(current)
+    return next
+  }
+  for (const event of events) {
+    if (event.kind === 'handStarted' || event.kind === 'street' || event.kind === 'between') {
+      next = new Map()
+      continue
+    }
+    if (event.kind === 'awaiting') {
+      writable().delete(event.playerId)
+      continue
+    }
+    if (event.kind === 'acted' || event.kind === 'timedOut' || event.kind === 'awayPlayed') {
+      writable().set(event.playerId, flagForAction(event.action))
+    }
+  }
+  return next ?? current
+}
+
 function joinUrl(roomId: string, inviteCode: string, venueId: VenueId): string {
   if (typeof window === 'undefined') return ''
   const url = new URL(window.location.href)
@@ -242,6 +287,9 @@ export function RiverRoomTable() {
   const [kick, setKick] = useState<KickState>(null)
   const [peek, setPeek] = useState(false)
   const [platesHeld, setPlatesHeld] = useState(false)
+  const [seatActions, setSeatActions] = useState<ReadonlyMap<string, SeatActionFlag>>(
+    () => new Map(),
+  )
   const [reel, setReel] = useState<ShowdownReel | null>(null)
   const [reelAtMs, setReelAtMs] = useState(0)
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
@@ -306,6 +354,16 @@ export function RiverRoomTable() {
     [],
   )
 
+  useEffect(() => {
+    if (notice === null || connection !== 'connected') return
+    const currentNotice = notice
+    const timer = window.setTimeout(
+      () => setNotice((current) => (current === currentNotice ? null : current)),
+      2600,
+    )
+    return () => window.clearTimeout(timer)
+  }, [connection, notice])
+
   const command = useCallback((next: ClientRoomCommand) => {
     try {
       socketRef.current?.command(next)
@@ -351,9 +409,27 @@ export function RiverRoomTable() {
             )
             return
           }
+          if (message.kind === 'grant') {
+            if (message.outcome.kind === 'granted') {
+              setBalance(message.outcome.balance)
+              setNotice(
+                `${message.outcome.delta.toLocaleString()} chips added. Balance ${message.outcome.balance.toLocaleString()}.`,
+              )
+            } else {
+              const copy =
+                message.outcome.reason === 'already-claimed'
+                  ? 'Daily chips already claimed.'
+                  : message.outcome.reason === 'capped'
+                    ? 'Rescue limit reached for today.'
+                    : 'Rescue is available only when your bankroll is empty.'
+              setNotice(copy)
+            }
+            return
+          }
           if (message.kind !== 'snapshot') return
           setView(message.view)
           setBotSeats(message.botSeats)
+          setSeatActions((current) => actionFlagsAfter(current, message.events))
           if (
             message.events.some((event) => event.kind === 'seedCommitted') &&
             message.view.seats.some(
@@ -487,11 +563,10 @@ export function RiverRoomTable() {
       // and "am I seated in a live hand" changes on neither of those.
       const current = viewRef.current
       const inHand =
-        current.phase === 'hand' &&
-        current.seats.some((seat) => seat.playerId === current.selfId && !seat.folded)
+        current.phase === 'hand' && current.seats.some((seat) => seat.playerId === current.selfId)
       if (event.key === 'Tab' && inHand) {
         event.preventDefault()
-        setPlatesHeld(true)
+        if (!event.repeat) setPlatesHeld((current) => !current)
       }
       if (event.key.toLowerCase() === 'c') {
         if (view.legal?.check.enabled) command({ kind: 'act', action: { kind: 'check' } })
@@ -501,7 +576,7 @@ export function RiverRoomTable() {
     }
     const up = (event: KeyboardEvent) => {
       if (event.code === 'Space') setPeek(false)
-      if (event.key === 'Shift' || event.key === 'Tab') setPlatesHeld(false)
+      if (event.key === 'Shift') setPlatesHeld(false)
     }
     // A key held when the window loses focus never sends its keyup, so the
     // plates would stay up for good after an alt-tab.
@@ -630,6 +705,7 @@ export function RiverRoomTable() {
   const selected =
     selectedSeat === null ? null : view.seats.find((seat) => seat.seat === selectedSeat)
   const selectedPlayerId = selected?.playerId ?? null
+  const entryBuyIn = affordableBuyIn(balance, DEFAULT_STAKE.minBuyIn, DEFAULT_STAKE.defaultBuyIn)
 
   const submitJoinCode = (event: FormEvent) => {
     event.preventDefault()
@@ -713,6 +789,7 @@ export function RiverRoomTable() {
               seatChips={seatChips}
               seatIds={seatIds}
               seatRefs={seatRefs}
+              heroSeat={selfSeat?.seat ?? null}
             />
           ) : null}
           <div className="hud-layer">
@@ -1127,9 +1204,14 @@ export function RiverRoomTable() {
                   local={seat.playerId === view.selfId}
                   timer={seat.playerId === view.currentActor?.playerId ? turnRemaining : null}
                   timerTotal={view.turnBudgetMs ?? 1}
-                  onSit={() =>
-                    command({ kind: 'sit', seat: seat.seat, buyIn: DEFAULT_STAKE.defaultBuyIn })
+                  actionFlag={
+                    seat.playerId === null ? null : (seatActions.get(seat.playerId) ?? null)
                   }
+                  buyIn={entryBuyIn}
+                  onSit={() => {
+                    if (entryBuyIn !== null)
+                      command({ kind: 'sit', seat: seat.seat, buyIn: entryBuyIn })
+                  }}
                   onSelect={() => setSelectedSeat(seat.seat)}
                   anchorRef={(element) => {
                     const key = seat.playerId ?? `seat-${seat.seat}`
@@ -1244,6 +1326,10 @@ export function RiverRoomTable() {
               onAction={(action) => command({ kind: 'act', action })}
               onDeal={() => command({ kind: 'startHand' })}
               onRebuy={() => command({ kind: 'rebuy', amount: DEFAULT_STAKE.defaultBuyIn })}
+              balance={balance}
+              claimsEnabled={connection === 'connected'}
+              onClaimDaily={() => socketRef.current?.claimDaily()}
+              onClaimRescue={() => socketRef.current?.claimRescue()}
               canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
               seated={selfSeat !== null}
               kicked={kick !== null}
@@ -1416,6 +1502,8 @@ function RoomSeat({
   local,
   timer,
   timerTotal,
+  actionFlag,
+  buyIn,
   onSit,
   onSelect,
   anchorRef,
@@ -1426,6 +1514,8 @@ function RoomSeat({
   local: boolean
   timer: number | null
   timerTotal: number
+  actionFlag: SeatActionFlag | null
+  buyIn: number | null
   onSit: () => void
   onSelect: () => void
   anchorRef: (element: HTMLElement | null) => void
@@ -1471,10 +1561,14 @@ function RoomSeat({
         className="seat open-seat"
         style={{ '--seat-x': `${position.x}%`, '--seat-y': `${position.y}%` } as CSSProperties}
       >
-        <button type="button" onClick={onSit}>
+        <button type="button" onClick={onSit} disabled={buyIn === null}>
           SIT
           <br />
-          <small>{formatAmount(DEFAULT_STAKE.defaultBuyIn, false)}</small>
+          <small>
+            {buyIn === null
+              ? `NEED ${formatAmount(DEFAULT_STAKE.minBuyIn, false)}`
+              : formatAmount(buyIn, false)}
+          </small>
         </button>
       </article>
     )
@@ -1534,7 +1628,10 @@ function RoomSeat({
           <b>{formatAmount(pin.amount, !local)}</b>
         </div>
       ) : null}
-      {pin.kind === 'glyph' && pin.glyph !== null ? (
+      {actionFlag !== null && !active ? (
+        <div className={`seat-action ${actionFlag.tone}`}>{actionFlag.label}</div>
+      ) : null}
+      {pin.kind === 'glyph' && pin.glyph !== null && actionFlag === null ? (
         <div className={`seat-glyph ${pin.glyph}`} role="img" aria-label={GLYPH_LABEL[pin.glyph]}>
           {GLYPH_MARK[pin.glyph]}
         </div>
@@ -1554,6 +1651,10 @@ function RadialActionMenu({
   onAction,
   onDeal,
   onRebuy,
+  balance,
+  claimsEnabled,
+  onClaimDaily,
+  onClaimRescue,
   canDeal,
   seated,
   kicked,
@@ -1569,6 +1670,10 @@ function RadialActionMenu({
   onAction: (action: TurnAction) => void
   onDeal: () => void
   onRebuy: () => void
+  balance: number
+  claimsEnabled: boolean
+  onClaimDaily: () => void
+  onClaimRescue: () => void
   canDeal: boolean
   seated: boolean
   kicked: boolean
@@ -1584,8 +1689,22 @@ function RadialActionMenu({
     )
   if (!seated)
     return (
-      <div className="ram ram-waiting">
-        <span>CHOOSE AN OPEN SEAT</span>
+      <div className={`ram ram-waiting${balance < DEFAULT_STAKE.minBuyIn ? ' recovery' : ''}`}>
+        <span>
+          {balance < DEFAULT_STAKE.minBuyIn
+            ? `NEED ${formatAmount(DEFAULT_STAKE.minBuyIn, false)} TO SIT`
+            : 'CHOOSE AN OPEN SEAT'}
+        </span>
+        {balance < DEFAULT_STAKE.minBuyIn ? (
+          <div className="recovery-actions">
+            <button type="button" disabled={!claimsEnabled} onClick={onClaimDaily}>
+              DAILY CHIPS
+            </button>
+            <button type="button" disabled={!claimsEnabled} onClick={onClaimRescue}>
+              BUST RESCUE
+            </button>
+          </div>
+        ) : null}
       </div>
     )
   if (!localTurn || view.legal === null) {

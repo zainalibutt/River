@@ -19,7 +19,15 @@ VENUES = ('rooftop', 'basement', 'suite')
 def main():
     os.makedirs(WEB_DIR, exist_ok=True)
     published = []
-    for venue in VENUES:
+    requested = {
+        venue.strip()
+        for venue in os.environ.get('RIVER_VENUES', '').split(',')
+        if venue.strip()
+    }
+    venues = [venue for venue in VENUES if not requested or venue in requested]
+    if requested and set(venues) != requested:
+        raise SystemExit('unknown RIVER_VENUES: ' + ', '.join(sorted(requested - set(venues))))
+    for venue in venues:
         name = venue + '_assets.glb'
         source = os.path.join(OUT_DIR, name)
         if not os.path.exists(source):

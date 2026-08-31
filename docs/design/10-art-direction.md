@@ -18,7 +18,7 @@ Conservative by policy, per the Q9 retarget in `docs/spec.md`. Desktop can excee
 |---|---|---|
 | Scene triangles, total | 250,000 | Everything visible at once |
 | Table, rail, chips, cards | 60,000 | Chips instanced, never modelled per-chip |
-| One seated character | **15,000** (revised 2026-08-24 from a guessed 12,000, against a measured 14,114) | Nine seated = 135,000 worst case |
+| One source character | **23,000** (revised 2026-08-28 after the permitted orbit exposed the old leg cut) | Venue LOD and the 250,000 scene ceiling remain shipping gates |
 | Environment and backdrop | 80,000 | Skyline is a card, not geometry |
 | Texture memory | 128 MB | Compressed where supported |
 | Max texture dimension | 2048 | 1024 preferred; characters share one atlas |
@@ -104,7 +104,7 @@ Confirmed for v1 by Zain. The reference's characters are a large part of why its
 |---|---|
 | Style | Stylised-realistic, reference-adjacent. Not cartoon, not photoreal |
 | Budget | 12,000 triangles, one shared 1024 atlas across the cast |
-| Rig | Upper body only below the waist is static — characters are seated and never walk |
+| Rig | Complete seated body; lower limbs stay on the shared rig for chair fit and the all-in stand-up |
 | Faces | No facial animation, per spec. Features are textured, not rigged |
 | Silhouette | Must read at 10 feet. Distinct headwear, shoulder line and posture per archetype. Silhouette test is an acceptance criterion below |
 | Variation | Palette swaps plus three head accessories over two base bodies for v1 |

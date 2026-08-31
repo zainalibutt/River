@@ -246,3 +246,15 @@ export function worldSeats(
     }
   })
 }
+
+export function seatCameraAzimuth(
+  seat: number,
+  ring: { x: number; y: number } = VENUES.rooftop.seatRing,
+): number {
+  if (!Number.isSafeInteger(seat) || seat < 0 || seat >= SEAT_SLOTS - 1) return 0
+  const position = worldSeats(
+    Array.from({ length: seat + 1 }, (_, index) => String(index)),
+    ring,
+  )[seat]
+  return position === undefined ? 0 : Math.atan2(position.x, position.z)
+}

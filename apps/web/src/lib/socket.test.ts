@@ -97,4 +97,35 @@ describe('River browser socket', () => {
     socket.serverClose()
     await expect(connected).rejects.toThrow('closed before authentication')
   })
+
+  it('sends grant claims and forwards their outcomes', async () => {
+    const socket = new TestSocket()
+    const listener = vi.fn()
+    const river = new RiverSocket({
+      url: 'ws://river.local/ws',
+      createSocket: () => socket,
+      createRequestId: () => 'grant-request',
+    })
+    river.subscribe(listener)
+    const connected = river.connect('access-token')
+    socket.open()
+    socket.message({ kind: 'authenticated', playerId: 'player', anonymous: true, admin: false })
+    await connected
+
+    river.claimDaily()
+    expect(JSON.parse(socket.sent[1] ?? '')).toEqual({
+      kind: 'claimDaily',
+      requestId: 'grant-request',
+    })
+    socket.message({
+      kind: 'grant',
+      requestId: 'grant-request',
+      outcome: { kind: 'granted', delta: 10_000, balance: 35_000, ref: 'daily:player:day' },
+    })
+    expect(listener).toHaveBeenLastCalledWith({
+      kind: 'grant',
+      requestId: 'grant-request',
+      outcome: { kind: 'granted', delta: 10_000, balance: 35_000, ref: 'daily:player:day' },
+    })
+  })
 })

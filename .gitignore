@@ -54,6 +54,14 @@ docs/images/menus/
 docs/images/3_main/
 docs/behaviour-reference.md
 docs/*-behaviour-reference.md
+# The capture kit is 2.7GB of somebody else's product, and its directory name
+# names them. Matched by shape as well as by path so a rename does not re-arm it.
+docs/images/*Reference_Kit*/
+docs/images/**/pictures_from_the_checklist/
+docs/images/**/recording_screenshots/
+
+# Raw dictation and scratch notes - working material, not portfolio material
+docs/images/justwords.txt
 
 # Internal working notes - not portfolio material
 docs/handoff/reference-hygiene.md

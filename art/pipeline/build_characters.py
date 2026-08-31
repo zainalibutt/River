@@ -17,7 +17,6 @@ import bpy
 from buildkit import smooth_mesh_by_angle
 from values import (
     BUDGET,
-    CHARACTER_CULL_FRACTION,
 )
 
 OUT_DIR = os.environ['RIVER_OUT']
@@ -27,11 +26,59 @@ FEMALE = 'char_female'
 MPFB_MODULE = 'bl_ext.blender_org.mpfb'
 
 POISON_NAMES = ('body', 'left', 'right', 'helpergeometry')
-GARMENT_BONES = ('spine', 'clavicle', 'shoulder', 'upperarm', 'breast', 'pelvis')
+GARMENT_BONES = ('spine', 'clavicle', 'shoulder', 'upperarm', 'lowerarm', 'breast', 'pelvis')
 GARMENT_WELD_DISTANCE = 0.0005
 ATLAS_SIZE = 1024
 ATLAS_COLUMNS = 8
 ATLAS_ROWS = 4
+
+FACE_RECIPE_CELLS = {
+    'young_everyday': (3, 0),
+    'established_everyday': (0, 3),
+    'older_everyday': (2, 3),
+    'young_glamorous': (5, 3),
+    'established_glamorous': (3, 2),
+    'older_glamorous': (5, 2),
+}
+
+HAIR_STYLES = ('slick_back', 'side_part', 'crop', 'quiff', 'bob', 'bun', 'bald')
+
+OUTFIT_RECIPE_CELLS = {
+    'dealer_ivory': (4, 1),
+    'm1_dinner': (5, 1),
+    'f1_cocktail_everyday': (6, 1),
+    'f1_cocktail_glamorous': (7, 2),
+    'm5_leather': (7, 3),
+}
+
+GOLD_FEMALE_IDENTITY = (
+    ('head-oval', 0.62),
+    ('head-invertedtriangular', 0.34),
+    ('forehead-temple-incr', 0.16),
+    ('l-eye-scale-decr', 0.08),
+    ('r-eye-scale-decr', 0.08),
+    ('l-eye-height1-decr', 0.12),
+    ('r-eye-height1-decr', 0.12),
+    ('l-eye-eyefold-up', 0.22),
+    ('r-eye-eyefold-up', 0.22),
+    ('l-eye-corner2-up', 0.14),
+    ('r-eye-corner2-up', 0.14),
+    ('l-cheek-bones-incr', 0.62),
+    ('r-cheek-bones-incr', 0.62),
+    ('l-cheek-volume-incr', 0.16),
+    ('r-cheek-volume-incr', 0.16),
+    ('nose-scale-horiz-decr', 0.30),
+    ('nose-point-width-decr', 0.24),
+    ('nose-scale-depth-decr', 0.12),
+    ('mouth-scale-horiz-incr', 0.14),
+    ('mouth-cupidsbow-incr', 0.46),
+    ('mouth-upperlip-volume-incr', 0.42),
+    ('mouth-lowerlip-volume-incr', 0.50),
+    ('mouth-angles-up', 0.12),
+    ('chin-width-decr', 0.42),
+    ('chin-height-decr', 0.18),
+    ('chin-prominent-decr', 0.08),
+)
 
 
 def have_mpfb():
@@ -196,6 +243,18 @@ def shade_ellipse(pixels, centre_x, centre_y, radius_x, radius_y, darken, softne
                 pixels[index + channel] = max(0, min(255, int(pixels[index + channel] * (1.0 - amount))))
 
 
+def tint_ellipse(pixels, centre_x, centre_y, radius_x, radius_y, colour, strength, softness=0.55):
+    for y in range(centre_y - radius_y, centre_y + radius_y + 1):
+        normal_y = (y - centre_y) / max(1, radius_y)
+        for x in range(centre_x - radius_x, centre_x + radius_x + 1):
+            normal_x = (x - centre_x) / max(1, radius_x)
+            distance = math.sqrt(normal_x * normal_x + normal_y * normal_y)
+            if distance > 1.0:
+                continue
+            falloff = 1.0 if distance < softness else (1.0 - distance) / max(1e-6, 1.0 - softness)
+            blend_pixel(pixels, x, y, colour, strength * falloff)
+
+
 def paint_ellipse(pixels, centre_x, centre_y, radius_x, radius_y, colour):
     for y in range(centre_y - radius_y, centre_y + radius_y + 1):
         normal_y = (y - centre_y) / max(1, radius_y)
@@ -225,18 +284,20 @@ def skin_tone(female):
     return (202, 153, 122) if female else (194, 145, 108)
 
 
-def paint_face_cell(pixels, female):
-    width = ATLAS_SIZE // ATLAS_COLUMNS
+def paint_face_cell(pixels, female, cell_x=3, cell_y=0, age='young', glamorous=False):
+    cell_width = ATLAS_SIZE // ATLAS_COLUMNS
+    width = cell_width * 2
     height = ATLAS_SIZE // ATLAS_ROWS
-    x0 = 3 * width
+    x0 = cell_x * cell_width
+    y0 = cell_y * height
     skin = skin_tone(female) + (255,)
     # Flat, not graded. A gradient across the face island is a second value
     # gradient fighting the shading below, and its top edge lands where the face
     # meets the scalp.
-    fill_gradient(pixels, 3, 0, skin[:3], skin[:3])
-    eye_y = round(height * 0.58)
-    brow_y = round(height * 0.67)
-    lip_y = round(height * 0.31)
+    fill_rect(pixels, x0, y0, x0 + width, y0 + height, skin)
+    eye_y = y0 + round(height * 0.58)
+    brow_y = y0 + round(height * 0.67)
+    lip_y = y0 + round(height * 0.31)
     centre_x = x0 + width // 2
 
     # Features, not form.
@@ -251,27 +312,34 @@ def paint_face_cell(pixels, female):
     # What is left is what geometry at this triangle count cannot give: a band
     # under the brow ridge, a socket around each eye, shadow beside and beneath
     # the nose, and one under the lip. All of them sit well inside the island.
-    shade_ellipse(pixels, centre_x, brow_y - 4, round(width * 0.40), round(height * 0.045), 0.20, 0.30)
-    for fraction in (0.32, 0.68):
-        shade_ellipse(pixels, x0 + round(width * fraction), eye_y + 2, 22, 15, 0.22, 0.20)
-    shade_ellipse(pixels, centre_x - 7, round(height * 0.47), 9, round(height * 0.09), 0.20, 0.20)
-    shade_ellipse(pixels, centre_x, round(height * 0.375), 15, 6, 0.24, 0.25)
-    shade_ellipse(pixels, centre_x, round(height * 0.265), round(width * 0.16), 7, 0.20, 0.25)
     for fraction in (0.32, 0.68):
         eye_x = x0 + round(width * fraction)
-        paint_ellipse(pixels, eye_x, eye_y, 12, 7, (91, 59, 43, 255))
-        paint_ellipse(pixels, eye_x, eye_y, 9, 4, (181, 168, 145, 255))
-        paint_ellipse(pixels, eye_x, eye_y, 3, 4, (35, 27, 24, 255))
-        paint_line(pixels, eye_x - 14, eye_y + 6, eye_x + 13, eye_y + 6, 2, (61, 39, 29, 255))
-        paint_line(pixels, eye_x - 15, brow_y, eye_x + 14, brow_y + 2, 3, (61, 39, 29, 255))
-    paint_line(pixels, x0 + width // 2, round(height * 0.55), x0 + width // 2 - 3, round(height * 0.39), 2, (166, 112, 86, 255))
-    paint_line(pixels, x0 + round(width * 0.38), lip_y, x0 + round(width * 0.62), lip_y, 3, (128, 64, 61, 255))
-    paint_line(pixels, x0 + 5, round(height * 0.84), x0 + width - 6, round(height * 0.84), 9, (55, 37, 29, 255))
+        shade_ellipse(pixels, eye_x, eye_y + 2, 30, 15, 0.23, 0.30)
+        shade_ellipse(pixels, eye_x, eye_y, 15, 5, 0.42, 0.54)
+        shade_ellipse(pixels, eye_x, brow_y, 23, 5, 0.29, 0.58)
+    shade_ellipse(pixels, centre_x - 11, y0 + round(height * 0.47), 13, round(height * 0.09), 0.17, 0.24)
+    shade_ellipse(pixels, centre_x, y0 + round(height * 0.375), 20, 6, 0.21, 0.28)
+    shade_ellipse(pixels, centre_x, y0 + round(height * 0.265), round(width * 0.16), 7, 0.20, 0.25)
+    warmth = (224, 128, 96)
+    for fraction in (0.30, 0.70):
+        tint_ellipse(pixels, x0 + round(width * fraction), y0 + round(height * 0.43), 28, 24, warmth, 0.13 if glamorous and female else 0.08)
+    tint_ellipse(pixels, centre_x, y0 + round(height * 0.50), 18, 34, warmth, 0.06)
+    lip_strength = 0.78 if glamorous and female else 0.58
+    tint_ellipse(pixels, centre_x, lip_y, round(width * 0.13), 6, (142, 48, 58), lip_strength, 0.62)
+    if glamorous and female:
+        brow = (68, 42, 34, 255)
+        paint_line(pixels, x0 + round(width * 0.235), brow_y, x0 + round(width * 0.385), brow_y + 3, 2, brow)
+        paint_line(pixels, x0 + round(width * 0.615), brow_y + 3, x0 + round(width * 0.765), brow_y, 2, brow)
+    shade_ellipse(pixels, centre_x, y0 + round(height * 0.985), round(width * 0.43), 14, 0.06, 0.68)
+    if age in {'established', 'older'}:
+        age_strength = 0.07 if age == 'established' else 0.12
+        for fraction in (0.32, 0.68):
+            shade_ellipse(pixels, x0 + round(width * fraction), eye_y - 9, 27, 8, age_strength, 0.62)
+    if age == 'older':
+        for fraction in (0.42, 0.58):
+            shade_ellipse(pixels, x0 + round(width * fraction), y0 + round(height * 0.39), 8, 24, 0.08, 0.66)
     if not female:
-        for y in range(round(height * 0.18), round(height * 0.38), 5):
-            for x in range(x0 + round(width * 0.23), x0 + round(width * 0.78), 7):
-                if (x * 13 + y * 7) % 5 < 2:
-                    paint_ellipse(pixels, x, y, 1, 1, (119, 87, 70, 255))
+        shade_ellipse(pixels, centre_x, y0 + round(height * 0.29), round(width * 0.31), round(height * 0.13), 0.11, 0.30)
 
 
 def paint_garment_cell(pixels, base, cell_x=1, cell_y=0):
@@ -310,12 +378,12 @@ def paint_garment_cell(pixels, base, cell_x=1, cell_y=0):
     #
     # Painted top-down in cell space, which is bottom-up on the model - the atlas
     # writer flips rows - so the wide end sits at the high v where the collar is.
-    ivory = (223, 213, 191)
+    ivory = (210, 199, 176)
     lapel = (13, 15, 19)
     centre = x0 + width / 2.0
     top = height * 0.95
-    apex = height * 0.58
-    half_at_collar = width * 0.21
+    apex = height * 0.72
+    half_at_collar = width * 0.12
     feather = 2.4
 
     for local_y in range(height):
@@ -354,6 +422,120 @@ def paint_garment_cell(pixels, base, cell_x=1, cell_y=0):
     for local_y in range(round(height * 0.95), round(height * 0.99)):
         for local_x in range(8, width - 8):
             blend_pixel(pixels, x0 + local_x, y0 + local_y, lapel, 0.9)
+
+
+def paint_hair_cell(pixels, base, skin, cell_x=2, cell_y=0):
+    width = ATLAS_SIZE // ATLAS_COLUMNS
+    height = ATLAS_SIZE // ATLAS_ROWS
+    x0 = cell_x * width
+    y0 = cell_y * height
+    fill_gradient(
+        pixels,
+        cell_x,
+        cell_y,
+        tuple(max(0, channel - 3) for channel in base),
+        tuple(min(255, channel + 12) for channel in base),
+    )
+    transition = tuple(round(channel * 0.85) for channel in skin)
+    highlight = tuple(min(255, channel + 18) for channel in base)
+    shadow = tuple(max(0, channel - 7) for channel in base)
+    for local_y in range(height):
+        hairline = min(1.0, local_y / 6.0)
+        hairline = hairline * hairline * (3.0 - 2.0 * hairline)
+        for local_x in range(width):
+            if hairline < 1.0:
+                blend_pixel(pixels, x0 + local_x, y0 + local_y, transition, 1.0 - hairline)
+            u = local_x / width
+            v = local_y / height
+            broad = 0.0
+            for centre in (0.22, 0.51, 0.80):
+                distance = abs(u - (centre + 0.07 * (v - 0.5)))
+                broad += 0.21 * max(0.0, 1.0 - distance / 0.11) ** 2
+            strand_phase = (u + 0.105 * (v - 0.5)) * 34.0 * math.pi
+            ridge = max(0.0, math.sin(strand_phase)) ** 8
+            groove = max(0.0, -math.sin(strand_phase)) ** 10
+            blend_pixel(pixels, x0 + local_x, y0 + local_y, highlight, (broad + 0.24 * ridge) * hairline)
+            blend_pixel(pixels, x0 + local_x, y0 + local_y, shadow, 0.17 * groove * hairline)
+
+
+def paint_wave_one_outfit_cell(pixels, style, cell_x, cell_y):
+    width = ATLAS_SIZE // ATLAS_COLUMNS
+    height = ATLAS_SIZE // ATLAS_ROWS
+    x0 = cell_x * width
+    y0 = cell_y * height
+    centre = x0 + width // 2
+    if style == 'dealer_ivory':
+        fill_gradient(pixels, cell_x, cell_y, (215, 202, 181), (239, 228, 208))
+        dark = (12, 14, 16)
+        fill_rect(
+            pixels,
+            x0 + round(width * 0.41),
+            y0 + round(height * 0.86),
+            x0 + round(width * 0.59),
+            y0 + round(height * 0.99),
+            dark + (255,),
+        )
+        paint_line(
+            pixels,
+            x0 + round(width * 0.38),
+            y0 + round(height * 0.96),
+            centre - 3,
+            y0 + round(height * 0.68),
+            7,
+            dark + (255,),
+        )
+        paint_line(
+            pixels,
+            x0 + round(width * 0.62),
+            y0 + round(height * 0.96),
+            centre + 3,
+            y0 + round(height * 0.68),
+            7,
+            dark + (255,),
+        )
+        paint_ellipse(pixels, centre - 7, y0 + round(height * 0.87), 8, 5, dark + (255,))
+        paint_ellipse(pixels, centre + 7, y0 + round(height * 0.87), 8, 5, dark + (255,))
+        return
+    if style == 'm1_dinner':
+        paint_garment_cell(pixels, (18, 24, 40), cell_x, cell_y)
+        return
+    if style.startswith('f1_cocktail'):
+        base = (70, 24, 36) if style.endswith('everyday') else (118, 14, 30)
+        fill_gradient(
+            pixels,
+            cell_x,
+            cell_y,
+            tuple(max(0, channel - 8) for channel in base),
+            tuple(min(255, channel + 13) for channel in base),
+        )
+        skin = (181, 128, 98)
+        for local_y in range(round(height * 0.89), height):
+            half = width * (0.13 + (local_y / height - 0.89) * 0.85)
+            for local_x in range(width):
+                if abs((x0 + local_x + 0.5) - centre) < half:
+                    blend_pixel(pixels, x0 + local_x, y0 + local_y, skin, 0.96)
+        for local_y in range(height):
+            band = 0.5 + 0.5 * math.cos((local_y / height - 0.52) * math.pi * 1.8)
+            for local_x in range(round(width * 0.43), round(width * 0.58)):
+                blend_pixel(pixels, x0 + local_x, y0 + local_y, (176, 54, 62), 0.09 * band)
+        for local_y in range(round(height * 0.345), round(height * 0.375)):
+            for local_x in range(5, width - 5):
+                edge = min(1.0, min(local_x - 4, width - 5 - local_x) / 5.0)
+                blend_pixel(pixels, x0 + local_x, y0 + local_y, (151, 116, 55), 0.72 * edge)
+        return
+    if style == 'm5_leather':
+        fill_gradient(pixels, cell_x, cell_y, (13, 13, 16), (28, 27, 30))
+        for local_y in range(height):
+            diagonal = round(width * (0.34 + 0.28 * local_y / height))
+            for offset in range(-2, 3):
+                blend_pixel(pixels, x0 + diagonal + offset, y0 + local_y, (82, 72, 64), 0.52 - abs(offset) * 0.09)
+        for local_y in range(round(height * 0.91), round(height * 0.99)):
+            for local_x in range(5, width - 5):
+                blend_pixel(pixels, x0 + local_x, y0 + local_y, (7, 8, 10), 0.85)
+        for local_y in range(round(height * 0.74), round(height * 0.90)):
+            strength = 0.10 * math.sin((local_y / height - 0.74) / 0.16 * math.pi)
+            for local_x in range(width):
+                blend_pixel(pixels, x0 + local_x, y0 + local_y, (86, 80, 74), strength)
 
 
 def create_character_atlas(name, female):
@@ -413,10 +595,21 @@ def create_character_atlas(name, female):
     # Hair, and the third value of the three. At (72, 49, 36) it was a tan that
     # landed between the skin and the shirt, which is most of why a shell over
     # the skull read as a cap rather than as hair - it was the colour of one.
-    fill_gradient(pixels, 2, 0, (16, 12, 11), (38, 28, 23))
-    paint_face_cell(pixels, female)
-    fill_gradient(pixels, 4, 0, tuple(max(0, channel - 10) for channel in skin), tuple(min(255, channel + 12) for channel in skin))
-    fill_gradient(pixels, 5, 0, (118, 89, 46), (205, 169, 93))
+    paint_hair_cell(pixels, (24, 18, 15), skin)
+    for recipe, cell in FACE_RECIPE_CELLS.items():
+        age, presentation = recipe.split('_', 1)
+        paint_face_cell(pixels, female, cell[0], cell[1], age, presentation == 'glamorous')
+    for style, cell in OUTFIT_RECIPE_CELLS.items():
+        paint_wave_one_outfit_cell(pixels, style, cell[0], cell[1])
+    fill_gradient(pixels, 5, 0, tuple(max(0, channel - 10) for channel in skin), tuple(min(255, channel + 12) for channel in skin))
+    fill_gradient(
+        pixels,
+        6,
+        0,
+        (74, 9, 21) if female else (30, 36, 48),
+        (132, 20, 38) if female else (56, 64, 78),
+    )
+    fill_gradient(pixels, 7, 0, (9, 10, 13), (22, 24, 29))
     handle = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
     handle.close()
     try:
@@ -433,25 +626,31 @@ def create_character_atlas(name, female):
 def add_atlas_material(name, image):
     material = bpy.data.materials.new(name)
     material.use_nodes = True
+    material.use_backface_culling = True
     nodes = material.node_tree.nodes
     bsdf = nodes.get('Principled BSDF')
     texture = nodes.new('ShaderNodeTexImage')
     texture.image = image
     material.node_tree.links.new(texture.outputs['Color'], bsdf.inputs['Base Color'])
     bsdf.inputs['Base Color'].default_value = (1.0, 1.0, 1.0, 1.0)
-    bsdf.inputs['Roughness'].default_value = 0.62
+    # The single-atlas character material is judged under Rooftop's broad key.
+    # At 0.62 its highlight broke the procedural hair shell into skin-coloured
+    # polygon islands and blew facial planes flat. A restrained matte response
+    # keeps the authored value shapes legible until dedicated skin/hair maps
+    # land without spending another material slot.
+    bsdf.inputs['Roughness'].default_value = 0.78
     return material
 
 
-def atlas_uv(cell_x, cell_y, local_u, local_v):
+def atlas_uv(cell_x, cell_y, local_u, local_v, span_x=1):
     margin_u = 0.015
     margin_v = 0.012
     local_u = min(1.0 - margin_u, max(margin_u, local_u))
     local_v = min(1.0 - margin_v, max(margin_v, local_v))
-    return ((cell_x + local_u) / ATLAS_COLUMNS, (cell_y + local_v) / ATLAS_ROWS)
+    return ((cell_x + local_u * span_x) / ATLAS_COLUMNS, (cell_y + local_v) / ATLAS_ROWS)
 
 
-def apply_body_atlas(obj, material):
+def apply_body_atlas(obj, material, face_cell=(3, 0)):
     mesh = obj.data
     mesh.materials.clear()
     mesh.materials.append(material)
@@ -460,12 +659,18 @@ def apply_body_atlas(obj, material):
     layer = mesh.uv_layers.new(name='RiverCharacterAtlas')
     for polygon in mesh.polygons:
         centre = polygon.center
-        if centre.z > 1.46:
-            face = centre.y < -0.035
-            cell = (3, 0) if face else (2, 0)
-        elif abs(centre.x) > 0.37 and centre.z < 1.12:
+        if abs(centre.x) > 0.37 and centre.z < 1.12:
             face = False
-            cell = (4, 0)
+            cell = (5, 0)
+        elif centre.z < 0.18:
+            face = False
+            cell = (7, 0)
+        elif centre.z < 0.96:
+            face = False
+            cell = (6, 0)
+        elif centre.z > 1.46:
+            face = centre.y < -0.035
+            cell = face_cell if face else (2, 0)
         else:
             face = False
             cell = (0, 0)
@@ -477,56 +682,439 @@ def apply_body_atlas(obj, material):
             else:
                 local_u = coordinate.x + 0.5
                 local_v = (coordinate.z - 0.52) / 1.16
-            layer.data[loop_index].uv = atlas_uv(cell[0], cell[1], local_u, local_v)
+            layer.data[loop_index].uv = atlas_uv(cell[0], cell[1], local_u, local_v, 2 if face else 1)
 
 
-def apply_garment_atlas(obj, material):
+def remove_eye_shells(obj):
+    """Remove MPFB's six disconnected eye shells.
+
+    The face atlas carries the gameplay-scale eye read. Retaining any of the
+    overlapping cornea, iris or eyeball shells produces intersecting triangular
+    fragments in profile, while a replacement sphere intersects the source
+    eyelids for the same reason.
+    """
+    mesh = obj.data
+    adjacency = [[] for _ in mesh.vertices]
+    for edge in mesh.edges:
+        first, second = edge.vertices
+        adjacency[first].append(second)
+        adjacency[second].append(first)
+    seen = set()
+    eye_components = []
+    eye_spikes = []
+    head_top = max(vertex.co.z for vertex in mesh.vertices)
+    for vertex in mesh.vertices:
+        if vertex.index in seen:
+            continue
+        component = set()
+        pending = [vertex.index]
+        while pending:
+            current = pending.pop()
+            if current in component:
+                continue
+            component.add(current)
+            seen.add(current)
+            pending.extend(adjacency[current])
+        points = [mesh.vertices[index].co for index in component]
+        if (
+            30 <= len(component) <= 40
+            and max(abs(point.x) for point in points) < 0.06
+            and max(point.y for point in points) < -0.09
+            and min(point.z for point in points) > head_top - 0.18
+            and max(point.z for point in points) < head_top - 0.06
+        ):
+            eye_components.append(component)
+        if (
+            len(component) == 4
+            and 0.020 < min(abs(point.x) for point in points)
+            and max(abs(point.x) for point in points) < 0.040
+            and max(point.y for point in points) < -0.12
+            and min(point.z for point in points) > head_top - 0.18
+            and max(point.z for point in points) < head_top - 0.05
+        ):
+            eye_spikes.append(component)
+    if len(eye_components) != 6:
+        raise RuntimeError('expected 6 source eye shells, found %d' % len(eye_components))
+    if len(eye_spikes) < 6:
+        raise RuntimeError('expected at least 6 source eye spikes, found %d' % len(eye_spikes))
+    eye_spikes = sorted(
+        eye_spikes,
+        key=lambda component: sum(mesh.vertices[index].co.y for index in component) / len(component),
+    )[:6]
+    eye_specs = []
+    for side in (-1, 1):
+        candidates = [
+            component for component in eye_components
+            if sum(mesh.vertices[index].co.x for index in component) / len(component) * side > 0.0
+        ]
+        sclera_component = max(
+            candidates,
+            key=lambda component: max(mesh.vertices[index].co.y for index in component)
+            - min(mesh.vertices[index].co.y for index in component),
+        )
+        coordinates = [mesh.vertices[index].co for index in sclera_component]
+        centre = tuple(
+            sum(coordinate[axis] for coordinate in coordinates) / len(coordinates)
+            for axis in range(3)
+        )
+        radii = tuple(
+            (max(coordinate[axis] for coordinate in coordinates)
+             - min(coordinate[axis] for coordinate in coordinates)) * 0.47
+            for axis in range(3)
+        )
+        eye_specs.append((centre, radii))
+
+    discarded = {
+        index
+        for component in eye_components + eye_spikes
+        for index in component
+    }
+    removed_faces = sum(
+        1
+        for polygon in mesh.polygons
+        if any(index in discarded for index in polygon.vertices)
+    )
+    mesh_data = bmesh.new()
+    mesh_data.from_mesh(mesh)
+    mesh_data.verts.ensure_lookup_table()
+    bmesh.ops.delete(
+        mesh_data,
+        geom=[mesh_data.verts[index] for index in sorted(discarded)],
+        context='VERTS',
+    )
+
+    mesh_data.to_mesh(mesh)
+    mesh_data.free()
+    obj['eyeShellsRemoved'] = len(eye_components)
+    obj['eyeSpikesRemoved'] = len(eye_spikes)
+    print('EYE_SHELLS %s: shells_removed=%d spikes_removed=%d faces_removed=%d' % (
+        obj.name, len(eye_components), len(eye_spikes), removed_faces
+    ))
+    return removed_faces, eye_specs
+
+
+def add_gold_eyes(obj, eye_specs):
+    vertices = []
+    faces = []
+    colours = []
+
+    def add_vertex(coordinate, colour):
+        vertices.append(coordinate)
+        colours.append(colour)
+        return len(vertices) - 1
+
+    def add_ellipsoid(center, radii, colour, segments=16, rings=8):
+        bottom = add_vertex((center[0], center[1], center[2] - radii[2]), colour)
+        ring_starts = []
+        for ring in range(1, rings):
+            latitude = -math.pi / 2.0 + math.pi * ring / rings
+            ring_starts.append(len(vertices))
+            for segment in range(segments):
+                longitude = 2.0 * math.pi * segment / segments
+                add_vertex((
+                    center[0] + radii[0] * math.cos(latitude) * math.cos(longitude),
+                    center[1] + radii[1] * math.cos(latitude) * math.sin(longitude),
+                    center[2] + radii[2] * math.sin(latitude),
+                ), colour)
+        top = add_vertex((center[0], center[1], center[2] + radii[2]), colour)
+        first = ring_starts[0]
+        for segment in range(segments):
+            following = (segment + 1) % segments
+            faces.append((bottom, first + following, first + segment))
+        for ring in range(len(ring_starts) - 1):
+            lower = ring_starts[ring]
+            upper = ring_starts[ring + 1]
+            for segment in range(segments):
+                following = (segment + 1) % segments
+                faces.append((lower + segment, lower + following, upper + following, upper + segment))
+        last = ring_starts[-1]
+        for segment in range(segments):
+            following = (segment + 1) % segments
+            faces.append((last + segment, last + following, top))
+
+    def add_disc(center, radius, colour, segments=16):
+        middle = add_vertex(center, colour)
+        rim = []
+        for segment in range(segments):
+            angle = 2.0 * math.pi * segment / segments
+            rim.append(add_vertex((
+                center[0] + radius * math.cos(angle),
+                center[1],
+                center[2] + radius * math.sin(angle),
+            ), colour))
+        for segment in range(segments):
+            faces.append((middle, rim[segment], rim[(segment + 1) % segments]))
+
+    sclera = (0.82, 0.79, 0.72, 1.0)
+    iris = (0.22, 0.095, 0.035, 1.0)
+    pupil = (0.012, 0.009, 0.008, 1.0)
+    catchlight = (1.0, 0.94, 0.82, 1.0)
+    for centre, source_radii in eye_specs:
+        side = -1.0 if centre[0] < 0.0 else 1.0
+        radii = (
+            source_radii[0],
+            max(0.010, source_radii[1]),
+            source_radii[2],
+        )
+        add_ellipsoid(centre, radii, sclera)
+        eye_front = centre[1] - radii[1] - 0.0008
+        iris_radius = radii[0] * 0.43
+        pupil_radius = iris_radius * 0.45
+        add_disc((centre[0], eye_front, centre[2]), iris_radius, iris)
+        add_disc((centre[0], eye_front - 0.0003, centre[2]), pupil_radius, pupil)
+        add_disc((centre[0] - side * iris_radius * 0.27, eye_front - 0.0006, centre[2] + iris_radius * 0.30), iris_radius * 0.14, catchlight, segments=8)
+
+    mesh = bpy.data.meshes.new(obj.name + '_eyes')
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    colour_layer = mesh.color_attributes.new(name='EyeColour', type='BYTE_COLOR', domain='CORNER')
+    for polygon in mesh.polygons:
+        for loop_index in polygon.loop_indices:
+            colour_layer.data[loop_index].color = colours[mesh.loops[loop_index].vertex_index]
+
+    material = bpy.data.materials.new(obj.name + '_eye_mat')
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    bsdf = nodes.get('Principled BSDF')
+    vertex_colour = nodes.new('ShaderNodeVertexColor')
+    vertex_colour.layer_name = 'EyeColour'
+    links.new(vertex_colour.outputs['Color'], bsdf.inputs['Base Color'])
+    links.new(vertex_colour.outputs['Alpha'], bsdf.inputs['Alpha'])
+    bsdf.inputs['Roughness'].default_value = 0.38
+    mesh.materials.append(material)
+
+    eyes = bpy.data.objects.new(mesh.name, mesh)
+    bpy.context.scene.collection.objects.link(eyes)
+    eyes.parent = obj
+    head_group = eyes.vertex_groups.new(name='head')
+    head_group.add(list(range(len(vertices))), 1.0, 'REPLACE')
+    modifier = eyes.modifiers.new('armature', 'ARMATURE')
+    modifier.object = armature_of(obj)
+    eyes['characterFeature'] = True
+    eyes['cosmeticSlot'] = 'eyes'
+    smooth_mesh_by_angle(mesh)
+    return eyes
+
+
+def add_gold_expressions(obj, eye_specs):
+    if not eye_specs:
+        return []
+    basis = obj.shape_key_add(name='Basis')
+    basis.interpolation = 'KEY_LINEAR'
+    eye_z = sum(spec[0][2] for spec in eye_specs) / len(eye_specs)
+    eye_y = sum(spec[0][1] for spec in eye_specs) / len(eye_specs)
+    eye_x = max(abs(spec[0][0]) for spec in eye_specs)
+    eye_rx = max(spec[1][0] for spec in eye_specs)
+    eye_rz = max(spec[1][2] for spec in eye_specs)
+    mouth_z = eye_z - 0.105
+    expressions = []
+
+    def add_expression(name, deform):
+        key = obj.shape_key_add(name=name, from_mix=False)
+        key.interpolation = 'KEY_LINEAR'
+        for index, source in enumerate(basis.data):
+            key.data[index].co = deform(source.co.copy())
+        expressions.append(name)
+
+    def eyelid_deform(amount, brow=False):
+        def deform(co):
+            for centre, _ in eye_specs:
+                dx = abs(co.x - centre[0]) / max(eye_rx * 1.45, 0.001)
+                dz = abs(co.z - centre[2]) / max(eye_rz * 1.75, 0.001)
+                if dx < 1.0 and dz < 1.0 and co.y < eye_y + 0.012:
+                    weight = (1.0 - dx * dx) * (1.0 - dz * dz)
+                    co.z += (centre[2] - co.z) * amount * weight
+                    co.y -= 0.0015 * weight
+            if brow and co.y < eye_y + 0.018 and eye_z + 0.018 < co.z < eye_z + 0.075:
+                span = abs(co.x) / max(eye_x + eye_rx, 0.001)
+                if span < 1.0:
+                    co.z -= 0.010 * (1.0 - span) ** 2
+            return co
+        return deform
+
+    def smile_deform(co, side_bias=0.0):
+        if co.y < eye_y + 0.015 and abs(co.x) < 0.075 and abs(co.z - mouth_z) < 0.042:
+            horizontal = min(1.0, abs(co.x) / 0.068)
+            vertical = max(0.0, 1.0 - abs(co.z - mouth_z) / 0.042)
+            side = 1.0 + side_bias * (1.0 if co.x > 0.0 else -1.0)
+            co.z += 0.020 * horizontal * vertical * side
+            co.x += math.copysign(0.007 * horizontal * vertical, co.x if co.x else 1.0)
+            co.y -= 0.0025 * vertical
+        cheek_z = mouth_z + 0.045
+        if co.y < eye_y + 0.020 and 0.045 < abs(co.x) < 0.115 and abs(co.z - cheek_z) < 0.050:
+            cheek = max(0.0, 1.0 - abs(co.z - cheek_z) / 0.050)
+            co.z += 0.005 * cheek
+            co.y -= 0.002 * cheek
+        return co
+
+    def frustration_deform(co):
+        co = eyelid_deform(0.22, brow=True)(co)
+        if co.y < eye_y + 0.015 and abs(co.x) < 0.075 and abs(co.z - mouth_z) < 0.042:
+            horizontal = min(1.0, abs(co.x) / 0.068)
+            vertical = max(0.0, 1.0 - abs(co.z - mouth_z) / 0.042)
+            co.z -= 0.006 * horizontal * horizontal * vertical
+        return co
+
+    def surprise_deform(co):
+        if co.y < eye_y + 0.015 and abs(co.x) < 0.060 and abs(co.z - mouth_z) < 0.044:
+            vertical = max(0.0, 1.0 - abs(co.z - mouth_z) / 0.044)
+            direction = 1.0 if co.z >= mouth_z else -1.0
+            co.z += direction * 0.008 * vertical
+            co.x *= 0.985
+        if co.y < eye_y + 0.018 and eye_z + 0.018 < co.z < eye_z + 0.075 and abs(co.x) < eye_x + eye_rx:
+            co.z += 0.006
+        return co
+
+    add_expression('face_blink', eyelid_deform(0.92))
+    add_expression('face_soft_smile', lambda co: smile_deform(co))
+    add_expression('face_frustration', frustration_deform)
+    add_expression('face_squint', eyelid_deform(0.46, brow=True))
+    add_expression('face_smirk', lambda co: smile_deform(co, side_bias=0.70))
+    add_expression('face_surprise', surprise_deform)
+    obj['facialExpressions'] = ','.join(expressions)
+    return expressions
+
+
+def apply_garment_atlas(obj, material, cell=(1, 0)):
     mesh = obj.data
     mesh.materials.clear()
     mesh.materials.append(material)
+    while mesh.uv_layers:
+        mesh.uv_layers.remove(mesh.uv_layers[0])
     layer = mesh.uv_layers.new(name='RiverCharacterAtlas')
     for polygon in mesh.polygons:
         for loop_index in polygon.loop_indices:
             coordinate = mesh.vertices[mesh.loops[loop_index].vertex_index].co
             local_u = 0.5 + coordinate.x / 1.1
             local_v = (coordinate.z - 0.58) / 0.88
-            layer.data[loop_index].uv = atlas_uv(1, 0, local_u, local_v)
+            layer.data[loop_index].uv = atlas_uv(cell[0], cell[1], local_u, local_v)
 
 
-def build_hair(obj, material, female):
-    segments = 16
-    rings = 6
+def build_hair(obj, material, female, style):
+    if style == 'bald':
+        return None
+    segments = 20 if style == 'crop' else 40 if style == 'bob' else 24
+    rings = 6 if style == 'crop' else 15 if style == 'bob' else 9
     centre_y = -0.044
     centre_z = 1.558
-    radius_x = 0.108
-    radius_y = 0.112
-    radius_z = 0.122
+    if style == 'bob':
+        radius_x, radius_y, radius_z = 0.113, 0.111, 0.135
+    elif style == 'crop':
+        radius_x, radius_y, radius_z = 0.113, 0.114, 0.118
+    elif style == 'bun':
+        radius_x, radius_y, radius_z = 0.113, 0.115, 0.126
+    else:
+        radius_x, radius_y, radius_z = 0.116, 0.120, 0.134
     vertices = []
     faces = []
-    # A hairline, rather than a bowl with a peak on it.
-    #
-    # Every ring used to stop at the same angle from the crown all the way
-    # round, so the shell met the forehead at the same height it met the nape.
-    # That is a hat, and a swept tube across the brow made it unmistakably a
-    # flat cap. Real hair sits high at the forehead and runs down at the back
-    # and sides, and at this distance that boundary is most of what says hair.
-    #
-    # -Y is the direction the face looks, so the limit is pulled up where the
-    # forehead is and let down everywhere else. Squaring the bias keeps the
-    # temples low instead of tapering them away with the brow.
     for ring in range(rings):
         span = ring / (rings - 1)
         for segment in range(segments):
             around = 2.0 * math.pi * segment / segments
             front = max(0.0, -math.sin(around))
-            limit = (1.82 if female else 1.66) - 0.62 * front * front
-            angle = 0.16 + span * (limit - 0.16)
-            vertices.append((
-                radius_x * math.sin(angle) * math.cos(around),
-                centre_y + radius_y * math.sin(angle) * math.sin(around),
-                centre_z + radius_z * math.cos(angle),
-            ))
-    faces.append(tuple(range(segments - 1, -1, -1)))
+            back = max(0.0, math.sin(around))
+            side = abs(math.cos(around))
+            left = max(0.0, -math.cos(around))
+            right = max(0.0, math.cos(around))
+            middle = math.sin(math.pi * span)
+            width = 1.0
+            lift = 0.0
+            forward = 0.0
+            sideways = 0.0
+            if style == 'crop':
+                limit = 1.32 + 0.18 * back - 0.50 * front - 0.10 * side
+                limit += 0.28 * front * side
+                width += 0.018 * side * middle
+                lift += 0.004 * front * middle
+            elif style == 'side_part':
+                limit = 1.43 + 0.19 * back - 0.52 * front - 0.16 * side
+                limit += 0.34 * left * front - 0.15 * right * front
+                width += (0.045 * left - 0.020 * right) * middle
+                lift += (0.012 * left + 0.006 * back) * middle
+                forward += 0.004 * front * left * middle
+                sideways -= 0.006 * middle
+            elif style == 'bob':
+                curtain = front * side
+                # The gold bob is an asymmetric salon cut measured against the
+                # accepted front/profile reference board: a broad centre part,
+                # one longer face-framing sweep and one ear-tucked side. The old
+                # symmetric curtain made a geometrically clean helmet.
+                limit = 1.42 + 0.48 * back - 0.70 * front + 0.38 * side
+                limit += 0.68 * left * curtain + 0.10 * right * curtain
+                limit += 0.06 * front
+                width += 0.055 * side * span + 0.020 * left * middle
+                lift += 0.007 * left * middle
+                forward += (0.012 * left - 0.003 * right) * curtain * span
+            elif style == 'slick_back':
+                limit = 1.42 + 0.28 * back - 0.60 * front - 0.18 * side
+                limit += 0.28 * front * side
+                width += (0.018 * back - 0.030 * front) * middle
+                lift += (0.008 * front + 0.006 * back) * middle
+                forward += 0.010 * middle
+            elif style == 'quiff':
+                limit = 1.35 + 0.16 * back - 0.58 * front - 0.16 * side
+                limit += 0.15 * front * side
+                width += 0.062 * front * middle
+                lift += 0.037 * front * middle * (0.74 + 0.26 * left)
+                forward -= 0.020 * front * middle
+                sideways -= 0.008 * front * middle
+            elif style == 'bun':
+                limit = 1.35 + 0.18 * back - 0.42 * front - 0.16 * side
+                limit += 0.25 * front * side
+                width -= 0.025 * middle
+                lift += 0.006 * back * middle
+            else:
+                base_limit = 1.82 if female else 1.66
+                limit = base_limit - 0.98 * front * front
+                limit += 0.18 * math.cos(around) * front
+            front_drop = {
+                'bob': 0.24,
+                'side_part': 0.20,
+                'slick_back': 0.16,
+                'quiff': 0.20,
+                'crop': 0.16,
+                'bun': 0.18,
+            }.get(style, 0.16)
+            temple_drop = 0.0 if style == 'bob' else 0.28
+            rear_drop = {
+                'crop': 0.16,
+                'side_part': 0.12,
+                'bob': 0.06,
+                'slick_back': 0.14,
+                'quiff': 0.08,
+                'bun': 0.11,
+            }.get(style, 0.0)
+            limit += front_drop * front * front + temple_drop * side * side + rear_drop * back * back
+            angle = 0.14 + span * (limit - 0.14)
+            boundary = max(0.0, min(1.0, (span - 0.64) / 0.36))
+            boundary = boundary * boundary * (3.0 - 2.0 * boundary)
+            # The old bob edge was shrunk to 89% of the shell and therefore
+            # sat inside the forehead. The body cut through it as a row of dark
+            # triangles. A measured 2% clearance keeps one continuous salon
+            # edge without making the whole style float away from the skull.
+            boundary_fit = 1.02 if style == 'bob' else 0.87
+            edge_taper = 1.0 - (1.0 - boundary_fit) * boundary
+            rear_fit = {
+                'bob': 0.20,
+                'side_part': 0.13,
+                'slick_back': 0.08,
+                'quiff': 0.05,
+            }.get(style, 0.0)
+            depth_taper = 1.0 - rear_fit * back * middle
+            x = sideways + radius_x * width * edge_taper * math.sin(angle) * math.cos(around)
+            y = centre_y + radius_y * depth_taper * edge_taper * math.sin(angle) * math.sin(around) + forward
+            z = centre_z + radius_z * math.cos(angle) + lift
+            if style == 'bob':
+                flow = math.sin(13.0 * around + 5.5 * span)
+                z += 0.0017 * flow * middle
+                y += 0.0012 * flow * middle
+            vertices.append((x, y, z))
+    crown = len(vertices)
+    vertices.append((0.0, centre_y, centre_z + radius_z + (0.0015 if style == 'bob' else 0.0)))
+    for segment in range(segments):
+        following = (segment + 1) % segments
+        faces.append((crown, following, segment))
     for ring in range(rings - 1):
         first = ring * segments
         second = (ring + 1) * segments
@@ -534,7 +1122,40 @@ def build_hair(obj, material, female):
             following = (segment + 1) % segments
             faces.append((first + segment, first + following, second + following, second + segment))
 
-    hair_mesh = bpy.data.meshes.new(obj.name + '_hair')
+    if style == 'bun':
+        bun_start = len(vertices)
+        bun_segments = 16
+        bun_latitudes = tuple(math.radians(value) for value in (-60, -30, 0, 30, 60))
+        bottom = len(vertices)
+        vertices.append((0.0, 0.058, 1.566))
+        for latitude in bun_latitudes:
+            for segment in range(bun_segments):
+                around = 2.0 * math.pi * segment / bun_segments
+                base_join = 1.20 if latitude < math.radians(-45) else 1.0
+                vertices.append((
+                    0.052 * base_join * math.cos(latitude) * math.cos(around),
+                    0.058 + 0.046 * base_join * math.cos(latitude) * math.sin(around),
+                    1.620 + 0.054 * math.sin(latitude),
+                ))
+        top = len(vertices)
+        vertices.append((0.0, 0.058, 1.674))
+        first_ring = bun_start + 1
+        for segment in range(bun_segments):
+            following = (segment + 1) % bun_segments
+            faces.append((bottom, first_ring + following, first_ring + segment))
+        for ring in range(len(bun_latitudes) - 1):
+            first = first_ring + ring * bun_segments
+            second = first + bun_segments
+            for segment in range(bun_segments):
+                following = (segment + 1) % bun_segments
+                faces.append((first + segment, first + following, second + following, second + segment))
+        last_ring = first_ring + (len(bun_latitudes) - 1) * bun_segments
+        for segment in range(bun_segments):
+            following = (segment + 1) % bun_segments
+            faces.append((last_ring + segment, last_ring + following, top))
+
+    faces = [tuple(reversed(face)) for face in faces]
+    hair_mesh = bpy.data.meshes.new(obj.name + '_hair_' + style)
     hair_mesh.from_pydata(vertices, [], faces)
     hair_mesh.materials.append(material)
     hair_obj = bpy.data.objects.new(hair_mesh.name, hair_mesh)
@@ -545,14 +1166,24 @@ def build_hair(obj, material, female):
     armature = armature_of(obj)
     modifier = hair_obj.modifiers.new('armature', 'ARMATURE')
     modifier.object = armature
+    hair_obj['hairStyle'] = style
+    hair_obj['characterFeature'] = True
+    hair_obj['cosmeticSlot'] = 'head'
     layer = hair_mesh.uv_layers.new(name='RiverCharacterAtlas')
     for polygon in hair_mesh.polygons:
         for loop_index in polygon.loop_indices:
-            coordinate = hair_mesh.vertices[hair_mesh.loops[loop_index].vertex_index].co
+            vertex_index = hair_mesh.loops[loop_index].vertex_index
+            coordinate = hair_mesh.vertices[vertex_index].co
             local_u = 0.5 + coordinate.x / 0.24
-            local_v = (coordinate.z - 1.57) / 0.13
+            if vertex_index < segments * rings:
+                local_v = 1.0 - (vertex_index // segments) / (rings - 1)
+            else:
+                local_v = 0.5
             layer.data[loop_index].uv = atlas_uv(2, 0, local_u, local_v)
-    smooth_mesh_by_angle(hair_mesh)
+    # Hair is one continuous groomed mass. The general 35-degree prop rule
+    # split the crown normals into bright polygon islands under the Rooftop key,
+    # which looked like missing scalp patches despite intact geometry and UVs.
+    smooth_mesh_by_angle(hair_mesh, 180.0)
     return hair_obj
 
 
@@ -583,24 +1214,6 @@ def reduce_body(obj):
     decimate.iterations = 1
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.modifier_apply(modifier='reduce')
-    zs = [v.co.z for v in obj.data.vertices]
-    zmin = min(zs)
-    zmax = max(zs)
-    cut = zmin + (zmax - zmin) * CHARACTER_CULL_FRACTION
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    bmesh.ops.bisect_plane(
-        bm,
-        geom=list(bm.verts) + list(bm.edges) + list(bm.faces),
-        dist=0.0001,
-        plane_co=(0.0, 0.0, cut),
-        plane_no=(0.0, 0.0, 1.0),
-        clear_inner=True,
-        clear_outer=False,
-        use_snap_center=False,
-    )
-    bm.to_mesh(obj.data)
-    bm.free()
     return obj
 
 
@@ -712,15 +1325,63 @@ def apply_female_proportions(obj):
     return obj
 
 
-def create_base(gender_value, name, female=False):
-    bpy.ops.mpfb.create_human()
-    human = bpy.context.active_object
-    try:
-        setattr(human, 'MPFB_HUM_gender', float(gender_value))
-    except Exception:
-        pass
+def apply_gold_female_identity(human, target_service):
+    loaded = []
+    for target_name, weight in GOLD_FEMALE_IDENTITY:
+        target_path = target_service.target_full_path(target_name)
+        if target_path is None:
+            raise RuntimeError('missing MPFB identity target ' + target_name)
+        target_service.load_target(
+            human,
+            target_path,
+            weight=weight,
+            name=target_name,
+        )
+        loaded.append(target_name)
+    human['identityRecipe'] = 'gold_glamorous_female_v1'
+    human['identityTargetCount'] = len(loaded)
+    print('IDENTITY %s targets=%d recipe=%s' % (
+        human.name,
+        len(loaded),
+        human['identityRecipe'],
+    ))
+    return human
+
+
+def create_base(name, female=False):
+    from bl_ext.blender_org.mpfb.services import HumanService, TargetService
+
+    macro_details = TargetService.get_default_macro_info_dict()
+    macro_details.update({
+        'gender': 0.06 if female else 0.94,
+        'age': 0.46 if female else 0.50,
+        'muscle': 0.36 if female else 0.52,
+        'weight': 0.46 if female else 0.50,
+        'proportions': 0.56 if female else 0.50,
+        'height': 0.58 if female else 0.54,
+        'cupsize': 0.58 if female else 0.50,
+        'firmness': 0.64 if female else 0.50,
+    })
+    if female:
+        macro_details['race'].update({
+            'african': 0.48,
+            'asian': 0.12,
+            'caucasian': 0.40,
+        })
+    human = HumanService.create_human(
+        mask_helpers=True,
+        detailed_helpers=True,
+        extra_vertex_groups=True,
+        feet_on_ground=True,
+        scale=0.1,
+        macro_detail_dict=macro_details,
+    )
+    if female:
+        apply_gold_female_identity(human, TargetService)
     human.name = name
     human.data.name = name + '_body'
+    bpy.context.view_layer.objects.active = human
+    human.select_set(True)
     bpy.ops.mpfb.add_standard_rig()
 
     # MPFB leaves helper primitives parented to the human. use_selection alone
@@ -737,13 +1398,17 @@ def create_base(gender_value, name, female=False):
     return human
 
 
-def garment_weights(obj):
+def garment_weights(obj, full_sleeves=True, sleeveless=False):
     group_lookup = {}
     for group in obj.vertex_groups:
         low = group.name.lower()
         if any(p in low for p in POISON_NAMES):
             continue
         for bone in GARMENT_BONES:
+            if sleeveless and bone in {'upperarm', 'lowerarm'}:
+                continue
+            if bone == 'lowerarm' and not full_sleeves:
+                continue
             if bone in low:
                 group_lookup[group.index] = group.name
                 break
@@ -936,8 +1601,15 @@ def uncover_body_under_garment(obj, indices, margin=1):
     return len(doomed), before
 
 
-def build_garment(obj, material, thickness=0.020, threshold=0.25):
-    weights = garment_weights(obj)
+def build_garment(
+    obj,
+    material,
+    thickness=0.020,
+    threshold=0.25,
+    full_sleeves=True,
+    sleeveless=False,
+):
+    weights = garment_weights(obj, full_sleeves, sleeveless)
     indices = {i for i, w in weights.items() if w >= threshold}
     if not indices:
         return None
@@ -1052,6 +1724,160 @@ def build_garment(obj, material, thickness=0.020, threshold=0.25):
     return garment_obj
 
 
+def add_divided_trousers(garment):
+    mesh = garment.data
+    start = len(mesh.vertices)
+    vertices = []
+    faces = []
+    weights = []
+    segments = 12
+    rings = (
+        (0.10, 0.080, 0.082, 'lowerleg01'),
+        (0.48, 0.096, 0.100, 'lowerleg01'),
+        (0.92, 0.118, 0.132, 'upperleg01'),
+    )
+    for side, centre_x in (('L', -0.105), ('R', 0.105)):
+        leg_start = len(vertices)
+        for z, radius_x, radius_y, bone in rings:
+            for segment in range(segments):
+                angle = 2.0 * math.pi * segment / segments
+                vertices.append((
+                    centre_x + radius_x * math.cos(angle),
+                    radius_y * math.sin(angle),
+                    z,
+                ))
+                weights.append(bone + '.' + side)
+        for ring in range(len(rings) - 1):
+            first = leg_start + ring * segments
+            second = first + segments
+            for segment in range(segments):
+                following = (segment + 1) % segments
+                faces.append((first + segment, first + following, second + following, second + segment))
+        faces.append(tuple(leg_start + segment for segment in range(segments - 1, -1, -1)))
+
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    new_vertices = [bm.verts.new(coordinate) for coordinate in vertices]
+    bm.verts.index_update()
+    for face in faces:
+        bm.faces.new(tuple(new_vertices[index] for index in face))
+    bm.to_mesh(mesh)
+    bm.free()
+
+    groups = {group.name: group for group in garment.vertex_groups}
+    for offset, bone_name in enumerate(weights):
+        group = groups.get(bone_name)
+        if group is not None:
+            group.add([start + offset], 1.0, 'REPLACE')
+    garment['trouserStyle'] = 'divided_basic'
+    garment['trouserVertexStart'] = start
+    garment['trouserVertexCount'] = len(vertices)
+    return len(vertices), len(faces)
+
+
+def add_evening_skirt(garment):
+    mesh = garment.data
+    start = len(mesh.vertices)
+    segments = 24
+    rings = (
+        (1.04, 0.225, 0.165),
+        (0.82, 0.245, 0.175),
+        (0.52, 0.270, 0.190),
+        (0.04, 0.305, 0.215),
+    )
+    vertices = []
+    faces = []
+    for z, radius_x, radius_y in rings:
+        for segment in range(segments):
+            angle = 2.0 * math.pi * segment / segments
+            vertices.append((
+                radius_x * math.cos(angle),
+                radius_y * math.sin(angle),
+                z,
+            ))
+    for ring in range(len(rings) - 1):
+        first = ring * segments
+        second = first + segments
+        for segment in range(segments):
+            following = (segment + 1) % segments
+            faces.append((
+                first + segment,
+                second + segment,
+                second + following,
+                first + following,
+            ))
+
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    new_vertices = [bm.verts.new(coordinate) for coordinate in vertices]
+    bm.verts.index_update()
+    for face in faces:
+        bm.faces.new(tuple(new_vertices[index] for index in face))
+    bm.to_mesh(mesh)
+    bm.free()
+
+    pelvis = next(
+        (group for group in garment.vertex_groups if 'pelvis' in group.name.lower()),
+        None,
+    )
+    if pelvis is None:
+        raise RuntimeError('evening skirt requires a pelvis vertex group')
+    pelvis.add(list(range(start, start + len(vertices))), 1.0, 'REPLACE')
+    garment['skirtStyle'] = 'fitted_column'
+    garment['skirtVertexStart'] = start
+    garment['skirtVertexCount'] = len(vertices)
+    return len(vertices), len(faces)
+
+
+def reshape_m5_leather(garment):
+    for vertex in garment.data.vertices:
+        if vertex.co.z > 1.14:
+            vertex.co.x *= 1.10
+            vertex.co.y *= 1.045
+        elif vertex.co.z > 0.88:
+            vertex.co.x *= 1.045
+    garment['silhouette'] = 'boxy_squared_shoulders'
+
+
+def reshape_f1_cocktail(garment):
+    garment['trouserStyle'] = 'none_sheath'
+    garment['silhouette'] = 'sleeveless_column_evening_gown'
+
+
+def build_outfit_variants(garment, female):
+    if garment is None:
+        return []
+    if female:
+        garment.name = garment.name + '_f1_cocktail'
+        garment.data.name = garment.data.name + '_f1_cocktail'
+        garment['outfitStyle'] = 'f1_cocktail'
+        reshape_f1_cocktail(garment)
+        apply_garment_atlas(
+            garment,
+            garment.data.materials[0],
+            OUTFIT_RECIPE_CELLS['f1_cocktail_glamorous'],
+        )
+        return [garment]
+
+    garment.name = garment.name + '_m1_dinner'
+    garment.data.name = garment.data.name + '_m1_dinner'
+    garment['outfitStyle'] = 'm1_dinner'
+    garments = [garment]
+    for style in ('m5_leather', 'dealer_ivory'):
+        clone = garment.copy()
+        clone.data = garment.data.copy()
+        clone.name = garment.name.replace('m1_dinner', style)
+        clone.data.name = garment.data.name.replace('m1_dinner', style)
+        clone['outfitStyle'] = style
+        bpy.context.scene.collection.objects.link(clone)
+        if style == 'm5_leather':
+            reshape_m5_leather(clone)
+        else:
+            clone['silhouette'] = 'ivory_shawl_dinner_jacket'
+        garments.append(clone)
+    return garments
+
+
 def apply_character_materials(obj, material):
     mesh = obj.data
     mesh.materials.clear()
@@ -1063,9 +1889,9 @@ def main():
     require_mpfb()
     os.makedirs(OUT_DIR, exist_ok=True)
     manifest = {'characters': []}
-    for name, gender, female in [(MALE, 0.1, False), (FEMALE, 0.85, True)]:
+    for name, female in [(MALE, False), (FEMALE, True)]:
         clear_scene()
-        obj = create_base(gender, name, female)
+        obj = create_base(name, female)
         atlas = create_character_atlas(name, female)
         material = add_atlas_material(name + '_atlas_mat', atlas)
         obj = apply_character_materials(obj, material)
@@ -1075,29 +1901,69 @@ def main():
         # from the shapekey mix and would discard these edits
         if female:
             apply_female_proportions(obj)
-        apply_body_atlas(obj, material)
-        garment = build_garment(obj, material)
+        apply_body_atlas(
+            obj,
+            material,
+            FACE_RECIPE_CELLS['young_glamorous'] if female else FACE_RECIPE_CELLS['young_everyday'],
+        )
+        eye_faces, eye_specs = remove_eye_shells(obj)
+        eyes = add_gold_eyes(obj, eye_specs)
+        garment = build_garment(
+            obj,
+            material,
+            full_sleeves=not female,
+            sleeveless=female,
+        )
         if garment is not None:
+            if female:
+                trouser_vertices, trouser_faces = add_evening_skirt(garment)
+            else:
+                trouser_vertices, trouser_faces = add_divided_trousers(garment)
             apply_garment_atlas(garment, material)
-        hair = build_hair(obj, material, female)
+        else:
+            trouser_vertices, trouser_faces = 0, 0
+        hairs = [
+            hair
+            for style in HAIR_STYLES
+            for hair in [build_hair(obj, material, female, style)]
+            if hair is not None
+        ]
         if garment is not None:
             draped, drape_shift = drape_garment(garment)
             print('DRAPE %s: %d interior vertices, mean shift %.4fm'
                   % (garment.name, draped, drape_shift))
         garment_boundary_vertices = smooth_garment_boundaries(garment) if garment is not None else 0
-        smooth_mesh_by_angle(obj.data)
+        smooth_mesh_by_angle(obj.data, 180.0)
         if garment is not None:
-            smooth_mesh_by_angle(garment.data)
+            smooth_mesh_by_angle(garment.data, 180.0)
+        facial_expressions = add_gold_expressions(obj, eye_specs)
+        outfits = build_outfit_variants(garment, female)
         armature = armature_of(obj)
         actions = build_animations(armature) if armature else []
         stats = checks_for(obj)
-        hair_faces_total, _ = mesh_stats(hair.data)
-        hair_quads = sum(1 for polygon in hair.data.polygons if len(polygon.vertices) == 4)
-        hair_tris = sum((1 if len(poly.vertices) == 3 else len(poly.vertices) - 2) for poly in hair.data.polygons)
+        hair_faces_total = sum(mesh_stats(hair.data)[0] for hair in hairs)
+        hair_quads = sum(
+            1
+            for hair in hairs
+            for polygon in hair.data.polygons
+            if len(polygon.vertices) == 4
+        )
+        hair_tris_by_style = {
+            hair['hairStyle']: sum((1 if len(poly.vertices) == 3 else len(poly.vertices) - 2) for poly in hair.data.polygons)
+            for hair in hairs
+        }
+        hair_tris = sum(hair_tris_by_style.values())
+        eye_face_count = len(eyes.data.polygons)
+        eye_quads = sum(1 for polygon in eyes.data.polygons if len(polygon.vertices) == 4)
+        eye_tris = sum(max(1, len(polygon.vertices) - 2) for polygon in eyes.data.polygons)
+        if eye_faces == 0:
+            stats['checks'].append('eye mass found no source faces')
+        if len(hairs) != len(HAIR_STYLES) - 1:
+            stats['checks'].append('hair style set incomplete {} != {}'.format(len(hairs), len(HAIR_STYLES) - 1))
         body_quads = sum(1 for polygon in obj.data.polygons if len(polygon.vertices) == 4)
-        combined_faces = stats['faces'] + hair_faces_total
-        combined_quad = (body_quads + hair_quads) / combined_faces if combined_faces else 0.0
-        character_tris = stats['tris'] + hair_tris
+        combined_faces = stats['faces'] + hair_faces_total + eye_face_count
+        combined_quad = (body_quads + hair_quads + eye_quads) / combined_faces if combined_faces else 0.0
+        character_tris = stats['tris'] + hair_tris + eye_tris
         if character_tris > BUDGET['character_triangles']:
             stats['checks'].append('triangle budget exceeded {} > {}'.format(character_tris, BUDGET['character_triangles']))
         if combined_quad < BUDGET['character_quad_min']:
@@ -1107,7 +1973,11 @@ def main():
         garment_ratio = garment_verts / garment_tris if garment_tris else 0.0
         garment_boundary_edges = boundary_edge_count(garment.data) if garment is not None else 0
         shape = shape_hash(obj)
-        glb = export_glb(obj, extra=(garment, hair))
+        outfit_tris_by_style = {
+            outfit['outfitStyle']: sum((1 if len(poly.vertices) == 3 else len(poly.vertices) - 2) for poly in outfit.data.polygons)
+            for outfit in outfits
+        }
+        glb = export_glb(obj, extra=tuple(outfits + hairs + [eyes]))
         manifest['characters'].append({
             'name': name,
             'glb': os.path.basename(glb),
@@ -1115,6 +1985,12 @@ def main():
             'tris': character_tris,
             'body_tris': stats['tris'],
             'hair_tris': hair_tris,
+            'hair_tris_by_style': hair_tris_by_style,
+            'outfit_tris_by_style': outfit_tris_by_style,
+            'eye_faces': eye_faces,
+            'replacement_eye_faces': eye_face_count,
+            'replacement_eye_tris': eye_tris,
+            'facial_expressions': facial_expressions,
             'quad_pct': round(combined_quad, 3),
             'atlas_dimensions': [ATLAS_SIZE, ATLAS_SIZE],
             'vertex_groups': stats['groups'],
@@ -1127,6 +2003,8 @@ def main():
             'garment_vertex_ratio': garment_ratio,
             'garment_boundary_edges': garment_boundary_edges,
             'garment_boundary_vertices': garment_boundary_vertices,
+            'trouser_vertices': trouser_vertices,
+            'trouser_faces': trouser_faces,
             'garment_groups': len(garment.vertex_groups) if garment is not None else 0,
             'shape_hash': shape,
         })
@@ -1135,15 +2013,17 @@ def main():
             stats['groups'], stats['bones'], len(garment_vert_indices(obj)),
             len(actions), stats['checks']
         ))
-        print('ATLAS %s dimensions=%dx%d hair_triangles=%d' % (
-            name, ATLAS_SIZE, ATLAS_SIZE, hair_tris
+        print('ATLAS %s dimensions=%dx%d hair_triangles=%d styles=%s' % (
+            name, ATLAS_SIZE, ATLAS_SIZE, hair_tris, hair_tris_by_style
         ))
+        print('EYES %s faces=%d' % (name, eye_faces))
         print('GARMENT %s vertices=%d triangles=%d vertices_per_triangle=%.3f' % (
             name, garment_verts, garment_tris, garment_ratio
         ))
         print('GARMENT_BOUNDARY %s edges=%d vertices=%d' % (
             name, garment_boundary_edges, garment_boundary_vertices
         ))
+        print('TROUSERS %s vertices=%d faces=%d' % (name, trouser_vertices, trouser_faces))
         print('HAIR %s components=%d faces=%d vertices=%d' % (
             name, hair_components, hair_faces, hair_vertices
         ))
@@ -1266,6 +2146,7 @@ def export_glb(obj, extra=()):
         export_materials='EXPORT',
         export_yup=True,
         export_apply=False,
+        export_extras=True,
         use_selection=True,
     )
     return glb
