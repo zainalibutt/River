@@ -49,11 +49,23 @@ docs/images/**/*.mov
 docs/images/**/*.mkv
 docs/images/**/*.webm
 
-# Competitor reference material - studied, not redistributed
+# Third-party reference material - studied, never redistributed.
+#
+# docs/reference/ is a default-deny home: everything inside it is ignored,
+# forever, without anyone having to add a rule. Put ALL study material there -
+# captures, screenshots, downloaded kits, behaviour studies, competitor UI.
+#
+# The named paths below are the legacy ones from before that rule existed. Do
+# not add to them. Chasing filenames is how a 2.7GB kit of somebody else's
+# product ended up untracked but NOT ignored, one `git add -A` away from a
+# public commit that would also have named them in the directory path.
+docs/reference/
 docs/images/menus/
 docs/images/3_main/
 docs/behaviour-reference.md
 docs/*-behaviour-reference.md
+**/*[Rr]eference[_-][Kk]it*/
+**/*reference-kit*/
 # The capture kit is 2.7GB of somebody else's product, and its directory name
 # names them. Matched by shape as well as by path so a rename does not re-arm it.
 docs/images/*Reference_Kit*/
@@ -63,6 +75,17 @@ docs/images/**/recording_screenshots/
 # Raw dictation and scratch notes - working material, not portfolio material
 docs/images/justwords.txt
 
-# Internal working notes - not portfolio material
+# Internal working notes - not portfolio material.
+#
+# docs/private/ is the default-deny home for these, same principle as
+# docs/reference/ above. Ops notes, audits, anything that records production
+# identifiers or reasoning that is not part of the public record.
+#
+# An ops note carrying the live database project ref sat in a public repository
+# for four days before anyone noticed. It was deleted at HEAD and stayed
+# readable in history for another eight.
+docs/private/
 docs/handoff/reference-hygiene.md
 docs/handoff/migration-state.md
+**/*-audit-internal.md
+**/*.private.md
