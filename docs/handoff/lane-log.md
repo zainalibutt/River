@@ -1,6 +1,6 @@
 # Lane log
 
-Running record of what all three models have shipped. **Append, never rewrite.**
+Running record of what all four models have shipped. **Append, never rewrite.**
 Claude maintains this. It exists so that a compaction on any side does not cost us
 a re-derivation of who did what.
 

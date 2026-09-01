@@ -9,9 +9,9 @@ code.
 
 ---
 
-## 1. The three-model workflow is foregrounded
+## 1. The four-model workflow is foregrounded
 
-River is built by Claude, Codex and DeepSeek working in parallel in one
+River is built by Claude, Codex, DeepSeek and Fable working in parallel in one
 repository under one owner. **That is a headline theme, not a footnote.**
 
 Write about it directly: the lane split and why the work has different shapes,

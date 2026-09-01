@@ -33,7 +33,7 @@ Do not add them.
 
 Update it in the same session as the work, not in a sweep afterwards:
 
-- **The three lane lists** — one entry per accepted packet, newest first, saying
+- **The four lane lists** — one entry per accepted packet, newest first, saying
   what was actually wrong rather than what was built.
 - **The header line and the footer meta** — HEAD, test count, gate state.
 - **"What is next, in order"** — this is the section that goes stale fastest and

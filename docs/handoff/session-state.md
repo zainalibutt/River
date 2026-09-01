@@ -9,7 +9,7 @@ live URL. It is the surface to update as work lands.
 
 ## The shape of the work
 
-Three models in one working copy, one human owner.
+Four models in one working copy, one human owner.
 
 - **Claude** — design, review, the web client, the server, the art pipeline, and
   reconciling the others. Reviews every packet before it counts as done, and

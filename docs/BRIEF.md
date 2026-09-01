@@ -33,19 +33,21 @@ holds up on the things a studio would be judged on:
 
 ## How it is being answered
 
-Three models working in parallel in one repository under one owner:
+Four models working in parallel in one repository under one owner:
 
 | Lane | Work |
 |---|---|
 | **Claude** | Design contracts, packet dispatch, all review, the web client, art direction |
 | **Codex** | Server, security, transport, migrations, the asset pipeline |
 | **DeepSeek** | Bounded deterministic engine modules — pure, tested, no I/O |
+| **Fable** | Bounded visual judgement and character/art review when the scarce input is taste rather than throughput |
 
 The delegation is the method, not a convenience. The work has genuinely
 different shapes: a crypto construction wants adversarial reasoning, a state
 machine wants exhaustive enumeration, a design contract wants judgement about
-what a player will feel. Sending all three to the same place is either overkill
-or underpowered.
+what a player will feel, and a visual gold-standard pass needs a controlled
+review budget. Sending every lane to the same place is either overkill or
+underpowered.
 
 ## Why it is measured
 

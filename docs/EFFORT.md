@@ -20,12 +20,19 @@ that question has no answer, only a story.
 | Commits | 99 |
 | Implementation | 12,626 lines |
 | Tests | 5,374 lines, 396 tests |
-| Models directed | 3, in parallel, one repository |
+| Models directed | 4, in parallel, one repository |
 
-The headline is not the line count. It is that a three-model fleet produced
-12,626 tested lines in two days without the repository ever going red for
-longer than one packet — and that the process discipline which made that
-possible was built from incidents, not designed up front.
+The headline is not the line count. The original two-day snapshot captured
+12,626 tested lines without the repository ever going red for longer than one
+packet — and the process discipline which made that possible was built from
+incidents, not designed up front. The active fleet is now four models, with
+Fable used selectively for bounded visual judgement.
+
+The table above is the historical measurement snapshot from the first two
+days; it is retained so the original claim remains auditable. Current checkpoint
+(2026-09-01): `HEAD`/`origin/main` are `defa10a`, the native-gold F3A character
+packet is reviewed, and curated visual captures 24–34 are tracked in
+`docs/progress/`. The generated `art/out/` tree remains intentionally ignored.
 
 ---
 
