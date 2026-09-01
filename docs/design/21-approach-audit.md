@@ -11,7 +11,7 @@ the target, and against the running app, which is not.
 ### I never looked at the reference
 
 `docs/images/3_main/` has held the reference rooftop stills since 24 August.
-`docs/behaviour-reference.md` is 46,820 bytes and I read it.
+The behaviour reference is 46,820 bytes and I read it.
 **I did not open a single reference image until tonight.**
 
 Every visual judgement I made was against my own taste, dressed up in numbers.

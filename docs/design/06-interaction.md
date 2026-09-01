@@ -1,6 +1,6 @@
 # 06 — Interaction, camera and input
 
-Rewritten 2026-08-24 against `docs/behaviour-reference.md`. The previous version specified a linear focus ring across a horizontal button rail. That model is wrong: River's primary action surface is a **radial action menu**, and the camera belongs to the player. Both are described below.
+Rewritten 2026-08-24 against the behaviour reference. The previous version specified a linear focus ring across a horizontal button rail. That model is wrong: River's primary action surface is a **radial action menu**, and the camera belongs to the player. Both are described below.
 
 River is controller-first and TV-first. Mouse and keyboard are fully supported and must preserve the same spatial model, not substitute a different one.
 

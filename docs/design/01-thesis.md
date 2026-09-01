@@ -1,6 +1,6 @@
 # 01 — Visual and behavioural thesis
 
-Rewritten 2026-08-24 against `docs/behaviour-reference.md` and the reference frames in `docs/images/`. The previous thesis — "the room is dark, the felt is lit, the interface is furniture" — was authored before either existed and was wrong in its core claim. It is superseded entirely. Where any other design document still reflects it, this file wins.
+Rewritten 2026-08-24 against the behaviour reference and the reference frames in `docs/images/`. The previous thesis — "the room is dark, the felt is lit, the interface is furniture" — was authored before either existed and was wrong in its core claim. It is superseded entirely. Where any other design document still reflects it, this file wins.
 
 ## The one idea
 

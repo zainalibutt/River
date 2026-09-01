@@ -1,6 +1,6 @@
 # 07 — Motion grammar
 
-**Revised 2026-08-24** against `docs/behaviour-reference.md`. The step-queue mechanism, animation catalogue and reduced-motion rules below still hold. Three new sections supersede parts of them: the hand presentation state machine, the animation priority tiers, and the pacing modes. Read those first.
+**Revised 2026-08-24** against the behaviour reference. The step-queue mechanism, animation catalogue and reduced-motion rules below still hold. Three new sections supersede parts of them: the hand presentation state machine, the animation priority tiers, and the pacing modes. Read those first.
 
 
 Motion in River exists to make money movement legible and to give big moments weight. It never exists to decorate a transition. If an animation does not answer "whose chips moved where" or "this hand just mattered", it should not ship.

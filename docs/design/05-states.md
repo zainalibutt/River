@@ -220,7 +220,7 @@ Phase 2 is a local solo session, so there is no network. These states are specif
 
 # Revision — behavioural states (2026-08-24)
 
-Added from `docs/behaviour-reference.md`. The engine at `d8fa7f0` does not yet expose these; they are Phase 3/4 states specified now so the HUD reserves space and 5B-R does not have to be redesigned around them.
+Added from the behaviour reference. The engine at `d8fa7f0` does not yet expose these; they are Phase 3/4 states specified now so the HUD reserves space and 5B-R does not have to be redesigned around them.
 
 ## Turn indication
 

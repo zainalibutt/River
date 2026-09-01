@@ -448,7 +448,7 @@ They also look like robots, and no amount of further primitive work fixes that. 
 
 # Revision — behaviour reference (2026-08-24)
 
-`docs/behaviour-reference.md` supersedes three things in this document.
+The behaviour reference supersedes three things in this document.
 
 ## Three venues at launch, the reference's set as general law
 

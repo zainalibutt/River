@@ -2,7 +2,7 @@
 
 Packet 3C. Written against the room protocol as actually implemented at `942261e` — `apps/server/src/protocol.ts`, `auth.ts`, `ledger.ts` — not against an imagined one. Codex implements from this.
 
-Behavioural source of truth remains `docs/behaviour-reference.md`. Where this document adds flows the reference does not have (text chat, invite codes), they are River decisions recorded in `01-thesis.md`.
+Behavioural source of truth remains the behaviour reference. Where this document adds flows the reference does not have (text chat, invite codes), they are River decisions recorded in `01-thesis.md`.
 
 ## Scope
 
