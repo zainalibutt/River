@@ -1,6 +1,7 @@
 # F3A — character gold standard
 
-Date: 2026-08-30. Owner: Codex. Status: `ACTIVE`.
+Date: 2026-08-30. Owner: Codex. Status: `REVIEW` — native gold proof
+published; visual acceptance remains with Claude and Zain.
 
 ## Current checkpoint — 2026-09-01
 
@@ -325,7 +326,7 @@ full roster exists.
 
 ## 15. Execution tracker
 
-Status on 1 September 2026: **ACTIVE**.
+Status on 1 September 2026: **REVIEW**.
 
 - [x] Replace the ineffective post-creation gender flag with MPFB macro-detail
   construction. Male and female now have genuinely distinct source geometry.
@@ -370,7 +371,6 @@ Status on 1 September 2026: **ACTIVE**.
   dress, eye, brow, lash and ponytail textures at 58,110 triangles, 30
   materials, 46 draw calls and 6,096KB. Laundromat and Executive Suite were
   not rebuilt or published.
-  Laundromat and Executive Suite were not rebuilt or published.
 - [x] Build the reproducible CC0 MakeHuman native source proof and preserve the
   approved glamorous identity in front, three-quarter, profile and seated
   renders. Faceunits01 now supplies clean blink, soft-smile and frustration
@@ -404,3 +404,5 @@ Status on 1 September 2026: **ACTIVE**.
 
 The current proof is a completed foundation pass, not F3A acceptance. It is
 deliberately not multiplied across the cast.
+
+READY FOR CLAUDE
