@@ -6,8 +6,9 @@ from mathutils import Vector
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ASSET = os.path.join(ROOT, 'out', 'char_female.glb')
+ASSET = os.environ.get('RIVER_CHARACTER_ASSET', os.path.join(ROOT, 'out', 'char_female.glb'))
 PROOFS = os.path.join(ROOT, 'out', 'proofs')
+PROOF_PREFIX = os.environ.get('RIVER_PROOF_PREFIX', 'gold-expression')
 CRITICAL_EXPRESSIONS = ('face_blink', 'face_soft_smile', 'face_frustration')
 
 
@@ -99,7 +100,7 @@ for expression in ('neutral',) + CRITICAL_EXPRESSIONS:
             key.value = 0.0
     if expression != 'neutral':
         keys[expression].value = 1.0
-    path = os.path.join(PROOFS, 'gold-expression-%s.png' % expression.replace('face_', ''))
+    path = os.path.join(PROOFS, '%s-%s.png' % (PROOF_PREFIX, expression.replace('face_', '')))
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
     print('RENDER ' + path)

@@ -17,7 +17,15 @@ BUDGET = {
     # of 120, so the cost is a material slot and nothing else. Merging the two
     # faces into one atlas would buy the slot back and is the obvious next
     # economy if this ever gets tight.
-    'max_materials': 26,
+    # 27 reserves one measured slot for the native character's eyes and shared
+    # brow/lash treatment. 28 carries the native gold hairstyle's clipped alpha
+    # texture instead of flattening its cards into an opaque helmet. 29 keeps
+    # the approved native eyebrow and eyelash alpha textures separate: merging
+    # them would require an atlas and UV rewrite on the face Zain approved. 30
+    # gives the browser proof one flat brown iris material rather than sampling
+    # a whole Blender eye shader graph that glTF cannot reproduce faithfully.
+    # The isolated review remains below half of the draw-call gate and under 6MB.
+    'max_materials': 30,
     'max_draw_calls': 120,
     # Full legs replaced the old upper-thigh cut after the permitted orbit
     # camera proved that the lower body is visible. The source is allowed 23k;

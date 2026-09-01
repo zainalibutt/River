@@ -9,12 +9,12 @@ file is the why.
 
 ---
 
-## Three models, one repository, one owner
+## Four models, one repository, one owner
 
-River is built by three AI models working in parallel — Claude on design,
-review and client, Codex on server, security and long grinds, DeepSeek on
-bounded deterministic engine modules — in a single working copy, with one
-human owner directing them.
+River is built by four AI models working in parallel — Claude on design, review
+and client, Codex on integration and long grinds, DeepSeek on bounded
+deterministic engine modules, and Fable on deliberately bounded visual
+judgement — in a single working copy, with one human owner directing them.
 
 **Why not one model.** The work has genuinely different shapes. A crypto
 construction wants adversarial reasoning; a pure state machine wants exhaustive
@@ -316,3 +316,37 @@ replaced it, because that is what the work is actually done on.
 *Rule this belongs to:* when a value is stated in four places, it is stated in
 zero. This is the same fault as the two colour conversions and the two camera
 tables, wearing a build badge instead of a render.
+
+## Native gold character is the source, not a browser substitute
+
+The first credible player is being built as one authored vertical slice before
+the cast is multiplied. The MPFB body, its seated rig and its expression shapes
+remain the source authority; the browser export is a measured translation of
+that source rather than a second face made from convenient primitives. The
+earlier substitute face and hair geometry was rejected when it failed the
+Chrome read, even when its isolated numbers looked tidy.
+
+This decision costs a little export work but removes the more expensive failure
+mode: a Blender proof that is not the asset the player sees. The current export
+keeps the real skin, dress, eye, brow, lash and ponytail textures, then maps the
+parts glTF can represent to explicit browser PBR materials. A small fitted iris
+material is intentional because the Blender eye shader graph does not survive
+the glTF path faithfully. The proof is judged in Chrome at the actual Rooftop
+camera, not only in Blender.
+
+The gold character is deliberately confined to the Rooftop while it is under
+review. Laundromat and Executive Suite remain deferred, and the other authored
+identities do not start until this one passes the close, orbit and gameplay-size
+checks. That keeps a face, hair or garment correction one change deep instead of
+forcing a nine-seat rebuild.
+
+The measured isolated proof currently passes 58,110 triangles, 30 materials,
+46 draw calls and 6,096 KB. The additional material headroom is a conscious
+trade for readable eye, brow, lash and iris treatment under the existing
+120-draw-call and 6,144 KB venue gates. Corneal occlusion, gameplay-lighting
+match, the final temple transition and couture garment termination remain open;
+they are not silently promoted to acceptance by a green export.
+
+*Rule this belongs to:* use one reproducible source of truth, and spend budget
+on the feature the player actually reads. A committed artefact is a milestone,
+not visual acceptance.

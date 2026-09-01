@@ -1051,7 +1051,120 @@ def build_rooftop_dealer(templates, animation_actions, atlas_material, garment_m
     return dealer
 
 
+def import_native_gold_template():
+    static_review = os.environ.get('RIVER_NATIVE_GOLD_STATIC') == '1'
+    path = os.environ.get('RIVER_NATIVE_GOLD_ASSET', os.path.join(OUT_DIR, 'char_native_gold.glb'))
+    if not os.path.exists(path):
+        raise SystemExit('FAIL: missing native gold character ' + path)
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=path)
+    imported = [
+        obj for obj in bpy.data.objects
+        if obj not in before
+        and (
+            obj.type == 'ARMATURE'
+            or (
+                obj.type == 'MESH'
+                and obj.data is not None
+                and any(material is not None for material in obj.data.materials)
+            )
+        )
+    ]
+    body = next(
+        (
+            obj for obj in imported
+            if obj.type == 'MESH'
+            and obj.data.name.startswith(('char_native_gold_body', 'review_native_gold_body'))
+        ),
+        None,
+    )
+    armature = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
+    if body is None or (armature is None and not static_review):
+        raise SystemExit('FAIL: native gold character lost its body or armature')
+    if static_review:
+        for obj in imported:
+            obj['nativeGold'] = True
+            if obj.type == 'MESH':
+                smooth_mesh_by_angle(obj.data, 180.0)
+        return imported
+    apply_seated_rest_pose(armature)
+    bpy.context.view_layer.update()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    for obj in imported:
+        if obj.type != 'MESH' or obj is body:
+            continue
+        evaluated = obj.evaluated_get(depsgraph)
+        baked = bpy.data.meshes.new_from_object(
+            evaluated,
+            preserve_all_data_layers=True,
+            depsgraph=depsgraph,
+        )
+        world = obj.matrix_world.copy()
+        obj.data = baked
+        obj.modifiers.clear()
+        obj.parent = None
+        obj.matrix_world = world
+    for obj in imported:
+        obj['nativeGold'] = True
+        if obj.type == 'MESH':
+            smooth_mesh_by_angle(obj.data, 180.0)
+    return imported
+
+
+def duplicate_native_gold(template, seat_index, x, y, angle):
+    mapping = {}
+    for source in template:
+        clone = source.copy()
+        if source.data is not None:
+            clone.data = source.data.copy()
+        bpy.context.scene.collection.objects.link(clone)
+        mapping[source] = clone
+    for source, clone in mapping.items():
+        clone.parent = mapping.get(source.parent)
+        for modifier in clone.modifiers:
+            if modifier.type == 'ARMATURE' and modifier.object in mapping:
+                modifier.object = mapping[modifier.object]
+        if clone.type == 'ARMATURE':
+            clone.animation_data_clear()
+            clone.name = 'char_native_gold_rig'
+        elif clone.type == 'MESH':
+            suffix = source.name.removeprefix('river_native_gold_')
+            clone.name = 'char_native_gold_' + suffix
+            if not clone.data.name.startswith('char_native_gold_body'):
+                clone.data.name = 'char_native_gold_' + suffix
+        clone['nativeGold'] = True
+    root = bpy.data.objects.new('river_character_%02d' % seat_index, None)
+    bpy.context.scene.collection.objects.link(root)
+    for source, clone in mapping.items():
+        if source.parent is None:
+            clone.parent = root
+    root.location = (x, y, CHARACTER_SEAT_Z)
+    root.rotation_euler = (0.0, 0.0, angle)
+    root.scale = (CHARACTER_SCALE,) * 3
+    root['seatIndex'] = seat_index
+    root['variant'] = 'female'
+    root['nativeGold'] = True
+    return root
+
+
 def build_venue_characters(venue):
+    if os.environ.get('RIVER_NATIVE_GOLD_ONLY') == '1':
+        if venue['id'] != 'rooftop':
+            raise SystemExit('FAIL: native gold isolation is Rooftop-only')
+        template = import_native_gold_template()
+        x, y = character_seat_positions(venue)[1]
+        angle = math.atan2(-x, y)
+        seat_offset = 0.12
+        duplicate_native_gold(
+            template,
+            0,
+            x + math.sin(angle) * seat_offset,
+            y - math.cos(angle) * seat_offset,
+            angle,
+        )
+        for obj in template:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        return
     atlas_material = build_character_atlas()
     garment_material = build_garment_material()
     templates, animation_actions = import_character_templates(atlas_material)

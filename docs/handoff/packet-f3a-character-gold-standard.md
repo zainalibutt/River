@@ -2,14 +2,14 @@
 
 Date: 2026-08-30. Owner: Codex. Status: `ACTIVE`.
 
-## Current checkpoint — 2026-08-31
+## Current checkpoint — 2026-09-01
 
 The source and Rooftop integration are now a working vertical slice, not a
 finished gold character. The source carries the authored female identity,
-geometric eyes, six facial shape keys, seated/action scaffolding, six solid
-hair variants and the first red evening-gown treatment. Rooftop preserves the
-hero morphs, uses the intended outfit and hair meshes, and passes at 127,946
-triangles, 26 materials, 73 draw calls and 6,037 KB.
+geometric eyes, six facial shape keys, seated/action scaffolding, the controlled
+ponytail and the first red evening-gown treatment. Rooftop preserves the hero
+source meshes and textures through an explicit browser PBR translation and
+passes at 58,110 triangles, 30 materials, 46 draw calls and 6,096 KB.
 
 Chrome confirms better face readability and actual hairstyle variation, but
 also keeps the remaining gate honest: the crop/receding hairlines still expose
@@ -325,7 +325,7 @@ full roster exists.
 
 ## 15. Execution tracker
 
-Status on 31 August 2026: **ACTIVE**.
+Status on 1 September 2026: **ACTIVE**.
 
 - [x] Replace the ineffective post-creation gender flag with MPFB macro-detail
   construction. Male and female now have genuinely distinct source geometry.
@@ -366,8 +366,40 @@ Status on 31 August 2026: **ACTIVE**.
 - [x] Integrate the current gold foundation into Rooftop only and inspect it in
   Chrome at `/dev/visual-review?build=f3a-hair-fit-v2`. The accepted build keeps
   morph targets on the gold female while flattening and LOD-reducing the
-  background cast: 127,390 triangles, 26 materials, 73 draw calls and 6,007KB.
+  background cast. The faithful static review now serves the native skin,
+  dress, eye, brow, lash and ponytail textures at 58,110 triangles, 30
+  materials, 46 draw calls and 6,096KB. Laundromat and Executive Suite were
+  not rebuilt or published.
   Laundromat and Executive Suite were not rebuilt or published.
+- [x] Build the reproducible CC0 MakeHuman native source proof and preserve the
+  approved glamorous identity in front, three-quarter, profile and seated
+  renders. Faceunits01 now supplies clean blink, soft-smile and frustration
+  targets; all four states are visible together in the retained Chrome proof.
+- [x] Produce and parse a bounded native GLB candidate. Identity construction
+  targets are baked into the base, the three required expressions remain as
+  named morphs, texture dimensions are capped at 1024, and the result passes at
+  22,183 body triangles, 137 bones and 3.5MB.
+- [x] Match MPFB's render-only modifier stack during glTF export. This removed
+  the helper/proxy strips, preserved the seated dress and produced a clean
+  hair-deferred Rooftop close frame in Chrome.
+- [x] Refine the native gold identity against the Prominence face references
+  and Zain's eye-area redline. The recipe now uses a tapered lower face, a
+  reduced almond eye opening, narrower and longer nose and restrained lip
+  volume. The isolated native render is the binding visual source; the later
+  substitute browser face, eye and hair geometry was rejected rather than
+  refined further.
+- [x] Replace the eye-covering bob in the active proof with a controlled
+  ponytail so both eyes remain judgeable from front and profile. Chrome now
+  carries the seated proof's real skin, dress, brown-eye, brow, lash and
+  ponytail textures instead of the flattened browser-safe replacements. A
+  deliberate glTF translation layer supplies browser PBR materials, the
+  Blender hair tint and a fitted brown iris while preserving the approved
+  meshes. The isolated Rooftop passes at 58,110 triangles, 30 materials, 46
+  draw calls and 6,096KB.
+- [ ] Finish the corneal-occlusion and gameplay-lighting match, then decide
+  whether the remaining temple transition warrants an atlas/mesh edit before
+  Rooftop acceptance. The rigged 3.8MB source candidate separately passes with
+  22,183 body triangles, 137 bones and the three named expression morphs.
 - [ ] Continue the remaining gold proof sequence in section 11.
 
 The current proof is a completed foundation pass, not F3A acceptance. It is

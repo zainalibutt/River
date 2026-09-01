@@ -24,16 +24,36 @@ ASSETS = {
     'eyes': ('eyes', 'high-poly', 'high-poly.mhclo'),
     'eyebrows': ('eyebrows', 'eyebrow007', 'eyebrow007.mhclo'),
     'eyelashes': ('eyelashes', 'eyelashes02', 'eyelashes02.mhclo'),
-    'hair': ('hair', 'bob01', 'bob01.mhclo'),
+    'hair': ('hair', 'ponytail01', 'ponytail01.mhclo'),
     'dress': ('clothes', 'toigo_halter_dress_midi', 'toigo_halter_dress_midi.mhclo'),
-    'skin': ('skins', 'young_caucasian_female2', 'young_caucasian_female2.mhmat'),
+    'skin': ('skins', 'young_african_female', 'young_african_female.mhmat'),
 }
+
+NATIVE_EXPRESSION_UNITS = (
+    'eyeBlinkLeft',
+    'eyeBlinkRight',
+    'mouthSmileLeft',
+    'mouthSmileRight',
+    'cheekSquintLeft',
+    'cheekSquintRight',
+    'browDownLeft',
+    'browDownRight',
+    'mouthFrownLeft',
+    'mouthFrownRight',
+)
 
 
 def asset_path(name):
     path = os.path.join(MPFB_DATA, *ASSETS[name])
     if not os.path.exists(path):
         raise SystemExit('FAIL: missing native MPFB asset ' + path)
+    return path
+
+
+def faceunit_path(name):
+    path = os.path.join(MPFB_DATA, 'targets', 'faceunits', name + '.target')
+    if not os.path.exists(path):
+        raise SystemExit('FAIL: missing Faceunits01 target ' + path)
     return path
 
 
@@ -78,8 +98,80 @@ def apply_identity(human, target_service):
         target_service.load_target(human, target, weight=weight, name=target_name)
 
 
+def tint_textured_materials(obj, colour, strength, blend_type, roughness, specular_level):
+    for slot in obj.material_slots:
+        material = slot.material
+        if material is None or not material.use_nodes:
+            continue
+        principled = next(
+            (node for node in material.node_tree.nodes if node.type == 'BSDF_PRINCIPLED'),
+            None,
+        )
+        if principled is None:
+            continue
+        base_colour = principled.inputs.get('Base Color')
+        if base_colour is None or not base_colour.is_linked:
+            continue
+        source_link = base_colour.links[0]
+        source_socket = source_link.from_socket
+        material.node_tree.links.remove(source_link)
+        mix = material.node_tree.nodes.new('ShaderNodeMixRGB')
+        mix.name = 'river_native_tint'
+        mix.blend_type = blend_type
+        mix.inputs['Fac'].default_value = strength
+        mix.inputs['Color2'].default_value = (*colour, 1.0)
+        material.node_tree.links.new(source_socket, mix.inputs['Color1'])
+        material.node_tree.links.new(mix.outputs['Color'], base_colour)
+        roughness_input = principled.inputs.get('Roughness')
+        if roughness_input is not None:
+            for link in list(roughness_input.links):
+                material.node_tree.links.remove(link)
+            roughness_input.default_value = roughness
+        specular_input = principled.inputs.get('Specular IOR Level')
+        if specular_input is not None:
+            for link in list(specular_input.links):
+                material.node_tree.links.remove(link)
+            specular_input.default_value = specular_level
+        coat_input = principled.inputs.get('Coat Weight')
+        if coat_input is not None:
+            coat_input.default_value = 0.0
+
+
+def refine_character_materials(human, attached):
+    by_name = {obj.name.rsplit('_', 1)[-1]: obj for obj in attached}
+    tint_textured_materials(
+        by_name['hair'],
+        colour=(0.035, 0.010, 0.004),
+        strength=0.99,
+        blend_type='MULTIPLY',
+        roughness=0.43,
+        specular_level=0.18,
+    )
+    tint_textured_materials(
+        by_name['dress'],
+        colour=(0.19, 0.008, 0.012),
+        strength=0.76,
+        blend_type='MIX',
+        roughness=0.50,
+        specular_level=0.22,
+    )
+    for slot in human.material_slots:
+        material = slot.material
+        if material is None or not material.name.lower().endswith('.lips'):
+            continue
+        proxy = type('MaterialProxy', (), {'material_slots': [slot]})()
+        tint_textured_materials(
+            proxy,
+            colour=(0.28, 0.025, 0.035),
+            strength=0.36,
+            blend_type='MIX',
+            roughness=0.42,
+            specular_level=0.30,
+        )
+
+
 def build_character():
-    from bl_ext.blender_org.mpfb.services import HumanService, TargetService
+    from bl_ext.blender_org.mpfb.services import FaceService, HumanService, TargetService
 
     macros = TargetService.get_default_macro_info_dict()
     macros.update({
@@ -92,7 +184,7 @@ def build_character():
         'cupsize': 0.56,
         'firmness': 0.64,
     })
-    macros['race'].update({'african': 0.20, 'asian': 0.12, 'caucasian': 0.68})
+    macros['race'].update({'african': 0.46, 'asian': 0.12, 'caucasian': 0.42})
 
     human = HumanService.create_human(
         mask_helpers=True,
@@ -105,6 +197,14 @@ def build_character():
     human.name = 'river_native_gold_body'
     human.data.name = 'river_native_gold_body_mesh'
     apply_identity(human, TargetService)
+    for face_unit in NATIVE_EXPRESSION_UNITS:
+        TargetService.load_target(
+            human,
+            faceunit_path(face_unit),
+            weight=0.0,
+            name=TargetService.expression_name_to_shapekey_name(face_unit),
+        )
+    FaceService.clear_expression(human)
 
     bpy.ops.object.select_all(action='DESELECT')
     human.select_set(True)
@@ -141,14 +241,19 @@ def build_character():
         obj.name = 'river_native_gold_' + name
         attached.append(obj)
 
+    FaceService.interpolate_targets(human)
+
     for obj in [human, *attached]:
         if obj.type != 'MESH':
             continue
         for polygon in obj.data.polygons:
             polygon.use_smooth = True
 
-    human['riverProof'] = 'native_gold_v1'
+    refine_character_materials(human, attached)
+
+    human['riverProof'] = 'native_gold_v2'
     human['sourceLicense'] = 'CC0'
+    human['expressionUnits'] = list(NATIVE_EXPRESSION_UNITS)
     return human, attached
 
 
