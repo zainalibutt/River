@@ -10,7 +10,7 @@ hypothetical, and most of them are yours.
 
 ## 1. The git index is shared state
 
-Three models write to this one working copy. **Whatever sits staged in the index
+Four models write to this one working copy. **Whatever sits staged in the index
 rides along in whoever commits next**, regardless of who staged it.
 
 - **Never run `git add -A`, `git add .`, or `git add -u`.** Stage only the exact
