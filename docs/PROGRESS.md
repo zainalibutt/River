@@ -107,22 +107,23 @@ resulting asset from `apps/web/public/assets/rooftop_assets.glb`.
 <table>
 <tr>
 <td><img src="progress/24-native-gold-face-before.png" alt="Gold face before final hair and material pass" width="220"></td>
+<td><img src="progress/25-native-gold-face-before-three-quarter.png" alt="Gold face three-quarter baseline" width="220"></td>
 <td><img src="progress/26-native-gold-portrait-front.png" alt="Gold portrait front" width="220"></td>
-<td><img src="progress/27-native-gold-portrait-three-quarter.png" alt="Gold portrait three-quarter" width="220"></td>
 </tr>
 <tr>
+<td><img src="progress/27-native-gold-portrait-three-quarter.png" alt="Gold portrait three-quarter" width="220"></td>
 <td><img src="progress/28-native-gold-profile.png" alt="Gold profile" width="220"></td>
 <td><img src="progress/29-native-gold-wardrobe-three-quarter.png" alt="Gold wardrobe three-quarter" width="220"></td>
-<td><img src="progress/30-native-gold-seated-front.png" alt="Gold seated front" width="220"></td>
 </tr>
 <tr>
+<td><img src="progress/30-native-gold-seated-front.png" alt="Gold seated front" width="220"></td>
 <td><img src="progress/31-native-gold-seated-table.png" alt="Gold seated table relationship" width="220"></td>
 <td><img src="progress/32-native-gold-expression-blink.png" alt="Gold blink expression" width="220"></td>
-<td><img src="progress/33-native-gold-expression-soft-smile.png" alt="Gold soft smile expression" width="220"></td>
 </tr>
 <tr>
+<td><img src="progress/33-native-gold-expression-soft-smile.png" alt="Gold soft smile expression" width="220"></td>
 <td><img src="progress/34-native-gold-expression-frustration.png" alt="Gold frustration expression" width="220"></td>
-<td colspan="2">The paired baseline and current portraits show the hair/material change; the seated and expression frames prove the source is being prepared for play rather than only a portrait.</td>
+<td colspan="1">The paired baseline and current portraits show the hair/material change; the seated and expression frames prove the source is being prepared for play rather than only a portrait.</td>
 </tr>
 </table>
 
