@@ -398,12 +398,14 @@
 <div class="wrap">
 
   <header>
-    <p class="eyebrow">Three lanes · updated 2026-08-27, after the reference audit</p>
+    <p class="eyebrow">Four lanes · updated 2026-09-02, after the native-gold handoff</p>
     <h1>River build board</h1>
     <p class="sub">
       Where the build actually stands, measured against the tree rather than
       against memory. Phases 1&ndash;4 are complete and in production; Phase&nbsp;5 &mdash; art, characters
-      and the long tail &mdash; is the active phase. 823 tests green, the full stack authenticated end to end, and the browser finally renders the room the venues were measured for.
+      and the long tail &mdash; is the active phase. The poker foundation is live,
+      and the current visual focus is one native-gold character in the Rooftop:
+      58,110 triangles, 30 materials, 46 draw calls and 6,096 KB in the served proof.
     </p>
   </header>
 
@@ -429,10 +431,12 @@
   </section>
 
   <section>
-    <h2>The three lanes</h2>
+    <h2>The four lanes</h2>
     <p class="note">
-      One owner per packet, no concurrent edits to the same files. Codex is on the server,
-      DeepSeek is in the engine, I am in the client and the art pipeline.
+      One owner per packet, no concurrent edits to the same files. Claude owns
+      design, review and client work; Codex owns integration and long grinds;
+      DeepSeek owns deterministic engine modules; Fable is reserved for bounded
+      visual judgement.
     </p>
     <div class="lanes">
 
@@ -441,8 +445,9 @@
           <h3>Codex</h3>
           <span class="pill flight">In flight</span>
         </header>
-        <span class="role">Terra High &middot; server, security, long grinds</span>
+        <span class="role">Sol High &middot; integration, art pipeline, long grinds</span>
         <ul>
+          <li><span class="dot flight"></span><span><b>F3A native gold character</b> &mdash; published at <code>ec3936f</code> and routed to Claude for review. The source-first MPFB export preserves native skin, eye, brow, lash, dress and ponytail textures; only the Rooftop is integrated while corneal occlusion, gameplay lighting, temple transition, couture termination and poker-motion deltas remain open.</span></li>
           <li><span class="dot flight"></span><span><b>5X clip amplitude</b> &mdash; opened. A full breathe cycle rotates the head <b>0.099 degrees</b>, measured in the browser and matching the 0.05-degree source constant exactly. Worse, three clips key nothing at all: their targets are named <code>upperarm01.R</code> while the rig carries <code>upperarm01R</code>, so the lookup returns None and <code>continue</code> runs silently &mdash; a chip toss that moves no arm, and an all-in stand-up that does not use its legs. Brief at <code>docs/handoff/packet-5X-clip-amplitude.md</code>.</span></li>
           <li><span class="dot done"></span><span><b>5W the blue palms</b> &mdash; landed at <code>08f5d58</code>, and it landed while the client lane was open in the same working copy without touching a file outside its own. <code>COLOR_0</code> renders green in Blender and vivid blue in the browser, because Blender ignores a colour attribute unless a shader node reads it while three.js multiplies by it automatically. The bake moves to <code>FLOAT_COLOR</code>, the base tint is neutralised into the vertex colour, and <code>baseColorFactor</code> is restored from a <code>riverVertexColourBase</code> extra after export. <em>Still needs a republish before it reaches the browser</em> &mdash; <code>art/out</code> is not what the app serves.</span></li>
                     <li><span class="dot done"></span><span><b>5V nighttime depth</b> &mdash; accepted, and the first art packet that improved the picture rather than the numbers. Baked occlusion in vertex colours, a dark wet-concrete terrace, and palms that are palms rather than traffic cones. Rooftop 71,343 triangles against a gate of 250,000.</span></li>
@@ -689,25 +694,23 @@
         </p>
       </article>
       <article class="step">
-        <h4>3 &middot; The room is the hero, not a person</h4>
+        <h4>3 &middot; The gold character review</h4>
         <p>
-          The direction board's hero is a generated figure at a fidelity
-          River's 5,837-triangle characters do not reach, and designing around
-          it would make every screen look broken the moment a real character
-          entered it. Menus take their imagery from venue renders, which the
-          pipeline now produces from any angle in ninety seconds. The character
-          returns to the menu when Codex's work lands.
+          The one-character vertical slice is now published and visible in the
+          Rooftop. Review the tracked progress gallery and the live Chrome tab
+          together: front, three-quarter, profile, seated contact and expression
+          frames are all recorded. The gold identity remains the source of truth
+          until Claude and Zain accept it.
         </p>
       </article>
       <article class="step">
-        <h4>4 &middot; The people</h4>
+        <h4>4 &middot; Finish the people before multiplying them</h4>
         <p>
-          Codex's lane, and the worst thing left in the frame. Every garment has
-          a shredded hem and torn sleeves - real broken geometry, not a texture.
-          Every face carries dark seams. All nine sit in the same pose with
-          their arms spread on the felt, and packet 5X already found three clips
-          that key nothing at all because their targets name bones the rig does
-          not have.
+          Close corneal occlusion and gameplay lighting, resolve the temple
+          transition, finish couture garment termination and replace scaffold
+          motion with authored poker deltas. Only then expand the gold recipe to
+          the cast; the Laundromat and Executive Suite stay deferred until that
+          quality bar is portable.
         </p>
       </article>
       <article class="step">
@@ -745,11 +748,11 @@
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> 4d2b9f1</span>
-    <span><b>Tests</b> 823 green</span>
-    <span><b>Lint &amp; typecheck</b> clean</span>
+    <span><b>HEAD</b> ec3936f</span>
+    <span><b>Targeted gates</b> clean</span>
+    <span><b>Lint &amp; typecheck</b> typecheck clean</span>
     <span><b>Production</b> live</span>
-    <span><b>Design docs</b> 19</span>
+    <span><b>Progress gallery</b> native-gold captures included</span>
   </div>
 
 </div>

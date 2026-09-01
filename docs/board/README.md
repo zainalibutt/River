@@ -5,8 +5,10 @@
 **Live:** https://claude.ai/code/artifact/e4975483-97be-4646-9094-5fa1018aae45
 
 It is private to Zain's account until shared. It shows where River actually
-stands — the three lanes and what each has shipped, the work as a tree, narrow
+stands — the four lanes and what each has shipped, the work as a tree, narrow
 and broad scope scored separately, what is next in order, and the open defects.
+The current board checkpoint is the native-gold character vertical slice and
+links to the tracked captures in `docs/progress/`.
 
 ## Why it lives here
 

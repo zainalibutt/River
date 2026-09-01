@@ -55,8 +55,15 @@ example.
    repository is the wrong place to publish a map of it.
 4. **Credentials of any kind.** Tokens, keys, passwords. These belong in
    `.env.local` or the platform's own secret store.
-5. **Generated output.** `art/out/`, build artefacts, proof renders. The
-   pipeline that makes them is the deliverable; the output is not.
+5. **Generated output.** `art/out/`, build artefacts and uncurated proof
+   renders. The pipeline that makes them is the deliverable; the output is not.
+
+The numbered captures under `docs/progress/` are the narrow exception: they are
+small, curated review snapshots whose purpose is to show the project's visual
+progress in a fresh checkout. They must be copied from a reviewed render, named
+and indexed in `docs/progress/README.md`, and must not be treated as runtime
+assets. Full-resolution build output and intermediate scratch renders remain in
+the ignored `art/out/` tree.
 
 ## What enforces it
 

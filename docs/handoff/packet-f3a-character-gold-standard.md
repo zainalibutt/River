@@ -396,6 +396,11 @@ Status on 1 September 2026: **REVIEW**.
   Blender hair tint and a fitted brown iris while preserving the approved
   meshes. The isolated Rooftop passes at 58,110 triangles, 30 materials, 46
   draw calls and 6,096KB.
+- [x] Curate the visual progression into `docs/progress/`: retained before/after
+  face views, front/three-quarter/profile portraits, wardrobe and seated contact
+  frames, plus blink, soft-smile and frustration captures. The full generated
+  proof directory remains ignored; these are the small review snapshots a fresh
+  checkout can inspect.
 - [ ] Finish the corneal-occlusion and gameplay-lighting match, then decide
   whether the remaining temple transition warrants an atlas/mesh edit before
   Rooftop acceptance. The rigged 3.8MB source candidate separately passes with

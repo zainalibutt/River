@@ -350,3 +350,20 @@ they are not silently promoted to acceptance by a green export.
 *Rule this belongs to:* use one reproducible source of truth, and spend budget
 on the feature the player actually reads. A committed artefact is a milestone,
 not visual acceptance.
+
+## Progress captures are curated evidence, not shipped build output
+
+The visual work was moving faster than the progress gallery, which made the
+repository tell an older story than the browser. The decision is to track a
+small, named set of reviewed snapshots in `docs/progress/`: enough to show the
+face, hair, wardrobe, seated contact and expression milestones in a fresh
+checkout. The full Blender/GLB output, intermediate renders and runtime assets
+remain generated and ignored under `art/out/`.
+
+This keeps the public record honest without turning the progress folder into a
+second asset pipeline. Every capture is indexed with the source proof and the
+visual claim it supports; replacing a capture requires a new review rather than
+quietly overwriting history.
+
+*Rule this belongs to:* publish the evidence a reader needs, not every file the
+build happened to produce.
