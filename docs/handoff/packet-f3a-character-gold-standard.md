@@ -410,15 +410,23 @@ Status on 2 September 2026: **ACTIVE**.
   changed the label while leaving the full-table camera in place. `d087391`
   now applies the face-side placement when gold mode starts and restores the
   measured play placement when it ends; both views were inspected in Chrome.
-- [ ] Finish the corneal-occlusion and gameplay-lighting match, then decide
-  whether the remaining temple transition warrants an atlas/mesh edit before
-  Rooftop acceptance. The rigged 3.8MB source candidate separately passes with
-  22,183 body triangles, 137 bones and the three named expression morphs.
+- [x] Finish the corneal-occlusion translation. The prior fitted brown iris was
+  real geometry but sat beneath the static review's visible eye surface, so
+  Chrome read mostly sclera. The exporter now ray-fits each iris to the source
+  eye surface, offsets it by 1.5 mm toward the camera, and uses a restrained
+  dark-brown PBR response. The source face, hair, dress and Rooftop light rig
+  were not reshaped or retuned. The rebuilt Chrome gold camera now visibly
+  carries the brown inner eye with no River application errors.
+- [ ] Finish the gameplay-lighting match, then decide whether the remaining
+  temple transition warrants an atlas/mesh edit before Rooftop acceptance. The
+  rigged 3.8MB source candidate separately passes with 22,183 body triangles,
+  137 bones and the three named expression morphs. The static review bake is
+  intentionally unskinned, so the generic rig checker is not its acceptance
+  instrument.
 - [ ] Continue the remaining gold proof sequence in section 11.
 
 The current proof is a completed foundation pass, not F3A acceptance. It is
 deliberately not multiplied across the cast.
 
-ACTIVE — CODEX. Next: corneal occlusion and Rooftop lighting match from the
-repaired gold-review camera; do not reshape the accepted source face in that
-pass.
+ACTIVE — CODEX. Next: Rooftop gameplay-lighting match from the repaired
+gold-review camera; do not reshape the accepted source face in that pass.

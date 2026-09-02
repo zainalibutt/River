@@ -3,6 +3,7 @@ import os
 import struct
 
 import bpy
+from mathutils import Vector
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -55,6 +56,16 @@ def replace_materials(obj, material):
         polygon.material_index = 0
 
 
+def front_surface_at(obj, x, z):
+    inverse = obj.matrix_world.inverted()
+    origin = inverse @ Vector((x, -1.0, z))
+    direction = (inverse.to_3x3() @ Vector((0.0, 1.0, 0.0))).normalized()
+    found, hit, _normal, _face_index = obj.ray_cast(origin, direction)
+    if not found:
+        raise SystemExit('FAIL: static review could not fit iris to eye surface')
+    return obj.matrix_world @ hit
+
+
 def add_review_irises(eyes, material):
     vertices = [eyes.matrix_world @ vertex.co for vertex in eyes.data.vertices]
     irises = []
@@ -64,12 +75,11 @@ def add_review_irises(eyes, material):
         x_max = max(vertex.x for vertex in eye_vertices)
         z_min = min(vertex.z for vertex in eye_vertices)
         z_max = max(vertex.z for vertex in eye_vertices)
-        radius = min((x_max - x_min) * 0.200, (z_max - z_min) * 0.220)
-        centre = (
-            (x_min + x_max) * 0.5,
-            min(vertex.y for vertex in eye_vertices) - 0.0005,
-            (z_min + z_max) * 0.5 - 0.0004,
-        )
+        radius = min((x_max - x_min) * 0.230, (z_max - z_min) * 0.250)
+        centre_x = (x_min + x_max) * 0.5
+        centre_z = (z_min + z_max) * 0.5 - 0.0004
+        surface = front_surface_at(eyes, centre_x, centre_z)
+        centre = (centre_x, surface.y - 0.0015, centre_z)
         bpy.ops.mesh.primitive_uv_sphere_add(
             segments=16,
             ring_count=8,
@@ -185,7 +195,7 @@ materials = (
 )
 for obj, material in materials:
     replace_materials(obj, material)
-iris_material = simple_material('native_gold_static_iris', (0.18, 0.045, 0.018), 0.38, 0.22)
+iris_material = simple_material('native_gold_static_iris', (0.035, 0.006, 0.002), 0.62, 0.08)
 baked.extend(add_review_irises(eyes, iris_material))
 
 for obj in baked:
