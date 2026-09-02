@@ -82,6 +82,7 @@ Format: one row per completed packet, newest last.
 | 2026-08-27 | Secret gate | Claude | working tree | The live Supabase project ref was tracked in an ops note. Gate extended to secrets - and its first pattern, a bare twenty-letter run, matched 'internationalisation'. Rewritten to match context |
 | 2026-08-27 | Three retractions | Claude | — | **The chairs were never oversized, the table was never too low, and the lighting ratio was never 88x.** All three were judged from renders and asserted as measurement; Codex caught two by checking the asset and declining the packet |
 | 2026-09-01 | F3A native gold character proof | Codex | `6dec689` | Published the reproducible native gold source and faithful static glTF translation. Chrome-served Rooftop proof: 58,110 triangles, 30 materials, 46 draw calls and 6,096 KB. Decisions and progress records refreshed; corneal/lighting match, couture termination and motion remain open. |
+| 2026-09-02 | F3A gold review camera | Codex | `d087391` | Gold mode now moves to the named face-side close framing and full mode restores the measured table camera. Chrome proved both transitions with no River application errors; this closes the instrument gap before eye and lighting work resumes. |
 
 ## The shared-index incident, 2026-08-24
 

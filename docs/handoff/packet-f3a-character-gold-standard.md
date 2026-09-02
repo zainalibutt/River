@@ -1,9 +1,9 @@
 # F3A — character gold standard
 
-Date: 2026-08-30. Owner: Codex. Status: `REVIEW` — native gold proof
-published; visual acceptance remains with Claude and Zain.
+Date: 2026-08-30. Owner: Codex. Status: `ACTIVE` — native gold proof
+published; Codex has resumed the bounded acceptance pass with Zain.
 
-## Current checkpoint — 2026-09-01
+## Current checkpoint — 2026-09-02
 
 The source and Rooftop integration are now a working vertical slice, not a
 finished gold character. The source carries the authored female identity,
@@ -18,6 +18,11 @@ large graphic scalp shapes, the garment remains body-derived rather than a
 tailored capsule, and the full-table review does not give the seat-zero gold
 character a front close read. These are the next acceptance defects; broad cast
 multiplication remains blocked.
+
+The attempted Opus continuation changed no committed River content. The clean
+recovery anchor was `9ccf3fb`; Codex resumed from that exact tree. The first
+resumed change, `d087391`, repaired the review camera so gold mode now moves to
+the named face-side framing and full mode restores the measured table camera.
 
 This packet is the binding character-first replacement for the unfinished visual
 parts of F2 and the earlier 7H sequence. Zain explicitly prioritised proper
@@ -326,7 +331,7 @@ full roster exists.
 
 ## 15. Execution tracker
 
-Status on 1 September 2026: **REVIEW**.
+Status on 2 September 2026: **ACTIVE**.
 
 - [x] Replace the ineffective post-creation gender flag with MPFB macro-detail
   construction. Male and female now have genuinely distinct source geometry.
@@ -401,6 +406,10 @@ Status on 1 September 2026: **REVIEW**.
   frames, plus blink, soft-smile and frustration captures. The full generated
   proof directory remains ignored; these are the small review snapshots a fresh
   checkout can inspect.
+- [x] Repair the Chrome gold-review camera. Occupancy-only gold mode previously
+  changed the label while leaving the full-table camera in place. `d087391`
+  now applies the face-side placement when gold mode starts and restores the
+  measured play placement when it ends; both views were inspected in Chrome.
 - [ ] Finish the corneal-occlusion and gameplay-lighting match, then decide
   whether the remaining temple transition warrants an atlas/mesh edit before
   Rooftop acceptance. The rigged 3.8MB source candidate separately passes with
@@ -410,4 +419,6 @@ Status on 1 September 2026: **REVIEW**.
 The current proof is a completed foundation pass, not F3A acceptance. It is
 deliberately not multiplied across the cast.
 
-READY FOR CLAUDE
+ACTIVE — CODEX. Next: corneal occlusion and Rooftop lighting match from the
+repaired gold-review camera; do not reshape the accepted source face in that
+pass.
