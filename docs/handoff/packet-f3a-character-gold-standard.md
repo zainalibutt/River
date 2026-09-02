@@ -413,10 +413,11 @@ Status on 2 September 2026: **ACTIVE**.
 - [x] Finish the corneal-occlusion translation. The prior fitted brown iris was
   real geometry but sat beneath the static review's visible eye surface, so
   Chrome read mostly sclera. The exporter now ray-fits each iris to the source
-  eye surface, offsets it by 1.5 mm toward the camera, and uses a restrained
-  dark-brown PBR response. The source face, hair, dress and Rooftop light rig
-  were not reshaped or retuned. The rebuilt Chrome gold camera now visibly
-  carries the brown inner eye with no River application errors.
+  eye surface, offsets it by 1.5 mm toward the camera, and uses a 128px crop
+  of the source brown-eye texture on a smaller fitted disc. The source face,
+  hair, dress and Rooftop light rig were not reshaped or retuned. The rebuilt
+  Chrome gold camera now visibly carries a brown iris and smaller dark pupil
+  with no River application errors.
 - [ ] Finish the gameplay-lighting match, then decide whether the remaining
   temple transition warrants an atlas/mesh edit before Rooftop acceptance. The
   rigged 3.8MB source candidate separately passes with 22,183 body triangles,

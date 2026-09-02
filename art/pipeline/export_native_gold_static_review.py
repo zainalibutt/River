@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import struct
 
@@ -20,13 +21,34 @@ NAMES = (
 )
 
 
-def simple_material(name, colour, roughness, specular_level=0.20):
+def detail_iris_material(name):
+    size = 128
+    source = bpy.data.images.get('brown_eye.png')
+    if source is None:
+        raise SystemExit('FAIL: faithful static review missing texture brown_eye.png')
+    source_pixels = list(source.pixels)
+    source_left = 596
+    source_top = 177
+    source_span = 256
+    image = bpy.data.images.new(name + '_detail', width=size, height=size, alpha=False)
+    pixels = []
+    for row in range(size):
+        for column in range(size):
+            source_column = round(source_left + source_span * column / (size - 1))
+            source_row = source.size[1] - 1 - round(source_top + source_span * row / (size - 1))
+            offset = (source_row * source.size[0] + source_column) * 4
+            pixels.extend(source_pixels[offset:offset + 4])
+    image.pixels.foreach_set(pixels)
+    image.pack()
     material = bpy.data.materials.new(name)
     material.use_nodes = True
-    principled = material.node_tree.nodes.get('Principled BSDF')
-    principled.inputs['Base Color'].default_value = (*colour, 1.0)
-    principled.inputs['Roughness'].default_value = roughness
-    principled.inputs['Specular IOR Level'].default_value = specular_level
+    nodes = material.node_tree.nodes
+    texture = nodes.new('ShaderNodeTexImage')
+    texture.image = image
+    principled = nodes.get('Principled BSDF')
+    material.node_tree.links.new(texture.outputs['Color'], principled.inputs['Base Color'])
+    principled.inputs['Roughness'].default_value = 0.52
+    principled.inputs['Specular IOR Level'].default_value = 0.12
     return material
 
 
@@ -66,6 +88,40 @@ def front_surface_at(obj, x, z):
     return obj.matrix_world @ hit
 
 
+def iris_disc(name, centre, radius, material):
+    segments = 20
+    rings = (0.34, 0.68, 1.0)
+    vertices = [(0.0, 0.0, 0.0)]
+    for ring in rings:
+        for segment in range(segments):
+            angle = math.tau * segment / segments
+            vertices.append((radius * ring * math.cos(angle), 0.0, radius * ring * math.sin(angle)))
+    faces = []
+    for segment in range(segments):
+        next_segment = (segment + 1) % segments
+        faces.append((0, 1 + segment, 1 + next_segment))
+    for ring in range(len(rings) - 1):
+        inner = 1 + ring * segments
+        outer = inner + segments
+        for segment in range(segments):
+            next_segment = (segment + 1) % segments
+            faces.append((inner + segment, outer + segment, outer + next_segment, inner + next_segment))
+    mesh = bpy.data.meshes.new(name + '_mesh')
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    uv_layer = mesh.uv_layers.new(name='UVMap')
+    for polygon in mesh.polygons:
+        for loop_index in polygon.loop_indices:
+            coordinate = mesh.vertices[mesh.loops[loop_index].vertex_index].co
+            uv_layer.data[loop_index].uv = (coordinate.x / (radius * 2.0) + 0.5, coordinate.z / (radius * 2.0) + 0.5)
+    iris = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(iris)
+    iris.location = centre
+    iris.data.materials.append(material)
+    iris['nativeGold'] = True
+    return iris
+
+
 def add_review_irises(eyes, material):
     vertices = [eyes.matrix_world @ vertex.co for vertex in eyes.data.vertices]
     irises = []
@@ -75,24 +131,12 @@ def add_review_irises(eyes, material):
         x_max = max(vertex.x for vertex in eye_vertices)
         z_min = min(vertex.z for vertex in eye_vertices)
         z_max = max(vertex.z for vertex in eye_vertices)
-        radius = min((x_max - x_min) * 0.230, (z_max - z_min) * 0.250)
+        radius = min((x_max - x_min) * 0.190, (z_max - z_min) * 0.210)
         centre_x = (x_min + x_max) * 0.5
         centre_z = (z_min + z_max) * 0.5 - 0.0004
         surface = front_surface_at(eyes, centre_x, centre_z)
         centre = (centre_x, surface.y - 0.0015, centre_z)
-        bpy.ops.mesh.primitive_uv_sphere_add(
-            segments=16,
-            ring_count=8,
-            location=centre,
-            scale=(radius, 0.0008, radius),
-        )
-        iris = bpy.context.object
-        iris.name = 'review_native_gold_' + prefix + '_iris'
-        iris.data.materials.append(material)
-        for uv in iris.data.uv_layers.active.data:
-            uv.uv = (0.62, 0.70)
-        iris['nativeGold'] = True
-        irises.append(iris)
+        irises.append(iris_disc('review_native_gold_' + prefix + '_iris', centre, radius, material))
     return irises
 
 
@@ -136,6 +180,9 @@ def make_opaque(path):
         elif any(token in name for token in ('native_gold_static_brows', 'native_gold_static_lashes')):
             material['alphaMode'] = 'MASK'
             material['alphaCutoff'] = 0.08
+            material['doubleSided'] = True
+        elif 'native_gold_static_iris' in name:
+            material['alphaMode'] = 'OPAQUE'
             material['doubleSided'] = True
         else:
             material['alphaMode'] = 'OPAQUE'
@@ -195,7 +242,7 @@ materials = (
 )
 for obj, material in materials:
     replace_materials(obj, material)
-iris_material = simple_material('native_gold_static_iris', (0.035, 0.006, 0.002), 0.62, 0.08)
+iris_material = detail_iris_material('native_gold_static_iris')
 baked.extend(add_review_irises(eyes, iris_material))
 
 for obj in baked:
