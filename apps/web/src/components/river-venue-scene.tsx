@@ -573,6 +573,7 @@ function CameraOrbit({
     ]
     return { position, target, distance: 1.453 }
   }, [reviewSeat, venue.seatRing])
+  const activePlacement = reviewPlacement ?? placement
   const controls = useRef<OrbitControlsImpl>(null)
   const { camera, size } = useThree()
 
@@ -585,18 +586,18 @@ function CameraOrbit({
     camera.updateProjectionMatrix()
   }, [camera, reviewPlacement, size.width, size.height, venue.camera.fov])
 
-  useEffect(() => {
-    if (controls.current === null || reviewPlacement === null) return
-    camera.position.set(...reviewPlacement.position)
-    controls.current.target.set(...reviewPlacement.target)
+  useLayoutEffect(() => {
+    if (controls.current === null) return
+    camera.position.set(...activePlacement.position)
+    controls.current.target.set(...activePlacement.target)
     controls.current.update()
-  }, [camera, reviewPlacement])
+  }, [activePlacement, camera])
 
   useEffect(() => {
-    if (controls.current === null || heroSeat === null) return
+    if (controls.current === null || heroSeat === null || reviewPlacement !== null) return
     controls.current.setAzimuthalAngle(seatCameraAzimuth(heroSeat, venue.seatRing))
     controls.current.update()
-  }, [heroSeat, venue.seatRing])
+  }, [heroSeat, reviewPlacement, venue.seatRing])
 
   useFrame((_, delta) => {
     const gamepad = navigator.getGamepads().find((candidate) => candidate !== null)
@@ -623,11 +624,11 @@ function CameraOrbit({
       makeDefault
       enablePan={false}
       enableZoom={false}
-      minDistance={reviewPlacement?.distance ?? placement.distance}
-      maxDistance={reviewPlacement?.distance ?? placement.distance}
+      minDistance={activePlacement.distance}
+      maxDistance={activePlacement.distance}
       minPolarAngle={THREE.MathUtils.degToRad(ORBIT_POLAR_DEGREES.min)}
       maxPolarAngle={THREE.MathUtils.degToRad(ORBIT_POLAR_DEGREES.max)}
-      target={reviewPlacement?.target ?? placement.target}
+      target={activePlacement.target}
     />
   )
 }
