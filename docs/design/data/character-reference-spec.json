@@ -1,0 +1,1925 @@
+{
+  "summary": "Extract a buildable spec for the River silver male from named the reference reference frames",
+  "agentCount": 6,
+  "logs": ["5/5 reference dimensions returned"],
+  "result": {
+    "dimensions": [
+      {
+        "key": "face",
+        "observations": [
+          {
+            "feature": "Skull outline, front",
+            "reference_shows": "The widest point of the head is the temple/parietal band level with the top of the ear, and the face barely narrows from there down to the cheekbone. With the beard filling the lower third, the front silhouette is close to a rounded rectangle — near-parallel sides from temple to gonion — rather than an egg tapering to the chin.",
+            "river_direction": "River's silhouette should taper: widest at the zygomatic arch, with the temple slightly narrower than the cheekbone and the gonion clearly inside the temple width. Target roughly gonion width ≈ 0.90–0.95 of temple width, cheekbone width ≈ 1.0. That taper is what separates a credible adult skull from a block.",
+            "source_frame": "male_face_01_front_neutral.png"
+          },
+          {
+            "feature": "Forehead plane",
+            "reference_shows": "An unbroken smooth dome. No frontal eminences, no temporal ridge, no plane change where the front of the forehead turns to the side of the head. It holds one continuous soft gradient from brow to hairline. The OVAL head preset narrows the parietal but does not fix this.",
+            "river_direction": "This is the single largest loss of masculinity in the reference style. Give River two shallow frontal eminences above the brow and a visible temporal ridge running up and back from the outer brow, so the forehead has a front plane and two side planes. Add a slight backward lean to the forehead (male foreheads recede more than female).",
+            "source_frame": "head_shape_oval.png"
+          },
+          {
+            "feature": "Brow ridge",
+            "reference_shows": "One continuous heavy shelf running straight across both brows with a painted vertical glabella furrow between them. It projects far enough to catch a hard shadow, but it reads as a single slab with no break between the medial (inner, thick) and lateral (outer, thinning) halves. Combined with the dark hard-edged eyebrow texture patch it reads angry rather than structured.",
+            "river_direction": "Keep the projection — brow projection is a top-three male cue — but break the slab. Heavier over the inner third, thinning and rolling back over the outer third, with a shallow depression above the middle of each brow. No painted glabella furrow at neutral; let a wrinkle map deliver it on expression only. Keep the eyebrow itself softer-edged than the reference's decal.",
+            "source_frame": "male_face_01_front_neutral.png"
+          },
+          {
+            "feature": "Nasion (brow-to-nose transition)",
+            "reference_shows": "The forehead runs into the nose with almost no depression at the nasion — the dip between the brow and the top of the nasal bone is very shallow, so the nose reads as an extrusion of the forehead rather than a separate bone.",
+            "river_direction": "Deepen the nasion noticeably. A clear scoop between the brow and the nasal root is what makes the brow read as a ridge at all, and in the 3/4 poker camera it is one of the few small forms that survives.",
+            "source_frame": "male_side.png"
+          },
+          {
+            "feature": "Eye opening and sclera",
+            "reference_shows": "Openings are tall and rounded-almond; the iris is large and fully visible with white showing both above and below it at neutral gaze. The sclera is a bright untinted white with no shadow cast from the upper lid onto the eyeball. The lids are thin with almost no visible thickness.",
+            "river_direction": "Reduce lid aperture height moderately so the upper lid crosses the top of the iris at neutral and no sclera shows above it. Shrink the iris slightly. Give the lids real thickness (a visible wet-line edge) and make sure the upper lid occludes and shades the top of the eyeball. Untinted white sclera plus a fully-visible iris is the doll signature and it is the reference's clearest failure.",
+            "source_frame": "male_face_02_front_closeup_clean.png"
+          },
+          {
+            "feature": "Eye socket depth",
+            "reference_shows": "The orbit has almost no depth, particularly at the outer corner — the eyeball sits on the front of the face rather than inside a bony cavity. There is no shadow in the upper socket and no tear-trough.",
+            "river_direction": "Set the globe back into the skull, deepen the upper socket under the brow, and add a shallow lateral orbital rim so the outer corner sits in shadow. A faint tear-trough is appropriate for late thirties and reads as age without reading as tiredness.",
+            "source_frame": "male_face_01_front_neutral.png"
+          },
+          {
+            "feature": "Eye spacing",
+            "reference_shows": "The interocular gap is close to one eye-width, which is anatomically about right, so spacing is not the problem here. What is off is that the eyes read too large for the head, which makes correct spacing look narrow.",
+            "river_direction": "Keep spacing at one eye-width — do not widen or narrow. Fix the apparent-narrowness by shrinking the eye, not by moving it. Verify by measuring: five eye-widths across the head at eye level.",
+            "source_frame": "male_face_01_front_neutral.png"
+          },
+          {
+            "feature": "Nose bridge",
+            "reference_shows": "Default bridge is broad and flat across the top with a slight convexity. The THIN BRIDGE preset narrows the dorsum to about the inner-eye-corner span and immediately reads more refined and more Bond-appropriate — but the tip and alae are left at default width, so the nose is pinched at the top and bulbous at the bottom with an unresolved transition.",
+            "river_direction": "Take the narrower bridge, but move the tip and alae with it in the same pass so the dorsum tapers continuously. Prefer a straight dorsum over the reference's slight convexity; a dead-straight nasal line is the classic formal-male read.",
+            "source_frame": "nose_thin_bridge.png"
+          },
+          {
+            "feature": "Nose tip and wings",
+            "reference_shows": "Tip is a soft rounded bulb; alar wings flare to roughly the inner-eye-corner verticals or a touch wider, with nostrils barely visible from the front. In profile the tip is slightly downturned and the nasolabial angle is around 90 degrees.",
+            "river_direction": "Narrow and slightly lengthen the tip, tuck the alae just inside the inner-eye-corner verticals, and define a definite tip-defining point rather than a bulb. Keep the tip's downward set and the near-90-degree nasolabial angle — upturned reads young and soft, wrong for this character.",
+            "source_frame": "nose_thin_bridge.png"
+          },
+          {
+            "feature": "Philtrum",
+            "reference_shows": "Short and shallow, with weak columns and no crisp cupid's bow. It reads as a soft dent rather than a channel between two ridges.",
+            "river_direction": "Deepen the channel and firm up the two columns so the philtrum casts a real value change under a table key light. Keep the length at neutral to slightly long — a slightly long philtrum reads adult male; a short one reads young.",
+            "source_frame": "male_face_02_front_closeup_clean.png"
+          },
+          {
+            "feature": "Lip volume and vermilion",
+            "reference_shows": "Upper lip is thin and rolled under; lower lip is noticeably fuller and softly bagged, with a soft mushy vermilion border. In the clean-shaven closeup the mouth is pulled into a permanent asymmetric smirk at what is supposed to be neutral, and the upper lip nearly vanishes at the pulled corner.",
+            "river_direction": "Bring the two lips closer to parity — reduce lower-lip volume slightly, do not further thin the upper. Sharpen the vermilion border into a crisp edge with a small ridge above it. Author River's neutral as genuinely neutral and symmetric; the confident mouth-corner set is a pose and a rig target, never baked into the base mesh.",
+            "source_frame": "male_face_02_front_closeup_clean.png"
+          },
+          {
+            "feature": "Cheekbone to jaw transition",
+            "reference_shows": "A smooth unbroken convex sweep from the zygomatic straight down to the mandible, with no hollow beneath the cheekbone and no visible masseter. In the 3/4 frame the malar has no forward projection — the zygomatic arch runs almost straight back to the ear — so the cheekbone never catches light as a distinct plane. The buccal area is full, giving a padded read.",
+            "river_direction": "This is where River earns its 'more anatomically grounded' claim. Push the malar forward (not wider), cut a shallow hollow directly under it, then bring the masseter back up as a soft mass in front of the ear. The result is a three-step read across the cheek — bone, hollow, muscle — that survives at poker-table distance. Do not simply thin the cheek: forward malar plus modest hollow, not gaunt.",
+            "source_frame": "male_face_01_threequarter_neutral.png"
+          },
+          {
+            "feature": "Jaw width and gonial angle — the over-squaring the brief names",
+            "reference_shows": "In the JAW/SQUARED preset the mandible corners flare out past the temples, so the widest point of the entire head becomes the jaw and the lower third of the face is the largest part of it. The gonial angle drops to near 90 degrees and the corner sits low, below the earlobe. The chin becomes a flat horizontal shelf nearly the full width between the mouth corners with hard vertical corners.",
+            "river_direction": "Treat SQUARED as the outer bound, not the target. River's gonial corner must exist and be readable in silhouette, but the corner sits inside the temple width and the corner point sits level with or slightly above the earlobe, not below it. Get the jaw to read male through a defined corner and a masseter, not through lateral flare.",
+            "source_frame": "jaw_squared.png"
+          },
+          {
+            "feature": "Jaw — the failure in the other direction",
+            "reference_shows": "In JAW/WEAK the mandible corners vanish inward behind the cheek mass, the ear-to-chin line becomes one continuous curve with no corner at all, and the chin recedes so far that the lower lip becomes the most forward point of the lower face. The neck reads continuous with the jaw.",
+            "river_direction": "River sits between these two bounds, off-centre toward SQUARED by roughly a quarter of the interval — a corner that is unmistakable at silhouette but stays inside the temple width. Use these two frames as the bracket when tuning MPFB2 jaw morphs: if River's silhouette can be mistaken for either, it is wrong.",
+            "source_frame": "jaw_weak.png"
+          },
+          {
+            "feature": "Chin projection versus chin width",
+            "reference_shows": "In profile the chin point sits behind a line dropped from the lower lip — the chin is short in projection. Yet from the front it is broad and flat-fronted, nearly mouth-width. Broad but not forward is exactly the wrong combination for a male read.",
+            "river_direction": "Invert it: bring the chin forward until the chin point sits on or just ahead of the lower-lip line in profile, and take a little width off it so it reads as a defined chin button with a shallow mental crease above. Forward-and-narrow reads as a leading man; wide-and-flat reads as a brawler or a block.",
+            "source_frame": "male_side.png"
+          },
+          {
+            "feature": "Ear size, thickness and standoff",
+            "reference_shows": "Ear span is correct — top of the helix aligns with the brow line, lobe ends level with the base of the nose. But the ear is large, the helix rim is thick and heavy, and the ear stands well off the skull, angled outward at the top. It also sits noticeably far back behind the jaw hinge.",
+            "river_direction": "Keep the vertical placement exactly as the reference has it — that part is right. Reduce overall ear size slightly, thin the helix rim, and pin the ear closer to the skull. Short dark hair and black tie leave the ears fully exposed, so standoff ears will dominate the 3/4 read. Bring the ear forward very slightly toward the hinge.",
+            "source_frame": "male_face_01_threequarter_neutral.png"
+          },
+          {
+            "feature": "Cranium depth (occiput)",
+            "reference_shows": "Front-to-back the skull is truncated — the back of the head sits close behind the ear and the occiput does not project. In 3/4 and side the head reads short and front-heavy, a common game-head shortcut.",
+            "river_direction": "Extend the cranium backward so the occiput projects clearly behind the ear. This costs nothing in silhouette from the front but fixes the profile and 3/4 immediately, and it is one of the cheapest credibility gains available.",
+            "source_frame": "male_side.png"
+          },
+          {
+            "feature": "Neck thickness and length",
+            "reference_shows": "The neck is nearly as wide as the jaw at the mandible corners, with no submandibular hollow — the head sits on a cylinder. Visible column between the jaw and the trapezius line is only about a third of a head-height, and the trapezius rises steeply to meet it, shortening the neck further. No sternocleidomastoid definition.",
+            "river_direction": "Thin the neck so it stays clearly narrower than the jaw at the gonion, cut a real shelf and hollow under the mandible, and lengthen the visible column to roughly half a head-height. Bring the trapezius line down. Define the sternocleidomastoid enough to read as two strands under a wing collar. The Bond silhouette needs a neck the bow tie can sit on.",
+            "source_frame": "male_front.png"
+          },
+          {
+            "feature": "Head-to-body scale and set",
+            "reference_shows": "Shoulder width reads about 2.6 head-widths — heroic but not superhero, which is a reasonable place to land. The head reads slightly oversized against the torso, and the neck column enters the skull nearly vertically, so the head sits squarely on top of the shoulders with no forward set.",
+            "river_direction": "Keep the shoulder-to-head ratio; shave a few percent off head scale toward a true 7.5–8 head figure. Give the cervical column a slight forward lean so the head sits marginally ahead of the shoulder line — heads planted dead vertical read as mannequins, and the seated poker pose exposes this.",
+            "source_frame": "male_front.png"
+          },
+          {
+            "feature": "Skin and surface — the clean-shaven test case",
+            "reference_shows": "The tight clean-shaven frame is the closest match to River's brief, and it is the least flattering. Skin is almost entirely matte with one broad soft highlight on the forehead and nose ridge, zero pore detail, no specular break-up, no subsurface warmth at the ear rim or nostril, and the nasolabial fold is a painted line rather than a form. It also exposes what the beards were hiding: without facial hair the mandible reads much narrower and the chin much smaller than the bearded frames suggested.",
+            "river_direction": "Two things. First, on material: River wants a broken specular with a fine pore-scale roughness variation, a slightly oilier T-zone, and real subsurface at the ear rim, nostril and lip edge — this is the 'materially refined' half of the thesis and it costs almost nothing in geometry. Second, on process: because the Bond lead is clean-shaven, every jaw, chin and cheek decision must be judged with no facial hair on the mesh. The reference's beards are load-bearing and River has no such cover.",
+            "source_frame": "male_face_02_front_closeup_clean.png"
+          },
+          {
+            "feature": "Hairline and hair-to-scalp transition",
+            "reference_shows": "The hair is a helmet-like shell with a hard sculpted outer edge, a painted part, and a visible hard seam where the hair cap meets the forehead — a clean geometric line with no gradation. The forehead hairline runs nearly straight across with a shallow central notch and temples that barely recede.",
+            "river_direction": "For dark short hair the seam is the risk. Give River a soft transition — a short scalp-level card or texture gradient at the hairline — and recede the temples slightly with a shallow M rather than a straight line. A straight-across hairline on a male late-thirties head reads as a wig.",
+            "source_frame": "male_face_02_front_closeup_clean.png"
+          }
+        ],
+        "build_deltas": [
+          {
+            "parameter": "Chin projection (forward, sagittal)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "The reference's chin is broad but sits behind the lower-lip line in profile. Forward projection is the cheapest, strongest male cue available and it costs nothing in silhouette width — the opposite of the over-squaring the brief forbids."
+          },
+          {
+            "parameter": "Jaw angle definition / gonial corner sharpness",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "River needs a corner that reads at poker-table distance, but delivered as a plane change rather than a box. Sharpen the corner while keeping it inside the temple width."
+          },
+          {
+            "parameter": "Jaw width at the gonion",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "Only slightly above a neutral parametric human. Target gonion width around 0.90–0.95 of temple width. The JAW/SQUARED preset flares past the temples and is the explicit outer bound River must stay well inside."
+          },
+          {
+            "parameter": "Brow ridge projection (supraorbital)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Enough to shadow the upper lid under a key light. Projection, not mass — the reference gets projection right and then ruins it by making it one continuous slab."
+          },
+          {
+            "parameter": "Brow ridge continuity (medial mass vs lateral taper)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Break the single shelf: heavy over the inner third, thinning and rolling back over the outer third. Reduces the reference's permanent-scowl read without losing masculinity."
+          },
+          {
+            "parameter": "Nasion depth (dip between brow and nasal root)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "The reference has almost none, so the nose reads as an extrusion of the forehead. This small scoop is what makes the brow read as a ridge at all, and it survives at game camera distance."
+          },
+          {
+            "parameter": "Eye opening height (l/r-eye-height1/2/3-decr)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Bring the upper lid down to cross the top of the iris at neutral so no sclera shows above it. The reference's tall round aperture with white above and below the iris is the doll signature."
+          },
+          {
+            "parameter": "Eye scale overall",
+            "direction": "decrease",
+            "magnitude": "slight",
+            "rationale": "Reference eyes are oversized for the head. Fix apparent narrowness by shrinking the eye, not by moving it — spacing is already correct."
+          },
+          {
+            "parameter": "Eye socket depth / orbital recession",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Set the globe into the skull with a real upper-socket shadow and a defined lateral orbital rim. The reference's eyes sit on the face rather than in it."
+          },
+          {
+            "parameter": "Eye spacing (interocular distance)",
+            "direction": "keep neutral",
+            "magnitude": "slight",
+            "rationale": "One eye-width apart, five eye-widths across the head at eye level. The reference is right here; do not move it, and verify by measurement rather than by eye after the size change."
+          },
+          {
+            "parameter": "Cheekbone (zygomatic) forward projection",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Forward, not wider. The reference's arch runs straight back to the ear with no forward malar, so the cheekbone never catches light as a plane. Forward projection is what gives the 3/4 view structure."
+          },
+          {
+            "parameter": "Buccal fullness / cheek fat",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Cut a shallow hollow under the zygomatic. Moderate, not severe — on a low-poly mesh an aggressive cut produces a skull-face at table lighting."
+          },
+          {
+            "parameter": "Masseter mass",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "The muscle in front of the ear is what makes a jaw read male without widening the bone. Completes the bone/hollow/muscle three-step across the cheek."
+          },
+          {
+            "parameter": "Chin width",
+            "direction": "decrease",
+            "magnitude": "slight",
+            "rationale": "Narrow the chin to a defined button with a shallow mental crease. Forward-and-narrow reads as a leading man; the reference's wide-and-flat reads as a brawler."
+          },
+          {
+            "parameter": "Nose bridge width (nose-scale-horiz-decr at the dorsum)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "The THIN BRIDGE preset already reads more Bond-appropriate than default. Take it, but resolve the taper down the whole nose rather than only the top."
+          },
+          {
+            "parameter": "Nose tip width / bulb",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Replace the reference's rounded bulb with a defined tip point, keeping its downward set and the near-90-degree nasolabial angle. Upturned reads young and soft."
+          },
+          {
+            "parameter": "Alar (nostril wing) width",
+            "direction": "decrease",
+            "magnitude": "slight",
+            "rationale": "Tuck the wings just inside the inner-eye-corner verticals. Reference sits at or slightly wider than that line."
+          },
+          {
+            "parameter": "Neck circumference",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "From the reference's near-jaw-width cylinder down to clearly narrower than the jaw at the gonion — while staying above a neutral human. Add a real submandibular shelf and hollow."
+          },
+          {
+            "parameter": "Neck length (visible column above the trapezius)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Reference gives about a third of a head-height; target roughly half. Black tie needs a column for the collar and bow tie to sit on. Also bring the trapezius line down."
+          },
+          {
+            "parameter": "Cranium depth front-to-back (occiput projection)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "The reference occiput is truncated and the head reads front-heavy in profile. Free credibility — invisible from the front, transformative at 3/4 and side."
+          },
+          {
+            "parameter": "Forehead plane definition (frontal eminences plus temporal ridge)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Recover the front plane and two side planes the reference's smooth dome loses. This is the largest single masculinity deficit in the reference style."
+          },
+          {
+            "parameter": "Forehead backward slope",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "Male foreheads recede more than female. Slight only — pushed further it reads primitive, which is the caricature trap on this axis."
+          },
+          {
+            "parameter": "Ear scale",
+            "direction": "decrease",
+            "magnitude": "slight",
+            "rationale": "Reference ears are large with a thick helix rim. Keep the vertical placement (helix top at the brow, lobe at nose base) exactly as the reference has it — that is correct."
+          },
+          {
+            "parameter": "Ear protrusion / standoff from skull",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Pin them closer. Short dark hair and black tie leave the ears fully exposed, so the reference's outward-angled standoff would dominate the 3/4 silhouette."
+          },
+          {
+            "parameter": "Lower lip volume",
+            "direction": "decrease",
+            "magnitude": "slight",
+            "rationale": "Bring the two lips nearer parity. The reference's lower lip is over-full and softly bagged against a thin rolled upper."
+          },
+          {
+            "parameter": "Philtrum depth",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "Firm the two columns into a real channel that holds a value change under table light. Keep philtrum length neutral to slightly long — short reads young."
+          },
+          {
+            "parameter": "Head scale relative to body",
+            "direction": "decrease",
+            "magnitude": "slight",
+            "rationale": "A few percent, toward a true 7.5–8 head figure. Keep the reference's shoulder-to-head ratio of about 2.6 head-widths, which is heroic without being superhero."
+          },
+          {
+            "parameter": "Age macro",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Around 0.40–0.45 for late thirties, but deliver the age through specific features — faint tear-trough, faint nasolabial — rather than letting the macro add sag and jowl everywhere."
+          },
+          {
+            "parameter": "Weight macro",
+            "direction": "decrease",
+            "magnitude": "slight",
+            "rationale": "Slightly below default supports the cheek hollow and the jaw corner without going gaunt. Muscle macro moderate (around 0.55–0.6), gender macro full male."
+          }
+        ],
+        "do_not_copy": [
+          "The JAW/SQUARED flare — mandible corners projecting past the temple width, making the jaw the widest part of the head and the lower third the largest part of the face. This is the specific over-squaring the brief names.",
+          "The gonial corner sitting below the earlobe. It should sit level with or slightly above it.",
+          "A chin that is wide but not forward. The reference's chin point sits behind the lower-lip line in profile while being nearly mouth-width from the front — the wrong combination on both axes.",
+          "The single continuous unbroken brow slab running straight across both brows, and the painted vertical glabella furrow baked into the neutral face.",
+          "Hard-edged dark eyebrow patches that read as decals rather than hair.",
+          "Large iris with sclera visible both above and below it at neutral gaze, on a bright untinted white eyeball with no upper-lid shadow. The clearest doll cue in the reference.",
+          "Eyeballs sitting on the front of the face with no orbital depth, especially the flat outer corner.",
+          "The bulbous rounded nose tip with flared alae — and specifically the THIN BRIDGE preset's unresolved result, pinched at the dorsum and still bulbous at the tip.",
+          "The near-absent nasion: forehead running into the nose with almost no dip.",
+          "The smooth unbroken convex sweep from cheekbone to jaw, with no hollow under the zygomatic, no forward malar and no masseter — the flat undermodelled mid-face.",
+          "A neck nearly as wide as the jaw with no submandibular hollow and no sternocleidomastoid, meeting a trapezius that rises too high and shortens the column further.",
+          "The truncated shallow occiput; the head reading front-heavy in profile with the back of the skull close behind the ear.",
+          "The head planted dead vertical on the shoulders with no forward set of the cervical column.",
+          "Large thick-rimmed ears standing off the skull and angled outward at the top.",
+          "Flat matte skin: one broad soft highlight, no pore-scale roughness variation, no specular break-up, no subsurface warmth at ear rim, nostril or lip edge.",
+          "The nasolabial fold as a painted line rather than a modelled form.",
+          "The hard seam where the hair cap meets the forehead, and the straight-across hairline with barely-receding temples.",
+          "The permanent asymmetric mouth-corner smirk baked into the neutral pose, with the upper lip vanishing at the pulled corner.",
+          "Facial hair authored as a flat hard-edged decal shape (the goatee reads as a sticker) — and more importantly, do not let facial hair hide mandible decisions, since River's lead is clean-shaven.",
+          "The JAW/WEAK direction as an overcorrection: no gonial corner at all, ear-to-chin as one continuous curve, chin receding behind the lower lip."
+        ],
+        "pitfalls": [
+          "Reading 'male' by widening. Lateral bone width is the fastest path to caricature and it is exactly the reference's error. The male read comes from brow projection, chin projection, plane definition, masseter and neck — none of which widen the silhouette.",
+          "Overcorrecting into gauntness. On a low-poly mesh there are not enough loops to hold a deep cheek hollow, so an aggressive cut collapses into a skull-face under flat table lighting. Forward malar plus a shallow hollow, never a deep hollow alone.",
+          "Judging the head with facial hair on. The reference's beards are load-bearing — they hide a narrow mandible and a small chin. River's Bond lead is clean-shaven, so every jaw, chin and cheek decision must be evaluated on the bare mesh at every step.",
+          "Detail that only reads in a closeup. The poker camera is far enough that only the outer silhouette and the largest value shapes survive. Jaw corner, brow shadow and neck-to-jaw separation carry the character; micro-forms do not.",
+          "Doll eyes returning through the shader after the geometry is correct. A properly-sized socket still reads doll-like if the sclera is pure white with no ambient occlusion from the upper lid. Fix geometry and shading together or the fix does not land.",
+          "MPFB2 morph stacking overshoot. Several jaw and chin targets applied together combine non-linearly and blow past the intended silhouette. Apply one at a time and check the outline against the SQUARED/WEAK bracket after each.",
+          "Perfect symmetry reading synthetic. A small asymmetry in brow height or nasal deviation buys credibility very cheaply, but it must stay subtle enough not to read as injury or as a modelling mistake.",
+          "Using the age macro instead of specific features. The macro adds sag and jowl across the whole head; a late-thirties Bond wants a faint tear-trough and a faint nasolabial and nothing else. Macro-aging will also undo the jaw corner.",
+          "Inflating neck length to fake elegance. Past about half a head-height of visible column it goes uncanny, and it breaks the dinner-jacket collar fit at the seated pose.",
+          "Ears breaking the head. Ear is where low-poly heads most often fail — too small or too flat reads as an error at 3/4 rather than as restraint. Reduce size and standoff, but keep the helix form and the brow-to-nose-base span.",
+          "Short dark hair collapsing into a helmet. Dark hair on a low-poly scalp becomes one solid cap and reproduces the reference's worst artefact — the hard forehead seam. The hairline needs a soft transition and slightly receded temples.",
+          "Head scale drift. A head authored in isolation routinely ends up oversized once parented to the body. Check scale on the full seated figure at the actual game camera, not in a head-only view.",
+          "Losing the male/female differentiation. The gold female counterpart shares the pipeline; if River leans on the gender macro alone rather than localised brow, chin, malar and neck deltas, the two heads will read as the same skull with different hair."
+        ]
+      },
+      {
+        "key": "hair",
+        "observations": [
+          {
+            "feature": "Front hairline height relative to the brow",
+            "source_frame": "male_hairstyle_2.png (ponytail/swept-back close 3/4)",
+            "reference_shows": "The lowest point of the hairline sits above the brow by roughly the same distance the brow sits above the base of the nose — the classical middle third, if anything slightly under it. the reference does NOT use a high hairline; the forehead reads as a normal-height panel, brow to hairline about 1/3 of the visible face. The perceived 'high' quality in the frame comes from the hardness of the edge, not from its height.",
+            "river_direction": "River's current straight, high edge is wrong on BOTH counts. Drop the front hairline so the brow-to-hairline distance equals the brow-to-nose-base distance, then add about 5-8% back to it for a late-thirties man (a mature hairline is what stops a Bond lead reading as a boy). Height alone will not fix the cap read — the edge shape below is the real fix."
+          },
+          {
+            "feature": "Plan shape of the hairline — the M",
+            "source_frame": "male_hairstyle_2.png and male_hair_slicked_back_threequarter.png",
+            "reference_shows": "the reference's shell edge is a polygonal, stair-stepped boundary: you can count straight segments and near-90-degree steps where the hair mesh crosses the forehead skin. There is a notch above the eyebrow tail, a horizontal run, then another step back. It is an authored silhouette cut, not a growth boundary — this is visibly the same defect River has.",
+            "river_direction": "Build the hairline as a real M/bell in plan: a rounded central frontal tuft that is the lowest and widest point at the midline, sweeping back and up over each frontotemporal recession, then turning down at the temple corner. No straight segment longer than about a quarter of the forehead width, and no corner sharper than a 30mm radius. This is the single highest-value geometry change available."
+          },
+          {
+            "feature": "Shape and position of the temple recession",
+            "source_frame": "male_hair_combed_sidepart_threequarter.png",
+            "reference_shows": "On the near side the shell edge angles back from the forehead at roughly 30-40 degrees, then turns down toward the ear at a visible hard corner. The turn is a corner, not an arc. The deepest point of recession sits above the tail of the eyebrow.",
+            "river_direction": "The recession must be a smooth CONCAVE arc, never a straight diagonal and never a corner. Put its deepest point above the eyebrow tail, on a vertical dropped from the outer eye corner (lateral canthus). At late thirties the recession is present but shallow — pushing it deeper than about 12-15mm behind the frontal tuft line starts reading as fifty, which is outside the brief."
+          },
+          {
+            "feature": "The bald gap at the temple — River's stated defect, present in the reference too",
+            "source_frame": "male_hairstyle_1.png (faux hawk close 3/4)",
+            "reference_shows": "A hard, near-vertical straight edge runs from above the brow tail down in front of the ear, and the skin forward of it is completely bare — same flat albedo value right up to the boundary, no stubble, no darkening, no ambient occlusion. Between the temple hair and the eyebrow there is an unbroken skin wedge. This is exactly what makes it read as painted-on.",
+            "river_direction": "On a real head there is essentially NEVER a bald gap between temple hair and sideburn — the hair is continuous around the temple corner and descends in front of the ear. Close the gap with geometry, and independently paint a stubble/shadow gradient onto the head texture that follows the hairline and extends 10-15mm past the mesh edge at ~35% opacity fading to zero. The mesh edge then lands inside a soft value ramp instead of on clean skin."
+          },
+          {
+            "feature": "How the shell meets the skull at the sideburn and the ear",
+            "source_frame": "male_hairstyle_1.png and male_hair_faux_hawk_profile.png",
+            "reference_shows": "The shell terminates in a clean upward-curving hem above the ear and is cut around the ear with a visible gap. The sideburn, where present, is a hard-edged tongue of constant width. The shell's lower boundary is cut on what looks like a plane rather than following the skull surface — which is precisely why a gap opens where the head surface falls away at the temple.",
+            "river_direction": "Shrinkwrap the hair shell to the MPFB2 head with a 2-4mm offset so its lower edge conforms to the cranium instead of being cut on a plane. Terminate the shell on the SIDE plane of the head, not the front plane, and carry a continuous sideburn strip down in front of the tragus, ending at roughly ear-canal height for a formal cut, tapering to a soft point rather than a razor-cut horizontal."
+          },
+          {
+            "feature": "Front-to-back volume ramp in profile",
+            "source_frame": "male_hair_faux_hawk_profile.png",
+            "reference_shows": "Maximum height is not at the crown — it is roughly 30-40% back from the hairline, in the quiff zone. From there the shell falls back and down in a long shallow arc over the vertex and hugs the occiput toward the nape. The sides are visibly shorter than the top; the fade is read entirely from silhouette, with no shading support. The manifest calls this the best hair silhouette frame in the recording and it earns that.",
+            "river_direction": "Copy the ramp, not the amplitude. For River's silver character: about 15-25mm of lift above the scalp at the peak (which sits behind the hairline, not at the vertex), ~5-8mm at the sides, ~3-5mm at the nape. the reference's faux hawk quiff leaves the skull by far more than that and belongs to a different tone."
+          },
+          {
+            "feature": "The nape scoop — the profile tell",
+            "source_frame": "male_hair_faux_hawk_profile.png (nape visible) vs male_hairstyle_2.png (nape hidden by the tie)",
+            "reference_shows": "Where the nape is visible the shell runs into the neck with no concave relief; the back silhouette is a continuous convex curve from vertex to collar. the reference gets away with it because the gameplay camera rarely sees the back of a head at that scale.",
+            "river_direction": "Put a concave scoop into the profile between the occiput bulge and the neck column. That short reversal of curvature is the single most reliable 'this is hair on a head, not a helmet' cue in profile. Shape the occipital hairline as a shallow W narrowing to a midline point at the level of the earlobe or just below, and fade the last 15-25mm of the taper in texture, never on a horizontal straight edge."
+          },
+          {
+            "feature": "How much of the far side shows in three-quarter",
+            "source_frame": "male_hair_combed_sidepart_threequarter.png",
+            "reference_shows": "At roughly 35-40 degrees the hair mass overhangs the far temple and is clearly visible outboard of the far cheekbone — the hair silhouette is wider than the skull silhouette on the far side. The near temple shows a genuine temple point where hair comes forward again below the recession. This is the best thing in the whole set and the closest style to River's archetype.",
+            "river_direction": "Test the River asset at 35-40 degrees specifically. If the hair silhouette falls INSIDE the skull silhouette on the far side, it is a painted cap by definition and no amount of texture work will save it. Keep the near-side temple point — hair coming forward again below the recession is what makes the recession read as anatomy rather than as a cut."
+          },
+          {
+            "feature": "Crown volume and top-silhouette break",
+            "source_frame": "male_hair_combed_sidepart_threequarter.png and male_hair_slicked_back_threequarter.png",
+            "reference_shows": "The crown is a single smooth dome with one unbroken specular sweep across it. The part is a groove in the surface, not a gap down to scalp. On the slicked-back frame the whole top is one continuous highlight band with no interruption.",
+            "river_direction": "Keep the part-as-groove idea (correct and cheap), but break the top silhouette into 3-5 shallow lobes running the growth direction, 2-4mm high, so the rim light segments instead of forming one glassy band. Also add a crown whorl behind the vertex where the shell dips slightly — an unbroken dome over the vertex is a helmet signature."
+          },
+          {
+            "feature": "Strand texture method",
+            "source_frame": "male_hair_messy_textured_front.png",
+            "reference_shows": "Curl and texture are faked entirely in albedo — fine directional streaks following growth, plus a value gradient darker at the roots and underside, lighter over the crown. Zero geometric variation. No transparency, no cards. The manifest is right that silhouette does all the work.",
+            "river_direction": "Keep the baked albedo streaks — they are the correct construction target at River's poly budget. The refinement step up is a separate anisotropic highlight band running perpendicular to the growth direction and offset from the geometric specular, plus root darkening. That is the cheapest 'materially refined' delta available and it costs no geometry."
+          },
+          {
+            "feature": "Front-view width of the hair mass",
+            "source_frame": "male_hair_messy_textured_front.png",
+            "reference_shows": "The mass sits well proud of the head, noticeably wider than the temples, with the sides dropping almost vertically in front of the ears and a shallow hard-edged arch across the forehead. It reads as a cushion sitting on the head.",
+            "river_direction": "Do not go here. For River's formal short cut, the front-view hair silhouette should exceed the skull width by no more than about 6-8mm per side above the temple, and should narrow — not drop vertically — as it comes down toward the ear."
+          },
+          {
+            "feature": "The cranium the shell has to sit on",
+            "source_frame": "male_hair_balding_crown_threequarter.png",
+            "reference_shows": "With the crown bare, the skull form is fully legible: an egg widest at the parietal, above and behind the ears, with flat and slightly inset temple planes. The residual hair is a narrow horseshoe band whose upper edge sits at about the level of the top of the ear, and whose forward point is behind the vertical of the outer eye corner. The bare scalp carries an unbroken specular sheen with no transition zone at all where hair meets skin.",
+            "river_direction": "Use this frame as the ground truth for the surface River's shell must conform to — the inset temple plane is exactly where a plane-cut shell opens its bald gap. And note the total absence of a transition zone: that is what River must add, not replicate."
+          },
+          {
+            "feature": "Scale of the fix versus the budget",
+            "source_frame": "whole 02_hair set",
+            "reference_shows": "All fourteen styles are a small number of solid sculpted shells with baked strand texture, no cards, no transparency sorting. the reference accepts hard mesh edges everywhere and still reads acceptably at gameplay distance because the game never puts a camera on the hairline.",
+            "river_direction": "River does — the character-preview bust and the winner close-up both frame the head large. So River cannot inherit the reference's tolerance for a hard edge. The solid-shell construction is right; the untreated edge is not."
+          }
+        ],
+        "build_deltas": [
+          {
+            "parameter": "hair shell front edge — vertical position",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Bring the front hairline down until brow-to-hairline equals brow-to-nose-base, then add back roughly 5-8% for a late-thirties mature hairline. River's current edge is above that; the reference sits at or slightly below it."
+          },
+          {
+            "parameter": "hair shell front edge — curvature (straightness of the hairline)",
+            "direction": "decrease",
+            "magnitude": "strong",
+            "rationale": "The straight edge is the defect. Replace with an M/bell plan: central frontal tuft lowest at the midline, concave recession arcs over each temple. No straight run longer than a quarter of the forehead width, no corner radius under 30mm."
+          },
+          {
+            "parameter": "temple coverage — lateral extent of hair at the frontotemporal corner",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "Close the bald gap. Hair must be continuous around the temple corner and down in front of the ear; a gap between temple hair and sideburn does not occur on a real head and is the loudest cap signal River has."
+          },
+          {
+            "parameter": "frontotemporal recession depth",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "A late-thirties Bond lead has a visible but shallow recession — about 12-15mm behind the frontal tuft line, apex above the eyebrow tail on the lateral-canthus vertical. Zero recession reads adolescent; deeper reads fifty."
+          },
+          {
+            "parameter": "crown lift above the scalp",
+            "direction": "keep neutral",
+            "magnitude": "slight",
+            "rationale": "15-25mm at the peak is right for a formal short cut. The peak belongs 30-40% back from the hairline, not at the vertex — that redistribution matters more than the amount."
+          },
+          {
+            "parameter": "side and nape shell thickness relative to crown",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "~5-8mm at the sides and 3-5mm at the nape against 15-25mm on top. the reference's uniform-offset shell is part of what makes its hair read as a moulded object; a real taper thins toward the hem."
+          },
+          {
+            "parameter": "nape profile — concavity between occiput and neck",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "A short concave scoop where the hair taper meets the neck column is the definitive profile cue for hair over helmet. The reference does not have it."
+          },
+          {
+            "parameter": "sideburn length",
+            "direction": "keep neutral",
+            "magnitude": "slight",
+            "rationale": "Terminate at roughly ear-canal / mid-tragus height for black tie, tapering to a soft point. Higher reads styled-for-the-eighties, lower reads unkempt against a dinner jacket."
+          },
+          {
+            "parameter": "forehead vertical scale (MPFB2 head parameter, not the hair asset)",
+            "direction": "keep neutral",
+            "magnitude": "slight",
+            "rationale": "The forehead panel itself is fine at neutral. Resist the temptation to shorten the forehead to compensate for a badly placed hairline — that displaces the brow and breaks the skull. Fix the hair edge, not the head."
+          },
+          {
+            "parameter": "forehead slope / brow ridge shelf",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "A slightly more raked forehead with a definite brow shelf gives the hairline a plane change to sit on, so the front hair mass reads as leaving a surface rather than being stuck to a flat panel. Also on-brief for a credible male skull."
+          },
+          {
+            "parameter": "far-side hair silhouette overhang at 35-40 degrees",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "The hair mass must be visible outboard of the far cheekbone at three-quarter. If it falls inside the skull silhouette the asset is a cap regardless of texture."
+          },
+          {
+            "parameter": "albedo value falloff at the roots and the shell underside",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Root darkening plus an underside gradient is nearly free and is a large part of the perceived material step up over the reference's flat single-value albedo."
+          }
+        ],
+        "do_not_copy": [
+          "The polygonal, stair-stepped hairline boundary visible on male_hairstyle_2.png and male_hair_slicked_back_threequarter.png — straight segments with near-90-degree steps. This is River's existing bug already present in the reference; it is the thing to fix, not a thing to match.",
+          "The bare skin wedge between temple hair and eyebrow, with the same flat skin value right up to the mesh edge — no stubble, no contact shadow, no ambient occlusion (male_hairstyle_1.png).",
+          "The hair shell cut on a plane in front of the ear rather than conforming to the skull surface. That plane cut is the mechanism that opens the temple gap.",
+          "The messy/textured cushion silhouette that is wider than the head with vertical sides (male_hair_messy_textured_front.png) — caricature, and outside River's tone.",
+          "The faux-hawk quiff amplitude (male_hair_faux_hawk_profile.png). Its ramp is the best in the set; its height is not.",
+          "The perfectly smooth unbroken crown dome carrying one continuous glassy specular band (male_hair_slicked_back_threequarter.png).",
+          "The completely absent transition zone between hair and scalp — the bald crown frame shows the reference's scalp shading has literally no gradient at the boundary.",
+          "Flat single-value albedo with baked streaks and no root darkening or underside falloff. Keep the baked streaks; do not keep the flatness.",
+          "The untreated flat inner surface on long styles that the manifest itself flags. Not directly relevant to a short cut, but the same shortcut will appear on River's nape ribbon if the shell is left single-sided."
+        ],
+        "pitfalls": [
+          "Fixing the hairline height and declaring victory. Height is a minor contributor; the straightness and hardness of the edge is what reads as a helmet. A correctly-placed straight edge still reads as a cap.",
+          "Solving the temple gap by scaling the whole hair shell down onto the head. That closes the gap and simultaneously destroys the far-side overhang at three-quarter, converting the asset from a cap with a gap into a cap without one.",
+          "Relying on the hairline shape alone with no texture support. Geometry gets you the M; only the stubble gradient painted 10-15mm past the mesh edge kills the hard boundary at close camera range.",
+          "Building the hairline symmetric and mathematically perfect. A perfectly mirrored hairline reads synthetic. Offset the frontal tuft 3-5mm off centre and make one recession marginally deeper.",
+          "Over-recessing the temples chasing 'mature'. Late thirties is a shallow recession; the failure mode is that the character starts reading as fifty and stops being the Bond lead.",
+          "Adding silhouette-breaking flyaway tongues everywhere. They belong at the hairline, the sideburn and the nape hem only. Scattered over the crown they read as damage, not styling.",
+          "Testing only from the front and the profile. The three-quarter at 35-40 degrees — the character-preview bust and winner close-up framing — is where the cap read actually shows up, because that is where the far-side overhang either exists or does not.",
+          "Letting the sideburn terminate on a hard horizontal razor line. It shows as a decal at close range even when everything above it is correct. Taper it to a point in geometry and fade the last few millimetres in texture.",
+          "Treating the nape as low-priority because the gameplay camera is frontal. River's preview and celebration cameras are not, and a convex helmet back is instantly legible when it does appear.",
+          "Adding a full card-hair layer to solve the edge. The budget answer is a single ring of 12-20 alpha-tested cards overlapping the shell edge by ~5mm at the hairline only, plus the painted gradient underneath — not converting the asset to cards."
+        ]
+      },
+      {
+        "key": "tailoring",
+        "observations": [
+          {
+            "feature": "Lapel type on the one black formal garment",
+            "source_frame": "male_black_formal_suit_cravat_front.png",
+            "reference_shows": "It is not a lapel at all. There is no gorge line, no notch, no roll. A stand/mandarin collar sits at the neck and a satin ribbon of near-constant width (~18px on a 1920-wide frame, roughly 3.5cm at scale) runs continuously from behind the collar down both front edges, past the waist, and out to the cutaway hem points. The manifest calls it a 'satin shawl lapel'; at 3x zoom it is a taped edge on a collarless Nehru-style jacket, not a shawl.",
+            "river_direction": "Reject the geometry, keep the satin idea. River gets a true peak lapel with a real roll line: a facing panel that turns over and casts its own shadow, not a flat ribbon appliqued on the front edge."
+          },
+          {
+            "feature": "Correct dinner-jacket lapel in the set",
+            "source_frame": "male_gold_suit.png",
+            "reference_shows": "The only credible black-tie lapel here. Black satin facing, peak points that rise up-and-out and terminate about 15% of the way from the gorge to the shoulder seam. Gorge sits high, level with the corner of the mouth. Facing at its widest is ~1/3 of the front-edge-to-shoulder-seam distance, i.e. slim.",
+            "river_direction": "Same peak geometry, widened. Take the facing to 45-50% of the front-edge-to-shoulder span so there is enough satin area to carry a specular. Keep the high gorge - it lifts the chest and reads well when the character is framed from the sternum up at the table."
+          },
+          {
+            "feature": "Lapel break point / depth of the V",
+            "source_frame": "male_gold_suit.png, male_maroon_three_piece_suit_front.png",
+            "reference_shows": "Gold tux breaks at a single fastened button at the natural waist, roughly 58-60% of the way down from the shoulder to the crotch, just above the navel. The three-piece jackets break lower still (~65%) and never close at all.",
+            "river_direction": "Break at 58-60%, one fastened button. This is the right depth: the V is long enough to show a full shirt column and bow tie, short enough that the jacket still reads closed and tailored when he is seated and leaning forward."
+          },
+          {
+            "feature": "Shoulder line and structure",
+            "source_frame": "male_black_formal_suit_cravat_front.png vs male_maroon_three_piece_suit_front.png",
+            "reference_shows": "The three-piece jackets are soft and unpadded - the shoulder point sits directly over the deltoid, the sleevehead joins with a soft rounded crease, no rope. The black formal jacket is the exception: a visibly straighter, squarer top line with a small extension past the deltoid, giving a wedge silhouette. It is the most 'built' shoulder in the male set.",
+            "river_direction": "Take the black formal suit's direction, mildly. Straight top line, 1-1.5cm extension past the deltoid, a slight crown at the sleevehead. Enough that the shoulders give a clean horizontal edge across the top of the seated silhouette. No rope, no visible pad step, no V-taper."
+          },
+          {
+            "feature": "Jacket length and hem shape",
+            "source_frame": "male_maroon_three_piece_suit_front.png, male_black_formal_suit_cravat_front.png",
+            "reference_shows": "Every jacket is short - hem lands at roughly crotch level to a couple of cm below, covering the seat only just. Front corners are rounded and cut away; on the black formal suit the cutaway is severe and the front points swing forward and outward.",
+            "river_direction": "Keep the short length (a longer skirt bunches and reads as a bathrobe when seated), but soften the cutaway. Hem at the bottom of the seat, front corners gently rounded, not swept."
+          },
+          {
+            "feature": "Waist suppression",
+            "source_frame": "male_maroon_three_piece_suit_front.png",
+            "reference_shows": "Strong. The side seam curves in hard at the natural waist and flares over the hip - the maroon reads roughly 78% waist-to-chest. Combined with the open front it gives an almost feminine X.",
+            "river_direction": "Ease it. Target 85-88% waist-to-chest: close but not corseted. Bond tailoring is clean drape over a fastened button, not a nipped waist."
+          },
+          {
+            "feature": "Sleeve length and shirt cuff exposure",
+            "source_frame": "male_maroon_three_piece_suit_front.png, male_suit.png",
+            "reference_shows": "Too much cuff. The white shirt band below the jacket sleeve is roughly 2-2.5cm deep and reads as a hard bright ring at each wrist. Real tailoring shows about half that. The black formal suit solves it differently: a deep turned-back satin cuff ~3cm, same black as the body but glossy, which reads as a gauntlet and is slightly costumey.",
+            "river_direction": "Split the difference: 8-12mm of white shirt cuff. Add cufflink geometry at the outer wrist. Two small bright points at the wrists are high-value at a poker table where the hands are permanently in frame, but a 2cm white ring makes the sleeve look short."
+          },
+          {
+            "feature": "Shirt collar",
+            "source_frame": "male_maroon_three_piece_suit_front.png, male_cream_three_piece_suit_front.png",
+            "reference_shows": "One collar across the whole set: moderate-spread point collar, short stand, long points lying flat on the chest. The black formal suit substitutes a stand/band collar with no points, which is not black-tie language.",
+            "river_direction": "Turndown collar with shorter points and slightly more spread than the reference, so the bow tie sits between the collar points rather than on top of them. Skip a wing collar - at game scale it reads waiter, not Bond."
+          },
+          {
+            "feature": "Neckwear",
+            "source_frame": "male_gold_suit.png vs male_black_formal_suit_cravat_front.png",
+            "reference_shows": "The gold tux bow tie is a proper semi-butterfly: ~9-10cm wide (about 60% of the neck-to-shoulder span), a clearly modelled centre knot, and two wing planes angled differently so they catch the key separately. The black formal suit's cravat is a sparkly textured mass at the throat with no readable structure - it reads as a lump of jewellery, not a garment.",
+            "river_direction": "Self-tie black semi-butterfly bow, modelled as real geometry with a distinct knot and two wings on slightly different planes. Silk against a matte shirt. The cravat is the wrong register entirely for River."
+          },
+          {
+            "feature": "Pocket square",
+            "source_frame": "male_suit.png, male_maroon_three_piece_suit_front.png, male_black_formal_suit_cravat_front.png",
+            "reference_shows": "The blue and maroon suits carry a white/contrast square showing ~10mm above the welt - small, but it is the only bright note on the chest and it works. The black formal suit's square is black satin on a black jacket with no visible welt line; it only exists where a specular happens to land on it, and contributes nothing to the read.",
+            "river_direction": "White linen, flat fold with one or two points, 12-15mm proud of the welt, with a real welt slit and baked AO under it. This is the single cheapest and biggest value break on the torso - a bright rectangle at upper-left chest that anchors the eye and stops the front reading as one slab."
+          },
+          {
+            "feature": "Button stance and fastening",
+            "source_frame": "male_gold_suit.png vs the three three-piece frames",
+            "reference_shows": "The gold tuxedo is the only jacket in the set with a fastened button - one button, natural waist. Every other jacket hangs completely open with parallel front edges and no closure, which is why they all read slightly cardigan-ish and lose the chest drape.",
+            "river_direction": "One button, fastened, at the natural waist, with a real buttonhole and a shank. Fastening is what creates the drape lines radiating from the button and the X-shape of the front - the open-front reference has none of it."
+          },
+          {
+            "feature": "Sleeve cuff buttons",
+            "source_frame": "all six frames",
+            "reference_shows": "Absent everywhere. No cuff buttons on any male jacket in the set.",
+            "river_direction": "Add four small buttons at each cuff, kissing. Nearly free as geometry or even as a normal-map detail, and it is one of the loudest 'this is tailored' signals at close range."
+          },
+          {
+            "feature": "Trouser break at the shoe",
+            "source_frame": "male_black_formal_suit_cravat_front.png",
+            "reference_shows": "A failure. The leg is a straight tapered tube with one knife crease front-centre and a hard horizontal hem that meets the shoe throat with essentially zero break - no fold, no ripple, no drape over the instep. There is also no occlusion shadow between hem and shoe, so trouser and shoe fuse into one black mass except where the patent toe catches light.",
+            "river_direction": "Give him a single shallow break: one horizontal fold across the front of the hem where it rests on the instep, hem covering the top third of the shoe at the front and cutting a little lower at the back. Bake a dark contact line between hem and shoe so the foot separates."
+          },
+          {
+            "feature": "Trouser outseam braid (galon)",
+            "source_frame": "male_black_formal_suit_cravat_front.png",
+            "reference_shows": "Missing. The dinner-suit trouser has no satin side stripe. The only vertical variation on the leg is a faint lighting rim on the outer edge.",
+            "river_direction": "Add a 15-18mm satin braid down each outseam. It is period-correct for a dinner suit, it distinguishes the trouser from a black business trouser instantly, and mechanically it is a permanent low-roughness vertical strip that keeps the legs from collapsing into a black rectangle in a dim room."
+          },
+          {
+            "feature": "Measured black value range on the black formal jacket",
+            "source_frame": "male_black_formal_suit_cravat_front.png",
+            "reference_shows": "Sampled: lit chest sRGB 13, shadowed flank sRGB 13 - identical, no gradient at all. A horizontal scan across the chest at y=430 returns values of 2-37 for the entire torso width. A vertical scan down the front centre returns 2-42 with a single 80 where a satin specular lands. The only meaningful lift anywhere is the shoulder-top rim at sRGB 55. The backdrop is sRGB 131.",
+            "river_direction": "The reference black is crushed to roughly 1.5% linear with no form modelling; it survives only because it is cut against a mid-grey backdrop. River must never go below ~4-5% reflectance on the jacket cloth (sRGB ~55-65), which still reads convincingly black next to skin but leaves enough headroom for the light to describe the chest, the lapel roll and the sleeve."
+          },
+          {
+            "feature": "How the reference separates adjacent blacks",
+            "source_frame": "male_gold_suit.png, male_black_formal_suit_cravat_front.png",
+            "reference_shows": "By roughness, not by colour. On the gold tux the black satin lapel facing samples sRGB 25 against a matte black shirt at sRGB 14 - an 11-point split between two adjacent blacks, achieved purely because the satin's low roughness catches the key while the shirt's does not. On the black formal suit the satin trim in shadow is actually darker than the cloth (sRGB 4 vs 13) and only reads where a narrow specular streak fires.",
+            "river_direction": "Adopt the mechanism, engineer it properly. Jacket body barathea at roughness ~0.65-0.75 with a fine twill in the roughness and normal maps; lapel facing, bow tie, trouser braid and button covers at roughness ~0.15-0.25 with slight anisotropy along the weave. That roughness delta alone produces the whole garment read in a dark venue with zero colour information."
+          },
+          {
+            "feature": "What actually holds the silhouette in the reference",
+            "source_frame": "male_black_formal_suit_cravat_front.png",
+            "reference_shows": "Two things and nothing else: a rim highlight along the shoulder tops and outer arms (sRGB 55), and the mid-grey backdrop behind it (sRGB 131). The chest itself carries no form. Take away the light backdrop and the figure becomes a hole.",
+            "river_direction": "River cannot lean on a bright backdrop - the venue is dark. Add a Fresnel sheen term to the wool so the shoulder, upper arm and lapel edge self-rim at grazing angles without any dedicated rim light, then guarantee one hard kicker from behind-above in the table lighting contract as a second layer. Do not rely on either alone."
+          },
+          {
+            "feature": "Layer separation and ambient occlusion",
+            "source_frame": "male_black_formal_suit_cravat_front.png",
+            "reference_shows": "None. There is no dark line at the armhole, no shadow under the lapel roll, no occlusion at the collar underside, no welt slit on the breast pocket, and no contact line where the jacket hem meets the trouser. Jacket, shirt, cravat and trouser all sit within a few sRGB points of each other with nothing drawing the boundaries.",
+            "river_direction": "Bake heavy AO into every seam - armhole, lapel roll turn-under, collar underside, pocket welts, buttonhole, hem, waistband junction. In a dark room those AO lines are the only thing that will describe the tailoring, so they need to be authored, not left to the renderer."
+          },
+          {
+            "feature": "The waistcoat as a value and material break",
+            "source_frame": "male_suit.png, male_cream_three_piece_suit_front.png",
+            "reference_shows": "The blue three-piece works because the waistcoat is a glossy satin at a clearly different value from the matte jacket, filling the V with a five-button vertical rhythm. On the cream suit the tan waistcoat does the same job. It is the only thing stopping those torsos reading flat.",
+            "river_direction": "Consider a low-cut black silk waistcoat or a cummerbund in place of a bare shirt front. Either gives a band of contrasting roughness across the midsection and hides the trouser waistband - useful when he is seated and the jacket falls open."
+          },
+          {
+            "feature": "Cloth micro-texture across the whole set",
+            "source_frame": "male_maroon_three_piece_suit_front.png, male_suit.png",
+            "reference_shows": "Every suit carries a visible fine woven micro-texture in normal and roughness - a dotted/birdseye weave on the blue, a subtle grain on the maroon. None of them are flat diffuse. Even in shadow the cloth is not uniform.",
+            "river_direction": "This is the one thing the reference does better than River's current base garment. Author a real barathea/twill weave at a scale that survives the target texel density and stays visible on the shoulder and sleeve at typical table framing. A black with no weave is a black hole."
+          }
+        ],
+        "build_deltas": [
+          {
+            "parameter": "jacket lapel facing width (garment)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Reference peak facing is ~1/3 of the front-edge-to-shoulder span. Take River to 45-50%. More satin area is more specular area, which is the primary defence against the black-on-black collapse."
+          },
+          {
+            "parameter": "lapel gorge height (garment)",
+            "direction": "keep neutral",
+            "magnitude": "slight",
+            "rationale": "The gold tux gorge - level with the corner of the mouth - is already correct and lifts the chest in the chest-up framing River uses at the table."
+          },
+          {
+            "parameter": "shoulder line straightness and padding (garment)",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "Move from the soft unpadded shoulder of the three-piece suits toward the black formal suit's squarer top line. 1-1.5cm extension past the deltoid, slight sleevehead crown. Gives a clean horizontal edge across the seated silhouette without going superhero."
+          },
+          {
+            "parameter": "shoulder breadth (macro body proportion)",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "A dinner jacket needs a frame to hang on. A touch wider than a neutral parametric male so the chest reads as drape rather than shrink-wrap, but nowhere near heroic proportions - the thesis is credible bodies."
+          },
+          {
+            "parameter": "waist suppression / waist-to-chest ratio (garment)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Reference maroon runs about 78% waist-to-chest, an almost corseted X. River should sit at 85-88%: close-fitting but recognisably a man's tailoring, not shapewear."
+          },
+          {
+            "parameter": "jacket hem length (garment)",
+            "direction": "keep neutral",
+            "magnitude": "slight",
+            "rationale": "The reference's short hem at crotch level is right for a seated character - a longer skirt bunches on a chair. Keep the length, but reduce the front cutaway so the corners are rounded rather than swept."
+          },
+          {
+            "parameter": "shirt cuff exposure at the wrist (garment)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Reference shows 2-2.5cm of white, which reads as a short sleeve. Drop to 8-12mm - still a legible bright punctuation at the wrist, no longer a cuff ring."
+          },
+          {
+            "parameter": "shirt collar point length (garment)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "The set's long flat points crowd a bow tie and read dated. Shorter points, slightly wider spread, so the bow sits between them."
+          },
+          {
+            "parameter": "number of fastened jacket buttons (garment)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "From zero (every jacket in the set except the gold tux hangs open) to one, fastened at the natural waist. Fastening is what creates the front drape and the tailored read; the open-front reference loses both."
+          },
+          {
+            "parameter": "jacket cloth base reflectance (material)",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "Reference sits at sRGB 13 with zero gradient between lit chest and shadowed flank. Lift to sRGB 55-65 (~4-5% reflectance). Still unambiguously black beside skin, but the light can now describe form."
+          },
+          {
+            "parameter": "roughness delta between body cloth and satin trim (material)",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "Body cloth ~0.65-0.75 against facing, braid and bow at ~0.15-0.25. This single split is what produces the whole garment read in a dark venue with no colour information at all - the mechanism the gold tux stumbles into and the black suit half-misses."
+          },
+          {
+            "parameter": "cloth weave micro-detail in normal and roughness maps (material)",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "River's current base garment is flat single-diffuse. Every reference suit carries a visible woven micro-texture that keeps the plane alive even in shadow. Non-negotiable for black."
+          },
+          {
+            "parameter": "seam ambient occlusion depth (material)",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "The reference has essentially none - no armhole line, no lapel roll shadow, no welt slit, no hem contact line. In a dark room baked AO is the only thing that will draw the tailoring, so it has to be authored deliberately."
+          },
+          {
+            "parameter": "wool sheen / Fresnel term (material)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Gives the shoulder, upper arm and lapel edge a self-generated rim at grazing angles. The reference gets its only silhouette hold from a scene rim light plus a bright backdrop; River has neither guaranteed."
+          },
+          {
+            "parameter": "lapel facing hue offset vs body cloth (material)",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "Warm the satin a few points toward brown/burgundy against a neutral body cloth. Mirrors real silk-on-barathea, and stops the black specular reading as blue plastic."
+          },
+          {
+            "parameter": "trouser value relative to jacket (material)",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "The reference trouser already samples lighter and cooler than the jacket (sRGB 33/37/50 vs 13/11/12), which incidentally separates the two garments. Keep 5-10% separation deliberately rather than by accident, and remove the blue cast."
+          },
+          {
+            "parameter": "trouser outseam satin braid (garment)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Absent from the reference. A 15-18mm braid is period-correct for a dinner suit and functions as a permanent low-roughness vertical break that stops the legs going to a black rectangle."
+          },
+          {
+            "parameter": "trouser break at the shoe (garment)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "From zero break (a rigid tapered pipe with a hard horizontal hem) to one shallow fold over the instep, hem covering the top third of the shoe front and dropping slightly at the back."
+          },
+          {
+            "parameter": "pocket square value contrast (garment)",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "The reference black-on-black square is invisible. White linen, 12-15mm proud, is the highest-return single element on the torso."
+          },
+          {
+            "parameter": "sleeve cuff button count (garment)",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "From none in the reference to four kissing buttons per cuff. Cheap detail, loud tailoring signal at close range."
+          },
+          {
+            "parameter": "neckwear structural definition (garment)",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "The reference cravat is an unstructured sparkly lump. River needs a modelled semi-butterfly bow with a distinct knot and two wings on different planes so they catch light separately."
+          }
+        ],
+        "do_not_copy": [
+          "The black formal suit's collar and front-edge treatment. It is a mandarin collar with a satin ribbon taped down the front edge, not a lapel - no gorge, no notch, no roll. It reads as a costume Nehru jacket, not black tie.",
+          "The cravat. An unstructured sparkly mass at the throat with no readable garment geometry. Wrong register for a Bond lead and it reads as jewellery at any distance.",
+          "The black-on-black pocket square with no welt. It contributes nothing to the read and wastes the single best value anchor on the chest.",
+          "The open, unfastened jacket front that every three-piece in the set uses. Parallel hanging front edges with no button kill the chest drape and make the jacket read as a cardigan.",
+          "The crushed black. sRGB 13 with identical values on the lit chest and the shadowed flank is not a black jacket, it is a hole that happens to be cut against a light grey backdrop.",
+          "The 2-2.5cm white cuff band. It is a legibility hack that costs the sleeve its correct length and puts a hard bright ring at each wrist.",
+          "The zero-break trouser hem - a hard horizontal cut meeting the shoe with no fold and no contact shadow. It reads as a rigid plastic tube and it fuses the foot into the leg.",
+          "The absent trouser braid. Without it the garment is a black business suit, not a dinner suit, and the leg has no vertical break.",
+          "The severe cutaway hem points on the black formal jacket, which swing forward and read theatrical.",
+          "The complete absence of seam AO. No armhole line, no lapel roll shadow, no hem contact - every layer boundary is undrawn.",
+          "Reliance on a bright mid-grey backdrop to hold the silhouette. River's venue is dark; the reference's entire read is borrowed from its background.",
+          "The extreme waist suppression on the maroon three-piece (~78% waist-to-chest), which pushes the male silhouette toward an X that does not match the anatomically grounded thesis.",
+          "The gold tuxedo's boutonniere and its metallic-gold body cloth. Its lapel and button stance are worth taking; its colour and lapel flower are not."
+        ],
+        "pitfalls": [
+          "Painting the dinner jacket at or near pure black. At low-poly density with few silhouette cues, a sub-2% albedo garment becomes a solid cutout the moment the venue light drops. Floor the cloth at 4-5% reflectance and let roughness, not value, do the material work.",
+          "Treating black-on-black as a colour problem. Every attempt to solve it by tinting the jacket lighter grey ends with a suit that reads charcoal or navy under the table key. The fix is a roughness split plus baked AO, not a value shift.",
+          "Authoring the satin facing as a flat appliqued strip on the front edge - exactly the failure the black formal reference makes. Without a modelled roll line the facing has no turn-under, no self-shadow and no direction change, so it never catches a moving specular.",
+          "Weave texture authored at a scale that vanishes at the game's texel density. A micro-weave that only resolves at 4K is the same as no weave at all; tune the tiling against the actual camera distance at the poker table.",
+          "Letting the whole shading plan depend on a rim or kicker light that the venue may not provide from every seat angle. Build the self-rim into the shader with a sheen term first, then treat scene lighting as a bonus.",
+          "Over-suppressing the waist to make the tailoring read. Low-poly plus a strong waist nip plus wide shoulders slides straight into the superhero silhouette the thesis forbids.",
+          "Modelling the bow tie as a flat billboard or a single symmetric plane. It has to be two wings on slightly different angles with a real knot, or it flattens into a black smear against a black collar.",
+          "Over-relying on the white shirt column so the torso becomes a bright stripe with two undefined black wings. The shirt is one anchor among several; the lapel facing, cuffs, pocket square, braid and shoes must all carry part of the load.",
+          "Baking specular hotspots into the albedo to fake sheen. They will fight the real lighting and lock the highlight to the wrong side of the body as the character turns at the table.",
+          "Detailing the front of the jacket only. He is seated and viewed from multiple table positions - the shoulder, the sleeve and the outer arm are what most players see most of the time, and they are the flattest surfaces on a dark suit.",
+          "Adding formal detail as texture where the silhouette needs geometry. Cuff buttons and welts can be maps; the lapel roll, the bow tie, the pocket square and the trouser break cannot - they change the outline.",
+          "Letting the trouser and the shoe share a material. Patent leather is the brightest black on the figure; if the shoe inherits the trouser roughness the leg terminates in nothing and the character appears to sink into the floor.",
+          "Copying the reference's collar and neckwear because they are the only black-tie-adjacent items in the male set. The set genuinely does not contain a correct dinner jacket - the gold tuxedo is the closest, and only in its lapel and button stance, not its colour or its boutonniere.",
+          "Letting MPFB2's base business-suit topology dictate the lapel. The generic notch lapel is a low-poly flap with no roll; retopologising the lapel and collar area is unavoidable if the peak facing is to turn over convincingly."
+        ]
+      },
+      {
+        "key": "body",
+        "observations": [
+          {
+            "feature": "Total height in head-heights",
+            "source_frame": "male_full_body_front_shirt_shorts.png",
+            "reference_shows": "Top of skull to sandal sole spans roughly 8.0 head-heights (head top-of-cranium to chin is about 1/8 of the standing figure). This is the idealised fashion/heroic figure, not the real-life 7.3-7.5. The head is genuinely small on the body — this is the single thing the reference gets most right and is what keeps it out of bobblehead territory.",
+            "river_direction": "Keep it. Target 7.75-8.0 heads for the silver male and the same for the gold female. Do NOT enlarge the head to improve readability at table camera distance; solve readability with silhouette and value contrast instead."
+          },
+          {
+            "feature": "Shoulder width in head-widths",
+            "source_frame": "male_full_body_front_shirt_shorts.png + male_torso_front_body_editor.png",
+            "reference_shows": "Deltoid outer edge to deltoid outer edge measures roughly 3.2-3.4 head-widths across, or about 2.2-2.3 head-heights. Subtracting the camp-shirt sleeve bulk (roughly 8-10px a side at this framing) the bare biacromial span reads near 3.1-3.2 head-widths. Broad, clearly outside the hip line, but not superhero — the shoulder does not exceed the classic heroic 2 head-heights by much.",
+            "river_direction": "Hold the male at approximately 3.0-3.2 head-widths / 2.1-2.2 head-heights at the deltoid. That is the primary dimorphism signal and it costs nothing in rig or animation. Resist going wider: the dinner jacket's shoulder line and roped sleevehead will add apparent width on top of the body."
+          },
+          {
+            "feature": "Shoulder-to-waist ratio",
+            "source_frame": "male_full_body_front_shirt_shorts.png",
+            "reference_shows": "At the belt/bumbag line the torso reads roughly 0.65-0.72 of shoulder width, and the shorts' widest point reads about 0.67. The taper is moderate, and critically it happens LATE — the ribcage stays close to full shoulder width well down toward the belt rather than narrowing from the armpit. The silhouette is a soft rectangle with a small pinch at the bottom, not an inverted triangle. The loose camp shirt makes true waist unmeasurable, so treat 0.65-0.72 as the ceiling of certainty.",
+            "river_direction": "Go slightly further than the reference: waist at 0.68-0.70 of shoulder for the male, and start the taper higher — from the lower pectoral rather than from the belt. A shallow late taper reads boxy under a fitted dinner jacket. The gold female should reach a narrower 0.62-0.65 ratio by having a narrower shoulder, not a smaller waist."
+          },
+          {
+            "feature": "Chest depth in profile",
+            "source_frame": "male_torso_profile_body_editor.png",
+            "reference_shows": "Sternum-front to back-plane reads roughly 0.75 head-heights. The front and back planes are close to parallel and the back is notably flat — thoracic curvature is understated to absent. The result is a slab: the reference buys breadth in the frontal plane and spends nothing in depth, so the torso reads like a card standing on edge when the camera swings.",
+            "river_direction": "Increase to approximately 0.95-1.0 head-heights at the sternum. Put the extra volume in the upper thoracic cage and pectoral mass, and give the back a real kyphotic curve behind it. Depth is what lets a lapel plane actually turn and what stops the jacket reading as cardboard from three-quarter — River's default table cameras are three-quarter."
+          },
+          {
+            "feature": "Neck thickness relative to jaw width",
+            "source_frame": "male_torso_front_body_editor.png + male_torso_profile_body_editor.png",
+            "reference_shows": "The neck column reads about 0.65-0.70 of bigonial (jaw-angle) width — and the beard inflates the apparent jaw, so the true ratio is likely a touch higher. More important than thickness is length: the visible column between jaw underside and collar is very short, and in profile the sternocleidomastoid is not described at all. The neck-to-shoulder transition is one soft unbroken ramp.",
+            "river_direction": "Thicker AND longer. Neck at 0.75-0.80 of bigonial width so a wing collar and bow tie sit on a real column, but with 0.55-0.60 head-heights of visible column between jaw and collar. The thickness is the masculine signal; the length is what lets the head turn legibly in a seated read and what stops black tie looking like a costume on a linebacker."
+          },
+          {
+            "feature": "Trapezius slope",
+            "source_frame": "male_torso_front_body_editor.png",
+            "reference_shows": "The trap runs from near the mastoid outward and down to the acromion in one continuous steep unbroken sweep, with no break where trap meets deltoid. Combined with the short column this produces the classic 'no-neck' game-character yoke.",
+            "river_direction": "Break the sweep. The trap should meet the deltoid at a readable change of plane, and the slope should be shallower so the neck reads as a separate cylinder rising out of the yoke rather than as a continuous cone. This matters at black tie because the jacket collar sits exactly on that transition."
+          },
+          {
+            "feature": "Clavicle and pectoral definition",
+            "source_frame": "male_torso_front_body_editor.png + male_torso_threequarter_body_editor.png",
+            "reference_shows": "Through the open collar the sternal notch pit is present, but the clavicles are smooth featureless tubes with no S-curve and no distinct acromial end. There is no pectoral shelf — the chest reads as one continuous plane from clavicle to belt.",
+            "river_direction": "Give the clavicle its S-curve and a clear acromial termination, and define a soft upper-pectoral edge. River's shirt is open at the collar in some states; this is the small anatomical detail that reads 'credible skull and body' rather than 'game mannequin'. Keep it subtle — a plane change, not a gym cut."
+          },
+          {
+            "feature": "Lumbar curve and pelvic tilt",
+            "source_frame": "male_torso_profile_body_editor.png",
+            "reference_shows": "In true profile the lower back is close to straight — minimal lumbar lordosis, pelvis reading neutral to posteriorly tilted, belly flat with no soft-tissue break over the waistband.",
+            "river_direction": "Restore a normal lumbar curve and a slightly anterior pelvic tilt. A straight lower back sculpted standing collapses into a visible slump the moment the character is seated at the table, which is the pose River will spend 95% of its screen time in."
+          },
+          {
+            "feature": "Arm length against the thigh",
+            "source_frame": "male_full_body_front_shirt_shorts.png",
+            "reference_shows": "With arms relaxed at the sides, the fingertips land at roughly the upper third of the thigh — appreciably above true mid-thigh. The deficit is not in the upper arm, which reads normal; it is in a short forearm compounded by a small hand.",
+            "river_direction": "Lengthen so fingertips land at genuine mid-thigh, about 45-50% of the way from crotch to knee. Take the gain in the forearm and the hand. Reach matters mechanically here: the character must plausibly reach the pot, the muck and his stack without the animator faking it."
+          },
+          {
+            "feature": "Hand size relative to the face",
+            "source_frame": "male_full_body_front_shirt_shorts.png",
+            "reference_shows": "Wrist-to-fingertip reads roughly 0.55-0.60 of head height. A real hand covers the face from chin to hairline, which is around 0.75-0.85 of head height. the reference undersizes the hand by roughly 20-25% — the standard game shortcut.",
+            "river_direction": "Full size, 0.75-0.80 of head height. This is the single most consequential number in this dimension for River: it is a poker game, the hands hold the cards and push the chips, and they are frequently the closest thing to camera. A shortcut here is visible in every hand played."
+          },
+          {
+            "feature": "Forearm and calf taper",
+            "source_frame": "male_torso_threequarter_body_editor.png + male_full_body_front_shirt_shorts.png",
+            "reference_shows": "Below the sleeve the arm is a smooth cylinder with only a faint elbow indication — no brachioradialis swell, no taper into the wrist. The calf does carry a modest gastrocnemius bulge in the upper third on the full-body frame, so the legs are marginally better described than the arms.",
+            "river_direction": "Taper the forearm: maximum circumference in the upper third, narrowing to a wrist about 60% of that. Visible cuff-to-hand transition is a black-tie signature — French cuff, link, then wrist. A cylindrical forearm makes the cuff read as a bracelet."
+          },
+          {
+            "feature": "Crotch line against mid-height",
+            "source_frame": "male_full_body_front_shirt_shorts.png",
+            "reference_shows": "The mid-point of the standing figure falls slightly ABOVE the crotch line — legs come in a little under half of total height. The figure is marginally long in the torso and short in the leg relative to a true human, where the crotch sits essentially at half height.",
+            "river_direction": "Do not copy. Put the crotch at 50-51% of total height for both River characters. With base height locked between silver and gold, identical leg length is the deliberate outcome — the dimorphism has to live in circumference, not segment length."
+          },
+          {
+            "feature": "Male/female shoulder-to-hip delta",
+            "source_frame": "female_full_body_front_shirt_shorts.png vs male_full_body_front_shirt_shorts.png",
+            "reference_shows": "Same shirt, same shorts, same flip-flops, same relaxed stance. Her shoulder span barely exceeds her hip span — the silhouette from shoulder to hip is close to straight-sided, with the waist pinch doing the work. His shoulder clearly overhangs his hip. Her trapezius drops away from the neck at a markedly shallower angle, so her neck column reads longer and thinner at a similar head scale. Every limb segment is thinner: upper arm and thigh diameters read roughly 70-75% of his, and her calf tapers smoothly from knee to ankle with no gastrocnemius break.",
+            "river_direction": "This is the delta River should reproduce, and reproduce entirely through mass. Male shoulder overhangs the hip by a clear margin; female shoulder sits at or barely outside the hip. Female limb circumferences at 70-75% of male. Female trap slope shallower and neck column longer. All of that is skinnable on one shared skeleton with one shared height."
+          },
+          {
+            "feature": "Frame comparability (manifest claim vs pixels)",
+            "source_frame": "REFERENCE_MANIFEST.md 04 section vs both full-body frames",
+            "reference_shows": "The manifest states the two full-body frames are 'same camera, same lens, same stance' and directly comparable. Stance, garment and lens character do match, but the subject distance clearly does not: the male occupies roughly 860px of frame height on the wardrobe screen while the female occupies roughly 560px on the GENDER screen. Internal ratios within each figure are comparable; absolute height between them is not.",
+            "river_direction": "Use these frames for shape ratios only. Do not derive any male/female HEIGHT ratio from them — it would be a subject-distance artifact. River's uniform-height decision is therefore unconstrained by the reference, which is convenient: nothing in the reference argues against it."
+          },
+          {
+            "feature": "Build slider behaviour",
+            "source_frame": "REFERENCE_MANIFEST.md 04 section",
+            "reference_shows": "The manifest records that across the whole BODY build slider range the reference changes torso mass only slightly and does not reproportion limbs at all.",
+            "river_direction": "If River ever exposes a build control, limb circumference must co-vary with torso mass. A torso that thickens over unchanged legs reads as a different character's head and chest pasted onto stock legs — visible instantly at the table where forearms and torso share the frame."
+          }
+        ],
+        "build_deltas": [
+          {
+            "parameter": "macro: height (male, relative to the gold female's value)",
+            "direction": "keep neutral",
+            "magnitude": "strong",
+            "rationale": "Binding River constraint: base heights stay relatively uniform across masculine and feminine characters so seated eye-line, elbow-on-table height and chip reach are one shared rig target. Set the silver male to the same height value as the gold female, within about 2cm. Every masculine read then has to be earned by mass, which is exactly what makes the pair animation-safe. The reference cannot argue against this — the two full-body frames are at different subject distances, so no height ratio is derivable from them."
+          },
+          {
+            "parameter": "l/r-hand-scale (hand length relative to head height)",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "the reference hands read 0.55-0.60 of head height; a true hand is 0.75-0.85. River needs 0.75-0.80. This is a poker game — hands hold cards, cut chips, and sit closest to camera on hero shots. This is the highest-value single change in the whole dimension."
+          },
+          {
+            "parameter": "macro: gender (toward male)",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "With height locked, the gender macro is the main lever that widens the ribcage and biacromial span while narrowing the pelvis — precisely the mass-based dimorphism River wants. Push it strongly, then correct the resulting proportions locally rather than reaching for muscle."
+          },
+          {
+            "parameter": "torso-scale-depth-incr (chest depth in profile)",
+            "direction": "increase",
+            "magnitude": "strong",
+            "rationale": "The reference profile shows a slab: about 0.75 head-heights of chest depth with near-parallel front and back planes. Target 0.95-1.0 head-heights. Without depth the dinner jacket has nothing to hang on, the lapel plane cannot turn, and the torso reads as cardboard at River's three-quarter table cameras."
+          },
+          {
+            "parameter": "torso-vshape-incr (shoulder-to-waist taper)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Reference waist/shoulder is roughly 0.65-0.72 with the taper starting late, at the belt. Target 0.68-0.70 with the taper beginning at the lower pectoral. A late shallow taper reads boxy under tailoring; a taper that starts high lets the jacket's waist suppression sit on real anatomy."
+          },
+          {
+            "parameter": "neck-scale-vert-incr (visible neck column length)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "The reference column between jaw underside and collar is very short, producing the no-neck yoke. Target 0.55-0.60 head-heights of visible column so the head reads as separable, turns legibly when seated, and gives the wing collar and bow tie somewhere to live."
+          },
+          {
+            "parameter": "neck-scale-horiz-incr / neck-scale-depth-incr (neck thickness vs bigonial width)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Reference reads about 0.65-0.70 of jaw width, and the beard inflates that. Target 0.75-0.80. Thickness is a cheap, silhouette-level masculine signal that survives at table distance — but only paired with the length increase above, or it becomes the football-player read that black tie cannot carry."
+          },
+          {
+            "parameter": "l/r-lowerarm length (forearm, and thus fingertip landing)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "Reference fingertips land at the upper third of the thigh instead of mid-thigh. Take the correction in the forearm (plus the hand increase above), not the upper arm, which already reads correct. Reach has to be mechanically honest — pot, muck and stack are all arm-length propositions."
+          },
+          {
+            "parameter": "macro: muscle",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "Deliberately restrained. A Bond lead is built from skeletal breadth and good tailoring, not from hypertrophy. The mass should come from the gender macro plus torso breadth and depth; a high muscle value gives a bodybuilder read that is wrong for the tone and fights the dinner jacket."
+          },
+          {
+            "parameter": "macro: proportions (toward idealised)",
+            "direction": "keep neutral",
+            "magnitude": "moderate",
+            "rationale": "Hold the 7.75-8.0 head-height figure the reference already achieves. The small head is what keeps this on the credible side of the line. Any drift toward a larger head to improve table-distance readability drops the character straight into caricature."
+          },
+          {
+            "parameter": "leg length / crotch height as a fraction of total height",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "Reference crotch sits marginally below mid-height, making the figure slightly long-torsoed. Set it at 50-51%. Because base height is locked to the female's, this also guarantees both characters share leg segment lengths — one set of walk, sit and chair-push cycles, and the dimorphism stays in circumference where it belongs."
+          },
+          {
+            "parameter": "hip-scale-horiz-decr (pelvic width)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "The male shoulder must clearly overhang the hip, where the female's sits at or barely outside it. Narrowing the pelvis buys that overhang without pushing the shoulders wider into superhero territory — and it works with the jacket, which drapes from shoulder past a narrow hip."
+          },
+          {
+            "parameter": "l/r-upperarm-scale and l/r-upperleg-scale circumference (male, relative to gold female)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "The measured male/female delta in the reference is roughly 70-75% female limb diameter. With heights and segment lengths locked uniform, limb circumference is one of the only remaining dimorphism channels — so it has to carry more load in River than it does in the reference."
+          },
+          {
+            "parameter": "trapezius slope / shoulder-yoke plane break",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Shallower trap slope with a readable plane change where trap meets deltoid, instead of the reference's single unbroken cone from mastoid to acromion. The jacket collar and shoulder seam sit exactly on this transition; if the anatomy has no break there, the tailoring has nothing to register against."
+          },
+          {
+            "parameter": "lumbar curve / pelvic tilt (anterior)",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "The reference profile is nearly straight through the lower back with a neutral-to-posterior pelvis. Sculpted that way, the character reads slumped the instant he is seated — and seated is essentially the entire game. A modest lordosis restores an upright, composed seated posture for free."
+          },
+          {
+            "parameter": "forearm taper to wrist",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "Reference forearm is a plain cylinder. Put maximum circumference in the upper third and bring the wrist to roughly 60% of it. The cuff-link-wrist transition is a black-tie signature and needs a real wrist to sit on; on a cylinder the French cuff reads as a bracelet."
+          }
+        ],
+        "do_not_copy": [
+          "The slab torso: roughly 0.75 head-heights of chest depth with near-parallel front and back planes. the reference buys all its breadth in the frontal plane and none in depth. River's three-quarter table cameras will expose this immediately.",
+          "The undersized hand at 0.55-0.60 of head height. Unacceptable in a game whose entire verb set is performed by hands.",
+          "Fingertips landing at the upper third of the thigh instead of mid-thigh — the short-forearm read.",
+          "The crotch line sitting slightly below mid-height (long torso, short leg). River sets it at 50-51%.",
+          "The no-neck yoke: a very short visible neck column plus a steep unbroken trapezius sweep from mastoid to acromion with no trap/deltoid plane break.",
+          "The straight lower back and neutral-to-posterior pelvic tilt in profile. It becomes a slump the moment the character sits down.",
+          "Smooth featureless clavicle tubes with no S-curve or acromial termination, and a chest that reads as one continuous plane from collar to belt with no pectoral shelf.",
+          "The perfectly cylindrical forearm with no brachioradialis swell and no taper into the wrist.",
+          "The build slider behaviour recorded in the manifest — torso mass changes while limbs stay fixed. Anything River exposes must co-vary limb circumference with torso mass.",
+          "The cargo-shorts hip flare read as body width. That is a garment silhouette, not anatomy; do not bake it into the base mesh.",
+          "The late taper that keeps the ribcage near full shoulder width all the way down to the belt. River's taper starts at the lower pectoral.",
+          "Any absolute male/female height ratio derived from the two full-body frames. The manifest calls them directly comparable, but the male fills roughly 860px of frame height against the female's roughly 560px — the subject distance differs, so only internal ratios are trustworthy."
+        ],
+        "pitfalls": [
+          "Widening the shoulders without deepening the chest. The most common way to make a game male look 'built', and it produces a torso that is convincing dead-on and cardboard at three-quarter — which is River's default camera.",
+          "Reaching for the muscle macro to get mass. It reads as bodybuilder, not Bond lead, and it fights the dinner jacket. Mass belongs in skeletal breadth and ribcage depth with muscle held low.",
+          "Locking heights uniform, then also matching limb circumferences by inertia. The male and female silhouettes converge and the only remaining difference is the head and the costume — which defeats the whole point of spending the dimorphism budget on mass.",
+          "Thickening the neck without lengthening the visible column. Gives the football-player read; black tie cannot carry it, and the wing collar loses its landing.",
+          "Enlarging the head to improve readability at table distance. Instant caricature. Hold 7.75-8.0 heads and solve legibility with silhouette and value contrast.",
+          "Sculpting and judging the proportions standing. Seated at the table the visible content is head, neck, shoulder yoke, upper arm, forearm and hands — thigh and calf mass are nearly invisible. Shoulder-to-waist, neck, and hand size do all the work. Check every delta in the seated pose before accepting it.",
+          "Pushing the V-taper deep on the naked body and then adding a structured jacket on top. The tailoring should carry most of the apparent shoulder width; an already-extreme body plus a roped sleevehead lands in superhero.",
+          "Trusting the manifest's 'same camera, same lens' claim for absolute measurements. The stance and garment match; the subject distance does not. Ratios internal to each figure are sound, cross-figure absolutes are not.",
+          "Correcting arm reach by lengthening the upper arm. The reference upper arm is fine; the deficit is forearm plus hand. Lengthening the wrong segment breaks elbow placement on every table-contact pose.",
+          "Fixing hand size on the mesh but leaving the rig's hand bones and card/chip prop scales at the old ratio. A hand scaled 25% up has to propagate to grip poses, card fan width and chip stack diameter or every prop contact goes wrong.",
+          "Adding a lumbar curve for the standing silhouette without checking it against the seated hip flexion. Overdone lordosis reads as an arched, posing stance when the character sits back in the chair.",
+          "Chasing anatomical description (clavicle S-curve, pectoral edge, brachioradialis) hard enough to cross into photoreal. These should be plane changes readable at silhouette scale, not gym-cut detail — River is slightly more grounded than the reference, not a different genre."
+        ]
+      },
+      {
+        "key": "seated",
+        "observations": [
+          {
+            "feature": "Spine angle from vertical at neutral rest",
+            "source_frame": "08_seated_posture/seated_profile_forearms_on_rail.png (cream three-piece gent, right of frame)",
+            "reference_shows": "The torso line from sacrum to acromion inclines forward roughly 15-20 degrees off vertical. The bend is at the femoral head: pelvis is tipped forward on the seat pan, the lumbar keeps a shallow forward curve, and there is no crease or fold at the waist. The chair back is 80-120 mm behind the shoulders and is not touched. Buttocks sit on the rear two-thirds of the seat pan with the pan's front edge under the mid-thigh.",
+            "river_direction": "Author River's neutral at 12-15 degrees from vertical — one notch more upright than the reference, because a Bond lead reads as composed, not settled-in. Keep the hinge exclusively at the hip joint; lock zero waist flexion in the neutral. Keep the pelvis back on the pan and let the sit bones contact and deform the cushion; the shoulder-to-chair-back gap should be 60-100 mm, present but never large enough to read as hovering."
+          },
+          {
+            "feature": "Forearm-to-rail contact point and elbow angle",
+            "source_frame": "08_seated_posture/seated_neutral_hands_clasped_front.png",
+            "reference_shows": "Both forearms cross the leather rail at roughly the mid-forearm, about 40-45 percent of forearm length up from the wrist crease. The wrists clear the rail's inner roll so the hands sit over the felt edge, not on the rail's crown. The elbow points sit outside the rail's outer edge and below the rail top by roughly 30-50 mm — the elbows are not weight-bearing; the forearm mid-shaft carries the load. Included elbow angle reads about 95-110 degrees.",
+            "river_direction": "Match the contact geometry exactly: mid-forearm on the rail, wrist past the inner roll, elbow floating just outside and below. Author the elbow at 100-105 degrees. Add real contact deformation — the dinner-jacket sleeve should flatten and pucker where it crosses the rail edge, which is the single cheapest cue that stops a seated character reading as hovering."
+          },
+          {
+            "feature": "Elbow width relative to torso",
+            "source_frame": "08_seated_posture/seated_neutral_hands_clasped_front.png",
+            "reference_shows": "The forearms form a triangle: elbows sit roughly 1 to 1.5 hand-widths outside the ribcage silhouette on each side, and the forearms converge inward to meet at the body midline. From the front camera the elbows are the widest point of the whole character, wider than the shoulders.",
+            "river_direction": "Keep the converging triangle but pull the elbows in to about 0.75 hand-width outside the ribcage. the reference's wide diamond reads bar-casual; a tighter triangle reads club. This also matters practically — at a 9-seat ring the reference elbow width will clip the neighbouring seat's silhouette from the default seat camera."
+          },
+          {
+            "feature": "Shoulder height and rotation",
+            "source_frame": "08_seated_posture/seated_profile_forearms_on_rail.png and seated_neutral_hands_clasped_front.png",
+            "reference_shows": "Acromion sits at or below its standing-rest height in every seated frame — no shrug anywhere in the set. The shoulders are rolled forward: the deltoid apex sits ahead of the frontmost point of the ribcage, with roughly 10-15 degrees of scapular protraction. The trapezius line from neck to shoulder point is long and shallow.",
+            "river_direction": "Keep the lowered acromion — that is the strongest single reason the reference reads planted rather than posed. Cut the protraction to 5-8 degrees. the reference's roll plus its forward head reads slumped; River's lead needs the same low shoulder with the chest plane still facing forward, so the collarbones stay near-horizontal rather than wrapping."
+          },
+          {
+            "feature": "Head carriage and tilt",
+            "source_frame": "08_seated_posture/seated_profile_two_players_side.png (cream gent) and seated_profile_forearms_on_rail.png",
+            "reference_shows": "The head is carried forward of the shoulder line — the ear canal sits ahead of the acromion by roughly half a head-width. The chin drops about 10-15 degrees so the gaze lands on the felt 250-350 mm in front of the seat, not at the table centre. In the two-player frame the same character props the chin on the back of a curled hand, head tipped an extra 5-8 degrees toward that hand.",
+            "river_direction": "Bring the ear back over the acromion, or ahead of it by no more than a quarter head-width, and cut the chin drop to 5-8 degrees. Aim the gaze at the community-card zone rather than at the near felt. The chin-on-hand variant is worth authoring as a secondary idle — it is the most character-carrying pose in the whole seated set — but with the fingers curled and the jaw resting on the proximal phalanges, not the palm."
+          },
+          {
+            "feature": "Knee height relative to the table and femur slope",
+            "source_frame": "08_seated_posture/seated_profile_forearms_on_rail.png (cropped, cream gent)",
+            "reference_shows": "The thigh slopes downhill from hip to knee — the knee sits roughly one thigh-diameter (about 100 mm) below the hip joint, because the chair pan is high relative to the rail. The rail's outer edge passes above the knee with clearance; the knee is genuinely under the table, not jammed against it. The shin drops close to vertical, heel roughly under or slightly behind the knee, foot flat on the floor.",
+            "river_direction": "Reproduce the downhill femur — a level or uphill thigh is what makes a seated rig look like it is perched on a stool. Hold 60-80 mm of vertical clearance between the knee's top surface and the rail underside so the lean-in extreme does not drive the thigh through the table. Feet flat with full sole contact and toes turned out 10-15 degrees each; a black patent oxford needs the sole plane visibly parallel to the floor."
+          },
+          {
+            "feature": "Male versus female seated silhouette",
+            "source_frame": "08_seated_posture/seated_profile_two_players_side.png (male gent right, female braided player left) and seated_lean_in_both_arms_on_table.png",
+            "reference_shows": "The male figures sit with the femora abducted roughly 10-15 degrees each side, so outside-of-knee to outside-of-knee spans about 1.3-1.4 times hip width. Elbows sit outside the torso silhouette. Upper-arm and deltoid mass carries the outer edge of the seated shape, so the widest horizontal line is at the elbows. The female player in the same frame keeps the femora near parallel, knees close, and her elbows track much closer to the ribcage, so her widest line is at the hips.",
+            "river_direction": "For silver: knees apart at 12 degrees abduction per side, elbows outside the ribcage, shoulder-and-elbow band carrying the widest horizontal read. This is the axis on which he must differ from the gold female — she should keep knees near-together or angled as a pair and elbows tucked, so her widest line stays at the hip and the shoulder tapers in. Do not attempt the distinction through mesh mass alone; it lives in the pose."
+          },
+          {
+            "feature": "What the hands actually do at rest",
+            "source_frame": "08_seated_posture/seated_neutral_hands_clasped_front.png (cropped)",
+            "reference_shows": "The hands are NOT interlaced. The right hand lies palm-down across the back of the left, fingers of the top hand crossing the lower hand at roughly 30 degrees, both sets of fingers relaxed and slightly curled with the fingertip pads touching the rail leather. The stack sits on the body midline. In the profile frames the same rest state is asymmetric instead — one hand cupped loosely over the hole card, the other raised to the chin or resting at the chip stack.",
+            "river_direction": "Author the hand-over-hand stack as River's neutral: cleaner and cheaper than an interlaced clasp, and it avoids the finger interpenetration that kills a low-poly clasp. Then author at least one asymmetric alternate — near hand cupped over the hole cards, far hand at the chip stack or the cuff link. Never leave the arms unsupported at the sides; the reference frame that does this (seated_neutral_arms_at_sides) is exactly the read River must avoid."
+          },
+          {
+            "feature": "Finger taper and phalangeal shape",
+            "source_frame": "09_hands_cards/open_hand_fingers_spread_closeup.png (cropped)",
+            "reference_shows": "Each finger is close to a constant-diameter cylinder for two-thirds of its length, then rounds off at the tip. There is almost no proximal-to-distal taper, no knuckle-crease indication, and no swell at the PIP joints. The little finger is noticeably shorter, its tip landing at about the ring finger's DIP. Nails are small, flat, pale quads with no nail-bed curvature.",
+            "river_direction": "Give River real taper — proximal phalanx roughly 15 percent wider than the distal, with a small diameter swell at the PIP and DIP so the finger reads as jointed rather than extruded. Keep the same little-finger length ratio; it is correct. Add nail-bed curvature and a slightly warmer nail-fold tone. This is the highest-value single upgrade in the hand, because at the seat camera the hands sit in the near foreground and the fingers are the largest readable detail on the character."
+          },
+          {
+            "feature": "Thumb root and thenar mass",
+            "source_frame": "09_hands_cards/open_hand_fingers_spread_closeup.png (cropped)",
+            "reference_shows": "The thumb root is a single soft rounded wedge. There is no separation between the thenar eminence and the first dorsal interosseous, and no hollow in the snuffbox. Thumb abduction at full spread reads about 65-70 degrees from the index axis; the web between thumb and index stretches as a flat sheet rather than folding.",
+            "river_direction": "Model the thenar as two masses with a shallow valley between the thenar pad and the first dorsal interosseous, and put a soft hollow at the base of the extensor tendons. Build the thumb web with enough spare geometry that at 60-plus degrees of abduction it folds along a crease instead of stretching to a paddle."
+          },
+          {
+            "feature": "Knuckle read on the back of the hand",
+            "source_frame": "08_seated_posture/seated_neutral_hands_clasped_front.png (cropped) and 09_hands_cards/open_hand_fingers_spread_closeup.png",
+            "reference_shows": "The MCP row reads as one continuous soft ridge, not four distinct heads. There is zero extensor-tendon relief on the dorsum even with the fingers fully spread, and no visible ulnar head or wrist narrowing — the forearm flows into the hand as a single tapering tube.",
+            "river_direction": "Break the MCP ridge into four resolvable heads with shallow valleys between, and add two to three extensor tendon ridges on the dorsum that only surface when the fingers extend. Put in a genuine wrist: narrow the forearm at the wrist crease by about 20 percent from the forearm's widest, and read the ulnar head as a small bump on the little-finger side. In a dinner jacket the wrist is where the shirt cuff terminates, so this junction is on camera on every hand pose."
+          },
+          {
+            "feature": "Hand and forearm scale relative to the head",
+            "source_frame": "09_hands_cards/open_hand_fingers_spread_closeup.png",
+            "reference_shows": "With both hands raised beside the face, each hand spans nearly the full cheek-to-cheek width of the head, and the palm reads almost as wide as it is long. The forearms are heavy, evenly cylindrical, and show no brachioradialis bulge or ulnar edge — cartoon slabs in short sleeves.",
+            "river_direction": "Bring the hand down to a credible ratio — wrist crease to middle fingertip roughly equal to chin-to-hairline, and palm width about 0.8 of palm length so the hand reads long rather than square. River's forearms are covered by the dinner-jacket sleeve to the wrist, so their silhouette is cloth: model the sleeve as a tapering tube with a break at the elbow and a cuff that stops 10-15 mm short of the shirt link, and put the anatomy budget into the hand instead."
+          },
+          {
+            "feature": "Full-reach arm geometry (extended pose)",
+            "source_frame": "08_seated_posture/seated_lean_in_both_arms_on_table.png (cropped, pineapple-shirt player) and 09_hands_cards/hands_on_felt_reach_01.png",
+            "reference_shows": "At full reach the torso pitches forward from the hip to about 30-35 degrees from vertical, the elbows open to roughly 150-160 degrees, and the hands land palm-down on the felt about a third of the way across, near the community-card line. Contact is at the hands only — the forearms leave the rail entirely. The shoulders stay LOW even at maximum reach; only the scapulae protract. The palms are flat and splayed on the felt with fingers together.",
+            "river_direction": "Keep the hip-hinge, the low shoulder and the hands-only contact; those are the reasons the reference reads weight-bearing. Cap River's lean at 25-28 degrees from vertical and stop the elbows at 145 degrees — the reference's near-straight arm plus flat splayed palm reads like shoving a table. Land River's fingers slightly curled with the fingertip pads and the hypothenar taking the weight, palm arch just clear of the felt."
+          },
+          {
+            "feature": "Card-protect gesture and required finger spread",
+            "source_frame": "08_seated_posture/seated_profile_forearms_on_rail.png (cream gent, near hand over the hole card) and seated_profile_two_players_side.png",
+            "reference_shows": "When a player covers a hole card the fingers are only slightly parted — well short of the maximum spread in the celebration frame. The hand cups over the card with the palm arch above it and the fingertips down on the felt, index and little finger straddling the card's short edges. A standard card is about 63 mm wide, so the index-to-little span needed is small.",
+            "river_direction": "Rig for about 15-20 degrees of MCP abduction at card-protect with the thumb abducted 30-35 degrees to sit against the card's near edge — and separately support 40-45 degrees MCP and 65-70 degrees thumb as the rig maximum for the win-reaction spread. Author the protect pose so the palm actually touches the back of the card rather than tenting above it; the tented version is the standard rig tell at this camera distance."
+          },
+          {
+            "feature": "Camera caution on the reference frames",
+            "source_frame": "08_seated_posture/seated_profile_forearms_on_rail.png and seated_profile_two_players_side.png",
+            "reference_shows": "Both frames named 'profile' in the manifest are actually raised orbit three-quarter views, roughly 25-35 degrees above the table plane and 20-30 degrees off true lateral. The apparent spine angle and thigh slope are therefore foreshortened, and the two frames disagree with each other by several degrees on the same character.",
+            "river_direction": "Treat every angle taken from these frames as a range, not a measurement. Set River's neutral in Blender against a true orthographic side view and validate it back against the reference by silhouette relationships — knee below rail, wrist past the inner roll, ear over acromion — rather than by matching a traced angle."
+          }
+        ],
+        "build_deltas": [
+          {
+            "parameter": "Hand overall scale (MPFB2 hand-scale)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "the reference's hand spans nearly the full cheek-to-cheek head width with a near-square palm. Pulling scale down until wrist-crease-to-middle-fingertip equals chin-to-hairline is what separates a credible male hand from the reference's cartoon paddle, and the hands sit in the near foreground of the default seat camera on every frame."
+          },
+          {
+            "parameter": "Palm width relative to palm length (hand-fingers-distance / palm proportion)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Reference palm reads roughly as wide as it is long. Target about 0.8 width-to-length so the hand reads long and tailored rather than blunt, which is the whole difference between a club silhouette and a bar one at rest on the rail."
+          },
+          {
+            "parameter": "Finger diameter taper, proximal to distal (hand-fingers-diameter)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Reference fingers are constant-diameter cylinders. Making the distal phalanx roughly 15 percent narrower than the proximal, with small swells at PIP and DIP, is the highest-value hand upgrade — it is what makes a finger read as jointed at gameplay distance."
+          },
+          {
+            "parameter": "Wrist circumference relative to forearm (wrist scale)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "The reference forearm flows into the hand with no narrowing at all. Narrowing the wrist by about 20 percent from the forearm's widest creates a real wrist, and in black tie the shirt cuff and link terminate exactly there, so it is on camera in every hand pose."
+          },
+          {
+            "parameter": "Knuckle and dorsal tendon relief (hand surface detail)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "The reference MCP row is a single soft ridge with zero extensor-tendon relief. Four resolvable knuckle heads plus two to three tendon ridges that surface only on extension put River a step past the reference without approaching photoreal skin detail."
+          },
+          {
+            "parameter": "Thenar/first-dorsal-interosseous separation (thumb root)",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "Reference thumb root is one undifferentiated wedge with a stretching web. A shallow valley between the two masses plus a snuffbox hollow lets the web fold along a crease at 60-plus degrees of abduction instead of going paddle-shaped in the win reaction."
+          },
+          {
+            "parameter": "Shoulder width / deltoid mass (macro proportions plus upper-arm muscle)",
+            "direction": "increase",
+            "magnitude": "slight",
+            "rationale": "The seated male read comes from the shoulder-and-elbow band carrying the widest horizontal line, versus the female's widest line at the hip. A slight increase over neutral is enough — it must not tip into superhero mass, and the dinner jacket's shoulder construction will add apparent width on top."
+          },
+          {
+            "parameter": "Trapezius/neck-to-shoulder slope (shoulders-trapezius)",
+            "direction": "decrease",
+            "magnitude": "slight",
+            "rationale": "The reference's long shallow trap line is correct and is part of why the lowered acromion reads as composure rather than slump. Slightly less trap bulk than neutral keeps the neck long, which is what stops the low-shoulder pose reading as beaten."
+          },
+          {
+            "parameter": "Forearm muscle mass",
+            "direction": "keep neutral",
+            "magnitude": "slight",
+            "rationale": "Reference forearms are heavy even cylinders, but River's silver wears a jacket sleeve to the wrist, so the forearm silhouette is cloth. Spend nothing here; the budget belongs in the hand and the sleeve break."
+          },
+          {
+            "parameter": "Hip flexion in the neutral seated pose (pose parameter, not a morph)",
+            "direction": "decrease",
+            "magnitude": "slight",
+            "rationale": "Reference sits at 15-20 degrees from vertical. River's neutral at 12-15 degrees reads one notch more composed while keeping the hinge at the femoral head. Waist flexion stays at exactly zero — folding at the waist is what makes a seated character look boneless."
+          },
+          {
+            "parameter": "Scapular protraction in the neutral seated pose (pose parameter)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Reference rolls the shoulders forward 10-15 degrees so the deltoid apex sits ahead of the ribcage. Cutting to 5-8 degrees keeps the chest plane facing forward and the collarbones near-horizontal, which is the Bond read; the lowered acromion itself must be kept."
+          },
+          {
+            "parameter": "Forward head translation in the neutral seated pose (pose parameter)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Reference carries the ear half a head-width ahead of the acromion with a 10-15 degree chin drop, which reads slouched. Bringing the ear back over the acromion with a 5-8 degree chin drop, gaze on the community-card zone, is the difference between studying the felt and owning the table."
+          },
+          {
+            "parameter": "Femoral abduction (knee spread) in the neutral seated pose (pose parameter)",
+            "direction": "increase",
+            "magnitude": "moderate",
+            "rationale": "12 degrees per side, giving an outside-knee span of about 1.3 times hip width, is the primary axis on which the silver male seated silhouette must differ from the gold female's near-parallel knees. It cannot be achieved through mesh mass."
+          },
+          {
+            "parameter": "Elbow lateral offset from the ribcage in the neutral seated pose (pose parameter)",
+            "direction": "decrease",
+            "magnitude": "moderate",
+            "rationale": "Reference elbows sit 1 to 1.5 hand-widths outside the ribcage and are the widest point of the character. Pulling to about 0.75 hand-width tightens the converging forearm triangle to a club read and prevents silhouette collision with the neighbouring seat at a 9-seat ring."
+          },
+          {
+            "parameter": "Elbow flexion at neutral rail contact (pose parameter)",
+            "direction": "keep neutral",
+            "magnitude": "slight",
+            "rationale": "The reference's 95-110 degrees with the mid-forearm on the rail and the wrist past the inner roll is correct and load-bearing. Author River at 100-105 degrees and keep the elbow point floating 30-50 mm below the rail top rather than resting on it."
+          }
+        ],
+        "do_not_copy": [
+          "Oversized hands — the reference hand spans nearly the whole head width with a near-square palm. River's must come down a full size and read long rather than blunt.",
+          "The wristless forearm-into-hand tube. There is no narrowing at the wrist crease and no ulnar head anywhere in the reference; in black tie the shirt cuff terminates exactly at that junction, so the absence would be conspicuous.",
+          "Constant-diameter finger cylinders with no PIP/DIP swell, no joint creases and no phalangeal taper.",
+          "The single soft MCP ridge with zero extensor-tendon relief on the back of the hand, even at full finger spread.",
+          "Shallow finger webs that ride high toward the PIP and stretch flat instead of folding when the fingers spread.",
+          "The forward-head-plus-rolled-shoulder combination. The lowered acromion is right and must be kept; the 10-15 degree protraction with the ear half a head-width ahead of the shoulder is a slouch and is wrong for a Bond lead.",
+          "Elbows parked 1 to 1.5 hand-widths outside the ribcage as a permanent state — it reads bar-casual and, at a 9-seat ring, collides with the neighbouring player's silhouette from the default seat camera.",
+          "The full-reach pose's near-straight arm (150-160 degrees) with flat splayed palms pressed on the felt. It reads like shoving furniture, not like reaching for cards.",
+          "Bare short-sleeved forearms as the source of the arm read. River's silver is sleeved to the wrist; the arm silhouette is tailoring, and the reference gives no useful information about sleeve behaviour at the rail.",
+          "The seated_neutral_arms_at_sides variant — unsupported arms hanging beside the body at a poker table. It is precisely the A-pose-adjacent read the River rule forbids.",
+          "Flat pale rectangular fingernails with no nail-bed curvature or nail-fold tone shift.",
+          "Mirrored, perfectly symmetric hand placement. Even the reference breaks symmetry in the profile frames, and symmetric hands are the loudest rig-default tell."
+        ],
+        "pitfalls": [
+          "A-pose residue: arms authored at the sides or drifting toward the body when a hand-driven state has no defined pose. Every seated state must terminate with the hands on the rail, on the felt, or on the face.",
+          "Hovering. The classic failures are hands resting on the rail plane but floating 10-20 mm above it, buttocks not deforming the seat cushion, and soles not fully contacting the floor. Contact deformation on the jacket sleeve at the rail edge is the cheapest fix and the one most often skipped.",
+          "Folding at the waist instead of the hip. It kills the weight read instantly and makes the character look like it is sitting on the chair rather than in it — the reference gets this right and it is the single most transferable thing in the set.",
+          "Thigh-through-rail collision at the lean-in extreme. With the knee under the table there is only 60-80 mm of clearance, and a low-poly thigh with linear skinning will punch through the rail underside before the lean reaches its cap.",
+          "Elbow silhouette blowout. At a 9-seat ring the elbows are the widest part of a seated male; author the neutral tight or the character will overlap its neighbour on the default seat camera.",
+          "Fingers modelled at rest and then spread by the rig alone. The webs stretch, the palm goes paddle-shaped, and the win-reaction close-up is exactly where that gets seen. Build spare geometry into the webs and validate at 45 degrees MCP abduction.",
+          "Card-protect authored as a tent — palm arched clear of the card instead of touching its back. At the seat camera the gap reads as the hand not knowing where the card is.",
+          "Interlaced-finger clasp attempted at low poly. Fingers interpenetrate under any wrist rotation. The reference's hand-over-hand stack avoids the problem entirely and should be River's neutral.",
+          "Erasing the male/female distinction by reusing one seated pose. The read lives in knee spread, elbow width and where the widest horizontal line sits — not in mesh mass. Silver and gold sharing a pose will make both look wrong.",
+          "Over-correcting toward photoreal in the hand. Knuckle heads, tendon ridges and wrist narrowing are the step past the reference; pore detail, vein networks and prominent tendons on the neutral rest hand overshoot the thesis and fight the flat game lighting.",
+          "Losing the lowered shoulder while fixing the slouch. Raising the acromion to correct the forward head is the wrong lever — the shoulder must stay down; only the head and the protraction move.",
+          "Chasing traced angles from the two 'profile' frames. Both are raised orbit three-quarters and disagree with each other by several degrees on the same character; set the pose in an orthographic side view and validate by silhouette relationships instead."
+        ]
+      }
+    ],
+    "synthesis": {
+      "headline": "The silver male is a credible late-thirties skull under black tie, read at three-quarter from across a dark table — so almost every decision is a value-and-silhouette decision before it is an anatomy decision. Masculinity must be earned forward and in planes, never laterally: brow projection with a broken slab, a real nasion scoop, forward malar over a shallow hollow with the masseter behind it, a gonial corner that is unmistakable in silhouette but sits inside the temple width, and a chin that comes forward as it narrows. Everything the reference hides behind a beard, a bright grey backdrop or a moulded hair shell has to be genuinely built here, because River's lead is clean-shaven, lit dark, and framed large in the preview bust and the winner close-up. Two of the three highest-value surfaces are material, not geometry: a dinner-suit contract (floor the cloth at 4-5% reflectance, hard roughness split between barathea and satin, authored seam AO, a weave that survives the real texel density) and an eye contract (globe set back, upper lid crossing the top of the iris, tinted sclera with lid occlusion). The third is the hands — it is a poker game, they sit nearest camera on every deal, and their scale is the one number the readers actively disagree about. Finally, he shares a skeleton, a height and a pipeline with the gold female, so the male read has to live in mass, plane breaks and pose — knee spread, elbow width, where the widest horizontal line sits — or the pair collapses into one skull with two haircuts.",
+      "ranked_risks": [
+        {
+          "risk": "Black-on-black collapse: the dinner suit becomes a silhouette-shaped hole in a dark venue",
+          "why": "The jacket is the largest surface on the character and the reference's own solution is unavailable to River. Measured reference black sits at sRGB 13 with identical values on the lit chest and the shadowed flank; it only reads because it is cut against an sRGB 131 backdrop. River's venue is dark, so there is no borrowed backdrop and no guaranteed rim from every seat angle. Nothing about the tailoring — lapel roll, button stance, waist suppression, cuff — survives if the cloth carries no form.",
+          "mitigation": "Set the material contract before any garment geometry is authored: cloth floored at sRGB 55-65 (~4-5% reflectance), body cloth roughness 0.65-0.75 against facing/braid/bow at 0.15-0.25, a barathea weave in normal and roughness tuned against the actual table-camera texel density, heavy baked AO at armhole, lapel roll, collar underside, welt, buttonhole and hem, plus a wool sheen/Fresnel term so the shoulder and outer arm self-rim without a scene light. Validate by screenshotting the seated figure on the real venue lighting rig with the backdrop removed."
+        },
+        {
+          "risk": "Doll eyes survive the geometry fix and return through the shader",
+          "why": "The face reader calls untinted white sclera plus a fully visible iris with no upper-lid shadow the reference's clearest failure, and the fix is split across two disciplines — lid aperture, globe recession and lid thickness are mesh; sclera tint, occlusion and catchlight are material. A correctly sized socket still reads doll-like with a pure white eyeball, so a half-fix scores as no fix. Eyes are also the one feature the preview bust frames largest.",
+          "mitigation": "Treat it as one deliverable, not two. Lower the aperture until the upper lid crosses the top of the iris at neutral with no sclera above it, shrink the iris slightly, set the globe back with a defined lateral orbital rim, give the lids visible wet-line thickness — then in the same pass tint the sclera off-white with a warm inner corner, bake upper-lid contact occlusion onto the eyeball, and fix a catchlight policy against the table key. Sign off on both together at the preview-bust framing, never on the geometry alone."
+        },
+        {
+          "risk": "The hair shell still reads as a painted cap at the 35-40 degree preview framing",
+          "why": "This is a bug River already has, and the reference has it too, so there is nothing to copy the fix from. The hair reader identifies three independent mechanisms — a stair-stepped straight front edge, a shell cut on a plane rather than conformed to the skull (which is what opens the bald temple gap), and zero transition zone where hair meets skin. Fixing only the hairline height, the most tempting single change, leaves all three intact. And unlike the reference, River puts a camera on the hairline in the character-preview bust and the winner close-up.",
+          "mitigation": "Fix all three or none: rebuild the front edge as an M/bell in plan (no straight run over a quarter of the forehead width, no corner radius under 30mm, tuft offset 3-5mm off centre), shrinkwrap the shell to the head at 2-4mm offset so it terminates on the side plane with a continuous sideburn in front of the tragus, and paint a stubble/shadow gradient 10-15mm past the mesh edge at ~35% falling to zero. Gate on a 35-40 degree render: if the hair silhouette falls inside the skull silhouette on the far side, it is still a cap."
+        },
+        {
+          "risk": "Hand scale set wrong, in either direction, and then propagated into the rig and props",
+          "why": "This is the only place two readers give opposite build directions for the same part — body says the reference hand is undersized at 0.55-0.60 head height and must grow strongly; seated says it is oversized, spanning nearly the full head width, and must shrink. Their targets almost coincide (~0.75-0.80 head height, or wrist-crease to middle fingertip equal to chin-to-hairline), so the disagreement is about the reference frames, not about River. But it is a poker game: hands hold the cards, cut the chips, and are the closest thing to camera on every hand played. A scale error is visible continuously and, once the rig, grip poses, card fan width and chip stack diameter are built on it, expensive to reverse.",
+          "mitigation": "Do not take a direction from either reader. Build the hand to the agreed absolute — wrist crease to middle fingertip equal to chin-to-hairline, palm width 0.8 of palm length — measured in Blender against River's own finished head, and lock that number before rigging. Only then set the card, chip and rail prop scales from it."
+        },
+        {
+          "risk": "Reading male by widening, with three separate 'slight' increases stacking into a superhero",
+          "why": "Lateral width is the fastest path to caricature and it is the reference's own error, but the compounding is the subtler danger: the body reader asks for a strong gender macro plus increased shoulder breadth, the tailoring reader asks for a squarer shoulder with 1-1.5cm extension past the deltoid and a slight body-breadth increase, and the seated reader asks for slightly more deltoid mass. Each is defensible alone; applied independently by different passes they land far outside the 3.0-3.2 head-width cap the body reader set, and the jacket's construction adds apparent width on top of all of it.",
+          "mitigation": "Make biacromial span a single budgeted number owned by one pass — 3.0-3.2 head-widths bare — and treat the jacket's shoulder extension as spending from that budget, not adding to it. Get the male read from chest depth (0.95-1.0 head-heights), a narrowed pelvis so the shoulder overhangs the hip, a trap/deltoid plane break and neck mass. Hold the muscle macro low; a Bond lead is skeletal breadth and tailoring, not hypertrophy."
+        },
+        {
+          "risk": "Jaw, chin and cheek judged with cover the character does not have",
+          "why": "Every bearded reference frame is load-bearing — the one clean-shaven closeup exposes a mandible that reads markedly narrower and a chin markedly smaller than the bearded frames implied. The same trap operates with hair: a shell that covers the temples flatters a forehead with no plane definition. River's lead is clean-shaven with short hair and fully exposed ears, so there is no cover anywhere on the head.",
+          "mitigation": "Evaluate the jaw, chin, cheek and forehead only on the bare mesh, with the hair asset hidden, at every checkpoint. Use the SQUARED/WEAK preset pair as an explicit silhouette bracket: if River's outline can be mistaken for either, it is wrong. Add a jaw-shadow/stubble tone in texture as a deliberate description of the mandible, decided after the geometry is signed off, never as a rescue for it."
+        },
+        {
+          "risk": "Seated pose failures — hovering, folding at the waist, thigh through the rail",
+          "why": "Seated is essentially the entire game, and the three classic tells all show at the default seat camera: hands resting on the rail plane but floating above it, buttocks not deforming the cushion, soles not fully on the floor; a bend at the waist instead of the femoral head, which kills the weight read; and, with only 60-80mm of knee-to-rail clearance, a low-poly thigh with linear skinning punching through the rail underside before the lean-in extreme is reached. A lumbar sculpted straight while standing also turns into a visible slump the moment he sits.",
+          "mitigation": "Set the neutral against a true orthographic side view — 12-15 degrees from vertical, hinge at the hip, zero waist flexion, downhill femur — and validate by silhouette relationships (knee below rail, wrist past the inner roll, ear over acromion), never by tracing angles off the reference's raised-orbit frames. Author sleeve contact deformation where the forearm crosses the rail edge, cushion and sole contact, and test the lean-in extreme for thigh/rail collision before the pose set is accepted."
+        },
+        {
+          "risk": "Silver and gold converge into the same figure",
+          "why": "They share a skeleton, a pipeline and — per the body reader's stated constraint — a base height, which removes segment length as a channel. If the difference is then left to the gender macro plus costume, the two read as one skull with different hair, and every localised delta paid for is wasted.",
+          "mitigation": "Spend the dimorphism budget deliberately in the two remaining channels. Mass: male limb circumference against female at roughly 70-75%, shoulder clearly overhanging the hip versus hers at or barely outside it, shallower female trap slope, plus localised brow, chin, malar and neck deltas rather than macro alone. Pose: his knees abducted ~12 degrees a side with elbows outside the ribcage so the widest horizontal line sits at the shoulder-elbow band; hers knees near-parallel and elbows tucked so hers sits at the hip. Never reuse one seated pose for both."
+        },
+        {
+          "risk": "MPFB2 morph stacking overshoot, and the age macro quietly undoing the jaw",
+          "why": "Several jaw and chin targets combine non-linearly and blow past the intended silhouette when applied together. Separately, reaching for the age macro to get late-thirties adds sag and jowl across the whole head and will erode exactly the gonial corner and cheek structure that were just built.",
+          "mitigation": "Apply one morph at a time and check the outline against the SQUARED/WEAK bracket after each. Keep the age macro around 0.40-0.45 and deliver the age through specific features — faint tear-trough, faint modelled nasolabial form, slightly receded temples — then re-check the jaw corner after the macro is set, not before."
+        },
+        {
+          "risk": "Detail authored for a closeup that does not survive the table camera, and detail skipped that does",
+          "why": "River has two framings with opposite demands: the poker camera resolves only the outer silhouette and the largest value shapes, while the preview bust and winner close-up resolve the hairline, the eye and the hands. Effort routinely goes to micro-forms that vanish at distance while the load-bearing items — jaw corner, brow shadow, neck-to-jaw separation, the white pocket square, the trouser braid, the cuff points — are treated as polish.",
+          "mitigation": "Split the checklist by camera and check both every session. Table camera: silhouette and the largest value breaks. Close camera: hairline transition, eye shading, hand and wrist junction. Anything that changes the outline — lapel roll, bow tie, pocket square, trouser break — must be geometry; cuff buttons and welts can be maps."
+        },
+        {
+          "risk": "Head scale drift once the head is parented to the body",
+          "why": "A head authored in isolation routinely ends up oversized on the full figure, and the readers disagree about whether the reference head is already slightly oversized or is the thing the reference gets most right — so there is no safe default to fall back on. The failure only shows on the seated figure at the real camera.",
+          "mitigation": "Fix the figure at 7.75-8.0 head-heights and verify head scale only on the full seated figure at the actual game camera. Resist enlarging the head to fix table-distance readability; solve that with silhouette and value contrast."
+        }
+      ],
+      "contradictions": [
+        "Hand scale, direction reversed: the body reader measures the reference hand at 0.55-0.60 of head height and calls for a STRONG INCREASE to 0.75-0.80; the seated reader measures it as spanning nearly the full cheek-to-cheek head width and calls for a MODERATE DECREASE. Their absolute targets nearly coincide (~0.75-0.80 head height / wrist crease to middle fingertip equal to chin-to-hairline), so the conflict is an artefact of the frames — a standing wardrobe shot versus a hands-beside-face closeup where the hands are nearer camera. Do not average, and do not take a slider direction from either. Set the absolute against River's own head and measure.",
+        "Neck circumference, direction reversed, and the readers also disagree about the reference itself: the face reader says the reference neck is 'nearly as wide as the jaw' and calls for a MODERATE DECREASE; the body reader measures it at 0.65-0.70 of bigonial width and calls for a MODERATE INCREASE to 0.75-0.80. Both agree the visible column must lengthen and that a submandibular shelf is missing. The 0.75-0.80 bigonial target happens to satisfy the face reader's 'clearly narrower than the jaw' as well, so a single number resolves the intent — but the sign of the MPFB2 change is genuinely undetermined and must be settled by measuring the neutral human, not by trusting either reading of the reference.",
+        "Neck column length: the face reader targets roughly half a head-height of visible column and explicitly warns that past about half it goes uncanny and breaks the dinner-jacket collar fit when seated. The body reader targets 0.55-0.60 head-heights — above the face reader's stated ceiling. Build at 0.50-0.55 and check the collar fit in the seated pose before going higher.",
+        "Wrist narrowing, same intent, incompatible numbers: the body reader wants the wrist at roughly 60% of the forearm's widest circumference; the seated reader wants it narrowed by about 20%, i.e. roughly 80%. That is a wide spread for a junction that is on camera in every hand pose because the shirt cuff and link terminate there. Neither is derived from a measurement of River. Suggest ~0.70-0.75 and validate against the actual French cuff geometry.",
+        "Collar type: the tailoring reader specifies a turndown collar with shorter points and more spread, and explicitly rejects a wing collar as reading 'waiter, not Bond' at game scale. The body reader twice justifies neck dimensions by reference to 'a wing collar and bow tie'. Tailoring owns this decision; the neck targets stand regardless, but the justification in the body reading should not be allowed to reintroduce the wing collar.",
+        "Head scale: the face reader says the head reads slightly oversized against the torso and asks to shave a few percent. The body reader says the small head is 'the single thing the reference gets most right', is what keeps the figure out of bobblehead territory, and treats any head-scale change as a caricature risk. Both land near 7.75-8.0 head-heights, so the practical gap is small — but they disagree about which direction the error lies in, so this must be judged on the full seated figure rather than adjusted on either reader's word.",
+        "Forearm budget: the body reader wants the forearm lengthened (to bring fingertips to true mid-thigh) and tapered with a brachioradialis swell. The seated reader says spend nothing on the forearm because River's silver is sleeved to the wrist and the forearm silhouette is cloth. These are reconcilable — length and the wrist taper affect the sleeve and the cuff landing, surface muscle description does not — but the reconciliation has to be stated, or one pass will model anatomy nobody sees while another skips the length correction that the reach depends on.",
+        "Internal inconsistency in the body reading (worth flagging because it will be copied): it says River should 'go slightly further than the reference' on shoulder-to-waist taper, then targets 0.68-0.70, which sits inside the reference's own measured 0.65-0.72 band and is looser than its low end. The defensible part of that observation is not the ratio but the taper's starting height — from the lower pectoral rather than from the belt. Take the start point, treat the ratio as unconstrained by the reference.",
+        "Shoulder width is requested three times from three levers and never reconciled: body (macro breadth increase, capped at 3.0-3.2 head-widths), tailoring (squarer shoulder line plus 1-1.5cm extension past the deltoid, plus a slight body-breadth increase), seated (slight deltoid mass increase). Each says 'slight'; applied independently they stack past the cap. One owner, one number.",
+        "Forehead: the hair reader says leave forehead vertical scale at neutral and fix the hair edge, not the head — warning that shortening the forehead to compensate for a badly placed hairline displaces the brow and breaks the skull. The face reader wants substantial forehead work. These are compatible only if the forehead change is strictly plane definition (frontal eminences, temporal ridge, slight backward rake) with no vertical rescale. Stated so it is not read as licence to reproportion the forehead."
+      ],
+      "gaps": [
+        "Skin value and complexion are unspecified by every reader. The tailoring reader floors the jacket at sRGB 55-65 partly on the argument that it still reads black 'next to skin', but no reading sets the skin's albedo, and in a dark venue the face is the primary read and the only large light-value surface above the shirt. Skin tone, its value separation from both the white shirt and the black cloth, and its behaviour under the table key need to be decided alongside the garment contract, not after it.",
+        "No poly budget, texel density, camera FOV or view distance is stated anywhere, yet several deltas are unresolvable without them: the weave tiling that 'survives the target texel density', the AO bake resolution, the 12-20 alpha card ring at the hairline, and the repeated judgement about what 'survives at poker-table distance'. These numbers are prerequisites, not details.",
+        "Chair and rail dimensions are River's, not the reference's, but the entire seated geometry is specified against the reference's furniture — rail height, seat pan height, the 60-80mm knee clearance, the wrist clearing the inner roll. If River's table and chair differ at all, the pose numbers move and the thigh/rail collision margin changes.",
+        "Which gold female parameters are already locked and therefore binding on silver is never established. The body reader asserts uniform base height as a 'binding River constraint' and no other reader mentions it. Shared skeleton, shared shader, shared texel density and shared rig targets all constrain silver in different ways and need to be enumerated before the first morph is applied.",
+        "Expression and the poker loop are absent. The face reader correctly rules that the confident mouth-corner set is a rig target and must never be baked into neutral — but nobody specifies the expression set the game actually needs (fold, call, bluff, win, loss reaction), how the wrinkle map delivers the glabella furrow on expression, or what the neutral has to blend cleanly into. Authoring a neutral without knowing its extremes is how neutrals end up unusable.",
+        "Hair behaviour under the poses the seated reader wants is uncovered. The chin-on-hand secondary idle is called the most character-carrying pose in the set, and it puts a hand into the jaw and near the hair shell; head turns at the table do the same. No reading addresses shell intersection, or whether the hair is rigid at all.",
+        "Footwear is orphaned. The tailoring reader mentions patent leather only as a warning against sharing the trouser material, and the seated reader wants soles flat with toes turned out 10-15 degrees — but no reader owns shoe geometry, and nobody establishes which cameras see below the rail at all. If none do, both those notes are wasted effort; if the preview bust is full-figure, the shoe is the brightest black on the character.",
+        "Stubble and jaw-shadow policy for a clean-shaven late-thirties male is missing from the face reading, though the hair reader independently invents it for the hairline. It is the cheapest available way to describe a mandible with no facial hair to hide behind — but it must be decided after the geometry is signed off, and the rule for that ordering is not written anywhere.",
+        "There is no asymmetry budget. Three readers separately ask for asymmetry — subtle brow/nasal deviation, a frontal tuft offset 3-5mm with one recession marginally deeper, asymmetric hand placement — with no single owner or ceiling. Uncoordinated, these either cancel out or compound into something that reads as injury or as a modelling error.",
+        "Nobody defines the acceptance framings except in passing. The hair reader alone invokes the character-preview bust and the winner close-up; the others reason mostly from the table camera. The full list of framings the character must pass, and which checklist applies to each, does not exist and should be written before the build starts.",
+        "The waistcoat/cummerbund question is raised once by the tailoring reader and never resolved. It materially changes the torso read when he is seated and the jacket falls open — it is the difference between a bright shirt stripe with two undefined black wings and a banded midsection — and it also changes the neck, collar and button-stance decisions downstream."
+      ],
+      "consolidated_deltas": [
+        {
+          "parameter": "Jacket cloth base reflectance (floor the black)",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "tailoring (material)"
+        },
+        {
+          "parameter": "Roughness split between body barathea (0.65-0.75) and satin facing, braid, bow and button covers (0.15-0.25)",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "tailoring (material)"
+        },
+        {
+          "parameter": "Authored seam ambient occlusion — armhole, lapel roll turn-under, collar underside, welt, buttonhole, hem, waistband, hem-to-shoe contact",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "tailoring (material)"
+        },
+        {
+          "parameter": "Cloth weave micro-detail in normal and roughness, tiled against the real table-camera texel density",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "tailoring (material)"
+        },
+        {
+          "parameter": "Wool sheen / Fresnel self-rim on shoulder, upper arm and lapel edge (no reliance on a scene rim or a bright backdrop)",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "tailoring (material)"
+        },
+        {
+          "parameter": "Eye lid aperture height — upper lid crosses the top of the iris at neutral, no sclera above",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Eye socket depth and orbital recession, with a defined lateral orbital rim so the outer corner sits in shadow",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Eye shading contract — sclera tinted off pure white, upper-lid contact occlusion baked onto the globe, catchlight policy fixed against the table key",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "face (material)"
+        },
+        {
+          "parameter": "Iris and overall eye scale (fix apparent narrowness by shrinking, not by moving)",
+          "direction": "decrease",
+          "magnitude": "slight",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Interocular spacing — hold at one eye-width, five eye-widths across the head at eye level, verified by measurement after the size change",
+          "direction": "keep neutral",
+          "magnitude": "hold",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Hairline plan shape — replace the straight stair-stepped edge with an M/bell: no straight run over a quarter of the forehead width, no corner radius under 30mm, tuft offset 3-5mm off centre",
+          "direction": "decrease (straightness)",
+          "magnitude": "strong",
+          "dimension": "hair"
+        },
+        {
+          "parameter": "Temple coverage — close the bald gap; hair continuous around the temple corner and down in front of the tragus as a tapered sideburn",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "hair"
+        },
+        {
+          "parameter": "Hairline transition zone — stubble/shadow gradient painted 10-15mm past the mesh edge at ~35% falling to zero, optionally a 12-20 card ring overlapping the shell edge by ~5mm",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "hair (material)"
+        },
+        {
+          "parameter": "Hair shell conformance — shrinkwrap to the skull at 2-4mm offset, terminating on the side plane rather than cut on a plane",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "hair"
+        },
+        {
+          "parameter": "Hand overall scale — wrist crease to middle fingertip equal to chin-to-hairline (~0.75-0.80 head height). Readers give opposite signs; set the absolute by measurement against River's own head before rigging",
+          "direction": "contested — set by measurement, not by slider sign",
+          "magnitude": "strong",
+          "dimension": "cross-cutting (body vs seated)"
+        },
+        {
+          "parameter": "Palm width relative to palm length (~0.8, long rather than square)",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Finger taper proximal to distal (~15%) with small swells at PIP and DIP",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Wrist circumference relative to forearm maximum (~0.70-0.75; readers say 0.60 and 0.80) plus a readable ulnar head",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "cross-cutting (body vs seated)"
+        },
+        {
+          "parameter": "Knuckle and dorsal tendon relief — four resolvable MCP heads, two to three extensor ridges that surface only on extension",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Chin projection forward, until the chin point sits on or just ahead of the lower-lip line in profile",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Chin width — narrow to a defined button with a shallow mental crease",
+          "direction": "decrease",
+          "magnitude": "slight",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Gonial corner definition as a plane change, corner level with or slightly above the earlobe",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Jaw width at the gonion — 0.90-0.95 of temple width, well inside the SQUARED bound",
+          "direction": "increase",
+          "magnitude": "slight",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Brow ridge projection (enough to shadow the upper lid under a key)",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Brow slab continuity — heavy over the inner third, thinning and rolling back laterally; no painted glabella furrow at neutral",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Nasion depth (scoop between brow and nasal root)",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Forehead plane definition — frontal eminences plus temporal ridge, plus slight backward rake. Plane change only: do not rescale forehead height",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face + hair"
+        },
+        {
+          "parameter": "Zygomatic forward projection (forward, not wider), with a shallow hollow beneath and the masseter brought back up in front of the ear",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Buccal fullness / cheek fat — shallow hollow only, never gaunt on a low-poly mesh",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Cranium depth front-to-back (occiput projection behind the ear)",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Chest depth in profile — 0.95-1.0 head-heights at the sternum, volume in the upper thoracic cage, with a real kyphotic back curve",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "body"
+        },
+        {
+          "parameter": "Gender macro toward male (primary dimorphism lever with height locked)",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "body"
+        },
+        {
+          "parameter": "Muscle macro — deliberately restrained; mass belongs in skeletal breadth and ribcage depth",
+          "direction": "increase",
+          "magnitude": "slight",
+          "dimension": "body"
+        },
+        {
+          "parameter": "Biacromial span — one owned budget of 3.0-3.2 head-widths bare, with the jacket's 1-1.5cm shoulder extension spending from it rather than adding to it",
+          "direction": "increase",
+          "magnitude": "slight",
+          "dimension": "cross-cutting (body + tailoring + seated)"
+        },
+        {
+          "parameter": "Pelvic width — narrow so the shoulder clearly overhangs the hip (female sits at or barely outside hers)",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "body"
+        },
+        {
+          "parameter": "Neck visible column length — 0.50-0.55 head-heights, trapezius line brought down; check the collar fit seated before going higher",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "cross-cutting (face vs body)"
+        },
+        {
+          "parameter": "Neck circumference — target 0.75-0.80 of bigonial width with a real submandibular shelf and hollow and readable sternocleidomastoid. Readers give opposite signs; measure the neutral human and set the ratio",
+          "direction": "contested — set to ratio, not by slider sign",
+          "magnitude": "moderate",
+          "dimension": "cross-cutting (face vs body)"
+        },
+        {
+          "parameter": "Trapezius slope, with a readable plane break where trap meets deltoid (the jacket collar and shoulder seam register on it)",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "body + seated"
+        },
+        {
+          "parameter": "Forearm length so fingertips land at true mid-thigh — take the gain in the forearm and the hand, never the upper arm",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "body"
+        },
+        {
+          "parameter": "Ear scale and helix rim thickness (keep the reference's vertical placement exactly: helix top at brow, lobe at nose base)",
+          "direction": "decrease",
+          "magnitude": "slight",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Ear standoff from the skull — pin closer, bring very slightly forward toward the hinge",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Nose taper resolved as one pass — narrower dorsum, defined tip point replacing the bulb, alae tucked just inside the inner-eye-corner verticals, straight dorsal line, tip kept down at a near-90-degree nasolabial angle",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Lapel — true peak with a modelled roll line and a facing at 45-50% of the front-edge-to-shoulder span, high gorge level with the mouth corner; retopologise the collar and lapel area rather than accepting the base garment's flap",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Fastened jacket buttons, zero to one at the natural waist (58-60% shoulder-to-crotch), with a real buttonhole and shank so the front drape exists",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Pocket square value contrast — white linen, 12-15mm proud, real welt slit with AO under it",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Bow tie structural definition — modelled self-tie semi-butterfly, distinct knot, two wings on different planes",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Trouser outseam satin braid, 15-18mm",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Trouser break at the shoe — one shallow fold over the instep, hem covering the top third of the shoe front, baked contact line so the foot separates; shoe must not share the trouser roughness",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Shirt cuff exposure at the wrist, from 2-2.5cm down to 8-12mm, with cufflink geometry at the outer wrist",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Shirt collar point length — shorter points, slightly more spread, turndown (not a wing collar) so the bow sits between the points",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Garment waist suppression, eased from the reference's ~78% to 85-88% waist-to-chest — separate number from the body's shoulder-to-waist taper; do not conflate the two",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Body shoulder-to-waist taper starting height — begin at the lower pectoral rather than the belt (the start point is the transferable finding; the reference's ratio is not)",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "body"
+        },
+        {
+          "parameter": "Skin material — broken specular with pore-scale roughness variation, slightly oilier T-zone, real subsurface at ear rim, nostril and lip edge, nasolabial as modelled form not a painted line",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face (material)"
+        },
+        {
+          "parameter": "Neutral face symmetry and expression hygiene — no baked smirk, no baked glabella furrow; the confident mouth set is a pose and a rig target only",
+          "direction": "decrease (baked-in expression)",
+          "magnitude": "strong",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Seated scapular protraction — cut to 5-8 degrees while HOLDING the lowered acromion (the low shoulder is what reads as planted; do not raise it to fix the slouch)",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Seated forward head translation — ear back over the acromion, chin drop to 5-8 degrees, gaze on the community-card zone",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Seated hip flexion at neutral — 12-15 degrees from vertical, hinge at the femoral head, zero waist flexion, downhill femur",
+          "direction": "decrease",
+          "magnitude": "slight",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Femoral abduction at neutral — ~12 degrees per side (the primary pose axis separating silver from gold)",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Elbow lateral offset from the ribcage — to ~0.75 hand-width, converging forearm triangle, mid-forearm on the rail with the elbow floating 30-50mm below the rail top",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Contact deformation — jacket sleeve flattening at the rail edge, cushion deformation under the sit bones, full sole contact",
+          "direction": "increase",
+          "magnitude": "strong",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Hair front edge vertical position — brow-to-hairline equal to brow-to-nose-base, plus 5-8% for a mature hairline",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "hair"
+        },
+        {
+          "parameter": "Frontotemporal recession depth — 12-15mm behind the frontal tuft line, apex above the eyebrow tail on the lateral-canthus vertical (deeper reads fifty)",
+          "direction": "increase",
+          "magnitude": "slight",
+          "dimension": "hair"
+        },
+        {
+          "parameter": "Hair shell thickness taper — 15-25mm at the peak (peak 30-40% back from the hairline, not at the vertex), 5-8mm at the sides, 3-5mm at the nape",
+          "direction": "decrease",
+          "magnitude": "moderate",
+          "dimension": "hair"
+        },
+        {
+          "parameter": "Nape profile concavity between occiput and neck column, occipital hairline as a shallow W faded in texture",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "hair"
+        },
+        {
+          "parameter": "Far-side hair overhang at 35-40 degrees — hair silhouette must sit outboard of the far cheekbone; also break the crown into 3-5 shallow lobes and add a whorl behind the vertex",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "hair"
+        },
+        {
+          "parameter": "Hair albedo root darkening and underside falloff, plus an anisotropic highlight band offset from the geometric specular",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "hair (material)"
+        },
+        {
+          "parameter": "Lumbar curve and slight anterior pelvic tilt (a straight lower back sculpted standing becomes a slump seated)",
+          "direction": "increase",
+          "magnitude": "slight",
+          "dimension": "body"
+        },
+        {
+          "parameter": "Crotch height at 50-51% of total height",
+          "direction": "increase",
+          "magnitude": "slight",
+          "dimension": "body"
+        },
+        {
+          "parameter": "Age macro ~0.40-0.45, with the age delivered through specific features (faint tear-trough, faint modelled nasolabial) and the jaw corner re-checked after it is set",
+          "direction": "increase",
+          "magnitude": "moderate",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Weight macro slightly below default to support the cheek hollow and jaw corner",
+          "direction": "decrease",
+          "magnitude": "slight",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Philtrum depth — firm columns into a real channel; length neutral to slightly long",
+          "direction": "increase",
+          "magnitude": "slight",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Lower lip volume toward parity with the upper, vermilion border sharpened into a crisp edge",
+          "direction": "decrease",
+          "magnitude": "slight",
+          "dimension": "face"
+        },
+        {
+          "parameter": "Thenar / first dorsal interosseous separation and spare web geometry that folds at 60+ degrees of thumb abduction",
+          "direction": "increase",
+          "magnitude": "slight",
+          "dimension": "seated"
+        },
+        {
+          "parameter": "Sleeve cuff buttons, four kissing per cuff",
+          "direction": "increase",
+          "magnitude": "slight",
+          "dimension": "tailoring"
+        },
+        {
+          "parameter": "Head scale relative to body — hold 7.75-8.0 head-heights, verified only on the full seated figure at the real camera (readers disagree on which way the reference errs)",
+          "direction": "contested — verify on the assembled figure",
+          "magnitude": "slight",
+          "dimension": "cross-cutting (face vs body)"
+        }
+      ]
+    }
+  },
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Reference"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "Synthesis"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "ref:face",
+      "phaseIndex": 1,
+      "phaseTitle": "Reference",
+      "agentId": "a78556c20f8930fbf",
+      "model": "claude-opus-5",
+      "state": "done",
+      "startedAt": 1788543102658,
+      "queuedAt": 1788543101082,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "promptPreview": "PROJECT: River, a multiplayer Texas Hold'em game. Timeless Bond-club tone.\nVISUAL THESIS (binding): River characters are SLIGHTLY MORE anatomically grounded and\nmaterially refined than the reference game reference, while keeping clear casino-game\nsilhouettes and expressive body language. NOT photoreal, NOT caricature. Credible skulls\nand bodies, strong grooming and styling. No giant eyes, no sup…",
+      "lastProgressAt": 1788543362607,
+      "tokens": 77677,
+      "toolCalls": 11,
+      "durationMs": 258875,
+      "resultPreview": "{\"observations\":[{\"feature\":\"Skull outline, front\",\"reference_shows\":\"The widest point of the head is the temple/parietal band level with the top of the ear, and the face barely narrows from there down to the cheekbone. With the beard filling the lower third, the front silhouette is close to a rounded rectangle — near-parallel sides from temple to gonion — rather than an egg tapering to the chin.\"…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "ref:hair",
+      "phaseIndex": 1,
+      "phaseTitle": "Reference",
+      "agentId": "aba967cc8ac5c3fb2",
+      "model": "claude-opus-5",
+      "state": "done",
+      "startedAt": 1788543102704,
+      "queuedAt": 1788543101082,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "promptPreview": "PROJECT: River, a multiplayer Texas Hold'em game. Timeless Bond-club tone.\nVISUAL THESIS (binding): River characters are SLIGHTLY MORE anatomically grounded and\nmaterially refined than the reference game reference, while keeping clear casino-game\nsilhouettes and expressive body language. NOT photoreal, NOT caricature. Credible skulls\nand bodies, strong grooming and styling. No giant eyes, no sup…",
+      "lastProgressAt": 1788543300917,
+      "tokens": 84971,
+      "toolCalls": 9,
+      "durationMs": 197184,
+      "resultPreview": "{\"observations\":[{\"feature\":\"Front hairline height relative to the brow\",\"source_frame\":\"male_hairstyle_2.png (ponytail/swept-back close 3/4)\",\"reference_shows\":\"The lowest point of the hairline sits above the brow by roughly the same distance the brow sits above the base of the nose — the classical middle third, if anything slightly under it. the reference does NOT use a high hairline; the forehead …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "ref:tailoring",
+      "phaseIndex": 1,
+      "phaseTitle": "Reference",
+      "agentId": "ac47624817ca61962",
+      "model": "claude-opus-5",
+      "state": "done",
+      "startedAt": 1788543102645,
+      "queuedAt": 1788543101082,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "promptPreview": "PROJECT: River, a multiplayer Texas Hold'em game. Timeless Bond-club tone.\nVISUAL THESIS (binding): River characters are SLIGHTLY MORE anatomically grounded and\nmaterially refined than the reference game reference, while keeping clear casino-game\nsilhouettes and expressive body language. NOT photoreal, NOT caricature. Credible skulls\nand bodies, strong grooming and styling. No giant eyes, no sup…",
+      "lastProgressAt": 1788543537048,
+      "tokens": 96595,
+      "toolCalls": 17,
+      "durationMs": 434402,
+      "resultPreview": "{\"observations\":[{\"feature\":\"Lapel type on the one black formal garment\",\"source_frame\":\"male_black_formal_suit_cravat_front.png\",\"reference_shows\":\"It is not a lapel at all. There is no gorge line, no notch, no roll. A stand/mandarin collar sits at the neck and a satin ribbon of near-constant width (~18px on a 1920-wide frame, roughly 3.5cm at scale) runs continuously from behind the collar down …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "ref:body",
+      "phaseIndex": 1,
+      "phaseTitle": "Reference",
+      "agentId": "abdec3d5a230e48e4",
+      "model": "claude-opus-5",
+      "state": "done",
+      "startedAt": 1788543102829,
+      "queuedAt": 1788543101083,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "promptPreview": "PROJECT: River, a multiplayer Texas Hold'em game. Timeless Bond-club tone.\nVISUAL THESIS (binding): River characters are SLIGHTLY MORE anatomically grounded and\nmaterially refined than the reference game reference, while keeping clear casino-game\nsilhouettes and expressive body language. NOT photoreal, NOT caricature. Credible skulls\nand bodies, strong grooming and styling. No giant eyes, no sup…",
+      "lastProgressAt": 1788543346121,
+      "tokens": 69275,
+      "toolCalls": 7,
+      "durationMs": 242388,
+      "resultPreview": "{\"observations\":[{\"feature\":\"Total height in head-heights\",\"source_frame\":\"male_full_body_front_shirt_shorts.png\",\"reference_shows\":\"Top of skull to sandal sole spans roughly 8.0 head-heights (head top-of-cranium to chin is about 1/8 of the standing figure). This is the idealised fashion/heroic figure, not the real-life 7.3-7.5. The head is genuinely small on the body — this is the single thing Pr…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 5,
+      "label": "ref:seated",
+      "phaseIndex": 1,
+      "phaseTitle": "Reference",
+      "agentId": "aa10e6d5ec1bfe5c2",
+      "model": "claude-opus-5",
+      "state": "done",
+      "startedAt": 1788543102842,
+      "queuedAt": 1788543101083,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "promptPreview": "PROJECT: River, a multiplayer Texas Hold'em game. Timeless Bond-club tone.\nVISUAL THESIS (binding): River characters are SLIGHTLY MORE anatomically grounded and\nmaterially refined than the reference game reference, while keeping clear casino-game\nsilhouettes and expressive body language. NOT photoreal, NOT caricature. Credible skulls\nand bodies, strong grooming and styling. No giant eyes, no sup…",
+      "lastProgressAt": 1788543381083,
+      "tokens": 96278,
+      "toolCalls": 15,
+      "durationMs": 277350,
+      "resultPreview": "{\"observations\":[{\"feature\":\"Spine angle from vertical at neutral rest\",\"source_frame\":\"08_seated_posture/seated_profile_forearms_on_rail.png (cream three-piece gent, right of frame)\",\"reference_shows\":\"The torso line from sacrum to acromion inclines forward roughly 15-20 degrees off vertical. The bend is at the femoral head: pelvis is tipped forward on the seat pan, the lumbar keeps a shallow for…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 6,
+      "label": "synthesis",
+      "phaseIndex": 2,
+      "phaseTitle": "Synthesis",
+      "agentId": "ae9db51c0754491b2",
+      "model": "claude-opus-5",
+      "state": "done",
+      "startedAt": 1788543540213,
+      "queuedAt": 1788543538480,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "The silver male is a credible late-thirties skull under bla…",
+      "promptPreview": "PROJECT: River, a multiplayer Texas Hold'em game. Timeless Bond-club tone.\nVISUAL THESIS (binding): River characters are SLIGHTLY MORE anatomically grounded and\nmaterially refined than the reference game reference, while keeping clear casino-game\nsilhouettes and expressive body language. NOT photoreal, NOT caricature. Credible skulls\nand bodies, strong grooming and styling. No giant eyes, no sup…",
+      "lastProgressAt": 1788543835715,
+      "tokens": 95902,
+      "toolCalls": 1,
+      "durationMs": 295499,
+      "resultPreview": "{\"headline\":\"The silver male is a credible late-thirties skull under black tie, read at three-quarter from across a dark table — so almost every decision is a value-and-silhouette decision before it is an anatomy decision. Masculinity must be earned forward and in planes, never laterally: brow projection with a broken slab, a real nasion scoop, forward malar over a shallow hollow with the masseter…"
+    }
+  ],
+  "totalTokens": 520698,
+  "totalToolCalls": 60
+}

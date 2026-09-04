@@ -387,7 +387,7 @@ Status on 2 September 2026: **ACTIVE**.
 - [x] Match MPFB's render-only modifier stack during glTF export. This removed
   the helper/proxy strips, preserved the seated dress and produced a clean
   hair-deferred Rooftop close frame in Chrome.
-- [x] Refine the native gold identity against the Prominence face references
+- [x] Refine the native gold identity against the reference face captures
   and Zain's eye-area redline. The recipe now uses a tapered lower face, a
   reduced almond eye opening, narrower and longer nose and restrained lip
   volume. The isolated native render is the binding visual source; the later
