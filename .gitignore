@@ -89,3 +89,6 @@ docs/handoff/reference-hygiene.md
 docs/handoff/migration-state.md
 **/*-audit-internal.md
 **/*.private.md
+
+# Cross-lane notes from the Claude worktree, not part of the record
+read_this_codex.md
