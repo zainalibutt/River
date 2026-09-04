@@ -81,7 +81,10 @@ def normalise_alpha_modes(path):
         name = material.get('name', '').lower()
         if any(token in name for token in MASK_MATERIALS):
             material['alphaMode'] = 'MASK'
-            material['alphaCutoff'] = 0.5
+            # 0.5 cuts the fringe. The strands at a hairline carry partial alpha, so a
+            # half cutoff deletes exactly the soft edge that stops the shell reading as a
+            # cap, and leaves a pale band of scalp along the forehead. 0.28 keeps them.
+            material['alphaCutoff'] = 0.28
             masked += 1
         else:
             material['alphaMode'] = 'OPAQUE'

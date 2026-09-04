@@ -262,6 +262,220 @@ def apply_black_tie(obj, diffuse_path, rough_path):
             coat.default_value = 0.0
 
 
+def _region_triangles(obj, tokens, threshold=0.5):
+    """UV triangles of every polygon owned entirely by the named vertex groups."""
+    mesh = obj.data
+    indices = {g.index for g in obj.vertex_groups
+               if any(token in g.name.lower() for token in tokens)}
+    if not indices:
+        return []
+    owned = set()
+    for vertex in mesh.vertices:
+        for group in vertex.groups:
+            if group.group in indices and group.weight > threshold:
+                owned.add(vertex.index)
+                break
+    uv_layer = mesh.uv_layers.active.data
+    triangles = []
+    for polygon in mesh.polygons:
+        if not all(index in owned for index in polygon.vertices):
+            continue
+        loops = list(polygon.loop_indices)
+        for corner in range(1, len(loops) - 1):
+            triangles.append((
+                tuple(uv_layer[loops[0]].uv),
+                tuple(uv_layer[loops[corner]].uv),
+                tuple(uv_layer[loops[corner + 1]].uv),
+            ))
+    return triangles
+
+
+def _rasterise(triangles, width, height):
+    mask = np.zeros((height, width), dtype=bool)
+    for a, b, c in triangles:
+        xs = np.array([a[0], b[0], c[0]], dtype=np.float64) * width
+        ys = np.array([a[1], b[1], c[1]], dtype=np.float64) * height
+        x0 = int(max(0, math.floor(xs.min())))
+        x1 = int(min(width - 1, math.ceil(xs.max())))
+        y0 = int(max(0, math.floor(ys.min())))
+        y1 = int(min(height - 1, math.ceil(ys.max())))
+        if x1 < x0 or y1 < y0:
+            continue
+        gx, gy = np.meshgrid(np.arange(x0, x1 + 1), np.arange(y0, y1 + 1))
+        denominator = ((ys[1] - ys[2]) * (xs[0] - xs[2])
+                       + (xs[2] - xs[1]) * (ys[0] - ys[2]))
+        if abs(denominator) < 1e-12:
+            continue
+        px, py = gx + 0.5, gy + 0.5
+        w0 = ((ys[1] - ys[2]) * (px - xs[2]) + (xs[2] - xs[1]) * (py - ys[2])) / denominator
+        w1 = ((ys[2] - ys[0]) * (px - xs[2]) + (xs[0] - xs[2]) * (py - ys[2])) / denominator
+        inside = (w0 >= -0.003) & (w1 >= -0.003) & ((1.0 - w0 - w1) >= -0.003)
+        mask[gy[inside], gx[inside]] = True
+    return mask
+
+
+def _dilate(mask, iterations):
+    grown = mask.copy()
+    for _ in range(iterations):
+        step = grown.copy()
+        step[1:, :] |= grown[:-1, :]
+        step[:-1, :] |= grown[1:, :]
+        step[:, 1:] |= grown[:, :-1]
+        step[:, :-1] |= grown[:, 1:]
+        grown = step
+    return grown
+
+
+def _blur(field, iterations):
+    out = field
+    for _ in range(iterations):
+        padded = np.pad(out, 1, mode='edge')
+        out = (padded[:-2, 1:-1] + padded[2:, 1:-1] + padded[1:-1, :-2]
+               + padded[1:-1, 2:] + out) / 5.0
+    return out
+
+
+def _scalp_weights(obj, hair, near=0.020, far=0.065):
+    """Per-vertex 0..1 weight for how covered by hair a body vertex is.
+
+    Measured by distance to the hair surface rather than by height, so it follows the
+    actual hairline the asset has - including the temple recession - instead of a
+    horizontal band that would cut across the forehead.
+    """
+    to_hair = hair.matrix_world.inverted() @ obj.matrix_world
+    weights = np.zeros(len(obj.data.vertices), dtype=np.float32)
+    distances = np.full(len(obj.data.vertices), np.inf, dtype=np.float32)
+    for index, vertex in enumerate(obj.data.vertices):
+        point = to_hair @ vertex.co
+        hit, location, _, _ = hair.closest_point_on_mesh(point)
+        if not hit:
+            continue
+        distances[index] = (location - point).length
+    finite = distances[np.isfinite(distances)]
+    if finite.size:
+        print('SCALP distance mm p1=%.1f p5=%.1f p10=%.1f p25=%.1f median=%.1f'
+              % tuple(np.percentile(finite, [1, 5, 10, 25, 50]) * 1000.0))
+    weights = np.clip((far - distances) / (far - near), 0.0, 1.0).astype(np.float32)
+    weights[~np.isfinite(distances)] = 0.0
+    return weights
+
+
+def _rasterise_weighted(obj, weights, width, height):
+    """Rasterise per-vertex weights into the atlas, so the shadow fades with the hairline."""
+    mesh = obj.data
+    uv_layer = mesh.uv_layers.active.data
+    field = np.zeros((height, width), dtype=np.float32)
+    for polygon in mesh.polygons:
+        loops = list(polygon.loop_indices)
+        corner_weights = [weights[mesh.loops[loop].vertex_index] for loop in loops]
+        if max(corner_weights) <= 0.0:
+            continue
+        value = float(sum(corner_weights) / len(corner_weights))
+        uvs = [tuple(uv_layer[loop].uv) for loop in loops]
+        for corner in range(1, len(uvs) - 1):
+            triangle = (uvs[0], uvs[corner], uvs[corner + 1])
+            mask = _rasterise([triangle], width, height)
+            field[mask] = np.maximum(field[mask], value)
+    return field
+
+
+def darken_scalp_under_hair(pixels, obj, hair, width, height):
+    """Lay a hair-shadow gradient on the scalp beneath and just past the hair edge.
+
+    The hair shell is alpha-cut, so its fringe is partially transparent and its edge is
+    ragged by design. Over bright forehead skin that reads as a hard scalloped band -
+    the single most cap-like thing left on the character. Darkening the skin underneath
+    means a gap shows shadow rather than lit scalp, and the transition softens instead of
+    terminating.
+
+    This is not a painted transition standing in for geometry: the shell is already
+    conformed to the skull. It is the shading half of the same fix.
+    """
+    weights = _scalp_weights(obj, hair)
+    covered = int((weights > 0).sum())
+    if covered < 200:
+        raise SystemExit('FAIL: scalp weighting found only %d covered vertices' % covered)
+    field = _blur(_rasterise_weighted(obj, weights, width, height), 6)
+    field = np.clip(field, 0.0, 1.0)[:, :, None]
+    shadow = np.array([0.26, 0.20, 0.17], dtype=np.float32)
+    pixels[:, :, :3] = (pixels[:, :, :3] * (1.0 - field)
+                        + pixels[:, :, :3] * shadow * field)
+    print('SCALP covered_verts=%d shaded_px=%d' % (covered, int((field > 0.02).sum())))
+    return pixels
+
+
+def match_extremity_skin_tone(obj, hair=None):
+    """Bring the hands and feet to the face's tone in the skin atlas.
+
+    MakeHuman paints the head islands warm and saturated and the hand and foot islands
+    noticeably paler and greyer. Measured on this atlas: head mean (0.794, 0.526, 0.432)
+    against hands (0.800, 0.621, 0.519) - 11% brighter and far less red, which is why
+    the hands read as pale gloves against the face in every render.
+
+    The correction is derived from those measurements at build time rather than hardcoded,
+    so it stays correct if the skin asset is swapped. The regions are rasterised from the
+    mesh's own UV triangles: the hand and head UV bounding boxes overlap almost completely
+    in this atlas, so a box mask would desaturate the face along with the hands.
+    """
+    image = next(
+        (node.image for slot in obj.material_slots
+         if slot.material is not None and slot.material.use_nodes
+         for node in slot.material.node_tree.nodes
+         if node.type == 'TEX_IMAGE' and node.image is not None
+         and 'diffuse' in node.image.name.lower()),
+        None,
+    )
+    if image is None:
+        raise SystemExit('FAIL: silver body has no skin diffuse to correct')
+    width, height = image.size
+    pixels = np.array(image.pixels[:], dtype=np.float32).reshape(height, width, 4)
+
+    extremity = _rasterise(
+        _region_triangles(obj, ('hand', 'finger', 'thumb', 'foot', 'toe')), width, height)
+    face = _rasterise(_region_triangles(obj, ('head',)), width, height)
+    if extremity.sum() < 1000 or face.sum() < 1000:
+        raise SystemExit('FAIL: skin regions did not rasterise (hands=%d face=%d)'
+                         % (int(extremity.sum()), int(face.sum())))
+    # The islands must not overlap, or the correction would fight itself.
+    face = face & ~extremity
+
+    face_mean = pixels[face][:, :3].mean(axis=0)
+    hand_mean = pixels[extremity][:, :3].mean(axis=0)
+    ratio = np.clip(face_mean / np.maximum(hand_mean, 1e-4), 0.5, 1.5)
+    print('SKIN face=(%.3f,%.3f,%.3f) hands=(%.3f,%.3f,%.3f) ratio=(%.3f,%.3f,%.3f)'
+          % (*face_mean, *hand_mean, *ratio))
+
+    corrected = pixels.copy()
+    blend = _dilate(extremity, 3)
+    for channel in range(3):
+        corrected[blend, channel] = np.clip(
+            corrected[blend, channel] * ratio[channel], 0.0, 1.0)
+
+    if hair is not None:
+        corrected = darken_scalp_under_hair(corrected, obj, hair, width, height)
+
+    out_path = os.path.join(OUT, 'river_silver_skin_diffuse.png')
+    authored = bpy.data.images.new('river_silver_skin_diffuse', width, height, alpha=True)
+    authored.pixels = corrected.reshape(-1).tolist()
+    authored.filepath_raw = out_path
+    authored.file_format = 'PNG'
+    authored.save()
+
+    replaced = 0
+    for slot in obj.material_slots:
+        material = slot.material
+        if material is None or not material.use_nodes:
+            continue
+        for node in material.node_tree.nodes:
+            if node.type == 'TEX_IMAGE' and node.image is not None \
+                    and node.image.name == image.name:
+                node.image = bpy.data.images.load(out_path)
+                replaced += 1
+    print('SKIN corrected px=%d slots=%d' % (int(blend.sum()), replaced))
+    if replaced == 0:
+        raise SystemExit('FAIL: corrected skin was authored but never bound')
+
+
 def conform_hair(obj):
     """Pull the stock hair shell onto the skull.
 
@@ -278,11 +492,13 @@ def conform_hair(obj):
     moved = 0
     for vertex in obj.data.vertices:
         delta = vertex.co - centre
+        # 0.86/0.93 pulled the crown and occiput inside the skull, and the scalp came
+        # through as a bald patch that is only visible from behind the seat.
         if delta.y > 0:
-            delta.y *= 0.86
-        delta.x *= 0.96
+            delta.y *= 0.93
+        delta.x *= 0.98
         if delta.z > 0:
-            delta.z *= 0.93
+            delta.z *= 0.975
         if vertex.co.z < nape_top:
             delta.x *= 0.90
             delta.y *= 0.90
@@ -334,13 +550,28 @@ def build_character():
         attached[name] = obj
 
     conform_hair(attached['hair'])
+    # After the shell is conformed, so the scalp shadow follows where the hair actually
+    # sits rather than where the stock asset put it.
+    match_extremity_skin_tone(human, attached['hair'])
     diffuse_path, rough_path = author_black_tie_maps()
     apply_black_tie(attached['suit'], diffuse_path, rough_path)
 
     tint(attached['hair'], (0.038, 0.026, 0.018), 0.94, 'MULTIPLY', 0.54, 0.18)
     tint(attached['eyebrows'], (0.070, 0.048, 0.034), 0.85, 'MULTIPLY', 0.68, 0.10)
     tint(human, (0.90, 0.76, 0.66), 0.70, 'MULTIPLY', 0.58, 0.32)
-    tint(attached['shoes'], (0.026, 0.026, 0.030), 1.0, 'MULTIPLY', 0.20, 0.62)
+    # Replaced rather than tinted. The stock shoe material survived a MULTIPLY at full
+    # strength and still rendered polished mahogany, so something in its node graph
+    # bypasses the base-colour rewire. The export flattens it to patent black anyway;
+    # doing the same here keeps the proof and the shipped asset from disagreeing about
+    # what colour the shoes are.
+    patent = bpy.data.materials.new('river_silver_patent')
+    patent.use_nodes = True
+    patent_bsdf = patent.node_tree.nodes.get('Principled BSDF')
+    patent_bsdf.inputs['Base Color'].default_value = (0.022, 0.022, 0.026, 1.0)
+    patent_bsdf.inputs['Roughness'].default_value = 0.20
+    patent_bsdf.inputs['Specular IOR Level'].default_value = 0.60
+    attached['shoes'].data.materials.clear()
+    attached['shoes'].data.materials.append(patent)
 
     for obj in [human, *attached.values()]:
         if obj.type != 'MESH':
