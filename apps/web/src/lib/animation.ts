@@ -21,6 +21,16 @@ export const CLIPS = [
 
 export type ClipName = (typeof CLIPS)[number]
 
+/**
+ * The clip that always runs underneath the others.
+ *
+ * Every clip used to be absolute, so a chip push overwrote the whole upper body and the
+ * character stopped breathing for the length of the gesture, then snapped back. The idle
+ * is the base layer and every other clip plays additively on top of it, which is why this
+ * name is worth having rather than being spelled out at each use.
+ */
+export const IDLE_CLIP: ClipName = 'IDLE_breathe'
+
 export interface AnimationCue {
   seat: number
   clip: ClipName

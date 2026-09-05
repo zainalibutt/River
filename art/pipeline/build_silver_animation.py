@@ -47,19 +47,25 @@ CLIPS = {
         # Two breaths and one slow gaze drift, deliberately on different periods so the
         # loop does not read as a metronome. The gaze is the thing that makes a seated
         # figure look alive; breathing alone reads as a machine.
+        #
+        # Amplitudes are roughly doubled from the first pass. That version was measurably
+        # running - spine04 moved 0.66 degrees in 1.6s - and completely invisible: two
+        # screenshots four seconds apart were identical. A correct idle nobody can see is
+        # the same as no idle, and at table distance the head carries far more of it than
+        # the ribcage does.
         'keys': [
             (0.00, {}),
-            (0.13, {'spine04': (1.3, 0, 0), 'spine03': (0.9, 0, 0), 'spine01': (0.7, 0, 0),
-                    'clavicle.L': (-1.1, 0, 0), 'clavicle.R': (-1.1, 0, 0)}),
-            (0.26, {'spine04': (0.2, 0, 0), 'spine03': (0.1, 0, 0)}),
-            (0.34, {'head': (0.5, 2.6, 0.8), 'neck02': (0.3, 1.6, 0.4)}),
-            (0.50, {'spine04': (1.3, 0, 0), 'spine03': (0.9, 0, 0), 'spine01': (0.7, 0, 0),
-                    'clavicle.L': (-1.1, 0, 0), 'clavicle.R': (-1.1, 0, 0),
-                    'head': (0.8, 3.1, 1.0), 'neck02': (0.4, 1.8, 0.5)}),
-            (0.63, {'spine04': (0.2, 0, 0), 'head': (0.4, 1.2, 0.4)}),
-            (0.76, {'head': (-0.3, -1.8, -0.6), 'neck02': (-0.2, -1.1, -0.3)}),
-            (0.88, {'spine04': (0.9, 0, 0), 'spine03': (0.6, 0, 0),
-                    'head': (-0.1, -0.7, -0.2)}),
+            (0.13, {'spine04': (2.6, 0, 0), 'spine03': (1.8, 0, 0), 'spine01': (1.4, 0, 0),
+                    'clavicle.L': (-2.2, 0, 0), 'clavicle.R': (-2.2, 0, 0)}),
+            (0.26, {'spine04': (0.4, 0, 0), 'spine03': (0.2, 0, 0)}),
+            (0.34, {'head': (1.6, 5.5, 1.8), 'neck02': (0.9, 3.2, 0.9)}),
+            (0.50, {'spine04': (2.6, 0, 0), 'spine03': (1.8, 0, 0), 'spine01': (1.4, 0, 0),
+                    'clavicle.L': (-2.2, 0, 0), 'clavicle.R': (-2.2, 0, 0),
+                    'head': (2.4, 6.5, 2.2), 'neck02': (1.2, 3.8, 1.1)}),
+            (0.63, {'spine04': (0.4, 0, 0), 'head': (1.2, 2.4, 0.9)}),
+            (0.76, {'head': (-1.4, -4.2, -1.4), 'neck02': (-0.8, -2.4, -0.7)}),
+            (0.88, {'spine04': (1.8, 0, 0), 'spine03': (1.2, 0, 0),
+                    'head': (-0.5, -1.6, -0.5)}),
             (1.00, {}),
         ],
     },

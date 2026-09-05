@@ -120,7 +120,13 @@ CHARACTER_SCALE = 0.92
 # seated player's forearms reach the rail without leaning, and the stool still clears the
 # table pedestal. seated_rail_contact() derives the hand reach from these, so the two
 # cannot drift apart again.
-ROOFTOP_SEAT_RING = (1.25, 1.42)
+# 1.18/1.36 puts the seat centres at 1.463 and 0.979, about 0.16m and 0.19m off the rail.
+# The stool is 0.235 in radius, so its front edge now sits just inside the rail line -
+# which is correct rather than a collision: the rail overhangs the table, and a stool
+# pulled in to a table goes under that overhang. Much beyond this the seat meets the
+# pedestal, so the 0.25m Zain asked for is not available in this direction; this is about
+# 0.09m of the 0.25.
+ROOFTOP_SEAT_RING = (1.18, 1.36)
 SUITE_SEAT_RING = (1.30, 1.44)
 CHARACTER_SEAT_Z = 0.05
 CHARACTER_VARIANTS = ('male', 'female')
@@ -1141,23 +1147,44 @@ def import_native_gold_template():
             if obj.type == 'MESH':
                 smooth_mesh_by_angle(obj.data, 180.0)
         return imported
-    apply_seated_rest_pose(armature)
+    # An asset that already carries its seated pose baked into its rest pose and its mesh
+    # must not be posed again. This pass sets spine01, spine02 and head and then calls
+    # armature_apply, which bakes over the animation channels of the bones it touches: a
+    # head with 151 keyframes of gaze drift arrived in the venue with 2 constant ones, so
+    # the character breathed but never looked at anything, and nothing said why.
+    if armature.get('riverSeatedBaked'):
+        print('SEATED already baked into the asset, skipping the venue pass')
+    else:
+        apply_seated_rest_pose(armature)
     bpy.context.view_layer.update()
-    depsgraph = bpy.context.evaluated_depsgraph_get()
-    for obj in imported:
-        if obj.type != 'MESH' or obj is body:
-            continue
-        evaluated = obj.evaluated_get(depsgraph)
-        baked = bpy.data.meshes.new_from_object(
-            evaluated,
-            preserve_all_data_layers=True,
-            depsgraph=depsgraph,
-        )
-        world = obj.matrix_world.copy()
-        obj.data = baked
-        obj.modifiers.clear()
-        obj.parent = None
-        obj.matrix_world = world
+    # Freezing everything but the body to static geometry - which is what clearing the
+    # modifiers and the parent does - was fine while the seated pose was the only thing
+    # these meshes had to follow. It is fatal once they animate: the body skins to the rig
+    # and the suit, hair, shoes and eyes do not, so the head turns inside a hairstyle that
+    # stays where it was and the jacket stops following the shoulders.
+    #
+    # An asset that already carries its seated pose baked in needs no freezing anyway: its
+    # pose is zero, so the deformation is identity and the bake would only strip the
+    # skinning that makes the rest of the character move.
+    if armature.get('riverSeatedBaked'):
+        print('SKIN keeping armature modifiers on %d meshes'
+              % sum(1 for obj in imported if obj.type == 'MESH'))
+    else:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        for obj in imported:
+            if obj.type != 'MESH' or obj is body:
+                continue
+            evaluated = obj.evaluated_get(depsgraph)
+            baked = bpy.data.meshes.new_from_object(
+                evaluated,
+                preserve_all_data_layers=True,
+                depsgraph=depsgraph,
+            )
+            world = obj.matrix_world.copy()
+            obj.data = baked
+            obj.modifiers.clear()
+            obj.parent = None
+            obj.matrix_world = world
     for obj in imported:
         obj['nativeGold'] = True
         if obj.type == 'MESH':
@@ -1179,8 +1206,16 @@ def duplicate_native_gold(template, seat_index, x, y, angle):
             if modifier.type == 'ARMATURE' and modifier.object in mapping:
                 modifier.object = mapping[modifier.object]
         if clone.type == 'ARMATURE':
-            clone.animation_data_clear()
+            # The clips are kept. This used to call animation_data_clear(), which meant
+            # the native character path shipped a venue with no animations at all - and
+            # the runtime reads its clips from the venue GLB, so it logged "carries no
+            # animation clips" and every native character sat perfectly still. Motion
+            # authored on either native character could not reach the browser.
+            #
+            # Object.copy() carries animation_data and its NLA tracks, so the imported
+            # clips ride along; a source with none is still silent, exactly as before.
             clone.name = 'char_native_gold_rig'
+            clone['animationOwner'] = clone.animation_data is not None
         elif clone.type == 'MESH':
             suffix = source.name.removeprefix('river_native_gold_')
             clone.name = 'char_native_gold_' + suffix

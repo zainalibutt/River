@@ -488,6 +488,38 @@ def seat_on_chair(armature, meshes):
              after.x, after.y, after.z))
 
 
+def author_motion_set(armature):
+    """Put the clips on the rig here, after the seated pose has been baked into the rest.
+
+    They used to be authored on the standing source, which was correct while the venue
+    applied its own seated rest on import. It no longer does - the seated pose is baked
+    into this GLB - so a clip authored against the standing rest would play its deltas
+    from the wrong starting pose. Authoring last means a delta of zero is this character
+    sitting at this table with his forearms on this rail.
+
+    The definitions live in build_silver_animation so the motion set is described in one
+    place and can still be previewed as contact sheets there.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import build_silver_animation as motion
+
+    actions = []
+    for name, spec in motion.CLIPS.items():
+        action = motion.author_clip(armature, name, spec)
+        action.use_fake_user = True
+        actions.append(action)
+
+    # Deliberately NOT pushed to NLA. Stacking all nine as simultaneously enabled tracks
+    # means the exporter samples every clip with the others layered underneath it, and
+    # ALLIN_standup holds its final pose rather than returning to rest - so spine01 and
+    # head came out pinned to that hold in every other clip, including the idle. They
+    # shipped as channels full of a constant, which is indistinguishable from a bone that
+    # simply never moves. Exporting actions individually samples each one alone.
+    armature.animation_data_create().action = None
+    print('MOTION clips=%d (exported as individual actions)' % len(actions))
+    return actions
+
+
 def report_seated_geometry(armature, label):
     """Print where the seated skeleton actually is, against the furniture it sits at.
 
@@ -692,6 +724,12 @@ def main():
     for obj in exported:
         obj['nativeGold'] = True
         obj['riverCharacter'] = 'silver'
+        # Tells the venue importer the seated pose is already in this asset's rest pose
+        # and mesh, so it must not run its own seated pass over the top. That pass poses
+        # spine01, spine02 and head and then calls armature_apply, which bakes over the
+        # animation channels of exactly the bones it touches - the head and spine01
+        # arrived in the venue with 151 keyframes flattened to 2 constant ones.
+        obj['riverSeatedBaked'] = True
 
     bpy.ops.object.select_all(action='DESELECT')
     for obj in exported:
@@ -699,6 +737,8 @@ def main():
         obj.hide_set(False)
         obj.select_set(True)
     bpy.context.view_layer.objects.active = body
+
+    author_motion_set(armature)
 
     os.makedirs(os.path.dirname(GLB), exist_ok=True)
     bpy.ops.export_scene.gltf(
@@ -711,7 +751,8 @@ def main():
         export_extras=True,
         export_lights=False,
         export_cameras=False,
-        export_animations=False,
+        export_animations=True,
+        export_animation_mode='ACTIONS',
         export_skins=True,
         export_morph=False,
         use_selection=True,
@@ -723,8 +764,17 @@ def main():
     if not skins or max(len(skin.get('joints', [])) for skin in skins) < 60:
         raise SystemExit('FAIL: silver GLB lost its rig')
     bones = max(len(skin.get('joints', [])) for skin in skins)
-    print('NATIVE_GLTF %s bytes=%d meshes=%d body_triangles=%d bones=%d' % (
-        GLB, os.path.getsize(GLB), len(gltf.get('meshes', [])), body_triangles, bones))
+    # The runtime treats a missing clip as a build error rather than a silent no-op, so
+    # the export checks the same contract here rather than letting the venue discover it.
+    import build_silver_animation as motion
+
+    shipped = {animation.get('name') for animation in gltf.get('animations', [])}
+    missing = sorted(set(motion.CLIPS) - shipped)
+    if missing:
+        raise SystemExit('FAIL: silver GLB is missing clips: ' + ', '.join(missing))
+    print('NATIVE_GLTF %s bytes=%d meshes=%d body_triangles=%d bones=%d clips=%d' % (
+        GLB, os.path.getsize(GLB), len(gltf.get('meshes', [])), body_triangles, bones,
+        len(shipped)))
 
 
 if __name__ == '__main__':

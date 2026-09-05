@@ -20,7 +20,7 @@ import {
 } from 'react'
 import * as THREE from 'three'
 import { type OrbitControls as OrbitControlsImpl, RectAreaLightUniformsLib } from 'three-stdlib'
-import { type AnimationCue, idleCueFor, missingClips } from '@/lib/animation'
+import { type AnimationCue, IDLE_CLIP, idleCueFor, missingClips } from '@/lib/animation'
 import { freshAsset } from '@/lib/asset-url'
 import { frameMetrics, TABLE_REGIONS } from '@/lib/frame-metrics'
 import {
@@ -260,7 +260,17 @@ function VenueAsset({
       for (const clip of clips) {
         const targeted = retargetToRig(clip, base, rig.boneNames)
         bound += targeted.matched
-        actions.current.set(seatClipKey(rig.seat, clip.name), mixer.clipAction(targeted.clip))
+        // Everything except the idle plays additively over it. Absolute clips overwrite
+        // whatever the base layer was doing, so a chip push froze the character's
+        // breathing for its whole length and then snapped back. makeClipAdditive
+        // rewrites a clip as a delta from its own first frame, and the pipeline authors
+        // every clip starting at the seated rest, so frame zero is exactly the pose the
+        // idle is already moving around.
+        const isIdle = clip.name === IDLE_CLIP
+        if (!isIdle) THREE.AnimationUtils.makeClipAdditive(targeted.clip)
+        const action = mixer.clipAction(targeted.clip)
+        if (!isIdle) action.blendMode = THREE.AdditiveAnimationBlendMode
+        actions.current.set(seatClipKey(rig.seat, clip.name), action)
       }
     }
     if (process.env.NODE_ENV !== 'production') {
@@ -298,7 +308,36 @@ function VenueAsset({
     })
   }, [asset.scene, occupiedSeats])
 
-  const playing = useMemo(() => (cues.length > 0 ? cues : seatIndexes.map(idleCueFor)), [cues])
+  // The base layer, started once when the clips bind and never restarted.
+  //
+  // It used to be a fallback - idles played only when there were no cues at all - so the
+  // first action of the hand replaced the breathing rather than layering over it, and it
+  // never came back. The idle now runs underneath continuously and actions are additive
+  // on top, which is also why this cannot live in the cue effect: re-running that effect
+  // would reset the breathing every time the table did anything.
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = []
+    for (const seat of seatIndexes) {
+      const cue = idleCueFor(seat)
+      const action = actions.current.get(seatClipKey(seat, cue.clip))
+      if (action === undefined) continue
+      const begin = () => {
+        action.reset()
+        action.setLoop(THREE.LoopRepeat, Number.POSITIVE_INFINITY)
+        action.play()
+      }
+      // The stagger is the whole reason idlePhaseFor exists: nine characters breathing on
+      // the same frame reads as a row of clones.
+      if (cue.delaySeconds > 0) {
+        timers.push(setTimeout(begin, cue.delaySeconds * 1000))
+        continue
+      }
+      begin()
+    }
+    return () => {
+      for (const timer of timers) clearTimeout(timer)
+    }
+  }, [])
 
   useEffect(() => {
     // A cue names a seat, and only that seat's action may answer it. Matching
@@ -313,10 +352,10 @@ function VenueAsset({
       action.clampWhenFinished = !cue.loop
       action.play()
     }
-    for (const cue of playing) {
-      // The stagger is the whole reason idlePhaseFor exists: nine characters
-      // breathing on the same frame reads as a row of clones. It was computed
-      // per seat and then thrown away here.
+    for (const cue of cues) {
+      // The idle is the base layer and owns its own lifetime above; a cue for it here
+      // would restart the breathing mid-gesture.
+      if (cue.clip === IDLE_CLIP) continue
       if (cue.delaySeconds > 0) {
         timers.push(setTimeout(() => start(cue), cue.delaySeconds * 1000))
         continue
@@ -326,7 +365,7 @@ function VenueAsset({
     return () => {
       for (const timer of timers) clearTimeout(timer)
     }
-  }, [playing])
+  }, [cues])
 
   // Advancing the mixers is the only per-frame cost, and it is skipped entirely
   // while there is nothing to advance.
