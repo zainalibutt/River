@@ -341,12 +341,22 @@ def _blur(field, iterations):
     return out
 
 
-def _scalp_weights(obj, hair, near=0.020, far=0.065):
+def _scalp_weights(obj, hair, near=None, far=None):
     """Per-vertex 0..1 weight for how covered by hair a body vertex is.
 
     Measured by distance to the hair surface rather than by height, so it follows the
     actual hairline the asset has - including the temple recession - instead of a
     horizontal band that would cut across the forehead.
+
+    The band is derived from the distances actually present rather than assumed. It used
+    to run from 20mm to 65mm, chosen from an impression of how close a hair shell sits to
+    a skull. On this one the nearest body vertex is 30mm away and the fifth percentile is
+    65.7mm, so NOTHING reached full shadow and almost nothing reached any - the scalp
+    stayed lit under the hair and showed through the alpha cutout as a pale patch across
+    the back of the head, which is the "flat cap" everyone kept seeing.
+
+    A band that matches nothing produces a weak result rather than an error, so the
+    number of vertices reaching full shadow is now checked.
     """
     to_hair = hair.matrix_world.inverted() @ obj.matrix_world
     weights = np.zeros(len(obj.data.vertices), dtype=np.float32)
@@ -358,11 +368,25 @@ def _scalp_weights(obj, hair, near=0.020, far=0.065):
             continue
         distances[index] = (location - point).length
     finite = distances[np.isfinite(distances)]
-    if finite.size:
-        print('SCALP distance mm p1=%.1f p5=%.1f p10=%.1f p25=%.1f median=%.1f'
-              % tuple(np.percentile(finite, [1, 5, 10, 25, 50]) * 1000.0))
+    if not finite.size:
+        raise SystemExit('FAIL: no body vertex has a nearest point on the hair, so the '
+                         'scalp shadow has nothing to follow')
+    print('SCALP distance mm p1=%.1f p5=%.1f p10=%.1f p25=%.1f median=%.1f'
+          % tuple(np.percentile(finite, [1, 5, 10, 25, 50]) * 1000.0))
+    if near is None or far is None:
+        # The scalp under the hair is the closest few per cent of the body to it; the
+        # rest of the figure is hundreds of millimetres away and pulls every average
+        # meaningless. Percentiles pick the band off the head itself.
+        near = float(np.percentile(finite, 3.0))
+        far = float(np.percentile(finite, 12.0))
+    print('SCALP band %.1fmm full to %.1fmm none' % (near * 1000.0, far * 1000.0))
     weights = np.clip((far - distances) / (far - near), 0.0, 1.0).astype(np.float32)
     weights[~np.isfinite(distances)] = 0.0
+    full = int((weights > 0.9).sum())
+    if full < 300:
+        raise SystemExit('FAIL: only %d vertices reach full hair shadow, which will not '
+                         'cover a scalp - the band %.1f..%.1fmm does not match the '
+                         'distances present' % (full, near * 1000.0, far * 1000.0))
     return weights
 
 

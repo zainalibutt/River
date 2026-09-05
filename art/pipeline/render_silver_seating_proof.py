@@ -273,6 +273,13 @@ def main():
     render_turntable(scene, camera, character, others, hand_target, 0.55, 0.26, 'hands',
                      size=(460, 460))
 
+    # The head, for the hair. The back of the skull is the one part of him no seating
+    # camera has ever framed - every one of them is aimed at the pose - and it is where
+    # the stock hair shell ends in a hard cut across the nape.
+    render_turntable(scene, camera, character, others,
+                     Vector((centre.x, centre.y, high - (high - low) * 0.09)),
+                     0.62, 0.06, 'head', size=(460, 460))
+
     torso = Vector((centre.x, centre.y, low + (high - low) * 0.72))
     render_turntable(scene, camera, character, others, torso, 1.15, 0.12, 'torso')
     render_turntable(scene, camera, character, others,

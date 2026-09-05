@@ -545,7 +545,23 @@ def build_table(venue, rail_mat, wood_mat):
 
 def build_chairs(venue, chair_fn, chair_mat, count=9):
     tune_surface(chair_mat, 0.42 if venue['id'] == 'rooftop' else 0.58)
-    positions = seat_positions(count)
+    # A chair goes where the person sitting in it goes.
+    #
+    # These two rings were separate: chairs on the buildkit default of FELT_RX * 1.42,
+    # characters on the venue's own ring, which for the Rooftop is FELT_RX * 1.18. That
+    # is 30cm of daylight, so every character sat in front of his stool rather than on
+    # it, with the seat pan visible behind him. Pulling the character ring in to fix the
+    # reach to the rail widened the gap and nothing said so, because nothing was
+    # comparing the two.
+    positions = character_seat_positions(venue, count)
+    ring = math.hypot(*positions[0])
+    rail = 1.0 / math.sqrt((positions[0][0] / ring / RAIL_X) ** 2
+                           + (positions[0][1] / ring / RAIL_Y) ** 2)
+    print('CHAIRS %-9s ring=%.3f rail=%.3f clearance=%.0fmm'
+          % (venue['id'], ring, rail, (ring - rail) * 1000.0))
+    if ring <= rail:
+        raise SystemExit('FAIL: the %s chair ring at %.3f is inside the rail at %.3f, so '
+                         'the stools are in the table' % (venue['id'], ring, rail))
     for index, (x, y) in enumerate(positions):
         chair_geo = chair_fn()
         leather_faces = None
@@ -2061,6 +2077,107 @@ def restore_vertex_colour_base_factors(glb):
         handle.write(output)
 
 
+def tuck_chairs_to_backs(venue, contact=0.005):
+    """Slide the chairs in until the backrest meets the back that is sitting against it.
+
+    Putting the chairs on the character ring got the seat pan under the figure, but a
+    chair's backrest is at the BACK of the chair and a person's back is roughly over the
+    middle of the seat, so sharing a centre still leaves a hand's width of daylight
+    between the two. It reads as a man perched on the front edge of his stool.
+
+    The distance is measured rather than dialled in, because "move it forward a bit" has
+    no units and the answer changes with the character's scale, the seat ring and the
+    chair model. Both surfaces are sampled over the height band where a backrest actually
+    touches a back - above the seat pan, below the shoulders - so buttocks on the pan and
+    a headrest above the shoulders cannot stand in for the contact.
+    """
+    # The characters were parented and placed moments ago and nothing has evaluated the
+    # dependency graph since, so matrix_world still reads as identity on every one of
+    # them. Measuring through it puts the whole figure at the origin, which is how a
+    # backrest 100mm behind a back measured as 771mm in front of one.
+    bpy.context.view_layer.update()
+
+    band = (SEAT_H + 0.06, SEAT_H + 0.42)
+    chairs = [obj for obj in bpy.data.objects
+              if obj.type == 'MESH' and obj.name.startswith(venue['id'] + '_chair_')]
+    people = [obj for obj in bpy.data.objects
+              if obj.type == 'MESH' and obj.name.startswith('char_')]
+    if not chairs or not people:
+        print('TUCK %-9s chairs=%d people=%d - nothing to measure against'
+              % (venue['id'], len(chairs), len(people)))
+        return 0.0
+
+    # One seat, along that seat's own outward direction. The seat ring is an ellipse, so
+    # radius from the origin is not comparable between seats - taking the furthest chair
+    # on the ring and the character on a different seat measured 1194mm of "gap" and
+    # drove every stool into the table.
+    seated = sum((sum((obj.matrix_world @ vertex.co for vertex in obj.data.vertices),
+                      Vector((0, 0, 0))) / len(obj.data.vertices) for obj in people),
+                 Vector((0, 0, 0))) / len(people)
+    outward = Vector((seated.x, seated.y, 0.0))
+    if outward.length < 1e-6:
+        raise SystemExit('FAIL: the %s character sits on the table axis, so there is no '
+                         'outward direction to tuck along' % venue['id'])
+    outward.normalize()
+    chair = min(chairs, key=lambda obj: (obj.location.xy - seated.xy).length)
+
+    def reach(objects, behind=None):
+        found = []
+        for obj in objects:
+            for vertex in obj.data.vertices:
+                point = obj.matrix_world @ vertex.co
+                if not band[0] <= point.z <= band[1]:
+                    continue
+                along = Vector((point.x, point.y, 0.0)).dot(outward)
+                if behind is None or along > behind:
+                    found.append(along)
+        return found
+
+    # His rearmost point in the band is his back. The backrest's is its OUTER face, which
+    # is the wrong side of a shell 60mm thick - so the chair is narrowed to the geometry
+    # behind its own centre, and the nearest of that is the face a back actually rests on.
+    seat_axis = Vector((chair.location.x, chair.location.y, 0.0)).dot(outward)
+    backs = reach(people)
+    rests = reach([chair], behind=seat_axis)
+    back = max(backs) if backs else None
+    rest = min(rests) if rests else None
+    if back is None or rest is None:
+        raise SystemExit('FAIL: %s found no geometry between %.2f and %.2f to measure a '
+                         'backrest contact against' % (venue['id'], band[0], band[1]))
+    gap = rest - back - contact
+    print('TUCK %-9s back=%.3f backrest=%.3f gap=%.0fmm'
+          % (venue['id'], back, rest, gap * 1000.0))
+    if gap <= 0.0:
+        print('TUCK %-9s already in contact, leaving the chairs alone' % venue['id'])
+        return 0.0
+    # A backrest is a hand's width behind a back at worst. Anything larger means the two
+    # surfaces being compared are not the ones that touch, and moving the stools by it
+    # puts them inside the table - which is exactly what the first version of this did.
+    if gap > 0.25:
+        raise SystemExit('FAIL: %s measured a %.0fmm backrest gap, which is too large to '
+                         'be one - back=%.3f backrest=%.3f along the seat axis'
+                         % (venue['id'], gap * 1000.0, back, rest))
+    for chair in chairs:
+        radius = math.hypot(chair.location.x, chair.location.y)
+        if radius < 1e-6:
+            continue
+        chair.location.x -= chair.location.x / radius * gap
+        chair.location.y -= chair.location.y / radius * gap
+    print('TUCK %-9s moved %d chairs %.0fmm towards the table'
+          % (venue['id'], len(chairs), gap * 1000.0))
+    # Re-check the rail after moving, not just before. The gate in build_chairs ran on the
+    # untucked ring, and a tuck large enough to close the gap is also large enough to put
+    # the stools through the table - which is what a 247mm reading would have done.
+    for moved in chairs:
+        radius = math.hypot(moved.location.x, moved.location.y)
+        unit_x, unit_y = moved.location.x / radius, moved.location.y / radius
+        rail = 1.0 / math.sqrt((unit_x / RAIL_X) ** 2 + (unit_y / RAIL_Y) ** 2)
+        if radius <= rail:
+            raise SystemExit('FAIL: tucking %s by %.0fmm put it at %.3f, inside the rail '
+                             'at %.3f' % (moved.name, gap * 1000.0, radius, rail))
+    return gap
+
+
 def build_venue(venue, chip_meshes, card_mesh):
     shared_meshes = list(chip_meshes.values()) + [card_mesh]
     keep_names = {mesh.name for mesh in shared_meshes}
@@ -2072,6 +2189,7 @@ def build_venue(venue, chip_meshes, card_mesh):
     build_table(venue, rail_mat, wood_mat)
     build_chairs(venue, chair_fn, chair_mat)
     build_venue_characters(venue)
+    tuck_chairs_to_backs(venue)
     chip_instances = {}
     for index in range(4):
         denom = list(CHIP_DENOMS)[index % len(CHIP_DENOMS)][0]

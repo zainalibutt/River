@@ -44,6 +44,12 @@ BODY_TRIANGLE_CEILING = 23000
 # blank-eyed.
 MASK_MATERIALS = ('hair', 'eyebrow', 'eyelash', 'high-poly')
 
+# See normalise_alpha_modes. 0.08 was tried against the head turntable on the theory that
+# the cutoff was eating the thinner occiput strands, and changed nothing at all - so the
+# bare patch on the back of the skull is not an alpha problem and this stays where the
+# fringe wants it.
+HAIR_ALPHA_CUTOFF = 0.28
+
 
 def glb_json(path):
     with open(path, 'rb') as handle:
@@ -86,8 +92,14 @@ def normalise_alpha_modes(path):
             material['alphaMode'] = 'MASK'
             # 0.5 cuts the fringe. The strands at a hairline carry partial alpha, so a
             # half cutoff deletes exactly the soft edge that stops the shell reading as a
-            # cap, and leaves a pale band of scalp along the forehead. 0.28 keeps them.
-            material['alphaCutoff'] = 0.28
+            # cap, and leaves a pale band of scalp along the forehead.
+            #
+            # 0.28 still ate the back of the head: the occiput strands are thinner than
+            # the fringe, so a cutoff tuned on the hairline opened a hard-edged hole
+            # across the back of the skull with a visible seam down the middle. It looked
+            # like a bald patch and survived every proof, because until the head got its
+            # own turntable nothing was pointed at the back of his skull.
+            material['alphaCutoff'] = HAIR_ALPHA_CUTOFF
             masked += 1
         else:
             material['alphaMode'] = 'OPAQUE'
@@ -210,6 +222,135 @@ RELAXED_WRIST = (6.0, 0.0, 7.0)
 # Three joints doing a third each is the same final hand position with a third of the
 # angle at every neighbourhood of vertices.
 GIRDLE_SHARE = 0.22
+
+# What the body masks down to when the suit's delete group is left exactly as the asset
+# ships it. Recorded so keep_forearm_inside_cuffs can report what it actually saved
+# rather than what it asked to save - the two differ, because much of what sits near the
+# wrist is helper geometry that the helper mask removes regardless.
+CUFFLESS_BODY_VERTICES = 7824
+
+# How far the elbow sits outboard of the shoulder-to-wrist line. Bracketed on a
+# turntable, not guessed: 0.38 lays the upper arms flat against the ribs and arm and
+# jacket read as one mass; 1.05 wings the elbows out and lifts them to 0.829. 0.66 sat
+# between those and was right for the shoulder, but it leaves the sleeve pressed into the
+# jacket's side panel and the armpit keeps a fold. 0.78 opens that angle without the
+# elbow riding up.
+ELBOW_OUTWARD = 0.78
+
+
+def smooth_shoulder_weights(obj, armature, radius=0.17, rounds=5, factor=0.55):
+    """Blend the skin weights around the shoulder so the armpit stops creasing.
+
+    The pose is as good as it is going to get: the rotation is shared across the girdle,
+    the elbow is bracketed, and the skinning that applies it agrees with Blender's own to
+    a micron. What is left is the weights themselves. MPFB fits a garment by matching each
+    of its vertices to the nearest vertex on the body and copying that vertex's weights,
+    which is fine on a shirt lying against skin and poor on a tailored jacket that stands
+    off it - a vertex on the outside of the shoulder can be nearest to a point on the
+    chest, and then it does not follow the arm at all. The boundary between what follows
+    the arm and what follows the ribs ends up abrupt, and an abrupt boundary under a
+    ninety degree rotation is a crease.
+
+    Averaging each weight with its neighbours' turns that step into a ramp. It is done on
+    the weights rather than on the geometry: smoothing the mesh afterwards pulls the
+    sleeve in and thins it, which is how an earlier pass made the arms look fused to the
+    body while removing the crease it was aimed at.
+    """
+    joints = [armature.matrix_world @ armature.data.bones['upperarm01.' + side].head_local
+              for side in ('L', 'R')]
+    matrix = obj.matrix_world
+    inside = {vertex.index for vertex in obj.data.vertices
+              if min((matrix @ vertex.co - joint).length for joint in joints) < radius}
+    if len(inside) < 100:
+        raise SystemExit('FAIL: only %d %s vertices sit within %.0fmm of a shoulder, so '
+                         'the weight smoothing has nothing to work on'
+                         % (len(inside), obj.name, radius * 1000.0))
+
+    neighbours = {index: set() for index in inside}
+    for edge in obj.data.edges:
+        first, second = edge.vertices
+        if first in neighbours:
+            neighbours[first].add(second)
+        if second in neighbours:
+            neighbours[second].add(first)
+
+    weights = {vertex.index: {group.group: group.weight for group in vertex.groups}
+               for vertex in obj.data.vertices}
+    moved = 0.0
+    for _ in range(rounds):
+        updated = {}
+        for index in inside:
+            blended = dict(weights[index])
+            around = neighbours[index]
+            if not around:
+                continue
+            for other in around:
+                for group, weight in weights[other].items():
+                    blended[group] = blended.get(group, 0.0) + weight / len(around)
+            mixed = {}
+            for group in set(weights[index]) | set(blended):
+                own = weights[index].get(group, 0.0)
+                near = blended.get(group, 0.0) - own
+                mixed[group] = own * (1.0 - factor) + near * factor
+            total = sum(mixed.values())
+            if total > 1e-6:
+                updated[index] = {group: value / total for group, value in mixed.items()
+                                  if value / total > 0.0005}
+        for index, values in updated.items():
+            moved = max(moved, max(
+                abs(values.get(group, 0.0) - weights[index].get(group, 0.0))
+                for group in set(values) | set(weights[index])))
+            weights[index] = values
+
+    groups = {group.index: group for group in obj.vertex_groups}
+    for index in inside:
+        for group in list(groups):
+            groups[group].remove([index])
+        for group, weight in weights[index].items():
+            if group in groups:
+                groups[group].add([index], weight, 'REPLACE')
+    print('WEIGHTS %-24s smoothed %d vertices around the shoulders, largest change %.3f'
+          % (obj.name, len(inside), moved))
+    return len(inside)
+
+
+def keep_forearm_inside_cuffs(body, armature, keep=0.19):
+    """Stop the sleeves being open tubes you can see down.
+
+    MakeHuman clothing carries a list of body vertices to delete underneath it, and
+    male_elegantsuit01's runs all the way to the wrist. The sleeve itself is an open
+    cylinder - garments in this library have no inside - so once the forearm under it is
+    gone there is nothing behind the cuff, and every close view has a dark hole at the
+    end of each arm with the white shirt cuff around it like a pipe collar.
+
+    Capping the sleeve would close the hole with a disc that is visibly a disc. Keeping
+    the forearm is what is actually meant to be in there, so this takes the vertices near
+    the wrist back out of the delete group before the mask is applied. They only have to
+    reach far enough up the arm to be hidden by the sleeve.
+    """
+    wrists = [armature.matrix_world @ armature.data.bones['wrist.' + side].head_local
+              for side in ('L', 'R')]
+    deleters = {group.index for group in body.vertex_groups
+                if group.name.lower().startswith('delete')}
+    if not deleters:
+        raise SystemExit('FAIL: the body has no delete group, so the suit is not masking '
+                         'anything and this is measuring the wrong mesh')
+    matrix = body.matrix_world
+    freed = 0
+    for vertex in body.data.vertices:
+        point = matrix @ vertex.co
+        if min((point - wrist).length for wrist in wrists) > keep:
+            continue
+        for group in vertex.groups:
+            if group.group in deleters:
+                body.vertex_groups[group.group].remove([vertex.index])
+                freed += 1
+    print('CUFFS kept %d forearm vertices within %.0fmm of the wrists'
+          % (freed, keep * 1000.0))
+    if freed < 50:
+        raise SystemExit('FAIL: only %d vertices were taken back out of the delete '
+                         'group, which will not fill a cuff' % freed)
+    return freed
 
 
 def rotate_pose_bone(bone, rotation):
@@ -793,7 +934,7 @@ def reach_to_rail(armature, meshes):
             # one mass with no separation, which is what "the arms are broken" actually
             # looked like. At 1.05 the elbows winged out and rode up to 0.829. 0.66 keeps
             # them clear of the ribs and still hanging.
-            down = Vector((sign * 0.66, -0.10, -1.0)).normalized()
+            down = Vector((sign * ELBOW_OUTWARD, -0.10, -1.0)).normalized()
             perpendicular = down - direction * down.dot(direction)
             if perpendicular.length < 1e-5:
                 perpendicular = Vector((sign, 0.0, 0.0))
@@ -1192,8 +1333,18 @@ def main():
     print('BAKED shape_keys=%d across %d meshes' % (baked, len(meshes)))
 
     before = len(body.data.vertices)
+    # Before the masks are applied, because after that the vertices are gone.
+    keep_forearm_inside_cuffs(body, armature)
     for obj in meshes:
         apply_non_armature_modifiers(obj)
+    # After the modifiers, so the weights being smoothed belong to the vertices that
+    # actually ship rather than to helper geometry that is about to be masked away.
+    smooth_shoulder_weights(next(obj for obj in meshes if 'suit' in obj.name), armature)
+    # How many of the freed vertices actually survived. Most of the first attempt's were
+    # helper geometry that the helper mask removed anyway, so the delete group reported
+    # 96 vertices released and the body grew by 14 - one ring, which does not fill a cuff.
+    print('CUFFS body kept %d more vertices than the suit asked to delete'
+          % (len(body.data.vertices) - CUFFLESS_BODY_VERTICES))
     bake_seated_pose(armature, meshes)
     print('HELPERS body vertices %d -> %d' % (before, len(body.data.vertices)))
     if len(body.data.vertices) >= before:
