@@ -83,15 +83,16 @@ ASSETS = {
     'eyes': ('eyes', 'high-poly', 'high-poly.mhclo'),
     'eyelashes': ('eyelashes', 'eyelashes01', 'eyelashes01.mhclo'),
     'eyebrows': ('eyebrows', 'eyebrow007', 'eyebrow007.mhclo'),
-    # short04, the slick-back, deliberately mirroring the gold character's slick bun: a
-    # controlled mass with directional flow reads far better at table distance than a
-    # textured crop, whose value is all in strand breakup that the downscale eats.
+    # short02. The slick-back (short04) mirrors the gold bun better from the front, and
+    # its white scalp gaps turned out to be forehead skin showing through rather than a
+    # fault of the hair - the scalp shadow fixed that. But it is a 1,050 triangle shell
+    # against short02's 3,344, and the back of the skull is where that shows: the crown
+    # goes coarse and the parting reads as a bald streak. From behind is exactly where
+    # this character is seen at a table.
     #
-    # It was rejected in an earlier pass for showing white scalp through the alpha gaps at
-    # the crown. That was never the hair's fault - the gaps were revealing bright forehead
-    # skin, and the scalp shadow in match_extremity_skin_tone now sits underneath. The
-    # reason it looked worse than short02 is gone.
-    'hair': ('hair', 'short04', 'short04.mhclo'),
+    # Neither is authored hair. Both are stock shells with a lighting pass baked into the
+    # albedo, and swapping between them trades one flaw for another.
+    'hair': ('hair', 'short02', 'short02.mhclo'),
     'suit': ('clothes', 'male_elegantsuit01', 'male_elegantsuit01.mhclo'),
     'shoes': ('clothes', 'shoes01', 'shoes01.mhclo'),
     'skin': ('skins', 'middleage_caucasian_male', 'middleage_caucasian_male.mhmat'),
@@ -481,6 +482,62 @@ def match_extremity_skin_tone(obj, hair=None):
         raise SystemExit('FAIL: corrected skin was authored but never bound')
 
 
+def flatten_hair_highlights(obj, source_png, percentile=68.0, ceiling=1.18):
+    """Crush the specular highlights baked into the hair diffuse.
+
+    The stock slick-back texture has bright streaks painted along the crown - a lighting
+    pass baked into an albedo map. Tinting cannot remove them: MULTIPLY scales every pixel
+    by the same factor, so a streak that was four times its neighbour stays four times its
+    neighbour, and on a dark head it reads as a bald patch with a shine on it. This is what
+    the back of the head looked like.
+
+    Only the top end is compressed, so the strand direction living in the mid and low
+    values survives. The alpha channel is untouched - it is the strand cutout.
+    """
+    image = bpy.data.images.load(source_png)
+    width, height = image.size
+    pixels = np.array(image.pixels[:], dtype=np.float32).reshape(height, width, 4)
+    opaque = pixels[:, :, 3] > 0.35
+    if not opaque.any():
+        raise SystemExit('FAIL: hair texture has no opaque pixels to level')
+    luminance = pixels[:, :, :3].mean(axis=2)
+    knee = float(np.percentile(luminance[opaque], percentile))
+    top = float(luminance[opaque].max())
+    if top <= knee + 1e-5:
+        raise SystemExit('FAIL: hair texture has no highlight range to compress')
+    hot = opaque & (luminance > knee)
+    # Above the knee, remap the remaining range into a narrow band so the streaks flatten
+    # toward the surrounding hair instead of punching through it.
+    scaled = knee + (luminance - knee) / (top - knee) * (knee * (ceiling - 1.0))
+    factor = np.ones_like(luminance)
+    factor[hot] = scaled[hot] / np.maximum(luminance[hot], 1e-5)
+    out = pixels.copy()
+    out[:, :, :3] *= factor[:, :, None]
+    print('HAIR knee=%.3f top=%.3f flattened=%d of %d opaque'
+          % (knee, top, int(hot.sum()), int(opaque.sum())))
+
+    path = os.path.join(OUT, 'river_silver_hair_diffuse.png')
+    authored = bpy.data.images.new('river_silver_hair_diffuse', width, height, alpha=True)
+    authored.pixels = np.clip(out, 0.0, 1.0).reshape(-1).tolist()
+    authored.filepath_raw = path
+    authored.file_format = 'PNG'
+    authored.save()
+
+    bound = 0
+    for slot in obj.material_slots:
+        material = slot.material
+        if material is None or not material.use_nodes:
+            continue
+        for node in material.node_tree.nodes:
+            if node.type == 'TEX_IMAGE' and node.image is not None \
+                    and 'short' in node.image.name.lower():
+                node.image = bpy.data.images.load(path)
+                bound += 1
+    if bound == 0:
+        raise SystemExit('FAIL: levelled hair texture was authored but never bound')
+    print('HAIR bound=%d' % bound)
+
+
 def conform_hair(obj):
     """Pull the stock hair shell onto the skull.
 
@@ -555,6 +612,12 @@ def build_character():
         attached[name] = obj
 
     conform_hair(attached['hair'])
+    # Derived from the chosen asset so the texture cannot end up levelling a different
+    # hairstyle's map than the one on the head.
+    hair_name = ASSETS['hair'][1]
+    flatten_hair_highlights(
+        attached['hair'],
+        os.path.join(MPFB_DATA, 'hair', hair_name, hair_name + '_diffuse.png'))
     # After the shell is conformed, so the scalp shadow follows where the hair actually
     # sits rather than where the stock asset put it.
     match_extremity_skin_tone(human, attached['hair'])

@@ -81,7 +81,11 @@ from values import (
     CHIP_THICK,
     FELT_RX,
     FELT_RY,
+    RAIL_T,
+    RAIL_X,
+    RAIL_Y,
     SEAT_H,
+    TABLE_TOP,
     VENUES,
     WOOD_HEX,
 )
@@ -108,6 +112,16 @@ VENUE_CHAIR = {
 # does. Once the characters actually sit, the same number makes them children: it put the
 # crown at 0.991m and the eyeline 0.19m above the felt instead of 0.44m.
 CHARACTER_SCALE = 0.92
+
+# Seat ring, as a multiple of the felt radii. The rail reaches 1.302 in X and 0.785 in Y.
+# At the original 1.42/1.58 the seat centres sat 0.44m and 0.34m clear of it, which parks
+# a stool near a table rather than pulling it in, and leaves bare floor between the stool
+# base and the table. 1.25/1.42 puts them about 0.25m off the rail - close enough that a
+# seated player's forearms reach the rail without leaning, and the stool still clears the
+# table pedestal. seated_rail_contact() derives the hand reach from these, so the two
+# cannot drift apart again.
+ROOFTOP_SEAT_RING = (1.25, 1.42)
+SUITE_SEAT_RING = (1.30, 1.44)
 CHARACTER_SEAT_Z = 0.05
 CHARACTER_VARIANTS = ('male', 'female')
 CHARACTER_BODY_LOD_RATIO = 0.60
@@ -319,7 +333,8 @@ def project_garment_uv(obj, region):
         uv.uv.y = v0 + inset_v + source_v * (height - inset_v * 2.0)
 
 
-def apply_seated_rest_pose(armature, pose_legs=True):
+def apply_seated_rest_pose(armature, pose_legs=True, contact=None):
+    reach, rail_height = contact if contact is not None else seated_rail_contact()
     ik_items = []
     for bone_name, degrees in (('spine01', 4.0), ('spine02', 2.0), ('head', -2.0)):
         bone = armature.pose.bones.get(bone_name)
@@ -357,10 +372,14 @@ def apply_seated_rest_pose(armature, pose_legs=True):
             pole = bpy.data.objects.new('seated_elbow_pole.' + side, None)
             bpy.context.scene.collection.objects.link(target)
             bpy.context.scene.collection.objects.link(pole)
-            # Measured against the Rooftop rail proof: wrists sit just inside
-            # shoulder width on the near rail, with elbows held outside them.
-            target.location = armature.matrix_world @ Vector((sign * 0.10, -0.58, 0.84))
-            pole.location = armature.matrix_world @ Vector((sign * 0.42, -0.20, 1.00))
+            # Wrists sit just inside shoulder width on the near rail, with elbows held
+            # outside them. The reach and the height come from seated_rail_contact rather
+            # than from constants, so the hands stay on the rail when the seat ring or the
+            # character scale moves.
+            target.location = armature.matrix_world @ Vector(
+                (sign * 0.10, -reach, rail_height))
+            pole.location = armature.matrix_world @ Vector(
+                (sign * 0.42, -reach * 0.34, rail_height + 0.16))
             constraint = forearm.constraints.new('IK')
             constraint.target = target
             constraint.pole_target = pole
@@ -544,15 +563,33 @@ def build_chairs(venue, chair_fn, chair_mat, count=9):
         )
 
 
+def seated_rail_contact(seat_index=1, count=9):
+    """Where the rail is, in character-local units, for a seated player.
+
+    The seated pose drove the wrists to a hardcoded 0.58m forward. On the Rooftop the
+    rail is 0.25m in front of the seat, so the hands were reaching a third of a metre
+    PAST it and ended up hovering over the felt with nothing under them. Height was
+    already right; only the reach was invented.
+
+    Derived so that contact survives the next time the seat ring or the character scale
+    moves - both have already moved once, and the hardcoded reach did not follow.
+    """
+    ring_x = FELT_RX * ROOFTOP_SEAT_RING[0]
+    ring_y = FELT_RY * ROOFTOP_SEAT_RING[1]
+    angle = math.pi / 2 + 2.0 * math.pi * seat_index / count
+    x, y = ring_x * math.cos(angle), ring_y * math.sin(angle)
+    seat_radius = math.hypot(x, y)
+    unit_x, unit_y = x / seat_radius, y / seat_radius
+    rail_radius = 1.0 / math.sqrt((unit_x / RAIL_X) ** 2 + (unit_y / RAIL_Y) ** 2)
+    forward = (seat_radius - rail_radius) / CHARACTER_SCALE
+    height = (TABLE_TOP + RAIL_T - CHARACTER_SEAT_Z) / CHARACTER_SCALE
+    return forward, height
+
+
 def character_seat_positions(venue, count=9):
     if venue['id'] == 'suite':
-        return seat_positions(count, FELT_RX * 1.30, FELT_RY * 1.44)
-    # Measured against the rail, which reaches 1.32 in X and 0.80 in Y. At 1.42/1.58 the
-    # seat centres sat 0.44m and 0.34m clear of it, so a correctly sized seated player
-    # perches on the front lip of the stool to reach the felt, with bare floor showing
-    # between the stool base and the table. 1.30/1.50 puts the seat centres about 0.30m
-    # off the rail, which is a stool pulled in to the table rather than parked near it.
-    return seat_positions(count, FELT_RX * 1.30, FELT_RY * 1.50)
+        return seat_positions(count, FELT_RX * SUITE_SEAT_RING[0], FELT_RY * SUITE_SEAT_RING[1])
+    return seat_positions(count, FELT_RX * ROOFTOP_SEAT_RING[0], FELT_RY * ROOFTOP_SEAT_RING[1])
 
 
 def apply_seated_lod(obj, ratio_override=None):

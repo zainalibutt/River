@@ -297,10 +297,142 @@ def bake_seated_pose(armature, meshes):
         print('SEATED %-30s mean_shift=%.4f' % (
             obj.name, moved / max(1, len(obj.data.vertices))))
 
-    drop_to_floor(armature, meshes)
+    seat_on_chair(armature, meshes)
+    report_seated_geometry(armature, 'after seating')
+    reach_to_rail(armature, meshes)
+    report_seated_geometry(armature, 'after rail reach')
 
 
-def drop_to_floor(armature, meshes):
+def _carry_meshes(armature, meshes, before):
+    """Move every vertex by the blended rest-to-rest transform of the bones that own it.
+
+    Linear blend skinning by hand: what the armature modifier would have done had it been
+    evaluated while the rig was still posed, rather than after armature_apply zeroed the
+    pose and made the deformation identity.
+    """
+    from mathutils import Vector
+
+    after = {bone.name: bone.matrix_local.copy() for bone in armature.data.bones}
+    transforms = {
+        name: after[name] @ before[name].inverted()
+        for name in before if name in after
+    }
+    for obj in meshes:
+        names = {group.index: group.name for group in obj.vertex_groups}
+        for vertex in obj.data.vertices:
+            accumulated = Vector((0.0, 0.0, 0.0))
+            weight_total = 0.0
+            for group in vertex.groups:
+                matrix = transforms.get(names.get(group.group))
+                if matrix is None or group.weight <= 0.0:
+                    continue
+                accumulated += (matrix @ vertex.co) * group.weight
+                weight_total += group.weight
+            if weight_total > 1e-6:
+                vertex.co = accumulated / weight_total
+    return transforms
+
+
+def reach_to_rail(armature, meshes):
+    """Put the wrists on the rail, in final coordinates.
+
+    This has to run AFTER the figure is settled onto the seat. The seated pose sets its
+    wrist IK target in the pre-settle frame, and the settle then shifts everything down by
+    the better part of half a metre - which dragged the hands the same distance below the
+    rail and left the arms hanging between his knees. Reaching once the origin has stopped
+    moving is the only way the target means what it says.
+    """
+    from mathutils import Vector
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    os.environ.setdefault('RIVER_OUT', OUT)
+    import build_assets
+
+    reach, rail_height = build_assets.seated_rail_contact()
+
+    before = {bone.name: bone.matrix_local.copy() for bone in armature.data.bones}
+    items = []
+    wanted = {}
+    for side in ('L', 'R'):
+        sign = 1.0 if side == 'L' else -1.0
+        # The chain ends on the wrist, not the forearm. An IK constraint drives the TAIL
+        # of the bone it sits on, so a chain rooted at lowerarm01 controls the forearm's
+        # end and leaves the wrist hanging two bones further down, outside the solve. The
+        # correction loop then pushed the target forever against a residual it could not
+        # move: the solver was never steering the joint being measured.
+        forearm = armature.pose.bones.get('wrist.' + side)
+        if forearm is None:
+            continue
+        target = bpy.data.objects.new('rail_wrist.' + side, None)
+        pole = bpy.data.objects.new('rail_elbow.' + side, None)
+        bpy.context.scene.collection.objects.link(target)
+        bpy.context.scene.collection.objects.link(pole)
+        wanted[side] = Vector((sign * 0.11, -reach, rail_height))
+        target.location = armature.matrix_world @ wanted[side]
+        # Pole BELOW the shoulder-to-wrist line, so the elbow hangs and points down and
+        # out the way a resting arm does. It was above, which lifted the elbow over the
+        # rail and left the forearm sloping down into it - the wrist finished 76mm under
+        # the rail top and the character read as gripping the table edge.
+        pole.location = armature.matrix_world @ Vector(
+            (sign * 0.46, -reach * 0.20, rail_height - 0.30))
+        constraint = forearm.constraints.new('IK')
+        constraint.target = target
+        constraint.pole_target = pole
+        # wrist, lowerarm02, lowerarm01, upperarm02, upperarm01 - the whole arm below the
+        # shoulder blade, so reaching forward rotates the upper arm instead of only
+        # unfolding the elbow.
+        constraint.chain_count = 5
+        items.append((forearm, constraint, target, pole))
+    if len(items) != 2:
+        raise SystemExit('FAIL: could not build a rail IK chain for both arms')
+
+    # Solve, measure, correct, repeat. An IK chain lands where the joint limits and the
+    # pole let it, not where the target is, and the previous pass simply assumed the two
+    # were the same - the wrists finished 76mm low and nothing said so. Feeding the
+    # residual back into the target converges in a couple of rounds and, more importantly,
+    # fails loudly when it cannot.
+    solved = {}
+    for attempt in range(8):
+        bpy.context.view_layer.update()
+        worst = 0.0
+        for side in ('L', 'R'):
+            wrist = armature.pose.bones.get('wrist.' + side)
+            target = next(t for f, c, t, p in items if f.name.endswith(side))
+            achieved = wrist.matrix.translation
+            error = wanted[side] - achieved
+            solved[side] = achieved.copy()
+            worst = max(worst, error.length)
+            target.location = target.location + (armature.matrix_world.to_3x3() @ error)
+        if worst < 0.004:
+            print('RAIL converged attempt=%d residual=%.4f' % (attempt, worst))
+            break
+    else:
+        raise SystemExit('FAIL: rail IK did not converge, residual %.4f' % worst)
+
+    bpy.context.view_layer.update()
+    bpy.ops.object.select_all(action='DESELECT')
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode='POSE')
+    bpy.ops.pose.select_all(action='SELECT')
+    bpy.ops.pose.visual_transform_apply()
+    bpy.ops.object.mode_set(mode='OBJECT')
+    for forearm, constraint, target, pole in items:
+        forearm.constraints.remove(constraint)
+        bpy.data.objects.remove(target, do_unlink=True)
+        bpy.data.objects.remove(pole, do_unlink=True)
+    bpy.ops.object.mode_set(mode='POSE')
+    bpy.ops.pose.armature_apply(selected=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    _carry_meshes(armature, meshes, before)
+    wrist = armature.data.bones['wrist.L'].head_local.z
+    print('RAIL reach=%.3f height=%.3f wrist_local=%.3f world=%.3f'
+          % (reach, rail_height, wrist,
+             build_assets.SEAT_H + build_assets.CHARACTER_SCALE * wrist))
+
+
+def seat_on_chair(armature, meshes):
     """Put the folded figure back on the ground.
 
     The source origin is at the character's STANDING feet, because the human is built with
@@ -318,17 +450,27 @@ def drop_to_floor(armature, meshes):
     """
     from mathutils import Vector
 
-    lowest = min(
-        (obj.matrix_world @ vertex.co).z
-        for obj in meshes for vertex in obj.data.vertices
-    )
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    os.environ.setdefault('RIVER_OUT', OUT)
+    import build_assets
+
+    # One frame, stated once, because getting it wrong cost a pass: the venue parents the
+    # character at CHARACTER_SEAT_Z and scales by CHARACTER_SCALE, so a local height l
+    # renders at CHARACTER_SEAT_Z + CHARACTER_SCALE * l. Local zero is therefore the
+    # floor, and everything else in this file - the rail reach included - is measured
+    # from it.
+    soles = min((obj.matrix_world @ vertex.co).z
+                for obj in meshes for vertex in obj.data.vertices)
     pelvis = armature.data.bones['spine05'].head_local.copy()
-    # The venue places the character's ORIGIN on the seat. For a standing figure the
-    # origin is between the feet, which is directly under the hips, so that works. Once
-    # the legs fold, the feet sit well forward of the hips - so anchoring on the origin
-    # perches him on the front lip of the stool with the backrest behind his shoulders.
-    # A seated character has to be anchored on his pelvis.
-    shift = Vector((-pelvis.x, -pelvis.y, -lowest))
+    # Origin also centres on the pelvis horizontally. The venue puts the origin on the
+    # seat position, and for a standing figure that is under the feet and under the hips
+    # at once. Once the legs fold it is only under the feet, which perches him on the
+    # front lip of the stool.
+    shift = Vector((-pelvis.x, -pelvis.y, -soles))
+    seat_local = (build_assets.SEAT_H - build_assets.CHARACTER_SEAT_Z) \
+        / build_assets.CHARACTER_SCALE
+    print('SEAT soles=%.3f shift_z=%+.3f pelvis_after=%.3f seat_pan_at=%.3f'
+          % (soles, shift.z, pelvis.z - soles, seat_local))
     for obj in meshes:
         for vertex in obj.data.vertices:
             vertex.co += shift
@@ -344,6 +486,40 @@ def drop_to_floor(armature, meshes):
     print('ANCHOR shift=(%+.4f, %+.4f, %+.4f) pelvis (%.3f, %.3f, %.3f) -> (%.3f, %.3f, %.3f)'
           % (shift.x, shift.y, shift.z, pelvis.x, pelvis.y, pelvis.z,
              after.x, after.y, after.z))
+
+
+def report_seated_geometry(armature, label):
+    """Print where the seated skeleton actually is, against the furniture it sits at.
+
+    Every seating defect so far survived because nothing measured the pose - it was
+    judged by eye from cameras that could not see the failure, and each fix compensated
+    for the last one. These are the numbers that decide whether a character is sitting:
+    hips on the seat, knees bent, feet down, forearms on the rail.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    os.environ.setdefault('RIVER_OUT', OUT)
+    import build_assets
+
+    def world(bone_name):
+        bone = armature.data.bones.get(bone_name)
+        if bone is None:
+            return None
+        head = bone.head_local
+        return (build_assets.CHARACTER_SEAT_Z
+                + build_assets.CHARACTER_SCALE * head.z,
+                build_assets.CHARACTER_SCALE * head.y)
+
+    joints = ('spine05', 'upperleg01.L', 'lowerleg01.L', 'foot.L',
+              'shoulder01.L', 'lowerarm01.L', 'wrist.L', 'head')
+    print('GEOMETRY %s  (world z, forward y)' % label)
+    for name in joints:
+        place = world(name)
+        if place is None:
+            continue
+        print('  %-14s z=%.3f  y=%+.3f' % (name, place[0], place[1]))
+    rail_top = build_assets.TABLE_TOP + build_assets.RAIL_T
+    print('  targets        seat=%.3f rail=%.3f floor=0.000'
+          % (build_assets.SEAT_H, rail_top))
 
 
 def reduce_body(obj, ratio):
