@@ -95,7 +95,19 @@ VENUE_CHAIR = {
     'suite': chair_dining,
 }
 
-CHARACTER_SCALE = 0.73
+# Measured against this venue's own furniture, which is already correct: the felt sits at
+# 0.760m and the chair backs top out at 0.920m, both real dimensions for a poker table and
+# a chair. A seated adult male's eyes are about 1.19m off the floor and his crown about
+# 1.32m. The character source is 1.358m from sole to crown once it is genuinely seated, so
+# 0.05 + s * 1.236 = 1.19 gives s = 0.92, and the crown lands at 1.302m.
+#
+# It was 0.73, uncommented. That number made sense while the characters were accidentally
+# STANDING at the table - apply_seated_rest_pose discarded its own result, see
+# export_native_silver.bake_seated_pose - because a 1.75m figure shrunk to 1.28m standing
+# happens to sit against a 0.76m table at almost exactly the proportion a seated adult
+# does. Once the characters actually sit, the same number makes them children: it put the
+# crown at 0.991m and the eyeline 0.19m above the felt instead of 0.44m.
+CHARACTER_SCALE = 0.92
 CHARACTER_SEAT_Z = 0.05
 CHARACTER_VARIANTS = ('male', 'female')
 CHARACTER_BODY_LOD_RATIO = 0.60
@@ -535,7 +547,12 @@ def build_chairs(venue, chair_fn, chair_mat, count=9):
 def character_seat_positions(venue, count=9):
     if venue['id'] == 'suite':
         return seat_positions(count, FELT_RX * 1.30, FELT_RY * 1.44)
-    return seat_positions(count, FELT_RX * 1.42, FELT_RY * 1.58)
+    # Measured against the rail, which reaches 1.32 in X and 0.80 in Y. At 1.42/1.58 the
+    # seat centres sat 0.44m and 0.34m clear of it, so a correctly sized seated player
+    # perches on the front lip of the stool to reach the felt, with bare floor showing
+    # between the stool base and the table. 1.30/1.50 puts the seat centres about 0.30m
+    # off the rail, which is a stool pulled in to the table rather than parked near it.
+    return seat_positions(count, FELT_RX * 1.30, FELT_RY * 1.50)
 
 
 def apply_seated_lod(obj, ratio_override=None):
@@ -1154,7 +1171,12 @@ def build_venue_characters(venue):
         template = import_native_gold_template()
         x, y = character_seat_positions(venue)[1]
         angle = math.atan2(-x, y)
-        seat_offset = 0.12
+        # Was 0.12, nudging the character off the seat centre toward the table. That was
+        # reaching compensation from when the seat ring sat 0.44m clear of the rail and
+        # the characters were standing anyway. With the ring pulled in to 0.30m and the
+        # character genuinely seated, the same nudge slides him off the front of the stool
+        # - the backside ends up in the air between seat and table.
+        seat_offset = 0.0
         duplicate_native_gold(
             template,
             0,

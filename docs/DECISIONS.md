@@ -367,3 +367,64 @@ quietly overwriting history.
 
 *Rule this belongs to:* publish the evidence a reader needs, not every file the
 build happened to produce.
+
+## The seated character is baked, not posed
+
+`apply_seated_rest_pose` posed the rig and then called `bpy.ops.pose.armature_apply`,
+which makes that pose the rest pose and zeroes every pose channel. The armature
+modifier then computes pose times rest-inverse, which is identity, so every bound
+mesh reverted to the standing vertices it was authored with. The seating was
+being calculated and then discarded, and the characters stood beside their chairs
+with their arms hanging. The venue compounded it by baking the other meshes from
+the depsgraph after that apply, and by skipping the body mesh entirely.
+
+The decision is to bake the seated deformation into the mesh by hand: capture
+each bone's rest matrix before and after, then move every vertex by the blended
+rest-to-rest transform of the bones that own it. That is ordinary linear blend
+skinning, and it is what the modifier would have done had it been evaluated while
+the rig was still posed. Afterwards the mesh, the rest pose and a zero pose all
+agree on a seated character, so an animation delta of zero leaves him seated.
+
+The alternative - keeping the pose live and authoring clips as seated base plus
+delta - was rejected. It makes every clip carry a copy of the seated numbers,
+which is the same value in two places, and it breaks the moment the venue applies
+its own seated rest on import.
+
+*Rule this belongs to:* if a transform has to survive an export, put it in the
+data rather than in a pose that something downstream is entitled to reset.
+
+## Character scale is measured against the furniture
+
+`CHARACTER_SCALE` was 0.73 and carried no comment, which by this repository's own
+convention means it was chosen rather than measured. It was compensating for the
+seating bug above: while the characters were accidentally standing, a 1.75m
+figure shrunk to 1.28m meets a 0.76m table at almost exactly the proportion a
+seated adult does. The moment they genuinely sat, the same number made them
+children - crown at 0.991m and eyeline 0.19m above the felt, against about 1.32m
+and 0.44m for a seated adult.
+
+The venue's own furniture is the reference, because it was already right: felt at
+0.760m and chair backs at 0.920m are both real dimensions. Scale is now derived
+from those, at 0.92, and the seat ring and the review camera heights derive from
+it rather than restating it.
+
+*Rule this belongs to:* a constant with no stated origin is a guess, and a guess
+that compensates for a bug becomes wrong the moment the bug is fixed.
+
+## Proof cameras must point where a defect can hide
+
+The seating defect survived several reviews because every instrument pointed the
+wrong way. It was invisible from the front, invisible from the gold review
+camera, and invisible in every isolated character proof - the character renders
+alone, with no chair to be wrong about. It was obvious the first time anyone
+orbited behind the seat.
+
+The decision is that a proof renderer reads the published venue build rather than
+the character source, so what gets photographed is what actually ships, next to
+the furniture it has to agree with; and that it shoots the angles a defect can
+hide from rather than the angles that flatter the work. Hands get their own frame
+with the venue hidden, because they sit within two centimetres of the rail top
+and every outside camera has the rail across them.
+
+*Rule this belongs to:* a review instrument that cannot see the failure is not
+evidence of its absence.

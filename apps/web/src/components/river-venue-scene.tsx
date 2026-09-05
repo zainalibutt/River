@@ -562,16 +562,25 @@ function CameraOrbit({
     if (radius === 0) return null
     const inwardX = -seat.x / radius
     const inwardZ = -seat.z / radius
-    // The source head is about 1.55m, then the venue applies its measured 0.73
-    // character scale and 5cm seat lift. Aim below the face so the proof keeps
-    // hair, neckline, hands and rail in one frame instead of clipping the chin.
-    const target: [number, number, number] = [seat.x, 1.04, seat.z]
+    // Aim below the face so the proof keeps hair, neckline, hands and rail in one frame
+    // instead of clipping the chin.
+    //
+    // These heights follow the pipeline's character scale, which moved from 0.73 to 0.92
+    // once the characters actually sat down rather than standing at the table - see the
+    // note on CHARACTER_SCALE in art/pipeline/build_assets.py. Everything above the 5cm
+    // seat lift scales with it, so the aim rides up with the character instead of
+    // pointing at his sternum.
+    const seatLift = 0.05
+    const scaleRatio = 0.92 / 0.73
+    const rise = (height: number) => seatLift + (height - seatLift) * scaleRatio
+    const target: [number, number, number] = [seat.x, rise(1.04), seat.z]
+    const distance = 1.453 * scaleRatio
     const position: [number, number, number] = [
-      seat.x + inwardX * 1.45,
-      1.14,
-      seat.z + inwardZ * 1.45,
+      seat.x + inwardX * distance,
+      rise(1.14),
+      seat.z + inwardZ * distance,
     ]
-    return { position, target, distance: 1.453 }
+    return { position, target, distance }
   }, [reviewSeat, venue.seatRing])
   const activePlacement = reviewPlacement ?? placement
   const controls = useRef<OrbitControlsImpl>(null)
@@ -623,9 +632,14 @@ function CameraOrbit({
       ref={controls}
       makeDefault
       enablePan={false}
-      enableZoom={false}
-      minDistance={activePlacement.distance}
-      maxDistance={activePlacement.distance}
+      // Fixed distance in play: the game camera is a composition decision, not something
+      // a player should be able to dolly out of. The review camera is a diagnosis tool
+      // and needs the opposite - close enough to read a hairline, far enough to judge the
+      // character against the chair and table.
+      enableZoom={reviewPlacement !== null}
+      zoomSpeed={0.7}
+      minDistance={reviewPlacement === null ? activePlacement.distance : 0.45}
+      maxDistance={reviewPlacement === null ? activePlacement.distance : 6.5}
       minPolarAngle={THREE.MathUtils.degToRad(ORBIT_POLAR_DEGREES.min)}
       maxPolarAngle={THREE.MathUtils.degToRad(ORBIT_POLAR_DEGREES.max)}
       target={activePlacement.target}

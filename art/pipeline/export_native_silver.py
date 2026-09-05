@@ -19,8 +19,10 @@ differences:
 Run: blender --background --python art/pipeline/export_native_silver.py
 """
 import json
+import math
 import os
 import struct
+import sys
 
 import bpy
 
@@ -166,6 +168,184 @@ def apply_non_armature_modifiers(obj):
     return applied
 
 
+# The seated rest pose curls every finger by 15 + 8*joint degrees and the thumb by
+# 12/24/30, which on a hand resting on a rail rather than gripping anything reads as a
+# claw. A relaxed hand on a surface is nearly flat: the knuckle takes most of what little
+# bend there is and the tip almost none.
+RELAXED_FINGER_CURL = (10.0, 14.0, 10.0)
+# Finger bones point along local +Y, so flexion is rotation about local X - which is right
+# for the four fingers and wrong for the thumb. The thumb's rest frame is rolled about
+# ninety degrees against the others, so the same X rotation swings it ACROSS the palm to
+# meet the index tip. Rendered, that is an "OK" sign on a man waiting for cards. The thumb
+# therefore stays nearly straight and takes its small bend on Z.
+RELAXED_THUMB_CURL = ((3.0, 0.0, 6.0), (4.0, 0.0, 5.0), (4.0, 0.0, 0.0))
+# The seated rest twists the wrist by 55 degrees, which supinates the palm until it faces
+# up like an offering. Pronating to 18 lays the palm toward the rail while keeping the
+# forearm roll the seated arm pose depends on.
+RELAXED_WRIST = (8.0, 0.0, 18.0)
+
+
+def relax_hands(armature):
+    """Open the seated hand out of its default claw, then bake it into the rest pose.
+
+    Called between apply_seated_rest_pose and the rest-to-rest measurement, so the hand
+    correction rides along in the same skinning bake rather than needing a second one.
+    """
+    touched = 0
+    for side in ('L', 'R'):
+        sign = 1.0 if side == 'L' else -1.0
+        wrist = armature.pose.bones.get('wrist.' + side)
+        if wrist is not None:
+            wrist.rotation_mode = 'XYZ'
+            wrist.rotation_euler = (
+                math.radians(RELAXED_WRIST[0]),
+                math.radians(RELAXED_WRIST[1]),
+                math.radians(-sign * RELAXED_WRIST[2]),
+            )
+            touched += 1
+        for joint, angles in enumerate(RELAXED_THUMB_CURL, start=1):
+            bone = armature.pose.bones.get('finger1-%d.%s' % (joint, side))
+            if bone is None:
+                continue
+            bone.rotation_mode = 'XYZ'
+            bone.rotation_euler = (
+                math.radians(angles[0]),
+                math.radians(angles[1]),
+                math.radians(sign * angles[2]),
+            )
+            touched += 1
+        for finger in range(2, 6):
+            for joint, degrees in enumerate(RELAXED_FINGER_CURL, start=1):
+                bone = armature.pose.bones.get('finger%d-%d.%s' % (finger, joint, side))
+                if bone is None:
+                    continue
+                bone.rotation_mode = 'XYZ'
+                bone.rotation_euler = (math.radians(degrees), 0.0, 0.0)
+                touched += 1
+    if touched < 20:
+        raise SystemExit('FAIL: relaxed only %d finger joints' % touched)
+    bpy.ops.object.select_all(action='DESELECT')
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode='POSE')
+    bpy.ops.pose.select_all(action='SELECT')
+    bpy.ops.pose.armature_apply(selected=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    print('HANDS relaxed joints=%d' % touched)
+
+
+def bake_seated_pose(armature, meshes):
+    """Put the character in the chair, in the mesh, permanently.
+
+    apply_seated_rest_pose poses the rig and then calls bpy.ops.pose.armature_apply,
+    which makes that pose the REST pose and zeroes every pose channel. The armature
+    modifier then computes pose x rest-inverse, which is identity, so the mesh reverts to
+    the standing vertices it was authored with. The seated pose is calculated and thrown
+    away, which is why the character stands beside the chair with his arms hanging.
+
+    The venue compounds it: it bakes the other meshes from the depsgraph AFTER that apply,
+    so it bakes the identity result, and it skips the body mesh altogether.
+
+    The fix is to do the skinning by hand. Every vertex is moved by the blended
+    rest-to-rest transform of the bones that own it - ordinary linear blend skinning,
+    exactly what the modifier would have done had it been evaluated while the rig was
+    still posed. Afterwards mesh, rest pose and zero pose all agree on a seated character,
+    and clip deltas of zero leave him seated.
+
+    The seated numbers are not copied. apply_seated_rest_pose is called and the difference
+    between the rest pose before and after is measured.
+    """
+    from mathutils import Vector
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    os.environ.setdefault('RIVER_OUT', OUT)
+    import build_assets
+
+    before = {bone.name: bone.matrix_local.copy() for bone in armature.data.bones}
+    build_assets.apply_seated_rest_pose(armature)
+    relax_hands(armature)
+    after = {bone.name: bone.matrix_local.copy() for bone in armature.data.bones}
+    transforms = {
+        name: after[name] @ before[name].inverted()
+        for name in before if name in after
+    }
+    changed = sum(
+        1 for name, matrix in transforms.items()
+        if max(abs(a - b) for row_a, row_b in zip(matrix, [[1, 0, 0, 0], [0, 1, 0, 0],
+                                                          [0, 0, 1, 0], [0, 0, 0, 1]])
+               for a, b in zip(row_a, row_b)) > 1e-4)
+    print('SEATED bones_moved=%d of %d' % (changed, len(transforms)))
+    if changed < 8:
+        raise SystemExit('FAIL: the seated pose moved only %d bones' % changed)
+
+    for obj in meshes:
+        names = {group.index: group.name for group in obj.vertex_groups}
+        moved = 0.0
+        for vertex in obj.data.vertices:
+            accumulated = Vector((0.0, 0.0, 0.0))
+            weight_total = 0.0
+            for group in vertex.groups:
+                matrix = transforms.get(names.get(group.group))
+                if matrix is None or group.weight <= 0.0:
+                    continue
+                accumulated += (matrix @ vertex.co) * group.weight
+                weight_total += group.weight
+            if weight_total > 1e-6:
+                target = accumulated / weight_total
+                moved += (target - vertex.co).length
+                vertex.co = target
+        print('SEATED %-30s mean_shift=%.4f' % (
+            obj.name, moved / max(1, len(obj.data.vertices))))
+
+    drop_to_floor(armature, meshes)
+
+
+def drop_to_floor(armature, meshes):
+    """Put the folded figure back on the ground.
+
+    The source origin is at the character's STANDING feet, because the human is built with
+    feet_on_ground. Folding the legs rotates them about the hip, which moves the knees and
+    feet but leaves the pelvis where it was - about 0.9m up. A seated pelvis belongs at
+    roughly chair height, so the whole figure ends up hovering by the difference, and the
+    venue then parents it at CHARACTER_SEAT_Z = 0.05 which is floor level, not seat level.
+
+    Measured rather than assumed: the lowest vertex after folding is the shoe sole, so
+    shifting everything until that sits at z=0 lands the feet on the floor and drops the
+    pelvis to whatever height the pose actually implies.
+
+    The armature's rest bones move by the same delta, or the skinning desynchronises from
+    the mesh it deforms.
+    """
+    from mathutils import Vector
+
+    lowest = min(
+        (obj.matrix_world @ vertex.co).z
+        for obj in meshes for vertex in obj.data.vertices
+    )
+    pelvis = armature.data.bones['spine05'].head_local.copy()
+    # The venue places the character's ORIGIN on the seat. For a standing figure the
+    # origin is between the feet, which is directly under the hips, so that works. Once
+    # the legs fold, the feet sit well forward of the hips - so anchoring on the origin
+    # perches him on the front lip of the stool with the backrest behind his shoulders.
+    # A seated character has to be anchored on his pelvis.
+    shift = Vector((-pelvis.x, -pelvis.y, -lowest))
+    for obj in meshes:
+        for vertex in obj.data.vertices:
+            vertex.co += shift
+    bpy.ops.object.select_all(action='DESELECT')
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode='EDIT')
+    for bone in armature.data.edit_bones:
+        bone.head += shift
+        bone.tail += shift
+    bpy.ops.object.mode_set(mode='OBJECT')
+    after = armature.data.bones['spine05'].head_local
+    print('ANCHOR shift=(%+.4f, %+.4f, %+.4f) pelvis (%.3f, %.3f, %.3f) -> (%.3f, %.3f, %.3f)'
+          % (shift.x, shift.y, shift.z, pelvis.x, pelvis.y, pelvis.z,
+             after.x, after.y, after.z))
+
+
 def reduce_body(obj, ratio):
     modifier = obj.modifiers.new('river_silver_decimate', 'DECIMATE')
     modifier.ratio = ratio
@@ -291,6 +471,7 @@ def main():
     before = len(body.data.vertices)
     for obj in meshes:
         apply_non_armature_modifiers(obj)
+    bake_seated_pose(armature, meshes)
     print('HELPERS body vertices %d -> %d' % (before, len(body.data.vertices)))
     if len(body.data.vertices) >= before:
         raise SystemExit('FAIL: no helper geometry was masked away, so the proxy strips '

@@ -83,10 +83,15 @@ ASSETS = {
     'eyes': ('eyes', 'high-poly', 'high-poly.mhclo'),
     'eyelashes': ('eyelashes', 'eyelashes01', 'eyelashes01.mhclo'),
     'eyebrows': ('eyebrows', 'eyebrow007', 'eyebrow007.mhclo'),
-    # short02 over short01/03/04, chosen by rendering all four on this head. short01 is a
-    # hard-edged cap, short04's slick-back leaves white scalp showing through its alpha
-    # gaps at the crown. short02's cutouts are dense enough to read as a hairline.
-    'hair': ('hair', 'short02', 'short02.mhclo'),
+    # short04, the slick-back, deliberately mirroring the gold character's slick bun: a
+    # controlled mass with directional flow reads far better at table distance than a
+    # textured crop, whose value is all in strand breakup that the downscale eats.
+    #
+    # It was rejected in an earlier pass for showing white scalp through the alpha gaps at
+    # the crown. That was never the hair's fault - the gaps were revealing bright forehead
+    # skin, and the scalp shadow in match_extremity_skin_tone now sits underneath. The
+    # reason it looked worse than short02 is gone.
+    'hair': ('hair', 'short04', 'short04.mhclo'),
     'suit': ('clothes', 'male_elegantsuit01', 'male_elegantsuit01.mhclo'),
     'shoes': ('clothes', 'shoes01', 'shoes01.mhclo'),
     'skin': ('skins', 'middleage_caucasian_male', 'middleage_caucasian_male.mhmat'),
