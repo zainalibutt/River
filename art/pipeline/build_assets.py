@@ -339,7 +339,20 @@ def project_garment_uv(obj, region):
         uv.uv.y = v0 + inset_v + source_v * (height - inset_v * 2.0)
 
 
-def apply_seated_rest_pose(armature, pose_legs=True, contact=None):
+def apply_seated_rest_pose(armature, pose_legs=True, pose_arms=True, contact=None):
+    """Pose a standing character into a seated rest pose and bake it into the rest.
+
+    pose_arms=False leaves the arms, hands and fingers exactly where the bind pose put
+    them, for callers that author the arms themselves afterwards.
+
+    A caller that poses the arms here AND authors them again later deforms every sleeve
+    twice: once into this pose and once out of it. Skinning error does not cancel when
+    you rotate a limb back - it accumulates in the mesh - so the garment carries the
+    damage of an intermediate pose that no longer exists anywhere in the file. The
+    silver character measured 152 degrees of forearm rotation on one side against 72 on
+    the other for a pose that is symmetric by the time it ships, which is the signature
+    of exactly that: the asymmetry belongs to the discarded intermediate, not the result.
+    """
     reach, rail_height = contact if contact is not None else seated_rail_contact()
     ik_items = []
     for bone_name, degrees in (('spine01', 4.0), ('spine02', 2.0), ('head', -2.0)):
@@ -349,30 +362,32 @@ def apply_seated_rest_pose(armature, pose_legs=True, contact=None):
             bone.rotation_euler = (math.radians(degrees), 0.0, 0.0)
     for side, rotation, leg_spread in (('L', -0.68, math.radians(6.0)), ('R', 0.68, math.radians(-6.0))):
         sign = 1.0 if side == 'L' else -1.0
-        bone = armature.pose.bones.get('upperarm01.' + side)
-        if bone is not None:
-            bone.rotation_mode = 'XYZ'
-            bone.rotation_euler = (math.radians(-10.0), 0.0, rotation)
-        forearm = armature.pose.bones.get('lowerarm01.' + side)
-        if forearm is not None:
-            forearm.rotation_mode = 'XYZ'
-            forearm.rotation_euler = (math.radians(56.0), 0.0, 0.0)
-        wrist = armature.pose.bones.get('wrist.' + side)
-        if wrist is not None:
-            wrist.rotation_mode = 'XYZ'
-            wrist.rotation_euler = (math.radians(10.0), 0.0, math.radians(-sign * 55.0))
-        for joint, curl in ((1, 12.0), (2, 24.0), (3, 30.0)):
-            thumb = armature.pose.bones.get('finger1-%d.%s' % (joint, side))
-            if thumb is not None:
-                thumb.rotation_mode = 'XYZ'
-                thumb.rotation_euler = (math.radians(curl), 0.0, 0.0)
-        for finger in range(2, 6):
-            for joint in range(1, 4):
-                digit = armature.pose.bones.get('finger%d-%d.%s' % (finger, joint, side))
-                if digit is None:
-                    continue
-                digit.rotation_mode = 'XYZ'
-                digit.rotation_euler = (math.radians(15.0 + joint * 8.0), 0.0, 0.0)
+        forearm = None
+        if pose_arms:
+            bone = armature.pose.bones.get('upperarm01.' + side)
+            if bone is not None:
+                bone.rotation_mode = 'XYZ'
+                bone.rotation_euler = (math.radians(-10.0), 0.0, rotation)
+            forearm = armature.pose.bones.get('lowerarm01.' + side)
+            if forearm is not None:
+                forearm.rotation_mode = 'XYZ'
+                forearm.rotation_euler = (math.radians(56.0), 0.0, 0.0)
+            wrist = armature.pose.bones.get('wrist.' + side)
+            if wrist is not None:
+                wrist.rotation_mode = 'XYZ'
+                wrist.rotation_euler = (math.radians(10.0), 0.0, math.radians(-sign * 55.0))
+            for joint, curl in ((1, 12.0), (2, 24.0), (3, 30.0)):
+                thumb = armature.pose.bones.get('finger1-%d.%s' % (joint, side))
+                if thumb is not None:
+                    thumb.rotation_mode = 'XYZ'
+                    thumb.rotation_euler = (math.radians(curl), 0.0, 0.0)
+            for finger in range(2, 6):
+                for joint in range(1, 4):
+                    digit = armature.pose.bones.get('finger%d-%d.%s' % (finger, joint, side))
+                    if digit is None:
+                        continue
+                    digit.rotation_mode = 'XYZ'
+                    digit.rotation_euler = (math.radians(15.0 + joint * 8.0), 0.0, 0.0)
         if forearm is not None:
             target = bpy.data.objects.new('seated_wrist_target.' + side, None)
             pole = bpy.data.objects.new('seated_elbow_pole.' + side, None)
@@ -587,7 +602,17 @@ def seated_rail_contact(seat_index=1, count=9):
     seat_radius = math.hypot(x, y)
     unit_x, unit_y = x / seat_radius, y / seat_radius
     rail_radius = 1.0 / math.sqrt((unit_x / RAIL_X) ** 2 + (unit_y / RAIL_Y) ** 2)
-    forward = (seat_radius - rail_radius) / CHARACTER_SCALE
+    # Reaching the rail's near edge is not resting on it. Stopping the wrists there leaves
+    # the forearms angled up and back with the hands held at the chest - a guard, not a
+    # player - even though the numbers read as correct, because the forearm is level and
+    # the wrist is at rail height. The hands have to go ONTO the table, so the wrist
+    # carries past the rail band and onto the felt and the forearm lies along it.
+    # Bracketed: 0.00 stops the wrists at the rail's near edge and the forearms fold back
+    # into a guard at the chest; 0.26 straightens the arm to near full extension and lifts
+    # the elbow to 0.859, which reads as reaching across the table rather than resting on
+    # it. 0.13 puts the hands on the rail with the elbow still bent.
+    reach_onto_felt = 0.13
+    forward = (seat_radius - rail_radius) / CHARACTER_SCALE + reach_onto_felt
     height = (TABLE_TOP + RAIL_T - CHARACTER_SEAT_Z) / CHARACTER_SCALE
     return forward, height
 

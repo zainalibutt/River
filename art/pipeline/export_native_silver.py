@@ -25,6 +25,7 @@ import struct
 import sys
 
 import bpy
+from mathutils import Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'out')
@@ -172,17 +173,243 @@ def apply_non_armature_modifiers(obj):
 # 12/24/30, which on a hand resting on a rail rather than gripping anything reads as a
 # claw. A relaxed hand on a surface is nearly flat: the knuckle takes most of what little
 # bend there is and the tip almost none.
-RELAXED_FINGER_CURL = (10.0, 14.0, 10.0)
+# Signs measured, not assumed - see probe_hand_axes. On this rig a POSITIVE X rotation
+# lifts the fingertip (+0.020 up for +20 degrees), so every earlier pass, which curled with
+# positive values, was straightening the fingers upward and calling it a relaxed hand.
+# Negative X closes them onto the surface underneath.
+# Per joint, base to tip. 13/17/12 was tuned when apply_seated_rest_pose was also curling
+# the fingers by 23/31/39 underneath it, so what shipped was a nearly straight hand with
+# the fingers fanned out - a gesture, not a rest. A hand lying on a table keeps a shallow
+# arch: most of it at the knuckle and the middle joint, almost none at the tip.
+RELAXED_FINGER_CURL = (-22.0, -26.0, -14.0)
 # Finger bones point along local +Y, so flexion is rotation about local X - which is right
 # for the four fingers and wrong for the thumb. The thumb's rest frame is rolled about
 # ninety degrees against the others, so the same X rotation swings it ACROSS the palm to
 # meet the index tip. Rendered, that is an "OK" sign on a man waiting for cards. The thumb
 # therefore stays nearly straight and takes its small bend on Z.
-RELAXED_THUMB_CURL = ((3.0, 0.0, 6.0), (4.0, 0.0, 5.0), (4.0, 0.0, 0.0))
+# The thumb's frame is rolled against the fingers: +X pulls its tip backward (-0.023) and
+# +Z lifts it (+0.023). So it takes a small positive X to lie back alongside the index and
+# a negative Z to come down to the surface rather than stand off the hand.
+RELAXED_THUMB_CURL = ((5.0, 0.0, -9.0), (4.0, 0.0, -7.0), (3.0, 0.0, -4.0))
 # The seated rest twists the wrist by 55 degrees, which supinates the palm until it faces
 # up like an offering. Pronating to 18 lays the palm toward the rail while keeping the
 # forearm roll the seated arm pose depends on.
-RELAXED_WRIST = (8.0, 0.0, 18.0)
+# On the wrist, +Z drops the hand (-0.043) and +X swings it forward (+0.049). The seated
+# rest supinated it 55 degrees the other way, which turned the palm face-up like an
+# offering. A little of each lays the hand down onto the rail it is already level with.
+RELAXED_WRIST = (6.0, 0.0, 7.0)
+
+# What fraction of the arm's rotation each shoulder girdle bone takes before upperarm01
+# takes the remainder. Two bones carry it - clavicle and shoulder01 - so the upper arm is
+# left with roughly what these two do not absorb.
+#
+# The point is not anatomy for its own sake. Linear blend skinning averages a vertex
+# between the transforms of the bones that own it, and the error in that average grows
+# with the angle between those transforms. One joint doing all the work is the worst case
+# available, and it is what the shipped build does: the sleeve around that joint balloons.
+# Three joints doing a third each is the same final hand position with a third of the
+# angle at every neighbourhood of vertices.
+GIRDLE_SHARE = 0.22
+
+
+def rotate_pose_bone(bone, rotation):
+    """Rotate a pose bone about its own head, in armature space.
+
+    Armature space rather than the bone's local frame, because local axes differ between
+    the fingers and the thumb and between the two hands, and every pass that assumed one
+    of them produced a different wrong hand.
+    """
+    head = bone.matrix.translation.copy()
+    matrix = bone.matrix.copy()
+    matrix.translation = Vector((0.0, 0.0, 0.0))
+    matrix = rotation @ matrix
+    matrix.translation = head
+    bone.matrix = matrix
+    bpy.context.view_layer.update()
+
+
+def palm_frame(armature, side):
+    """Measure the hand's own frame: where it points, and which way the palm faces.
+
+    Returned as (joints, forward, normal), all in armature space, with `normal` pointing
+    OUT of the palm rather than out of the back of the hand.
+
+    That last part is measured rather than chosen, and it is the whole reason this
+    function exists. The cross product of the knuckle line and the middle finger gives
+    the palm plane, but its sign flips between the two hands, and picking a convention
+    produced one hand right and one hand backwards. The fingers curl towards the palm, so
+    the direction the second phalanx bends away from the first says which side the palm
+    is on, whatever the rig's local axes happen to be doing.
+    """
+    joints = {}
+    for finger in range(2, 6):
+        bones = [armature.pose.bones.get('finger%d-%d.%s' % (finger, joint, side))
+                 for joint in (1, 2, 3)]
+        if any(bone is None for bone in bones):
+            raise SystemExit('FAIL: finger%d is incomplete on side %s, so the hand frame '
+                             'cannot be measured' % (finger, side))
+        joints[finger] = bones
+
+    base, middle, tip = joints[3]
+    forward = tip.matrix.translation - base.matrix.translation
+    across = joints[5][0].matrix.translation - joints[2][0].matrix.translation
+    if forward.length < 1e-5 or across.length < 1e-5:
+        raise SystemExit('FAIL: degenerate hand frame on side ' + side)
+    normal = forward.normalized().cross(across.normalized())
+    if normal.length < 1e-5:
+        raise SystemExit('FAIL: the knuckles and the middle finger are colinear on side '
+                         '%s, so there is no palm plane to measure in' % side)
+    normal.normalize()
+
+    first = (middle.matrix.translation - base.matrix.translation).normalized()
+    second = (tip.matrix.translation - middle.matrix.translation).normalized()
+    bend = second - first
+    if bend.length < 1e-4:
+        raise SystemExit('FAIL: the fingers on side %s are straight, so which side the '
+                         'palm is on cannot be measured - curl them first' % side)
+    if normal.dot(bend) < 0.0:
+        normal = -normal
+    return joints, forward.normalized(), normal
+
+
+def level_palm(armature, facing=Vector((0.0, 0.0, -1.0))):
+    """Turn each palm to face the table.
+
+    apply_seated_rest_pose used to pronate the wrist by 55 degrees, and that was the only
+    thing turning the palms down. Skipping its arm pass to stop the sleeves being
+    deformed twice took the pronation with it, and the hands came back up on edge with
+    the palms facing each other - which reads as a man explaining something, not a man
+    sitting still.
+
+    The rotation is the minimal one that takes the measured palm normal onto `facing`, so
+    it changes the pronation and leaves where the fingers point alone.
+
+    It is spread over the forearm twist bone and the wrist rather than landing entirely
+    on the wrist. Real pronation happens along the forearm - the radius crossing over the
+    ulna - which is what lowerarm02 is for, and a 90-degree rotation on a single joint
+    wrings the mesh around it exactly the way the shoulder was being wrung.
+    """
+    from mathutils import Quaternion
+
+    turned = []
+    for side in ('L', 'R'):
+        total = 0.0
+        for name, share in (('lowerarm02.' + side, 0.6), ('wrist.' + side, 1.0)):
+            bone = armature.pose.bones.get(name)
+            if bone is None:
+                raise SystemExit('FAIL: %s is missing, so pronation cannot be spread'
+                                 % name)
+            _, _, normal = palm_frame(armature, side)
+            rotation = normal.rotation_difference(facing)
+            if share < 1.0:
+                rotation = Quaternion().slerp(rotation, share)
+            total += math.degrees(2.0 * math.acos(min(1.0, abs(rotation.w))))
+            rotate_pose_bone(bone, rotation.to_matrix().to_4x4())
+        turned.append((side, total))
+
+    # Report where the hand ACTUALLY ended up, not how far it was asked to turn. Which
+    # side of the palm plane is the palm is inferred from the way the fingers bend, and
+    # if that inference is backwards the hand turns over and every number above still
+    # looks perfect - 81.7 degrees on both sides reads as a clean symmetric pronation
+    # whether the palms finished downward or upward.
+    for side, degrees in turned:
+        joints, _, normal = palm_frame(armature, side)
+        knuckle = joints[3][0].matrix.translation
+        fingertip = joints[3][2].matrix.translation
+        print('PALM %s pronated %.1f degrees, normal=(%+.2f,%+.2f,%+.2f), '
+              'fingertip %+.0fmm relative to the knuckle'
+              % (side, degrees, normal.x, normal.y, normal.z,
+                 (fingertip.z - knuckle.z) * 1000.0))
+        if normal.z > -0.55:
+            raise SystemExit(
+                'FAIL: the %s palm faces (%+.2f,%+.2f,%+.2f) after levelling - it is not '
+                'pointing at the table, so the palm side was identified backwards'
+                % (side, normal.x, normal.y, normal.z))
+    # A symmetric pose needs the same correction on both hands. Different numbers mean
+    # the frame was measured wrong on one of them, which is how a backwards hand shipped
+    # before, and it is invisible at any distance a proof camera has ever sat at.
+    if abs(turned[0][1] - turned[1][1]) > 6.0:
+        raise SystemExit('FAIL: the palms needed %.1f and %.1f degrees - the hand frame '
+                         'disagrees between sides' % (turned[0][1], turned[1][1]))
+    return max(degrees for _, degrees in turned)
+
+
+def close_finger_splay(armature, factor=0.72):
+    """Bring the fingers together, and say by how much.
+
+    relax_hands curls the fingers and leaves their spread exactly as the bind pose had
+    it, which on this mesh is a fan. A hand resting on a table has its fingers close to
+    parallel, so a fanned hand reads as a gesture rather than a rest.
+
+    factor is short of 1.0 because real fingers are not parallel - the little finger sits
+    a few degrees off - and closing them completely reads as a mitten.
+    """
+    from mathutils import Matrix
+
+    closed = []
+    for side in ('L', 'R'):
+        joints, forward, normal = palm_frame(armature, side)
+
+        def in_plane(vector):
+            flattened = vector - normal * vector.dot(normal)
+            return flattened.normalized() if flattened.length > 1e-6 else None
+
+        reference = in_plane(forward)
+        for finger, bones in joints.items():
+            if finger == 3 or reference is None:
+                continue
+            base, _, tip = bones
+            direction = in_plane(tip.matrix.translation - base.matrix.translation)
+            if direction is None:
+                continue
+            angle = direction.angle(reference)
+            if direction.cross(reference).dot(normal) < 0.0:
+                angle = -angle
+            closed.append((side, finger, math.degrees(angle)))
+            rotate_pose_bone(base, Matrix.Rotation(angle * factor, 4, normal))
+
+    spread = max(abs(angle) for _, _, angle in closed)
+    print('SPLAY closed %d fingers, widest was %.1f degrees off the middle finger'
+          % (len(closed), spread))
+    return spread
+
+
+def probe_hand_axes(armature):
+    """Find out which local axis actually flexes a finger, by moving it and looking.
+
+    Every hand pass so far has guessed. Finger bones point along local +Y so flexion is
+    rotation about local X - true for the four fingers, false for the thumb, whose rest
+    frame is rolled about ninety degrees against them, and unverified for the wrist. The
+    result was an OK sign, then a claw, then a hand hovering palm-up.
+
+    This rotates one joint at a time by twenty degrees and reports where the fingertip
+    went, in armature space. The axis whose displacement points most steeply downward is
+    the one that closes the hand onto a surface it is resting on.
+    """
+    from mathutils import Vector
+
+    for bone_name, tip_name in (('finger3-1.L', 'finger3-3.L'),
+                                ('finger1-1.L', 'finger1-3.L'),
+                                ('wrist.L', 'finger3-3.L')):
+        bone = armature.pose.bones.get(bone_name)
+        tip = armature.pose.bones.get(tip_name)
+        if bone is None or tip is None:
+            continue
+        bone.rotation_mode = 'XYZ'
+        bone.rotation_euler = (0.0, 0.0, 0.0)
+        bpy.context.view_layer.update()
+        origin = tip.matrix.translation.copy()
+        readings = []
+        for axis, label in enumerate('XYZ'):
+            euler = [0.0, 0.0, 0.0]
+            euler[axis] = math.radians(20.0)
+            bone.rotation_euler = euler
+            bpy.context.view_layer.update()
+            delta = tip.matrix.translation - origin
+            readings.append('%s=(%+.3f,%+.3f,%+.3f)' % (label, delta.x, delta.y, delta.z))
+            bone.rotation_euler = (0.0, 0.0, 0.0)
+        bpy.context.view_layer.update()
+        print('HANDAXIS %-12s tip %-12s %s' % (bone_name, tip_name, '  '.join(readings)))
 
 
 def relax_hands(armature):
@@ -200,7 +427,7 @@ def relax_hands(armature):
             wrist.rotation_euler = (
                 math.radians(RELAXED_WRIST[0]),
                 math.radians(RELAXED_WRIST[1]),
-                math.radians(-sign * RELAXED_WRIST[2]),
+                math.radians(sign * RELAXED_WRIST[2]),
             )
             touched += 1
         for joint, angles in enumerate(RELAXED_THUMB_CURL, start=1):
@@ -224,6 +451,11 @@ def relax_hands(armature):
                 touched += 1
     if touched < 20:
         raise SystemExit('FAIL: relaxed only %d finger joints' % touched)
+    # The splay is a property of the hand alone, so it can be settled here. Pronation
+    # cannot: reach_to_rail rotates the whole arm afterwards and carries the hand with it,
+    # so a palm levelled at this point does not stay level. It is done there instead.
+    bpy.context.view_layer.update()
+    close_finger_splay(armature)
     bpy.ops.object.select_all(action='DESELECT')
     armature.select_set(True)
     bpy.context.view_layer.objects.active = armature
@@ -262,7 +494,19 @@ def bake_seated_pose(armature, meshes):
     import build_assets
 
     before = {bone.name: bone.matrix_local.copy() for bone in armature.data.bones}
-    build_assets.apply_seated_rest_pose(armature)
+    # The legs and spine come from the shared seated pose; the arms do not. That function
+    # places them with a two-bone IK chain and a pole target - the same under-constrained
+    # solve reach_to_rail exists to replace - and then bakes it into the rest pose, after
+    # which reach_to_rail poses the arms all over again from there.
+    #
+    # The result is a sleeve deformed twice. Skinning error does not undo itself when a
+    # limb is rotated back, so the jacket keeps the damage of an intermediate pose that no
+    # longer exists anywhere: the shipped forearms measured 152 degrees of rotation on the
+    # left against 72 on the right, for a final pose whose wrists both land within a
+    # tenth of a millimetre and whose rolls agree to 0.3 degrees. The asymmetry was never
+    # in the result, it was in the discarded middle step.
+    build_assets.apply_seated_rest_pose(armature, pose_arms=False)
+    probe_hand_axes(armature)
     relax_hands(armature)
     after = {bone.name: bone.matrix_local.copy() for bone in armature.data.bones}
     transforms = {
@@ -310,8 +554,10 @@ def _carry_meshes(armature, meshes, before):
     evaluated while the rig was still posed, rather than after armature_apply zeroed the
     pose and made the deformation identity.
     """
+    import numpy as np
     from mathutils import Vector
 
+    travelled = {obj.name: [] for obj in meshes}
     after = {bone.name: bone.matrix_local.copy() for bone in armature.data.bones}
     transforms = {
         name: after[name] @ before[name].inverted()
@@ -329,87 +575,262 @@ def _carry_meshes(armature, meshes, before):
                 accumulated += (matrix @ vertex.co) * group.weight
                 weight_total += group.weight
             if weight_total > 1e-6:
-                vertex.co = accumulated / weight_total
-    return transforms
+                target = accumulated / weight_total
+                travelled[obj.name].append((target - vertex.co).length)
+                vertex.co = target
+            else:
+                travelled[obj.name].append(0.0)
+    return {name: np.array(values) for name, values in travelled.items()}
+
+
+def relax_skinning(obj, moved, threshold=0.04, factor=0.4, rounds=4):
+    """Smooth out the pinch where a mesh had to follow a large joint rotation.
+
+    Linear blend skinning collapses on the inside of a big rotation, and the shoulder is
+    the biggest one in this pose: the upper arm swings from a near-A-pose rest to hanging
+    forward, and the jacket creases diagonally across the shoulder blade. It is invisible
+    from the front and from both three-quarters and obvious from behind.
+
+    Weighted by how far each vertex actually travelled, so the relaxation lands on the
+    shoulder that needs it and leaves the lapel, the collar and the hem - which barely
+    moved - alone.
+    """
+    import numpy as np
+
+    vertices = obj.data.vertices
+    count = len(vertices)
+    if count == 0 or moved is None:
+        return
+    weight = np.clip((moved - threshold) / max(threshold, 1e-6), 0.0, 1.0)
+    if float(weight.max()) <= 0.0:
+        return
+    neighbours = [[] for _ in range(count)]
+    for edge in obj.data.edges:
+        a, b = edge.vertices
+        neighbours[a].append(b)
+        neighbours[b].append(a)
+    coords = np.array([vertex.co[:] for vertex in vertices], dtype=np.float64)
+    for _ in range(rounds):
+        average = np.array([
+            coords[neighbours[i]].mean(axis=0) if neighbours[i] else coords[i]
+            for i in range(count)
+        ])
+        coords += (average - coords) * (factor * weight)[:, None]
+    for index, vertex in enumerate(vertices):
+        vertex.co = coords[index]
+    print('RELAX %-30s vertices=%d' % (obj.name, int((weight > 0).sum())))
 
 
 def reach_to_rail(armature, meshes):
-    """Put the wrists on the rail, in final coordinates.
+    """Author the resting arms, rather than solving for a wrist point.
 
-    This has to run AFTER the figure is settled onto the seat. The seated pose sets its
-    wrist IK target in the pre-settle frame, and the settle then shifts everything down by
-    the better part of half a metre - which dragged the hands the same distance below the
-    rail and left the arms hanging between his knees. Reaching once the origin has stopped
-    moving is the only way the target means what it says.
+    This replaces an IK pass. A point target constrains three degrees of freedom and an
+    arm has roughly seven, so the solver was free to choose forearm roll and elbow height
+    and did: roll came out 43.9 degrees on the left against 138.6 on the right, which is a
+    ninety degree corkscrew in opposite directions, and the elbow sat at 0.957 against a
+    shoulder joint at 0.964 - the arm held out horizontally instead of hanging. Neither is
+    a tuning problem, so no pole vector fixes it.
+
+    Every joint is chosen here instead. The elbow comes from a closed-form two-link solve,
+    each bone is aimed by building its orientation directly with world up as the roll
+    reference, and the twist bones stay neutral. Runs after the figure is settled on the
+    seat, because the settle shifts everything down and a target set before it means
+    nothing after it.
+
+    The legs and spine still come from build_assets.apply_seated_rest_pose. Only the arms
+    are owned here.
     """
-    from mathutils import Vector
+    from mathutils import Matrix, Quaternion, Vector
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     os.environ.setdefault('RIVER_OUT', OUT)
     import build_assets
 
     reach, rail_height = build_assets.seated_rail_contact()
-
+    # This is the rest pose the arms are posed AWAY from, not the character's original
+    # bind: bake_seated_pose has already carried the meshes once, so the mesh and the rest
+    # pose agree on a seated figure with the arms still hanging. Rotation away from here
+    # is therefore exactly what this stage's skinning has to survive, and it is reported
+    # below rather than described - the shoulder was called "about 75 degrees" on no
+    # evidence at all.
     before = {bone.name: bone.matrix_local.copy() for bone in armature.data.bones}
-    items = []
-    wanted = {}
+
+    def turn(bone, rotation):
+        """Rotate a bone about its own head, in armature space."""
+        head = bone.matrix.translation.copy()
+        matrix = bone.matrix.copy()
+        matrix.translation = Vector((0.0, 0.0, 0.0))
+        matrix = rotation @ matrix
+        matrix.translation = head
+        bone.matrix = matrix
+        bpy.context.view_layer.update()
+
+    def swing(bone, joint, destination):
+        """Rotate `bone` about its head so that `joint` lands on `destination`.
+
+        Aiming a bone's own Y axis at a target is not the same thing, because the joint
+        that has to arrive is two bones further down the chain and the rest pose is not
+        perfectly straight - upperarm01 and lowerarm01 each carry a twist bone before the
+        next real joint. Aiming left the wrist 82mm out, and feeding that residual back
+        made it worse rather than better, because moving the aim moves the whole solve.
+        Rotating by the angle between where the joint IS and where it must GO is exact
+        whatever the chain does in between.
+        """
+        head = bone.matrix.translation.copy()
+        current = joint.matrix.translation - head
+        wanted = destination - head
+        if current.length < 1e-6 or wanted.length < 1e-6:
+            return
+        turn(bone, current.rotation_difference(wanted).to_matrix().to_4x4())
+
+    def level_roll(bone, up=Vector((0.0, 0.0, 1.0))):
+        """Roll a bone about its own length until its Z axis points as up as it can.
+
+        This is the degree of freedom a position target cannot touch, and the one the
+        twisted sleeves were made of: the solver had it at 43.9 degrees on one side and
+        138.6 on the other."""
+        axis = (bone.matrix.to_3x3() @ Vector((0.0, 1.0, 0.0))).normalized()
+        current = bone.matrix.to_3x3() @ Vector((0.0, 0.0, 1.0))
+        wanted = up - axis * up.dot(axis)
+        if wanted.length < 1e-5:
+            return
+        wanted.normalize()
+        current = (current - axis * current.dot(axis))
+        if current.length < 1e-5:
+            return
+        current.normalize()
+        angle = current.angle(wanted)
+        if angle < 1e-5:
+            return
+        if current.cross(wanted).dot(axis) < 0:
+            angle = -angle
+        turn(bone, Matrix.Rotation(angle, 4, axis))
+
+    report = []
     for side in ('L', 'R'):
         sign = 1.0 if side == 'L' else -1.0
-        # The chain ends on the wrist, not the forearm. An IK constraint drives the TAIL
-        # of the bone it sits on, so a chain rooted at lowerarm01 controls the forearm's
-        # end and leaves the wrist hanging two bones further down, outside the solve. The
-        # correction loop then pushed the target forever against a residual it could not
-        # move: the solver was never steering the joint being measured.
-        forearm = armature.pose.bones.get('wrist.' + side)
-        if forearm is None:
-            continue
-        target = bpy.data.objects.new('rail_wrist.' + side, None)
-        pole = bpy.data.objects.new('rail_elbow.' + side, None)
-        bpy.context.scene.collection.objects.link(target)
-        bpy.context.scene.collection.objects.link(pole)
-        wanted[side] = Vector((sign * 0.11, -reach, rail_height))
-        target.location = armature.matrix_world @ wanted[side]
-        # Pole BELOW the shoulder-to-wrist line, so the elbow hangs and points down and
-        # out the way a resting arm does. It was above, which lifted the elbow over the
-        # rail and left the forearm sloping down into it - the wrist finished 76mm under
-        # the rail top and the character read as gripping the table edge.
-        pole.location = armature.matrix_world @ Vector(
-            (sign * 0.46, -reach * 0.20, rail_height - 0.30))
-        constraint = forearm.constraints.new('IK')
-        constraint.target = target
-        constraint.pole_target = pole
-        # wrist, lowerarm02, lowerarm01, upperarm02, upperarm01 - the whole arm below the
-        # shoulder blade, so reaching forward rotates the upper arm instead of only
-        # unfolding the elbow.
-        constraint.chain_count = 5
-        items.append((forearm, constraint, target, pole))
-    if len(items) != 2:
-        raise SystemExit('FAIL: could not build a rail IK chain for both arms')
-
-    # Solve, measure, correct, repeat. An IK chain lands where the joint limits and the
-    # pole let it, not where the target is, and the previous pass simply assumed the two
-    # were the same - the wrists finished 76mm low and nothing said so. Feeding the
-    # residual back into the target converges in a couple of rounds and, more importantly,
-    # fails loudly when it cannot.
-    solved = {}
-    for attempt in range(8):
+        chain = [armature.pose.bones.get(name + side) for name in
+                 ('upperarm01.', 'upperarm02.', 'lowerarm01.', 'lowerarm02.', 'wrist.')]
+        if any(bone is None for bone in chain):
+            raise SystemExit('FAIL: incomplete arm chain on side ' + side)
+        upper, upper_twist, fore, fore_twist, wrist = chain
+        girdle = [bone for bone in (armature.pose.bones.get('clavicle.' + side),
+                                    armature.pose.bones.get('shoulder01.' + side))
+                  if bone is not None]
+        if not girdle:
+            raise SystemExit('FAIL: no shoulder girdle bones on side ' + side)
+        for bone in chain + girdle:
+            bone.rotation_mode = 'XYZ'
+            bone.rotation_euler = (0.0, 0.0, 0.0)
         bpy.context.view_layer.update()
-        worst = 0.0
-        for side in ('L', 'R'):
-            wrist = armature.pose.bones.get('wrist.' + side)
-            target = next(t for f, c, t, p in items if f.name.endswith(side))
-            achieved = wrist.matrix.translation
-            error = wanted[side] - achieved
-            solved[side] = achieved.copy()
-            worst = max(worst, error.length)
-            target.location = target.location + (armature.matrix_world.to_3x3() @ error)
-        if worst < 0.004:
-            print('RAIL converged attempt=%d residual=%.4f' % (attempt, worst))
-            break
-    else:
-        raise SystemExit('FAIL: rail IK did not converge, residual %.4f' % worst)
 
-    bpy.context.view_layer.update()
+        rest = armature.data.bones
+        upper_len = (rest['lowerarm01.' + side].head_local
+                     - rest['upperarm01.' + side].head_local).length
+        fore_len = (rest['wrist.' + side].head_local
+                    - rest['lowerarm01.' + side].head_local).length
+        # Shoulder width, not clasped in the middle. At 0.11 the wrists met in front of
+        # the sternum, which drags each upper arm hard across the body - the deltoid
+        # collapsed into a lump and the sleeve creased, which is what a broken right arm
+        # looked like up close. Forearms resting parallel on a rail is both what a player
+        # does and what the skinning can take.
+        target = Vector((sign * 0.21, -reach, rail_height))
+
+        # Give the shoulder girdle its share of the rotation before the upper arm takes
+        # the rest.
+        #
+        # Everything below this used to land on upperarm01 alone, with the clavicle and
+        # shoulder01 left at zero. The skinning carry is exact - it agrees with Blender's
+        # armature modifier to a micron - so the ballooned shoulder in the shipped build
+        # is not an error in the deformation, it is linear blend skinning doing what it
+        # honestly does when one joint is asked to swallow the whole rotation: the
+        # vertices around that joint are averaged between two very different transforms
+        # and the sleeve loses its shape.
+        #
+        # A real shoulder does not work that way either. The clavicle and the scapula
+        # carry a meaningful share of any arm movement, and spreading the rotation over
+        # three joints leaves each one with a smaller angle for its neighbourhood of
+        # vertices to survive.
+        aim = target - upper.matrix.translation
+        have = fore.matrix.translation - upper.matrix.translation
+        if aim.length > 1e-6 and have.length > 1e-6:
+            full = have.rotation_difference(aim)
+            for bone in girdle:
+                turn(bone, Quaternion().slerp(full, GIRDLE_SHARE).to_matrix().to_4x4())
+
+        # After the girdle has moved, because rotating the clavicle moves the shoulder
+        # joint itself - solving from where it used to be would put the elbow in the
+        # wrong place by exactly the distance the clavicle travelled.
+        shoulder = upper.matrix.translation.copy()
+
+        # Solve, look, correct. The two-link maths assumes the chain is exactly two rigid
+        # segments, and it is not: upperarm01 and lowerarm01 each carry a twist bone
+        # between them and the next joint, so the effective lengths differ slightly from
+        # the head-to-head distances measured off the rest pose. Feeding the residual back
+        # absorbs that instead of pretending it away - the first attempt landed 82mm out.
+        adjusted = target.copy()
+        landed = None
+        for _ in range(6):
+            span = (adjusted - shoulder)
+            distance = min(span.length, (upper_len + fore_len) * 0.999)
+            direction = span.normalized()
+        # Law of cosines for the angle between the upper arm and the shoulder-to-wrist
+        # line. Clamped because a target the arm cannot reach is a straight arm, not a
+        # crash.
+            cosine = ((upper_len ** 2 + distance ** 2 - fore_len ** 2)
+                      / (2 * upper_len * distance))
+            angle = math.acos(max(-1.0, min(1.0, cosine)))
+            # The elbow swings below the shoulder-to-wrist line, which is where a resting
+            # arm puts it. Choosing that side explicitly is what a pole vector kept
+            # failing to do - it put the elbow level with the shoulder.
+            # Down, and well clear of the ribs. At 0.38 outward the upper arms lay flat
+            # against the torso and merged into it - on a turntable the arm and the jacket
+            # body read as one mass with no separation between them, which is what "the
+            # arms are broken" actually looked like. A seated player's elbows sit outside
+            # the ribcage, not pinned to it.
+            # Bracketed on the turntable rather than guessed. At 0.38 outward the upper
+            # arms lay flat against the torso and merged into it - arm and jacket read as
+            # one mass with no separation, which is what "the arms are broken" actually
+            # looked like. At 1.05 the elbows winged out and rode up to 0.829. 0.66 keeps
+            # them clear of the ribs and still hanging.
+            down = Vector((sign * 0.66, -0.10, -1.0)).normalized()
+            perpendicular = down - direction * down.dot(direction)
+            if perpendicular.length < 1e-5:
+                perpendicular = Vector((sign, 0.0, 0.0))
+            perpendicular.normalize()
+            elbow = (shoulder + direction * (upper_len * math.cos(angle))
+                     + perpendicular * (upper_len * math.sin(angle)))
+
+            for twist in (upper_twist, fore_twist):
+                twist.rotation_euler = (0.0, 0.0, 0.0)
+            bpy.context.view_layer.update()
+            swing(upper, fore, elbow)
+            # The upper arm's roll is exactly as free as the forearm's was, and nothing
+            # constrained it: swing produces the minimal rotation that lands the elbow and
+            # says nothing about the twist around it. That wrings the deltoid and the
+            # sleeve across the shoulder blade, which is invisible from the front and from
+            # both three-quarters and obvious from directly behind.
+            level_roll(upper)
+            swing(upper, fore, elbow)
+            swing(fore, wrist, adjusted)
+            level_roll(fore)
+            # Rolling moves the joint below it slightly, so each swing is re-run once its
+            # roll is set rather than the other way round.
+            swing(fore, wrist, adjusted)
+
+            landed = wrist.matrix.translation.copy()
+            error = target - landed
+            if error.length < 0.004:
+                break
+            adjusted = adjusted + error
+
+        report.append((side, (landed - target).length, elbow.z, shoulder.z))
+
+    # Here rather than in relax_hands, because the arm has only now stopped moving.
+    # Levelling the palm before this ran turned the hands down in a pose the arm then
+    # rotated 90 degrees out of, which put them back on edge.
+    level_palm(armature)
+
     bpy.ops.object.select_all(action='DESELECT')
     armature.select_set(True)
     bpy.context.view_layer.objects.active = armature
@@ -417,19 +838,78 @@ def reach_to_rail(armature, meshes):
     bpy.ops.pose.select_all(action='SELECT')
     bpy.ops.pose.visual_transform_apply()
     bpy.ops.object.mode_set(mode='OBJECT')
-    for forearm, constraint, target, pole in items:
-        forearm.constraints.remove(constraint)
-        bpy.data.objects.remove(target, do_unlink=True)
-        bpy.data.objects.remove(pole, do_unlink=True)
     bpy.ops.object.mode_set(mode='POSE')
     bpy.ops.pose.armature_apply(selected=False)
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    _carry_meshes(armature, meshes, before)
-    wrist = armature.data.bones['wrist.L'].head_local.z
-    print('RAIL reach=%.3f height=%.3f wrist_local=%.3f world=%.3f'
-          % (reach, rail_height, wrist,
-             build_assets.SEAT_H + build_assets.CHARACTER_SCALE * wrist))
+    # How far each joint actually had to rotate, now that the girdle shares it. This is
+    # the number that governs how badly the sleeve around a joint deforms, and it was
+    # never measured - the shoulder was described as "about 75 degrees" from nothing but
+    # impression. Reported per bone so a regression shows up as a number rather than as a
+    # lump somebody notices in a screenshot three rounds later.
+    after_rest = {bone.name: bone.matrix_local.copy() for bone in armature.data.bones}
+    worst_joint, worst_angle = None, 0.0
+    for stem in ('clavicle.', 'shoulder01.', 'upperarm01.', 'lowerarm01.'):
+        angles = []
+        for side in ('L', 'R'):
+            name = stem + side
+            if name not in before or name not in after_rest:
+                continue
+            delta = (after_rest[name].to_3x3().to_quaternion()
+                     .rotation_difference(before[name].to_3x3().to_quaternion()))
+            # Take the short way round. A quaternion and its negation are the same
+            # rotation, so Quaternion.angle reports anything up to 360 degrees and a
+            # 92-degree forearm reads as 268. That number is wrong in the direction that
+            # looks alarming rather than harmless, which is the worst kind to print.
+            angles.append(math.degrees(2.0 * math.acos(min(1.0, abs(delta.w)))))
+        if not angles:
+            continue
+        print('ROTATION %-12s L=%.1f R=%.1f degrees' % (stem.rstrip('.'), *angles))
+        if max(angles) > worst_angle:
+            worst_joint, worst_angle = stem.rstrip('.'), max(angles)
+    print('ROTATION worst joint %s at %.1f degrees' % (worst_joint, worst_angle))
+
+    travelled = _carry_meshes(armature, meshes, before)
+    # Smoothing is deliberately light now. It was added to hide a shoulder crush that the
+    # pose itself was causing, and at strength it shrank the sleeves - which made the arms
+    # read as fused to the torso rather than resting beside it. With the elbows clear of
+    # the ribs there is little left to hide, and hiding it was the wrong instinct anyway.
+    for obj in meshes:
+        if 'suit' in obj.name or 'body' in obj.name:
+            relax_skinning(obj, travelled.get(obj.name), threshold=0.09, factor=0.2,
+                           rounds=2)
+
+    # Gate on all three, because each one has shipped broken while the other two looked
+    # fine, and none of them was visible in anything the build printed.
+    for side, error, elbow_z, shoulder_z in report:
+        print('ARM %s wrist_error=%.4f elbow=%.3f shoulder=%.3f'
+              % (side, error, elbow_z, shoulder_z))
+        if error > 0.008:
+            raise SystemExit('FAIL: %s wrist landed %.4f from the rail' % (side, error))
+        if elbow_z >= shoulder_z:
+            raise SystemExit('FAIL: %s elbow is not below the shoulder' % side)
+    # Both segments, not just the forearm. Gating only the forearm passed a build whose
+    # upper arm was wrung round at the shoulder, which showed as a twisted sleeve across
+    # the shoulder blade from directly behind and from nowhere else.
+    for bone_name in ('lowerarm01.', 'upperarm01.'):
+        rolls = []
+        for side in ('L', 'R'):
+            axis = (armature.data.bones[bone_name + side].matrix_local.to_3x3()
+                    @ Vector((1.0, 0.0, 0.0)))
+            rolls.append(math.degrees(math.acos(max(-1.0, min(1.0, axis.normalized().z)))))
+        print('ARM %-11s roll L=%.1f R=%.1f (90 is level)'
+              % (bone_name.rstrip('.'), rolls[0], rolls[1]))
+        if max(abs(roll - 90.0) for roll in rolls) > 22.0:
+            raise SystemExit('FAIL: %s roll %.1f/%.1f is a twist, not a rest'
+                             % (bone_name.rstrip('.'), rolls[0], rolls[1]))
+        # Compare how far each side is from level, not the raw angles. The arms are
+        # mirrored, so a symmetric pose reads as reflections about 90 - 97.5 against 82.4
+        # is the same roll on both sides, and comparing the raw numbers called it a
+        # 15-degree twist when the deviations were 7.5 and 7.6.
+        if abs(abs(rolls[0] - 90.0) - abs(rolls[1] - 90.0)) > 8.0:
+            raise SystemExit('FAIL: %s roll is asymmetric, %.1f against %.1f'
+                             % (bone_name.rstrip('.'), rolls[0], rolls[1]))
+
 
 
 def seat_on_chair(armature, meshes):
@@ -461,16 +941,37 @@ def seat_on_chair(armature, meshes):
     # from it.
     soles = min((obj.matrix_world @ vertex.co).z
                 for obj in meshes for vertex in obj.data.vertices)
+    # Where the backside actually is. An earlier attempt built the group-index set across
+    # every mesh at once, but group indices are per-mesh, so it matched nothing and
+    # silently reported the soles instead. Indices are resolved per mesh here.
+    buttocks = None
+    for obj in meshes:
+        names = {group.index: group.name for group in obj.vertex_groups}
+        for vertex in obj.data.vertices:
+            if not any(names.get(group.group) in ('pelvis.L', 'pelvis.R', 'spine05')
+                       and group.weight > 0.4 for group in vertex.groups):
+                continue
+            z = (obj.matrix_world @ vertex.co).z
+            buttocks = z if buttocks is None else min(buttocks, z)
     pelvis = armature.data.bones['spine05'].head_local.copy()
     # Origin also centres on the pelvis horizontally. The venue puts the origin on the
     # seat position, and for a standing figure that is under the feet and under the hips
     # at once. Once the legs fold it is only under the feet, which perches him on the
     # front lip of the stool.
-    shift = Vector((-pelvis.x, -pelvis.y, -soles))
+    # Close the last of the gap under him. Anchoring on the soles alone left the backside
+    # 14mm clear of the pan, which is small but is exactly the difference between sitting
+    # on a stool and hovering over one. The feet drop the same 14mm, which the sole
+    # thickness absorbs and the table hides.
     seat_local = (build_assets.SEAT_H - build_assets.CHARACTER_SEAT_Z) \
         / build_assets.CHARACTER_SCALE
-    print('SEAT soles=%.3f shift_z=%+.3f pelvis_after=%.3f seat_pan_at=%.3f'
-          % (soles, shift.z, pelvis.z - soles, seat_local))
+    gap = 0.0 if buttocks is None else max(0.0, (buttocks - soles) - seat_local)
+    shift = Vector((-pelvis.x, -pelvis.y, -soles - gap))
+    print('SEAT soles=%.3f buttocks=%s shift_z=%+.3f pelvis_after=%.3f seat_pan_at=%.3f'
+          % (soles, 'none' if buttocks is None else '%.3f' % buttocks,
+             shift.z, pelvis.z - soles, seat_local))
+    if buttocks is not None:
+        print('SEAT gap_above_pan=%+.3f (positive means hovering)'
+              % ((buttocks - soles) - seat_local))
     for obj in meshes:
         for vertex in obj.data.vertices:
             vertex.co += shift
@@ -528,6 +1029,8 @@ def report_seated_geometry(armature, label):
     for the last one. These are the numbers that decide whether a character is sitting:
     hips on the seat, knees bent, feet down, forearms on the rail.
     """
+    from mathutils import Vector
+
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     os.environ.setdefault('RIVER_OUT', OUT)
     import build_assets
@@ -542,7 +1045,8 @@ def report_seated_geometry(armature, label):
                 build_assets.CHARACTER_SCALE * head.y)
 
     joints = ('spine05', 'upperleg01.L', 'lowerleg01.L', 'foot.L',
-              'shoulder01.L', 'lowerarm01.L', 'wrist.L', 'head')
+              'shoulder01.L', 'upperarm01.L', 'upperarm02.L',
+              'lowerarm01.L', 'lowerarm02.L', 'wrist.L', 'head')
     print('GEOMETRY %s  (world z, forward y)' % label)
     for name in joints:
         place = world(name)
@@ -552,6 +1056,17 @@ def report_seated_geometry(armature, label):
     rail_top = build_assets.TABLE_TOP + build_assets.RAIL_T
     print('  targets        seat=%.3f rail=%.3f floor=0.000'
           % (build_assets.SEAT_H, rail_top))
+    # Forearm roll is the degree of freedom an IK target cannot pin, and it is the one a
+    # twisted sleeve is made of. Reported as the angle between the forearm's own X axis
+    # and world up: near 90 means the palm faces down, which is what resting on a rail
+    # looks like. Anything far from that is a corkscrew no wrist position will reveal.
+    for side in ('L', 'R'):
+        bone = armature.data.bones.get('lowerarm01.' + side)
+        if bone is None:
+            continue
+        axis = bone.matrix_local.to_3x3() @ Vector((1.0, 0.0, 0.0))
+        roll = math.degrees(math.acos(max(-1.0, min(1.0, axis.normalized().z))))
+        print('  forearm %s roll_from_up=%.1f deg' % (side, roll))
 
 
 def reduce_body(obj, ratio):
