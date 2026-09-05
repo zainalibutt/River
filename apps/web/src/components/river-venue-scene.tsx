@@ -21,6 +21,7 @@ import {
 import * as THREE from 'three'
 import { type OrbitControls as OrbitControlsImpl, RectAreaLightUniformsLib } from 'three-stdlib'
 import { type AnimationCue, idleCueFor, missingClips } from '@/lib/animation'
+import { freshAsset } from '@/lib/asset-url'
 import { frameMetrics, TABLE_REGIONS } from '@/lib/frame-metrics'
 import {
   ambientFor,
@@ -203,7 +204,7 @@ function VenueAsset({
   occupiedSeats: readonly number[] | undefined
 }) {
   const venue = venueOf(venueId)
-  const asset = useGLTF(venue.asset)
+  const asset = useGLTF(freshAsset(venue.asset))
   const mixers = useRef<THREE.AnimationMixer[]>([])
   const actions = useRef<Map<string, THREE.AnimationAction>>(new Map())
 
@@ -872,4 +873,4 @@ export function RiverScene({
   )
 }
 
-for (const id of VENUE_ORDER) useGLTF.preload(venueOf(id).asset)
+for (const id of VENUE_ORDER) useGLTF.preload(freshAsset(venueOf(id).asset))

@@ -1,3 +1,4 @@
+import { freshAsset } from './asset-url'
 import type { VenueId } from './venue.js'
 
 export interface RigLight {
@@ -195,7 +196,7 @@ export async function loadLightingSidecar(
   fetchImpl: typeof fetch = fetch,
 ): Promise<LightingSidecar> {
   try {
-    const response = await fetchImpl('/assets/lighting.json')
+    const response = await fetchImpl(freshAsset('/assets/lighting.json'))
     if (!response.ok) return {}
     return (await response.json()) as LightingSidecar
   } catch {
