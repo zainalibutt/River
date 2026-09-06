@@ -943,7 +943,14 @@ export function RiverScene({
         // The scene is only judged in a browser, and four separate attempts to
         // measure it failed because there was nothing to read it from. This is
         // the instrument: camera, controls and scene graph, in development.
-        if (window.location.pathname.startsWith('/dev/')) {
+        //
+        // Gated on the build rather than on the path. It used to require a
+        // /dev/ route, which meant the one scene nobody could measure was the
+        // actual table - the place the characters animate, the lighting is
+        // real and the camera is the player's. A hand was dealt with a bot
+        // seated and visible and there was still no way to ask whether a single
+        // bone had moved. Production is untouched.
+        if (process.env.NODE_ENV !== 'production') {
           Object.assign(window, {
             riverScene: state,
             // The rendered frame, as numbers. Every visual judgement on this
