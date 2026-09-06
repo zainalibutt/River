@@ -238,6 +238,212 @@ CUFFLESS_BODY_VERTICES = 7824
 ELBOW_OUTWARD = 0.78
 
 
+def open_creases(obj, armature, radius=0.24, rounds=26, factor=0.55, cap=0.016):
+    """Fill the valley linear blend skinning digs on the inside of a big rotation.
+
+    Separate defect from the sleeve passing through the jacket, and fixing that one did
+    nothing for this one - which is the whole reason it needed saying out loud. A fold
+    where two surfaces cross is opened by pushing them apart. A CREASE is a place where
+    the surface has collapsed inward and there is nothing to push against: the arm turns
+    about 75 degrees from the bind pose, the fabric on the inside of that turn is averaged
+    between two very different bone transforms, and it loses volume. Under a raking light
+    that reads as a deep dark valley running out of each armpit, which is exactly what it
+    is.
+
+    The production answer is a corrective shape driven by the joint angle. This character
+    does not need the driver - the seated pose IS the rest pose - so the correction can be
+    applied once, to the baked mesh.
+
+    Only concavities move. For each vertex the average of its neighbours is compared with
+    the vertex itself: if that average lies OUTSIDE the surface, the vertex is sitting in
+    a valley and gets pulled out towards it; if it lies inside, the vertex is on a ridge
+    and is left alone. That asymmetry is the point. Plain smoothing flattens ridges too,
+    which thins the sleeve and makes the arms read as fused to the body - a mistake
+    already made once on this character and reversed.
+    """
+    joints = [armature.matrix_world @ armature.data.bones['upperarm01.' + side].head_local
+              for side in ('L', 'R')]
+    matrix = obj.matrix_world
+    rotation = matrix.to_3x3()
+    inverse = matrix.inverted()
+    region = [vertex.index for vertex in obj.data.vertices
+              if min((matrix @ vertex.co - joint).length for joint in joints) < radius]
+    if len(region) < 200:
+        raise SystemExit('FAIL: only %d vertices are within %.0fmm of a shoulder, so the '
+                         'crease pass has nothing to work on'
+                         % (len(region), radius * 1000.0))
+    neighbours = {index: set() for index in region}
+    for edge in obj.data.edges:
+        first, second = edge.vertices
+        if first in neighbours:
+            neighbours[first].add(second)
+        if second in neighbours:
+            neighbours[second].add(first)
+
+    def depth_map():
+        """How far each vertex sits below the surface its neighbours describe."""
+        out = {}
+        for index in region:
+            around = neighbours[index]
+            if len(around) < 3:
+                continue
+            here = matrix @ obj.data.vertices[index].co
+            average = sum((matrix @ obj.data.vertices[other].co for other in around),
+                          Vector((0, 0, 0))) / len(around)
+            normal = (rotation @ obj.data.vertices[index].normal).normalized()
+            out[index] = (average - here).dot(normal)
+        return out
+
+    start = depth_map()
+    worst_before = max(start.values()) if start else 0.0
+    travelled = {}
+    for _ in range(rounds):
+        depths = depth_map()
+        moved = False
+        for index, depth in depths.items():
+            if depth <= 0.0002:
+                continue
+            budget = cap - travelled.get(index, 0.0)
+            if budget <= 0.0:
+                continue
+            normal = (rotation @ obj.data.vertices[index].normal).normalized()
+            shift = min(depth * factor, budget)
+            obj.data.vertices[index].co = inverse @ (
+                (matrix @ obj.data.vertices[index].co) + normal * shift)
+            travelled[index] = travelled.get(index, 0.0) + shift
+            moved = True
+        if not moved:
+            break
+    obj.data.update()
+    after = depth_map()
+    worst_after = max(after.values()) if after else 0.0
+    print('CREASE %-22s %d vertices, deepest %.1fmm -> %.1fmm'
+          % (obj.name, len(region), worst_before * 1000.0, worst_after * 1000.0))
+    # The quantity nobody was measuring. The armpit has been declared fixed three times
+    # off renders alone, so it now has a number that a build can refuse to ship.
+    if worst_after > worst_before:
+        raise SystemExit('FAIL: the crease pass made it worse, %.1fmm to %.1fmm'
+                         % (worst_before * 1000.0, worst_after * 1000.0))
+    return worst_after
+
+
+def relieve_sleeve_intersection(obj, armature, radius=0.22, rounds=20, step=0.0015,
+                                cap=0.005):
+    """Pull the jacket's side panel out of the sleeve that is passing through it.
+
+    The armpit was diagnosed as a skinning crease twice and it is not one. Straight-on
+    front and back views show a flat, straight-edged sliver of geometry emerging at each
+    armpit, which is the sleeve and the torso panel of one mesh occupying the same space.
+    Weighting cannot fix that and neither can the pose - the arm is already as far out as
+    it can go before the elbow rides up and it reads as reaching rather than resting.
+
+    So the surfaces are separated directly. Faces are classified by which bone their
+    vertices actually belong to, so a sleeve face and a body face are told apart by the
+    rig rather than by position, and the BODY face is the one that moves - inwards, away
+    from the sleeve. The inside of an armpit is not visible from anywhere, so a couple of
+    millimetres there costs nothing, whereas moving the sleeve outward would show as a
+    bulge on the one part of him people have been complaining about.
+
+    It stops when the region is clear, and says how many pairs are left if it is not.
+    """
+    from mathutils.bvhtree import BVHTree
+
+    arm_bones, body_bones = set(), set()
+    for group in obj.vertex_groups:
+        stem = group.name.split('.')[0]
+        if stem in ('upperarm01', 'upperarm02', 'lowerarm01', 'lowerarm02', 'wrist'):
+            arm_bones.add(group.index)
+        elif stem.startswith('spine') or stem in ('clavicle', 'shoulder01', 'neck01',
+                                                  'neck02', 'pelvis'):
+            body_bones.add(group.index)
+    if not arm_bones or not body_bones:
+        raise SystemExit('FAIL: %s has no arm or no body vertex groups, so sleeve and '
+                         'panel cannot be told apart' % obj.name)
+
+    def side_of(index):
+        """Positive when this vertex belongs to the arm, negative when to the body."""
+        arm = body = 0.0
+        for group in obj.data.vertices[index].groups:
+            if group.group in arm_bones:
+                arm += group.weight
+            elif group.group in body_bones:
+                body += group.weight
+        return arm - body
+
+    shoulders = [armature.matrix_world @ armature.data.bones['upperarm01.' + side].head_local
+                 for side in ('L', 'R')]
+    matrix = obj.matrix_world
+    inverse = matrix.inverted()
+    remaining = 0
+    travelled = {}
+    for attempt in range(rounds):
+        verts = [matrix @ vertex.co for vertex in obj.data.vertices]
+        polys = [tuple(polygon.vertices) for polygon in obj.data.polygons]
+        tree = BVHTree.FromPolygons(verts, polys, all_triangles=False, epsilon=0.0)
+        corners = [set(poly) for poly in polys]
+        shifts = {}
+        remaining = skipped = 0
+        for first, second in tree.overlap(tree):
+            if first >= second or corners[first] & corners[second]:
+                continue
+            centres = [sum((verts[i] for i in polys[face]), Vector((0, 0, 0)))
+                       / len(polys[face]) for face in (first, second)]
+            if min((centre - joint).length
+                   for centre in centres for joint in shoulders) > radius:
+                continue
+            remaining += 1
+            scores = [sum(side_of(i) for i in polys[face]) / len(polys[face])
+                      for face in (first, second)]
+            # The more body-like of the two moves. If they are equally body-like there is
+            # no sleeve here and this is some other fold, so leave it alone.
+            if abs(scores[0] - scores[1]) < 0.15:
+                skipped += 1
+                continue
+            # Both faces move, each along its own normal, away from the other.
+            #
+            # Moving only the body panel was tried first, on the reasoning that the
+            # inside of an armpit is never seen so it is the free surface to spend. It
+            # separated at first and then got worse - 162 pairs at 14 rounds, 238 at 45 -
+            # because a panel pushed far enough into the torso folds through something
+            # else, and the fold is a new intersection. The sleeve and the jacket body
+            # are one continuous surface here, so there is no 'wrong' side to move: this
+            # is one surface folding against itself as the arm comes down, and the fix is
+            # to open the fold from both sides rather than to drive one side through the
+            # character.
+            for mover in (0, 1):
+                face = (first, second)[mover]
+                # Along the face's own normal, not along the line between the two
+                # centres: two surfaces sliding through each other have centres nearly
+                # side by side, so that line is almost tangential and pushing along it
+                # slides the panel about without separating it.
+                corner = [verts[i] for i in polys[face]]
+                normal = (corner[1] - corner[0]).cross(corner[2] - corner[0])
+                if normal.length < 1e-9:
+                    continue
+                normal.normalize()
+                if normal.dot(centres[1 - mover] - centres[mover]) > 0.0:
+                    normal = -normal
+                for index in polys[face]:
+                    shifts[index] = shifts.get(index, Vector((0, 0, 0))) + normal * step
+        if not shifts:
+            break
+        for index, shift in shifts.items():
+            # Capped, in total, per vertex. Without a ceiling this walks a panel
+            # arbitrarily far to escape one crossing and creates several more on the way.
+            budget = cap - travelled.get(index, 0.0)
+            if budget <= 0.0:
+                continue
+            if shift.length > budget:
+                shift = shift.normalized() * budget
+            travelled[index] = travelled.get(index, 0.0) + shift.length
+            obj.data.vertices[index].co = inverse @ (
+                (matrix @ obj.data.vertices[index].co) + shift)
+    print('SLEEVE relieved over %d rounds, %d pairs left in the armpits '
+          '(%d of them sleeve against sleeve, which this does not move)'
+          % (attempt + 1, remaining, skipped))
+    return remaining
+
+
 def smooth_shoulder_weights(obj, armature, radius=0.17, rounds=5, factor=0.55):
     """Blend the skin weights around the shoulder so the armpit stops creasing.
 
@@ -1346,6 +1552,12 @@ def main():
     print('CUFFS body kept %d more vertices than the suit asked to delete'
           % (len(body.data.vertices) - CUFFLESS_BODY_VERTICES))
     bake_seated_pose(armature, meshes)
+    # After the pose is baked, because the surfaces only overlap once the arm is down.
+    suit = next(obj for obj in meshes if 'suit' in obj.name)
+    relieve_sleeve_intersection(suit, armature)
+    # After the surfaces are no longer crossing, because opening a crease that still has
+    # another surface inside it just pushes the intruder further out into view.
+    open_creases(suit, armature)
     print('HELPERS body vertices %d -> %d' % (before, len(body.data.vertices)))
     if len(body.data.vertices) >= before:
         raise SystemExit('FAIL: no helper geometry was masked away, so the proxy strips '
