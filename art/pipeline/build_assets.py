@@ -1511,7 +1511,10 @@ def build_rooftop(venue):
     # Strength 3 clipped these to pure white and six segments made them
     # hexagons, so the first honest venue render showed two floating white
     # blobs at head height that read as characters with no faces.
-    fire_mat = add_emissive_material('rooftop_fire', venue['fire'], 0.55)
+    # Strength 3 clipped these to pure white and read as two floating hexagons, so
+    # it was pulled back to 0.55. 0.9 is enough to light the bowl the flame now
+    # sits in without going back towards that.
+    fire_mat = add_emissive_material('rooftop_fire', venue['fire'], 0.9)
     bowl_geo, flame_geo = fire_bowl()
     for index in range(2):
         angle = -0.55 + index * 1.1
@@ -1553,6 +1556,28 @@ def build_rooftop(venue):
     # need a trunk at 4.4m on a terrace whose parapet is at 4.1m. The problem
     # was never where they stood. It was that a rooftop palm was modelled at
     # chest height, so the camera flew through the leaves instead of under them.
+    # Shortened from 2.85-3.35m. That height was chosen when the palms stood at
+    # 3.2m, exactly on the play camera's orbit, so the only way to keep the fronds
+    # out of the lens was to lift them above it. They now sit at 3.95m, outside
+    # the orbit entirely, and the camera cannot reach them at any height - so the
+    # height is free again, and at three and a half metres with the camera at 1.5m
+    # looking down at 73.5 degrees the canopies were simply above the frame. Six
+    # palms nobody can see are six palms not worth building.
+    #
+    # 2.85 is not a preference, it is the floor, and it is worth writing down so
+    # nobody spends another afternoon trying to lower it.
+    #
+    # The orbit gate defines a tube 2.80-3.60m out and 0.0-2.40m up. At this
+    # radius the fronds reach inside it radially whatever their height, so the
+    # canopy has to clear the 2.40m roof. A frond reaches up to 1.04m from the
+    # trunk and droops up to 0.42m below the crown, so the trunk cannot go below
+    # 2.82m without a frond tip entering the camera's path. 2.05m was tried and
+    # caught at z=2.38; 2.55m was tried and caught at z=2.34.
+    #
+    # Moving them outward instead would need 4.64m on a 4.0m terrace. So on this
+    # terrace a palm is either taller than the camera or in front of it, and the
+    # reason the canopies sit above the play frame is the camera's 73.5-degree
+    # downward pitch rather than the tree.
     PALM_RADIUS = 3.95
     palms = []
     for index in range(6):

@@ -768,5 +768,21 @@ def fire_bowl(radius=0.26, height=0.42):
         cone(radius, radius * 0.45, height, 0.0, 12),
         cylinder(radius * 0.16, 0.06, 0.0, 6),
     ])
-    flame = sphere(0.15, 0.0, 0.0, height + 0.07, 12, 8)
+    # A tapered flame rising out of the bowl, not a ball hovering over it.
+    #
+    # This was a sphere of radius 0.15 centred 0.07 ABOVE the bowl's rim, so it
+    # touched nothing. That is invisible in a lit render and unmistakable at
+    # dusk: the flame is emissive and the bowl is dark metal against a dark
+    # parapet, so the bowl disappears and the sphere reads as an orange ball
+    # floating over the terrace. It survived in the menu backdrop for days.
+    #
+    # Sinking it means the bowl always occludes the base, so the two read as one
+    # object whatever the lighting does.
+    #
+    # It stays a sphere rather than becoming a tapered cone. A cone was tried and
+    # the brazier went dark: the emissive area is what carries a small light at
+    # this distance, and a slender flame has about a third of it, so the fix for a
+    # ball that floated was a bowl with no fire in it. The shape was never the
+    # problem - the height was.
+    flame = sphere(0.15, 0.0, 0.0, height - 0.02, 12, 8)
     return bowl, flame
