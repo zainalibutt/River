@@ -449,7 +449,7 @@
         <ul>
           <li><span class="dot flight"></span><span><b>F3A native gold character</b> &mdash; published at <code>ec3936f</code> and routed to Claude for review. The source-first MPFB export preserves native skin, eye, brow, lash, dress and ponytail textures; only the Rooftop is integrated while corneal occlusion, gameplay lighting, temple transition, couture termination and poker-motion deltas remain open.</span></li>
           <li><span class="dot flight"></span><span><b>5X clip amplitude</b> &mdash; opened. A full breathe cycle rotates the head <b>0.099 degrees</b>, measured in the browser and matching the 0.05-degree source constant exactly. Worse, three clips key nothing at all: their targets are named <code>upperarm01.R</code> while the rig carries <code>upperarm01R</code>, so the lookup returns None and <code>continue</code> runs silently &mdash; a chip toss that moves no arm, and an all-in stand-up that does not use its legs. Brief at <code>docs/handoff/packet-5X-clip-amplitude.md</code>.</span></li>
-          <li><span class="dot done"></span><span><b>5W the blue palms</b> &mdash; landed at <code>08f5d58</code>, and it landed while the client lane was open in the same working copy without touching a file outside its own. <code>COLOR_0</code> renders green in Blender and vivid blue in the browser, because Blender ignores a colour attribute unless a shader node reads it while three.js multiplies by it automatically. The bake moves to <code>FLOAT_COLOR</code>, the base tint is neutralised into the vertex colour, and <code>baseColorFactor</code> is restored from a <code>riverVertexColourBase</code> extra after export. <em>Still needs a republish before it reaches the browser</em> &mdash; <code>art/out</code> is not what the app serves.</span></li>
+          <li><span class="dot done"></span><span><b>5W the blue palms</b> &mdash; landed at <code>08f5d58</code>, and it landed while the client lane was open in the same working copy without touching a file outside its own. <code>COLOR_0</code> renders green in Blender and vivid blue in the browser, because Blender ignores a colour attribute unless a shader node reads it while three.js multiplies by it automatically. The bake moves to <code>FLOAT_COLOR</code>, the base tint is neutralised into the vertex colour, and <code>baseColorFactor</code> is restored from a <code>riverVertexColourBase</code> extra after export. Published on 2 Sep and verified in the browser on 6 Sep: the palm vertex colour reads a neutral <code>0.63, 0.63, 0.63</code> against a <code>baseColorFactor</code> of <code>0.016, 0.033, 0.021</code>, so the product is green-dominant. The note that it <em>still needed a republish</em> stood for four days after it no longer did.</span></li>
                     <li><span class="dot done"></span><span><b>5V nighttime depth</b> &mdash; accepted, and the first art packet that improved the picture rather than the numbers. Baked occlusion in vertex colours, a dark wet-concrete terrace, and palms that are palms rather than traffic cones. Rooftop 71,343 triangles against a gate of 250,000.</span></li>
           <li><span class="dot done"></span><span><b>5U clothes and clips</b> &mdash; accepted. Nine clothed seats with distinct loadouts, and all nine animation clips finally carried into every venue export &mdash; so the driver that shipped with nothing to play has something to play.</span></li>
           <li><span class="dot flight"></span><span><b>5T face atlas</b> &mdash; half accepted. Brows, a lash line, lip tone and a hairline band now read at the table, and it found a real pipeline bug on the way: exported character UVs collapsing to a point after a double remap. But the face cell reached onto the shoulders and bled chevrons across the chest, and 5S had quietly deleted the garment mesh, so the table is nine nude people. Region tightened; the clothes are the next packet.</span></li>
@@ -668,29 +668,42 @@
     <h2>What is next, in order</h2>
     <p class="note">
       The route map, fixed so the lanes cannot collide. Claude builds the shell
-      in <code>apps/web</code>; Codex has the people, in
-      <code>build_characters.py</code> and the character clips. There is no file
-      in common.
+      in <code>apps/web</code>, plus props, scenery and venues; Astra has the
+      people, in <code>build_characters.py</code>, the character exporters and
+      the clips. There is no file in common.
+    </p>
+    <p class="note">
+      <b>Read this section sceptically and check the code before acting on it.</b>
+      On 6 Sep it still listed the design system and the front door as the next
+      two jobs. Both had shipped: <code>club.css</code> carries twenty tokens and
+      726 lines, and <code>/</code>, <code>/play</code> and <code>/table</code>
+      have existed since <code>050b053</code>. A stale route map does not sit
+      there harmlessly, it sends the next session to build something twice.
     </p>
     <div class="steps">
       <article class="step">
-        <h4>1 &middot; The design system, once</h4>
+        <h4>1 &middot; The design system &mdash; <em>done</em></h4>
         <p>
-          Tokens and four components &mdash; smoked panel, hairline rule, the
-          value row, the bottom action bar &mdash; plus the route scaffold.
-          Every screen after this is assembly rather than invention, which is
-          what makes six of them a finite job. Restraint is the risk: collage
-          hides loose spacing and mediocre type, and this direction will not.
+          Shipped. <code>club.css</code> holds twenty <code>--club-*</code>
+          tokens across 726 lines, and the route scaffold is in place. The claim
+          that every screen after it is assembly rather than invention held up:
+          the front door was built on top of it in four commits.
         </p>
       </article>
       <article class="step">
-        <h4>2 &middot; The front door</h4>
+        <h4>2 &middot; The front door &mdash; <em>done, minus three services</em></h4>
         <p>
-          <code>/</code> is the menu. PLAY deals a bot table straight away.
-          PRIVATE TABLE opens the one configuration screen. JOIN FRIENDS is a
-          dialog, not a route. WARDROBE, COLLECTION and SETTINGS each finally
-          give a finished service somewhere to live. Nothing on the menu is a
-          button that does not work.
+          <code>/</code> is the menu and it honours its own rule: WARDROBE,
+          COLLECTION and SETTINGS each carry a <b>SOON</b> badge rather than
+          being a live button that does nothing. PLAY, PRIVATE TABLE and JOIN
+          FRIENDS all work. The three badged services are what remains, and they
+          are the reason this is not simply closed.
+        </p>
+        <p>
+          The venue picker has come out of both the private table screen and the
+          table HUD. Only the Rooftop is being dressed and reviewed, so two of
+          its three buttons opened a room nobody is working on. Deferred, not
+          deleted &mdash; the venues and their rigs are still built.
         </p>
       </article>
       <article class="step">
