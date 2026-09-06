@@ -783,6 +783,93 @@ function VenueLights({
   )
 }
 
+/**
+ * The dusk sky behind the Rooftop.
+ *
+ * `scene.background` takes a single colour, read from the Blender world in
+ * lighting.json. That is honest at night and it is also nothing to look at: the
+ * top half of the frame is one flat near-black rectangle, and the menu backdrop
+ * - a rendered still, which can afford a gradient - had a sunset while the room
+ * you actually sit in did not.
+ *
+ * A dome rather than a background texture, because a 2D background is stretched
+ * to the viewport and shears as the camera orbits, while a sphere is stable and
+ * costs one draw call of eight hundred triangles. It sits at 220m, well outside
+ * the 26m skyline, writes no depth and renders first, so nothing in the room has
+ * to know about it.
+ *
+ * Interiors keep the flat colour. A sunset through the Laundromat ceiling would
+ * be a bug, so this is keyed by venue rather than applied to all three.
+ */
+const SKY: Partial<Record<VenueId, { low: string; band: string; hot: string; high: string }>> = {
+  // The same ramp the menu still uses, so the front door and the table agree on
+  // what time of day it is.
+  rooftop: { low: '#0a0b16', band: '#3b1d24', hot: '#b85f2b', high: '#12121d' },
+}
+
+function SunsetSky({ venueId }: { venueId: VenueId }) {
+  const palette = SKY[venueId]
+  const material = useMemo(() => {
+    if (palette === undefined) return null
+    return new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: {
+        uLow: { value: new THREE.Color(palette.low) },
+        uBand: { value: new THREE.Color(palette.band) },
+        uHot: { value: new THREE.Color(palette.hot) },
+        uHigh: { value: new THREE.Color(palette.high) },
+      },
+      vertexShader: `
+        varying vec3 vWorld;
+        void main() {
+          vec4 world = modelMatrix * vec4(position, 1.0);
+          vWorld = world.xyz;
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uLow;
+        uniform vec3 uBand;
+        uniform vec3 uHot;
+        uniform vec3 uHigh;
+        varying vec3 vWorld;
+        void main() {
+          float h = clamp(normalize(vWorld).y * 0.5 + 0.5, 0.0, 1.0);
+          // Horizon glow low in frame, cooling upward. smoothstep rather than
+          // mix so the warm band has an edge to it and does not wash the whole
+          // sky orange.
+          // Bands widened after looking at it in the room rather than in
+          // isolation. The play camera pitches 73.5 degrees down, so the only
+          // sky in frame is a shallow strip above the parapet and between the
+          // skyline towers; a band that faded out by h=0.6 put the whole of that
+          // strip in the dark part of the ramp and only showed colour through
+          // two tower gaps.
+          vec3 colour = mix(uLow, uBand, smoothstep(0.40, 0.50, h));
+          colour = mix(colour, uHot, smoothstep(0.48, 0.56, h) * (1.0 - smoothstep(0.62, 0.78, h)));
+          colour = mix(colour, uHigh, smoothstep(0.74, 0.97, h));
+          // A gradient across a thousand pixels of near-black bands visibly on
+          // an 8-bit display. A sub-LSB of ordered noise costs nothing and
+          // removes it.
+          float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+          colour += (dither - 0.5) / 255.0;
+          gl_FragColor = vec4(colour, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
+    })
+  }, [palette])
+
+  useEffect(() => () => material?.dispose(), [material])
+  if (material === null) return null
+  return (
+    <mesh renderOrder={-1} frustumCulled={false} material={material}>
+      <sphereGeometry args={[220, 32, 16]} />
+    </mesh>
+  )
+}
+
 function Scene({
   seatIds,
   seatRefs,
@@ -813,6 +900,7 @@ function Scene({
   return (
     <>
       <color attach="background" args={[worldColour]} />
+      <SunsetSky venueId={venueId} />
       <VenueLights lights={lights} ambient={ambient} />
       <Suspense fallback={null}>
         <VenueAsset venueId={venueId} cues={cues} occupiedSeats={occupiedSeats} />

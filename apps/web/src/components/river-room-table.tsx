@@ -70,7 +70,7 @@ import {
 } from '@/lib/social'
 import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib/socket'
 import { initialRoomTarget, LAST_TABLE_KEY, type RememberedTable } from '@/lib/table-target'
-import { DEFAULT_VENUE, VENUE_ORDER, type VenueId, venueOf, worldSeats } from '@/lib/venue'
+import { DEFAULT_VENUE, type VenueId, venueOf, worldSeats } from '@/lib/venue'
 import { type VerifyResult, verifyHand } from '@/lib/verify'
 
 const boardSlots = ['flop-one', 'flop-two', 'flop-three', 'turn', 'river'] as const
@@ -898,31 +898,14 @@ export function RiverRoomTable() {
                 </section>
               </div>
             ) : null}
-            {view.handNumber === 0 ? (
-              <fieldset className="venue-picker" aria-label="Choose a venue">
-                {VENUE_ORDER.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={id === venueId ? 'chosen' : ''}
-                    aria-pressed={id === venueId}
-                    title={venueOf(id).tagline}
-                    disabled={id === venueId}
-                    onClick={() => {
-                      // Opens a new table in that room rather than restyling
-                      // this one. A venue is a property of the table, so
-                      // changing it locally would only have changed what this
-                      // player sees.
-                      const url = new URL(window.location.href)
-                      url.search = new URLSearchParams({ venue: id }).toString()
-                      window.location.assign(url.toString())
-                    }}
-                  >
-                    {venueOf(id).name}
-                  </button>
-                ))}
-              </fieldset>
-            ) : null}
+            {/* The venue picker lived here, shown before the first hand. It is
+                gone for the same reason the stepper on the private table screen
+                is gone: only the Rooftop is being finished, so two of the three
+                buttons opened a room nobody is dressing or reviewing. Deferred
+                rather than deleted - the venues, their lighting rigs and their
+                stills are all still built, and `?venue=` still routes - so this
+                comes back as three buttons the moment there is a second room
+                worth choosing. */}
             {repFlash === null ? null : (
               <output className="rep-flash" key={repFlash.id}>
                 <strong>+{repFlash.totalRep.toLocaleString()} REP</strong>
