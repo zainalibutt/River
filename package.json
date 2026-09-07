@@ -19,6 +19,7 @@
     "build": "npm run build --workspace @river/web && npm run build --workspace @river/server",
     "start": "npm run start --workspace @river/server",
     "demo": "tsx packages/engine/src/cli/demo.ts",
+    "check:penetration": "node art/pipeline/run_blender.mjs art/pipeline/check_penetration.py",
     "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
     "lint": "biome check .",
     "format": "biome check --write .",

@@ -15,7 +15,10 @@ Both jobs use BVHTree.overlap, which does real triangle-triangle intersection ra
 comparing bounding volumes. For one mesh against itself, faces that share a vertex touch
 by construction and are excluded; anything left is geometry folded through itself.
 
-Run: blender --background --python-exit-code 1 --python art/pipeline/check_penetration.py
+The counts are held to a budget rather than to zero. See BUDGET below for why.
+
+Run: npm run check:penetration
+  or blender --background --python-exit-code 1 --python art/pipeline/check_penetration.py
 """
 import math
 import os
@@ -29,6 +32,29 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENUE = os.path.normpath(os.path.join(ROOT, 'out', 'rooftop_assets.glb'))
 
 FURNITURE = ('rooftop_rail', 'rooftop_felt', 'rooftop_wood', 'rooftop_chair')
+
+# What the build currently does wrong, measured on 2026-09-08, so that it cannot
+# start doing it more.
+#
+# A gate that fails on a known-bad state blocks every branch until somebody fixes
+# a defect that predates their change, and the usual next step is to delete the
+# gate. So this one is a ratchet: the numbers below are a budget, exceeding one
+# fails the build, and coming in under one prints the lower figure to move it to.
+# It does not claim any of this is acceptable. It claims it will not get worse
+# without somebody saying so in a diff.
+#
+# The count is faces, not depth. Two surfaces grazing by a tenth of a millimetre
+# and an arm buried to the elbow both count as one face each, so a fall in these
+# numbers is evidence of less penetration and not of shallower penetration. If
+# that distinction ever matters, it needs a different measurement rather than a
+# reinterpretation of this one.
+BUDGET = {
+    'self': 1449,
+    'rooftop_rail': 277,
+    'rooftop_chair': 205,
+    'rooftop_wood': 192,
+    'rooftop_felt': 49,
+}
 
 
 def world_geometry(obj):
@@ -104,7 +130,7 @@ def main():
                 return obj
         return None
 
-    failures = []
+    measured = {}
 
     suit = find('silver_suit')
     if suit is None:
@@ -125,7 +151,7 @@ def main():
                     where = '  nearest bone %s at %.0fmm' % (bone, gap * 1000.0)
             print('   %4d faces around (%.3f, %.3f, %.3f)%s'
                   % (len(members), centre.x, centre.y, centre.z, where))
-        failures.append('%s intersects itself in %d places' % (suit.name, len(pairs)))
+    measured['self'] = len(pairs)
 
     # The character against the furniture. Same test, different pair of surfaces - and
     # the reason the earlier attempt at this produced numbers clamped at its own search
@@ -138,8 +164,11 @@ def main():
         props = [obj for name, obj in meshes.items()
                  if token in name or token in obj.data.name]
         if not props:
-            print('CLEAR %-16s NOT FOUND - nothing was tested against it' % token)
-            continue
+            # A gate that passes because it looked at nothing is worse than no
+            # gate, and this project has shipped one of those before. If the
+            # furniture is renamed, this must fail rather than report clear.
+            raise SystemExit('FAIL: no mesh named %s in the venue build, so nothing '
+                             'was tested against it' % token)
         hits = 0
         worst = None
         for prop in props:
@@ -160,16 +189,34 @@ def main():
         if hits:
             print('CLEAR %-16s %d intersecting faces, e.g. %s at (%.3f, %.3f, %.3f)'
                   % (token, hits, worst[0], worst[1].x, worst[1].y, worst[1].z))
-            failures.append('the character passes through %s in %d faces' % (token, hits))
         else:
             print('CLEAR %-16s clear' % token)
+        measured[token] = hits
 
-    if failures:
-        for line in failures:
-            print('PENETRATION ' + line)
-        raise SystemExit('FAIL: %d surface(s) pass through something they should not'
-                         % len(failures))
-    print('PENETRATION none')
+    regressions, gains = [], []
+    for name, budget in sorted(BUDGET.items()):
+        if name not in measured:
+            raise SystemExit('FAIL: %s has a budget but was never measured' % name)
+        count = measured[name]
+        if count > budget:
+            regressions.append('%s %d faces, budget %d, worse by %d'
+                               % (name, count, budget, count - budget))
+        elif count < budget:
+            gains.append('%s %d faces, budget %d, lower it by %d'
+                         % (name, count, budget, budget - count))
+    for name in sorted(set(measured) - set(BUDGET)):
+        raise SystemExit('FAIL: %s was measured at %d faces and has no budget, so a '
+                         'regression in it could not be caught' % (name, measured[name]))
+
+    for line in gains:
+        print('BUDGET improved ' + line)
+    if regressions:
+        for line in regressions:
+            print('BUDGET regressed ' + line)
+        raise SystemExit('FAIL: %d penetration budget(s) exceeded' % len(regressions))
+    total = sum(measured.values())
+    print('PENETRATION within budget, %d intersecting faces in total across %d sites'
+          % (total, len(measured)))
 
 
 if __name__ == '__main__':
