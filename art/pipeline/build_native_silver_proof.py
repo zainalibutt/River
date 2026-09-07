@@ -563,34 +563,65 @@ def flatten_hair_highlights(obj, source_png, percentile=68.0, ceiling=1.18):
 
 
 def conform_hair(obj):
-    """Pull the stock hair shell onto the skull.
+    """Fit the rear and crown to the evaluated skull, preserving the front fringe.
 
-    It balloons behind and above the head and terminates at a hard horizontal cut across
-    the nape, which is most of why a solid hair mesh reads as a moulded cap. The fringe
-    is deliberately untouched - only the back, the crown and the nape boundary move.
+    A2 measured 289/851 short02 occiput vertices inside after the old shrink,
+    versus 18/851 before it. The offset is the shell's own median signed standoff
+    over the selected region, measured before any vertex moves, in world metres.
     """
-    coords = np.array([v.co[:] for v in obj.data.vertices], dtype=np.float32)
-    centre = Vector((float((coords[:, 0].min() + coords[:, 0].max()) / 2.0),
-                     float((coords[:, 1].min() + coords[:, 1].max()) / 2.0),
-                     float((coords[:, 2].min() + coords[:, 2].max()) / 2.0)))
-    z_min, z_max = float(coords[:, 2].min()), float(coords[:, 2].max())
-    nape_top = z_min + (z_max - z_min) * 0.28
-    moved = 0
+    human = bpy.data.objects.get('river_native_silver_body')
+    if human is None:
+        raise RuntimeError('Hair conform requires the silver body')
+    bpy.context.view_layer.update()
+    body = human.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    matrix = body.matrix_world.copy()
+    inverse = matrix.inverted()
+    normal_matrix = matrix.to_3x3().inverted().transposed()
+    group = human.vertex_groups.get('head')
+    head = [matrix @ vertex.co for vertex in body.data.vertices
+            if group is not None and any(g.group == group.index and g.weight >= 0.5
+                                         for g in vertex.groups)]
+    if not head:
+        raise RuntimeError('Hair conform found no head vertices')
+    rear_y = (min(p.y for p in head) + max(p.y for p in head)) * 0.5
+    low_z, high_z = min(p.z for p in head), max(p.z for p in head)
+    crown_z = low_z + (high_z - low_z) * 0.75
+    hair_matrix = obj.matrix_world.copy()
+    to_hair = hair_matrix.inverted()
+    selected = []
     for vertex in obj.data.vertices:
-        delta = vertex.co - centre
-        # 0.86/0.93 pulled the crown and occiput inside the skull, and the scalp came
-        # through as a bald patch that is only visible from behind the seat.
-        if delta.y > 0:
-            delta.y *= 0.93
-        delta.x *= 0.98
-        if delta.z > 0:
-            delta.z *= 0.975
-        if vertex.co.z < nape_top:
-            delta.x *= 0.90
-            delta.y *= 0.90
-            moved += 1
-        vertex.co = centre + delta
-    print('HAIR_CONFORM nape_verts=%d of %d' % (moved, len(obj.data.vertices)))
+        point = hair_matrix @ vertex.co
+        hit, location, normal, _ = body.closest_point_on_mesh(inverse @ point)
+        if not hit:
+            raise RuntimeError('Hair conform could not find the body surface')
+        location = matrix @ location
+        normal = (normal_matrix @ normal).normalized()
+        if location.y >= rear_y or location.z >= crown_z:
+            selected.append((vertex, location, normal, (point - location).dot(normal)))
+    if not selected:
+        raise RuntimeError('Hair conform selected zero rear or crown vertices')
+    offset = float(np.median([entry[3] for entry in selected]))
+    if not np.isfinite(offset) or offset <= 0:
+        raise RuntimeError('Hair conform median standoff must be positive: %r' % offset)
+    reprojected = 0
+    for vertex, location, normal, _ in selected:
+        for attempt in range(8):
+            candidate = location + normal * offset
+            hit, nearest, facing, _ = body.closest_point_on_mesh(inverse @ candidate)
+            if not hit:
+                raise RuntimeError('Hair conform lost the body surface')
+            nearest = matrix @ nearest
+            facing = (normal_matrix @ facing).normalized()
+            if (candidate - nearest).dot(facing) > 0:
+                vertex.co = to_hair @ candidate
+                reprojected += int(attempt > 0)
+                break
+            location, normal = nearest, facing
+        else:
+            raise RuntimeError('Hair conform projection remains inside the body')
+    obj.data.update()
+    print('HAIR_CONFORM surface_verts=%d of %d median_standoff_mm=%.3f reprojected=%d'
+          % (len(selected), len(obj.data.vertices), offset * 1000, reprojected))
 
 
 def build_character():
