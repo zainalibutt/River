@@ -24,10 +24,12 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "pretest": "npm run build --workspace @river/engine",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:ui": "playwright test"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.0.0",
     "supabase": "2.115.0",
     "tsx": "^4.19.0",

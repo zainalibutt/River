@@ -37,6 +37,18 @@ describe('raise-to sizing', () => {
     expect(raiseToForPotFraction(facingARaise, 1)).not.toBe(facingARaise.pot)
   })
 
+  it('offers three-quarter pot rather than a second all-in', () => {
+    const rail = sizingPresets(facingARaise)
+    expect(rail.map((preset) => preset.id)).toEqual([
+      'minimum',
+      'half-pot',
+      'three-quarter-pot',
+      'pot',
+    ])
+    expect(rail.map((preset) => preset.amount)).toEqual([2_500, 3_775, 5_013, 6_250])
+    expect(rail.some((preset) => preset.amount === facingARaise.allInTo)).toBe(false)
+  })
+
   it('returns whole chips', () => {
     const oddPot: SizingState = { ...facingARaise, pot: 3_651 }
     for (const preset of sizingPresets(oddPot)) {

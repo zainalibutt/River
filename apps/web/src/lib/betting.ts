@@ -37,12 +37,18 @@ export function raiseToForPotFraction(state: SizingState, fraction: number): num
   return clampToLegal(state, Math.round(raw))
 }
 
+/**
+ * MIN, half, three-quarter and full pot. There is no MAX: it returned the same
+ * figure as the ALL IN wedge sitting one press away, so a quarter of the rail
+ * bought nothing, while three-quarter pot — the standard value bet — could not
+ * be reached at all.
+ */
 export function sizingPresets(state: SizingState): SizingPreset[] {
   return [
     { id: 'minimum', label: 'MIN', amount: clampToLegal(state, state.minRaiseTo) },
     { id: 'half-pot', label: '½', amount: raiseToForPotFraction(state, 0.5) },
+    { id: 'three-quarter-pot', label: '¾', amount: raiseToForPotFraction(state, 0.75) },
     { id: 'pot', label: 'POT', amount: raiseToForPotFraction(state, 1) },
-    { id: 'maximum', label: 'MAX', amount: state.allInTo },
   ]
 }
 

@@ -645,7 +645,7 @@ function ActionRail({
                 disabled={!canRaise || disabled}
                 onClick={() => setRaiseTo(amount)}
               >
-                {label === '½' ? '1/2 POT' : label}
+                {label}
               </button>
             )
           })}
