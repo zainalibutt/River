@@ -1,7 +1,14 @@
 import { type Browser, expect, type Page, test } from '@playwright/test'
 
 const MIN_TARGET = 56
-const DIAL_DIAMETER = 330
+/**
+ * `04-anatomy.md` gives the RAM an outer diameter of 420 and says the betting
+ * dial occupies its interior. An earlier version of this file asserted a
+ * 330-pixel dial, a figure that came from a comment in `globals.css` rather
+ * than from the spec, so the gate measured a quantity nothing had decided.
+ */
+const RAM_DIAMETER = 420
+const CONCENTRIC_TOLERANCE = 2
 const HOLE_CARD = { width: 168, height: 235 }
 const RADIUS_SPREAD = 1.15
 
@@ -16,6 +23,8 @@ interface Snapshot {
   scale: number
   controls: { label: string; width: number; height: number }[]
   dial: Rect | null
+  ram: Rect | null
+  concentricOffset: number | null
   statusLine: Rect | null
   overlapping: { label: string; width: number; height: number }[]
   radii: number[]
@@ -59,9 +68,11 @@ function capture(): Snapshot {
     (el.getAttribute('aria-label') ?? el.textContent ?? 'unlabelled').replace(/\s+/g, ' ').trim()
 
   const dial = rect(document.querySelector('.betting-dial'))
+  const ram = rect(document.querySelector('.ram'))
   const statusLine = rect(document.querySelector('.status-line'))
   const dialCentre =
     dial === null ? null : { x: dial.x + dial.width / 2, y: dial.y + dial.height / 2 }
+  const ramCentre = ram === null ? null : { x: ram.x + ram.width / 2, y: ram.y + ram.height / 2 }
 
   const controls = [...document.querySelectorAll('.ram button')]
     .map((el) => ({ el, box: rect(el) }))
@@ -89,34 +100,44 @@ function capture(): Snapshot {
             return [{ label: name(el), width: Math.round(width), height: Math.round(height) }]
           })
 
+  /**
+   * Measured on the labels, not the buttons. Each wedge button fills the whole
+   * 420 box and is cut to its segment by `clip-path`, which
+   * `getBoundingClientRect` ignores, so every button reports the same box and a
+   * correct ring measures as four radii of zero.
+   */
   const radii =
-    dialCentre === null
+    ramCentre === null
       ? []
-      : [...document.querySelectorAll('.ram-wedge')].flatMap((el) => {
+      : [...document.querySelectorAll('.ram-wedge-label')].flatMap((el) => {
           const box = rect(el)
           if (box === null) return []
           return [
             Math.round(
-              Math.hypot(
-                box.x + box.width / 2 - dialCentre.x,
-                box.y + box.height / 2 - dialCentre.y,
-              ),
+              Math.hypot(box.x + box.width / 2 - ramCentre.x, box.y + box.height / 2 - ramCentre.y),
             ),
           ]
         })
 
-  const presets = [...document.querySelectorAll('.dial-presets button')].map((el) => {
-    const label = el.getAttribute('aria-label') ?? ''
-    return {
-      label: (el.textContent ?? '').trim(),
-      amount: Number(label.replace(/^.*raise to /, '').replace(/,/g, '')),
-    }
-  })
+  const presets = [...document.querySelectorAll('.dial-presets button:not(.dial-step)')].map(
+    (el) => {
+      const label = el.getAttribute('aria-label') ?? ''
+      return {
+        label: (el.textContent ?? '').trim(),
+        amount: Number(label.replace(/^.*raise to /, '').replace(/,/g, '')),
+      }
+    },
+  )
 
   return {
     scale: Math.min(window.innerWidth / 1920, window.innerHeight / 1080),
     controls,
     dial,
+    ram,
+    concentricOffset:
+      dialCentre === null || ramCentre === null
+        ? null
+        : Math.round(Math.hypot(dialCentre.x - ramCentre.x, dialCentre.y - ramCentre.y)),
     statusLine,
     overlapping,
     radii,
@@ -157,10 +178,17 @@ test.describe('the action surface, in base-canvas pixels', () => {
     expect(undersized).toEqual([])
   })
 
-  test('gives the betting dial the diameter the reference gives it', () => {
-    expect(snapshot.dial).not.toBeNull()
-    expect(Math.round(snapshot.dial?.width ?? 0)).toBeGreaterThanOrEqual(DIAL_DIAMETER)
-    expect(Math.round(snapshot.dial?.height ?? 0)).toBeGreaterThanOrEqual(DIAL_DIAMETER)
+  test('gives the menu the outer diameter the anatomy gives it', () => {
+    expect(snapshot.ram).not.toBeNull()
+    expect(Math.round(snapshot.ram?.width ?? 0)).toBe(RAM_DIAMETER)
+    expect(Math.round(snapshot.ram?.height ?? 0)).toBe(RAM_DIAMETER)
+  })
+
+  test('seats the betting dial in the centre of the menu', () => {
+    expect(snapshot.concentricOffset).not.toBeNull()
+    expect(snapshot.concentricOffset ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
+      CONCENTRIC_TOLERANCE,
+    )
   })
 
   test('keeps the action surface off the status line', () => {
@@ -174,7 +202,7 @@ test.describe('the action surface, in base-canvas pixels', () => {
     const spread = Math.max(...snapshot.radii) / Math.min(...snapshot.radii)
     expect(
       spread,
-      `wedge radii from the dial centre: ${snapshot.radii.join(', ')}`,
+      `wedge label radii from the menu centre: ${snapshot.radii.join(', ')}`,
     ).toBeLessThanOrEqual(RADIUS_SPREAD)
   })
 

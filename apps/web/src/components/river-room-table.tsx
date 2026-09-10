@@ -51,6 +51,13 @@ import {
   resolvePreset,
   shouldClearPreset,
 } from '@/lib/preset'
+import {
+  DIAL_DIAMETER,
+  RAM_DIAMETER,
+  type WedgeSlot,
+  wedgeClipPath,
+  wedgeLabelOffset,
+} from '@/lib/ram-geometry'
 import { type RepFlash, repFlashFor, shouldShowRate } from '@/lib/rep-feedback'
 import {
   actionLabel,
@@ -295,7 +302,6 @@ export function RiverRoomTable() {
   const [reelAtMs, setReelAtMs] = useState(0)
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
   const [raiseTo, setRaiseTo] = useState(0)
-  const [dialBand, setDialBand] = useState(0)
   const [stageScale, setStageScale] = useState(2 / 3)
   // River is a 3D game. The DOM table is a fallback for a machine that cannot
   // run the venue, not the thing being built, so it is no longer the default.
@@ -537,7 +543,6 @@ export function RiverRoomTable() {
   useEffect(() => {
     const minimum = view.legal?.raiseTo.min ?? 0
     setRaiseTo(minimum)
-    setDialBand(3)
   }, [view.legal?.raiseTo.min])
 
   useEffect(() => {
@@ -573,7 +578,8 @@ export function RiverRoomTable() {
         if (view.legal?.check.enabled) command({ kind: 'act', action: { kind: 'check' } })
         else if (view.legal?.call.enabled) command({ kind: 'act', action: { kind: 'call' } })
       }
-      if (event.key.toLowerCase() === 'r' && view.legal?.raiseTo.enabled) setDialBand(1)
+      if (event.key.toLowerCase() === 'r' && view.legal?.raiseTo.enabled)
+        document.querySelector<HTMLElement>('.betting-dial')?.focus()
     }
     const up = (event: KeyboardEvent) => {
       if (event.code === 'Space') setPeek(false)
@@ -1304,8 +1310,6 @@ export function RiverRoomTable() {
               localTurn={localTurn}
               urgency={urgency}
               raiseTo={raiseTo}
-              dialBand={dialBand}
-              onDialBand={setDialBand}
               onRaiseTo={setRaiseTo}
               onAction={(action) => command({ kind: 'act', action })}
               onDeal={() => command({ kind: 'startHand' })}
@@ -1629,8 +1633,6 @@ function RadialActionMenu({
   localTurn,
   urgency,
   raiseTo,
-  dialBand,
-  onDialBand,
   onRaiseTo,
   onAction,
   onDeal,
@@ -1648,8 +1650,6 @@ function RadialActionMenu({
   localTurn: boolean
   urgency: boolean
   raiseTo: number
-  dialBand: number
-  onDialBand: (value: number) => void
   onRaiseTo: (value: number) => void
   onAction: (action: TurnAction) => void
   onDeal: () => void
@@ -1722,94 +1722,73 @@ function RadialActionMenu({
   const max = legal.allIn.amount
   const clamped = Math.min(max, Math.max(min, raiseTo))
   const step = DEFAULT_STAKE.bigBlind
-  const rangeWidth = Math.max(step, Math.ceil((max - min) / 2 ** dialBand / step) * step)
-  const rangeStart = Math.max(min, min + Math.floor((clamped - min) / rangeWidth) * rangeWidth)
-  const rangeEnd = Math.min(max, rangeStart + rangeWidth)
-  const setDialValue = (value: number) => onRaiseTo(Math.min(rangeEnd, Math.max(rangeStart, value)))
+  const setDialValue = (value: number) => onRaiseTo(Math.min(max, Math.max(min, value)))
   const wedge = (
-    label: string,
+    slot: WedgeSlot,
+    word: string,
+    amount: string | null,
     enabled: boolean,
     action: TurnAction,
-    className: string,
     hold = 0,
   ) => (
     <HoldAction
-      className={`ram-wedge ${className}`}
+      className={`ram-wedge ${slot}`}
       disabled={!enabled}
       duration={hold}
+      style={{ clipPath: wedgeClipPath(slot) }}
       onComplete={() => onAction(action)}
     >
-      {label}
+      <span className="ram-wedge-label" style={wedgeLabelOffset(slot)}>
+        <span className="ram-wedge-word">{word}</span>
+        {amount === null ? null : <span className="ram-wedge-amount">{amount}</span>}
+      </span>
     </HoldAction>
   )
   return (
-    <section className={`ram${urgency ? ' urgent' : ''}`} aria-label="Radial action menu">
-      {wedge('FOLD', legal.fold.enabled, { kind: 'fold' }, 'fold', legal.check.enabled ? 400 : 0)}
+    <section
+      className={`ram${urgency ? ' urgent' : ''}`}
+      aria-label="Radial action menu"
+      style={{ width: RAM_DIAMETER, height: RAM_DIAMETER }}
+    >
+      {wedge(
+        'fold',
+        'FOLD',
+        null,
+        legal.fold.enabled,
+        { kind: 'fold' },
+        legal.check.enabled ? 400 : 0,
+      )}
       {legal.check.enabled
-        ? wedge('CHECK', true, { kind: 'check' }, 'check')
-        : wedge(
-            `CALL ${formatAmount(legal.call.amount, false)}`,
-            legal.call.enabled,
-            { kind: 'call' },
-            'call',
-          )}
+        ? wedge('call', 'CHECK', null, true, { kind: 'check' })
+        : wedge('call', 'CALL', formatAmount(legal.call.amount, false), legal.call.enabled, {
+            kind: 'call',
+          })}
       {legal.raiseTo.enabled
-        ? wedge(
-            `RAISE TO ${formatAmount(clamped, false)}`,
-            true,
-            { kind: 'raiseTo', to: clamped },
-            'raise',
-          )
+        ? wedge('raise', 'RAISE TO', formatAmount(clamped, false), true, {
+            kind: 'raiseTo',
+            to: clamped,
+          })
         : null}
       {wedge(
-        `ALL IN ${formatAmount(max, false)}`,
+        'all-in',
+        'ALL IN',
+        formatAmount(max, false),
         legal.allIn.enabled,
         { kind: 'allIn' },
-        'all-in',
         600,
       )}
       {legal.raiseTo.enabled ? (
-        <div
-          className="betting-dial"
-          onWheel={(event) => {
-            event.preventDefault()
-            setDialValue(clamped + (event.deltaY > 0 ? -step : step))
-          }}
-        >
-          <button
-            type="button"
-            aria-label="Halve betting range"
-            onClick={() => onDialBand(Math.min(3, dialBand + 1))}
-          >
-            ½
-          </button>
-          <output>
-            RAISE TO
-            <br />
-            <strong>{formatAmount(clamped, false)}</strong>
-          </output>
-          <button
-            type="button"
-            aria-label="Double betting range"
-            onClick={() => onDialBand(Math.max(0, dialBand - 1))}
-          >
-            2×
-          </button>
-          <button
-            type="button"
-            aria-label="Decrease raise amount"
-            onClick={() => setDialValue(clamped - step)}
-          >
-            −
-          </button>
-          <button
-            type="button"
-            aria-label="Increase raise amount"
-            onClick={() => setDialValue(clamped + step)}
-          >
-            +
-          </button>
+        <>
+          <BettingDial value={clamped} step={step} onValue={setDialValue} />
           <div className="dial-presets">
+            <button
+              type="button"
+              className="dial-step"
+              aria-label="Decrease raise amount"
+              onClick={() => setDialValue(clamped - step)}
+            >
+              −
+            </button>
             {sizingPresets({
               pot: view.pot,
               currentBet: view.currentBet,
@@ -1826,8 +1805,16 @@ function RadialActionMenu({
                 {label}
               </button>
             ))}
+            <button
+              type="button"
+              className="dial-step"
+              aria-label="Increase raise amount"
+              onClick={() => setDialValue(clamped + step)}
+            >
+              +
+            </button>
           </div>
-        </div>
+        </>
       ) : (
         <div className="ram-centre">YOUR TURN</div>
       )}
@@ -1835,16 +1822,80 @@ function RadialActionMenu({
   )
 }
 
+/**
+ * The dial's own wheel listener, bound non-passively.
+ *
+ * React attaches `wheel` at the root as a passive listener, so the
+ * `preventDefault` inside an `onWheel` prop silently does nothing and the page
+ * scrolls while the raise changes. Binding it here with `passive: false` is the
+ * only way to own the gesture.
+ */
+function BettingDial({
+  value,
+  step,
+  onValue,
+}: {
+  value: number
+  step: number
+  onValue: (next: number) => void
+}) {
+  const host = useRef<HTMLDivElement | null>(null)
+  const latest = useRef({ value, step, onValue })
+  latest.current = { value, step, onValue }
+  useEffect(() => {
+    const node = host.current
+    if (node === null) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const { value: current, step: bigBlind, onValue: commit } = latest.current
+      commit(current + (event.deltaY > 0 ? -bigBlind : bigBlind))
+    }
+    node.addEventListener('wheel', onWheel, { passive: false })
+    return () => node.removeEventListener('wheel', onWheel)
+  }, [])
+  return (
+    <div
+      ref={host}
+      className="betting-dial"
+      role="slider"
+      tabIndex={0}
+      aria-label="Raise to"
+      aria-valuenow={value}
+      aria-valuetext={formatAmount(value, false)}
+      style={{ width: DIAL_DIAMETER, height: DIAL_DIAMETER }}
+      onKeyDown={(event) => {
+        const direction =
+          event.key === 'ArrowUp' || event.key === 'ArrowRight'
+            ? 1
+            : event.key === 'ArrowDown' || event.key === 'ArrowLeft'
+              ? -1
+              : 0
+        if (direction === 0) return
+        event.preventDefault()
+        onValue(value + direction * step)
+      }}
+    >
+      <output>
+        RAISE TO
+        <br />
+        <strong>{formatAmount(value, false)}</strong>
+      </output>
+    </div>
+  )
+}
+
 function HoldAction({
   duration,
   disabled = false,
   className,
+  style,
   onComplete,
   children,
 }: {
   duration: number
   disabled?: boolean
   className: string
+  style?: CSSProperties
   onComplete: () => void
   children: React.ReactNode
 }) {
@@ -1875,7 +1926,7 @@ function HoldAction({
       type="button"
       className={`${className}${holding ? ' holding' : ''}`}
       disabled={disabled}
-      style={{ '--hold-duration': `${duration}ms` } as CSSProperties}
+      style={{ ...style, '--hold-duration': `${duration}ms` } as CSSProperties}
       onPointerDown={begin}
       onPointerUp={cancel}
       onPointerLeave={cancel}
