@@ -39,6 +39,7 @@ import {
   loadBrowserAuthConfig,
   upgradeRiverSession,
 } from '@/lib/auth'
+import { sizingPresets } from '@/lib/betting'
 import { affordableBuyIn } from '@/lib/buy-in'
 import { readoutFor } from '@/lib/hand-readout'
 import { formatAmount } from '@/lib/presentation'
@@ -1809,16 +1810,18 @@ function RadialActionMenu({
             +
           </button>
           <div className="dial-presets">
-            {[
-              { id: 'minimum', label: 'MIN', amount: min },
-              { id: 'half-pot', label: '½', amount: Math.round(view.pot / 2) },
-              { id: 'pot', label: 'POT', amount: view.pot },
-              { id: 'maximum', label: 'MAX', amount: max },
-            ].map(({ id, label, amount }) => (
+            {sizingPresets({
+              pot: view.pot,
+              currentBet: view.currentBet,
+              toCall: legal.call.amount,
+              minRaiseTo: min,
+              allInTo: max,
+            }).map(({ id, label, amount }) => (
               <button
                 type="button"
                 key={id}
-                onClick={() => onRaiseTo(Math.min(max, Math.max(min, amount)))}
+                aria-label={`${label}, raise to ${formatAmount(amount, false)}`}
+                onClick={() => onRaiseTo(amount)}
               >
                 {label}
               </button>

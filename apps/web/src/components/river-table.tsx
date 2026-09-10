@@ -21,6 +21,7 @@ import {
   useState,
 } from 'react'
 import { RiverVenue } from '@/components/river-venue'
+import { sizingPresets } from '@/lib/betting'
 import { cloneView, dwellFor, formatAmount, orderedSeats, reduceStep } from '@/lib/presentation'
 import { DEFAULT_VENUE } from '@/lib/venue'
 
@@ -204,10 +205,14 @@ export function RiverTable() {
         raiseRef.current?.focus()
       }
       if (/^[1-4]$/.test(event.key) && view.legal?.raiseTo.enabled) {
-        const minimum = view.legal.raiseTo.min
-        const maximum = view.legal.allIn.amount
-        const values = [minimum, Math.round(view.pot / 2), view.pot, maximum]
-        setRaiseTo(Math.min(maximum, Math.max(minimum, values[Number(event.key) - 1] ?? minimum)))
+        const presets = sizingPresets({
+          pot: view.pot,
+          currentBet: view.currentBet,
+          toCall: view.legal.call.amount,
+          minRaiseTo: view.legal.raiseTo.min,
+          allInTo: view.legal.allIn.amount,
+        })
+        setRaiseTo(presets[Number(event.key) - 1]?.amount ?? view.legal.raiseTo.min)
       }
       if (event.key.toLowerCase() === 'v' && view.commit !== null) setVerifyOpen(true)
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
@@ -236,7 +241,7 @@ export function RiverTable() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [act, settingsOpen, verifyOpen, view.commit, view.legal, view.pot])
+  }, [act, settingsOpen, verifyOpen, view.commit, view.currentBet, view.legal, view.pot])
 
   useEffect(() => {
     const syncFullscreen = () => setTvMode(document.fullscreenElement !== null)
@@ -626,21 +631,21 @@ function ActionRail({
           onChange={(event) => setRaiseTo(Number(event.target.value))}
         />
         <div className="presets">
-          {[
-            { id: 'minimum', label: 'MIN', value: minimum },
-            { id: 'half-pot', label: '1/2 POT', value: Math.round(view.pot / 2) },
-            { id: 'pot', label: 'POT', value: view.pot },
-            { id: 'maximum', label: 'MAX', value: maximum },
-          ].map(({ id, label, value }) => {
-            const clamped = Math.min(maximum, Math.max(minimum, value))
+          {sizingPresets({
+            pot: view.pot,
+            currentBet: view.currentBet,
+            toCall: view.legal?.call.amount ?? 0,
+            minRaiseTo: minimum,
+            allInTo: maximum,
+          }).map(({ id, label, amount }) => {
             return (
               <button
                 type="button"
                 key={id}
                 disabled={!canRaise || disabled}
-                onClick={() => setRaiseTo(clamped)}
+                onClick={() => setRaiseTo(amount)}
               >
-                {label}
+                {label === '½' ? '1/2 POT' : label}
               </button>
             )
           })}
