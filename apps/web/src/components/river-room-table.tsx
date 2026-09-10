@@ -797,9 +797,10 @@ export function RiverRoomTable() {
               seatIds={seatIds}
               seatRefs={seatRefs}
               heroSeat={selfSeat?.seat ?? null}
+              platesHeld={platesHeld}
             />
           ) : null}
-          <div className="hud-layer">
+          <div className={`hud-layer${platesHeld ? ' plates-held' : ''}`}>
             {graphicsMode === 'two' ? (
               <div className="dom-table-fallback" aria-hidden="true" />
             ) : null}

@@ -77,9 +77,19 @@ type SceneProps = {
   heroSeat?: number | null | undefined
   /** Dev-review seat framed from inside the table for a face-side close read. */
   reviewSeat?: number | null | undefined
+  /**
+   * Whether the table-read plaques are showing.
+   *
+   * Nothing else needs it, but seat layout does: the spacing pass reserves a
+   * plaque-sized rectangle per seat and pushes each one outward from the table
+   * until it stops overlapping its neighbours. With nine of them and a table
+   * that projects small, that push ran far enough to put labels in the
+   * skyline, and it ran whether or not a single plaque was visible.
+   */
+  platesHeld?: boolean | undefined
 }
 
-function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
+function Seats({ seatIds, seatRefs, venueId, platesHeld = false }: SceneProps) {
   const venue = venueOf(venueId)
   const seats = useMemo(() => worldSeats(seatIds, venue.seatRing), [seatIds, venue.seatRing])
   const { camera, controls } = useThree()
@@ -98,17 +108,42 @@ function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
       near: perspective.near,
       far: perspective.far,
     }
-    const screens = seats.map((seat) => projectToScreen({ x: seat.x, y: seat.y, z: seat.z }, spec))
+    // Anchored at the chair, not at head height.
+    //
+    // worldSeats puts the anchor at 1.46m so a plaque reads as belonging to the
+    // player under it. The Rooftop camera sits at 1.50m. Four centimetres below
+    // the lens means every seat, near and far, projects onto the horizon: the
+    // nine anchors measured 18.57 to 19.91 percent down the frame, a spread of
+    // 1.3 percent across a whole table. That is why labels and SIT targets sat
+    // in the skyline, and no amount of spacing could fix it, because the
+    // spacing was pushing points that were already all in the same place.
+    //
+    // The height a target belongs at is the chair anyway. A plaque that wants
+    // to float above its player is offset in screen space by the HUD, where the
+    // offset is a constant instead of a function of where the camera is.
+    const screens = seats.map((seat) =>
+      projectToScreen({ x: seat.x, y: SEAT_ANCHOR_HEIGHT, z: seat.z }, spec),
+    )
     // Anchors alone put nine plaques on top of each other and over the board.
     // The table centre is the point they are pushed away from, so a label
     // never crosses to the far side and stops being that player's label.
     const table = projectToScreen({ x: 0, y: focus.y, z: 0 }, spec)
-    const laidOut = layOutPlaques(
-      screens.map((screen) => ({ xPercent: screen.xPercent, yPercent: screen.yPercent })),
-      PLAQUE,
-      STAGE,
-      { xPercent: table.xPercent, yPercent: table.yPercent },
-    )
+    // Spacing is only owed to plaques. With them hidden the anchor carries a
+    // pin or a SIT target, and a target has to be exactly where the seat is or
+    // the player aims at a chair and misses.
+    const laidOut = platesHeld
+      ? layOutPlaques(
+          screens.map((screen) => ({ xPercent: screen.xPercent, yPercent: screen.yPercent })),
+          PLAQUE,
+          STAGE,
+          { xPercent: table.xPercent, yPercent: table.yPercent },
+        )
+      : screens.map((screen, index) => ({
+          index,
+          xPercent: screen.xPercent,
+          yPercent: screen.yPercent,
+          pushed: false,
+        }))
     seats.forEach((seat, index) => {
       const element = seatRefs.current.get(seat.id)
       const screen = screens[index]
@@ -127,6 +162,9 @@ function Seats({ seatIds, seatRefs, venueId }: SceneProps) {
 
   return <group />
 }
+
+/** Chair-seat height in metres, measured from the venue build spec's chairs. */
+const SEAT_ANCHOR_HEIGHT = 0.46
 
 const seatIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 
@@ -879,6 +917,7 @@ function Scene({
   seatChips = [],
   heroSeat,
   reviewSeat,
+  platesHeld,
 }: SceneProps) {
   const [sidecar, setSidecar] = useState<LightingSidecar>({})
 
@@ -906,7 +945,7 @@ function Scene({
         <VenueAsset venueId={venueId} cues={cues} occupiedSeats={occupiedSeats} />
       </Suspense>
       <InstancedTablePieces seatChips={seatChips} />
-      <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} />
+      <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} platesHeld={platesHeld} />
       <CameraOrbit venueId={venueId} heroSeat={heroSeat ?? null} reviewSeat={reviewSeat ?? null} />
     </>
   )
@@ -921,6 +960,7 @@ export function RiverScene({
   seatChips,
   heroSeat,
   reviewSeat,
+  platesHeld,
 }: SceneProps) {
   const venue = venueOf(venueId)
   return (
@@ -1002,6 +1042,7 @@ export function RiverScene({
         seatChips={seatChips}
         heroSeat={heroSeat}
         reviewSeat={reviewSeat}
+        platesHeld={platesHeld}
       />
     </Canvas>
   )

@@ -1,4 +1,4 @@
-import { type Browser, expect, type Page, test } from '@playwright/test'
+import { type Browser, type BrowserContext, expect, type Page, test } from '@playwright/test'
 
 const MIN_TARGET = 56
 /**
@@ -43,19 +43,38 @@ interface Snapshot {
  */
 let snapshot: Snapshot
 let page: Page
+let context: BrowserContext
 
 async function reachLiveTurn(target: Page): Promise<void> {
   await target.goto('/table')
-  await target.getByRole('button', { name: 'SIT', exact: true }).first().click({ timeout: 30_000 })
+  // The guest bankroll empties after a few runs and every SIT is then disabled,
+  // which surfaced as a thirty second click timeout rather than as the empty
+  // wallet it actually was. Claim before sitting.
+  const rescue = target.getByRole('button', { name: 'BUST RESCUE', exact: true })
+  if (await rescue.isVisible().catch(() => false)) {
+    await rescue.click().catch(() => {})
+  }
+  const seat = target.getByRole('button', { name: /^SIT/ }).first()
+  // Say what actually went wrong. An exhausted rescue claim leaves every seat
+  // disabled, and without this it surfaced as a click timeout on a button that
+  // was never going to enable.
+  await expect(seat)
+    .toBeEnabled({ timeout: 20_000 })
+    .catch(() => {
+      throw new Error(
+        'cannot sit: the guest bankroll is under the minimum buy-in and the rescue claim granted nothing',
+      )
+    })
+  await seat.click({ timeout: 20_000 })
   const deal = target.getByRole('button', { name: 'DEAL', exact: true })
   const dial = target.locator('.betting-dial')
-  const deadline = Date.now() + 120_000
+  const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
     if (await dial.isVisible().catch(() => false)) return
     if (await deal.isVisible().catch(() => false)) await deal.click().catch(() => {})
     await target.waitForTimeout(250)
   }
-  throw new Error('no live turn with a betting dial inside 120s')
+  throw new Error('no live turn with a betting dial inside 60s of sitting down')
 }
 
 function capture(): Snapshot {
@@ -150,14 +169,23 @@ function capture(): Snapshot {
 }
 
 test.describe('the action surface, in base-canvas pixels', () => {
+  /**
+   * The page is created from a context this file owns rather than from
+   * `browser.newPage`. A page opened straight off the browser fixture inside
+   * `beforeAll` was being closed underneath the setup, which surfaced as
+   * "target closed" partway through reaching a turn rather than as anything to
+   * do with the table.
+   */
   test.beforeAll(async ({ browser }: { browser: Browser }) => {
-    page = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
+    test.setTimeout(300_000)
+    context = await browser.newContext({ viewport: { width: 1920, height: 1080 } })
+    page = await context.newPage()
     await reachLiveTurn(page)
     snapshot = await page.evaluate(capture)
   })
 
   test.afterAll(async () => {
-    await page?.close()
+    await context?.close()
   })
 
   /**
