@@ -1179,11 +1179,21 @@ export function RiverRoomTable() {
               </div>
             )}
             <HeroHand view={view} peek={peek} />
-            <div className="status-line populated" aria-live="polite">
-              {kick === null
-                ? (notice ?? view.message ?? waitingCopy(view, seatedCount, botSeats, isHost))
-                : kickCopy(kick.reason)}
-            </div>
+            {/* `populated` is what paints the glass, so it has to follow the
+                text rather than be hardcoded. It was always on, and during a
+                live hand the copy resolves to an empty string, which left a lit
+                bar sitting on the felt with nothing in it. */}
+            {(() => {
+              const status =
+                kick === null
+                  ? (notice ?? view.message ?? waitingCopy(view, seatedCount, botSeats, isHost))
+                  : kickCopy(kick.reason)
+              return (
+                <div className={`status-line${status ? ' populated' : ''}`} aria-live="polite">
+                  {status}
+                </div>
+              )
+            })()}
             <div className={`seat-ring${platesHeld ? ' plates-held' : ''}`}>
               {seats.map((seat, index) => (
                 <RoomSeat

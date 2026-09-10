@@ -28,6 +28,30 @@
   --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0.05, 0.36, 1);
   --ease-settle: cubic-bezier(0.34, 1.26, 0.64, 1);
+
+  /* Material.
+     One lamp, upper left, per 10-art-direction.md. Every raised edge is lit on
+     that side and shadowed on the other, and nothing in the HUD is allowed a
+     light source the room does not have. This is the difference between a panel
+     that sits in the Rooftop and one that sits on top of a screenshot of it. */
+  --river-brass-hi: #dcb273;
+  --river-brass: #a87c42;
+  --river-brass-lo: #4a3620;
+  --river-brass-face: rgb(184 115 51 / 34%);
+
+  /* Grain, at the scale of a felt weave rather than film noise. Applied at low
+     opacity over flat fills, which is what stops a large dark area reading as
+     an unpainted div. */
+  --river-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");
+
+  /* Elevation. Ambient occlusion, then a cast shadow away from the lamp, then a
+     lit top edge and an occluded bottom one. Three layers, one direction. */
+  --river-lift-1:
+    0 1px 2px rgb(0 0 0 / 40%), 0 6px 16px rgb(0 0 0 / 34%), inset 0 1px 0 rgb(255 214 150 / 14%),
+    inset 0 -1px 0 rgb(0 0 0 / 46%);
+  --river-lift-2:
+    0 2px 6px rgb(0 0 0 / 46%), 0 18px 44px rgb(0 0 0 / 52%),
+    inset 0 1px 0 rgb(255 214 150 / 18%), inset 0 -2px 3px rgb(0 0 0 / 52%);
   color-scheme: dark;
 }
 
@@ -270,9 +294,19 @@ button.invite-chip.showing-code {
 .pot-readout > span {
   color: var(--club-brass);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.34em;
   text-indent: 0.34em;
+}
+
+/* A hairline rule under the pot, lit in the middle and fading at both ends, so
+   the figure sits on something without acquiring a panel. */
+.pot-readout::after {
+  width: 132px;
+  height: 1px;
+  margin-top: 2px;
+  background: linear-gradient(90deg, transparent, var(--river-brass), transparent);
+  content: "";
 }
 
 .street-label,
@@ -350,11 +384,21 @@ button.invite-chip.showing-code {
   border-radius: 12px;
 }
 
+/* Card stock rather than a white rectangle: a warm face that falls off toward
+   the lower right away from the lamp, the printed border a real deck has, and a
+   contact shadow tight under the card with a soft cast behind it. */
 .playing-card {
   overflow: hidden;
   border: 1px solid var(--river-card-edge);
-  background: var(--river-card-face);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 42%);
+  background:
+    var(--river-grain),
+    linear-gradient(158deg, #fdfaf4 0%, var(--river-card-face) 46%, #eae3d6 100%);
+  background-blend-mode: multiply, normal;
+  box-shadow:
+    0 1px 1px rgb(0 0 0 / 34%),
+    0 10px 26px rgb(0 0 0 / 46%),
+    inset 0 0 0 1px rgb(255 255 255 / 70%),
+    inset 0 0 0 4px rgb(0 0 0 / 4%);
   color: var(--river-suit-spade);
   animation: card-in 220ms var(--ease-out) both;
 }
@@ -753,9 +797,25 @@ button.invite-chip.showing-code {
   pointer-events: none;
 }
 
+/* Held, not laid out. The pair fans from a shared origin the way a hand does
+   in the world, which is the cheapest thing on this screen that reads as a
+   physical object rather than as two divs in a flex row. */
 .hero-hand-cards {
   display: flex;
-  gap: 12px;
+  gap: 2px;
+  padding-bottom: 12px;
+}
+
+.hero-hand .playing-card:first-child,
+.hero-hand .card-back:first-child {
+  transform: rotate(-5deg) translateY(6px);
+  transform-origin: bottom center;
+}
+
+.hero-hand .playing-card:last-child,
+.hero-hand .card-back:last-child {
+  transform: rotate(5deg) translateY(6px);
+  transform-origin: bottom center;
 }
 
 /* 168 x 235 base-canvas pixels, from 04-anatomy.md. At 120 x 168 the hand a
@@ -788,12 +848,12 @@ button.invite-chip.showing-code {
 .hero-hand-readout {
   margin: 0;
   max-width: 348px;
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--river-amber);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
   text-shadow: 0 2px 10px rgb(0 0 0 / 70%);
+  text-transform: uppercase;
 }
 
 .action-rail {
@@ -1305,6 +1365,10 @@ button.invite-chip.showing-code {
 /* Each wedge fills the whole 420 box and is clipped to its own annulus segment.
    The clip is the hit area as well as the paint, so a player aiming at the
    visible edge of a wedge cannot land on the one behind it. */
+/* Every wedge shares the same 420 box and the same centre, so one radial
+   background gives the whole ring a brass line on the inner and outer edge of
+   the annulus without any wedge knowing where it sits. The stops are the same
+   96 and 210 radii that ram-geometry.ts cuts the clip path at. */
 .ram-wedge {
   position: absolute;
   inset: 0;
@@ -1314,15 +1378,32 @@ button.invite-chip.showing-code {
   overflow: visible;
   border: 0;
   border-radius: 0;
-  background: linear-gradient(165deg, rgb(26 35 30 / 97%), rgb(46 58 50 / 96%));
+  background:
+    var(--river-grain), radial-gradient(circle at 32% 20%, rgb(255 216 154 / 13%), transparent 56%),
+    radial-gradient(
+      circle 210px at 50% 50%,
+      transparent 0 94px,
+      var(--river-brass-hi) 95px 96px,
+      #2b3730 97px,
+      #202a25 150px,
+      #161d1a 202px,
+      var(--river-brass) 205px 208px,
+      var(--river-brass-lo) 209px 210px,
+      transparent 210px
+    );
+  background-blend-mode: overlay, screen, normal;
   color: var(--river-cream);
-  transition: background 120ms ease-out;
+  transition: filter 140ms var(--ease-out);
 }
 
 .ram-wedge:hover:not(:disabled),
 .ram-wedge:focus-visible {
-  background: linear-gradient(165deg, rgb(42 56 47 / 98%), rgb(68 84 71 / 97%));
+  filter: brightness(1.32) saturate(1.06);
   outline: none;
+}
+
+.ram-wedge:active:not(:disabled) {
+  filter: brightness(0.94);
 }
 
 .ram-wedge:disabled {
@@ -1340,16 +1421,25 @@ button.invite-chip.showing-code {
 }
 
 .ram-wedge-word {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0.07em;
+  color: var(--river-cream-dim);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
 }
 
+/* Money is set in the serif. The pairing was already wired into the layout and
+   used elsewhere in the app; the action surface was the one place still reading
+   as an unstyled control because it inherited the label sans for figures. */
 .ram-wedge-amount {
   color: var(--river-amber-bright);
-  font-size: 23px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 27px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 76%);
 }
 
 .ram-wedge.fold .ram-wedge-word {
@@ -1381,20 +1471,30 @@ button.invite-chip.showing-code {
   }
 }
 
+/* A machined bezel rather than a bordered circle: a brass ring turned on the
+   lamp side, a dark well sunk into the middle, and the cast shadow falling away
+   from the light like everything else in the room. */
 .betting-dial,
 .ram-centre {
   position: absolute;
   top: 50%;
   left: 50%;
   display: grid;
-  place-items: center;
-  border: 2px solid rgb(209 172 104 / 70%);
+  border: 0;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 34%, #1e2b24, #0f1512 74%);
+  background:
+    var(--river-grain), radial-gradient(circle at 36% 24%, rgb(255 218 158 / 12%), transparent 62%),
+    radial-gradient(circle at 50% 50%, #1d2922 0 58%, #131b17 80%, #0b100e 100%);
+  background-blend-mode: overlay, screen, normal;
   box-shadow:
-    0 12px 30px rgb(0 0 0 / 62%),
-    inset 0 0 26px rgb(0 0 0 / 55%);
+    0 0 0 2px var(--river-brass-lo),
+    0 0 0 3px var(--river-brass-face),
+    0 1px 0 3px rgb(255 216 154 / 26%),
+    0 20px 46px rgb(0 0 0 / 62%),
+    inset 0 2px 10px rgb(0 0 0 / 66%),
+    inset 0 -1px 0 rgb(255 216 154 / 10%);
   color: var(--river-cream);
+  place-items: center;
   text-align: center;
   transform: translate(-50%, -50%);
 }
@@ -1404,30 +1504,42 @@ button.invite-chip.showing-code {
 }
 
 .betting-dial:focus-visible {
-  border-color: var(--river-amber-bright);
+  box-shadow:
+    0 0 0 2px var(--river-amber-bright),
+    0 0 0 5px rgb(232 169 60 / 30%),
+    0 20px 46px rgb(0 0 0 / 62%),
+    inset 0 2px 10px rgb(0 0 0 / 66%);
   outline: none;
 }
 
 .ram-centre {
   width: 180px;
   height: 180px;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  color: var(--river-cream-dim);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
 }
 
 .betting-dial output {
-  color: var(--river-cream-dim);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  display: grid;
+  gap: 2px;
+  color: var(--river-cream-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
 }
 
 .betting-dial output strong {
   display: block;
+  margin-top: -2px;
   color: var(--river-amber-bright);
-  font-size: 33px;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 42px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1;
+  text-shadow: 0 2px 12px rgb(232 169 60 / 26%);
 }
 
 /* Sizing sits outside the ring rather than inside the dial. Six controls at the
@@ -1446,18 +1558,32 @@ button.invite-chip.showing-code {
 .dial-presets button {
   min-width: 66px;
   min-height: 56px;
-  border: 1px solid rgb(209 172 104 / 42%);
-  border-radius: 10px;
-  background: rgb(13 19 16 / 90%);
-  color: var(--river-cream);
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  border: 1px solid var(--river-brass-lo);
+  border-radius: 12px;
+  background: var(--river-grain), linear-gradient(180deg, #232e28, #131a17);
+  background-blend-mode: overlay, normal;
+  box-shadow: var(--river-lift-1);
+  color: var(--river-cream-dim);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  transition:
+    color 140ms var(--ease-out),
+    border-color 140ms var(--ease-out),
+    filter 140ms var(--ease-out);
 }
 
-.dial-presets button:hover {
-  border-color: var(--river-amber);
-  background: rgb(26 36 30 / 94%);
+.dial-presets button:hover,
+.dial-presets button:focus-visible {
+  border-color: var(--river-brass);
+  color: var(--river-amber-bright);
+  filter: brightness(1.2);
+  outline: none;
+}
+
+.dial-presets button:active {
+  box-shadow: inset 0 2px 6px rgb(0 0 0 / 62%);
+  filter: brightness(0.94);
 }
 
 .dial-presets .dial-step {
@@ -1472,10 +1598,11 @@ button.invite-chip.showing-code {
   display: grid;
   width: 300px;
   height: 46px;
-  border: 1px solid var(--river-room-edge);
+  border: 1px solid var(--river-brass-lo);
   border-radius: 999px;
-  background: rgb(19 25 22 / 82%);
-  box-shadow: none;
+  background: var(--river-grain), linear-gradient(180deg, rgb(31 41 35 / 88%), rgb(15 21 18 / 90%));
+  background-blend-mode: overlay, normal;
+  box-shadow: var(--river-lift-1);
   place-items: center;
 }
 .ram-waiting span {
@@ -1491,9 +1618,11 @@ button.invite-chip.showing-code {
 .ram-waiting button {
   min-width: 200px;
   min-height: 86px;
-  border: 1px solid var(--river-amber);
+  border: 1px solid var(--river-brass);
   border-radius: 999px;
-  background: linear-gradient(180deg, #2b3a32, #151d19);
+  background: var(--river-grain), linear-gradient(180deg, #33443a, #141c18);
+  background-blend-mode: overlay, normal;
+  box-shadow: var(--river-lift-2);
   color: var(--river-amber-bright);
   font-size: 22px;
   font-weight: 800;
