@@ -1215,61 +1215,101 @@ button.invite-chip.showing-code {
  * the venue. The buy-in is the same at every seat, so printing it nine times
  * was nine copies of one fact. It comes back on hover, where it is asked for.
  */
+/* An empty chair is not a button. It is a chair, and pointing at it should
+   light it up rather than hang a disc over it. The disc was legible and
+   completely foreign to the room, which is the same mistake the flat HUD was
+   making one layer further in. Nothing paints here until the pointer arrives. */
 .open-seat {
   display: grid;
-  width: 74px;
-  height: 74px;
-  border: 1px solid var(--river-brass-lo);
-  border-radius: 999px;
-  background:
-    var(--river-grain), radial-gradient(circle at 38% 26%, rgb(255 218 158 / 10%), transparent 62%),
-    radial-gradient(circle at 50% 50%, rgb(24 33 28 / 88%), rgb(9 13 11 / 92%));
-  background-blend-mode: overlay, screen, normal;
-  box-shadow: var(--river-lift-1);
+  width: 132px;
+  height: 132px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  box-shadow: none;
+  cursor: pointer;
   place-items: center;
-  transition:
-    width 160ms var(--ease-out),
-    height 160ms var(--ease-out),
-    border-color 160ms var(--ease-out),
-    filter 160ms var(--ease-out);
+}
+
+.open-seat::before {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 56%,
+    rgb(111 191 139 / 42%),
+    rgb(111 191 139 / 14%) 48%,
+    transparent 72%
+  );
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms var(--ease-out);
+}
+
+.open-seat:hover::before,
+.open-seat:focus-within::before {
+  opacity: 1;
 }
 
 .open-seat:hover,
 .open-seat:focus-within {
-  width: 138px;
-  height: 88px;
-  border-color: var(--river-brass);
-  filter: brightness(1.25);
+  box-shadow:
+    inset 0 0 0 2px rgb(111 191 139 / 58%),
+    0 0 30px rgb(111 191 139 / 22%);
+}
+
+/* A seat you cannot afford answers in the same place, in the other colour. */
+.open-seat:has(button:disabled)::before {
+  background: radial-gradient(
+    circle at 50% 56%,
+    rgb(230 125 99 / 32%),
+    rgb(230 125 99 / 10%) 48%,
+    transparent 72%
+  );
+}
+
+.open-seat:has(button:disabled):hover,
+.open-seat:has(button:disabled):focus-within {
+  box-shadow:
+    inset 0 0 0 2px rgb(230 125 99 / 48%),
+    0 0 24px rgb(230 125 99 / 18%);
+  cursor: not-allowed;
 }
 
 .open-seat button {
+  display: grid;
   width: 100%;
   height: 100%;
   border: 0;
-  border-radius: 999px;
+  border-radius: 50%;
   background: transparent;
-  color: var(--river-cream-faint);
-  cursor: pointer;
+  color: var(--river-win);
+  cursor: inherit;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.2em;
+  gap: 3px;
+  letter-spacing: 0.24em;
+  opacity: 0;
+  place-content: center;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 82%);
+  transition: opacity 150ms var(--ease-out);
 }
 
 .open-seat:hover button,
 .open-seat:focus-within button {
-  color: var(--river-amber-bright);
-  font-size: 15px;
+  opacity: 1;
+}
+
+.open-seat button:disabled {
+  color: var(--river-danger);
 }
 
 .open-seat small {
-  display: none;
-  color: var(--river-amber);
-  font-size: 13px;
-}
-
-.open-seat:hover small,
-.open-seat:focus-within small {
-  display: block;
+  color: var(--river-cream-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
 }
 
 .seat.reconnecting {
