@@ -758,16 +758,36 @@ button.invite-chip.showing-code {
   gap: 12px;
 }
 
+/* 168 x 235 base-canvas pixels, from 04-anatomy.md. At 120 x 168 the hand a
+   player is reading under a fifteen second clock was the smallest thing on
+   screen carrying information, and the pip and rank scale with the card rather
+   than staying at the community-card size. */
 .hero-hand .playing-card,
 .hero-hand .card-back {
-  width: 120px;
-  height: 168px;
-  border-radius: 12px;
+  width: 168px;
+  height: 235px;
+  border-radius: 16px;
+}
+
+.hero-hand .playing-card > span:first-child {
+  top: 11px;
+  left: 14px;
+  font-size: 45px;
+}
+
+.hero-hand .playing-card > b {
+  font-size: 78px;
+}
+
+.hero-hand .playing-card .card-corner {
+  right: 14px;
+  bottom: 11px;
+  font-size: 36px;
 }
 
 .hero-hand-readout {
   margin: 0;
-  max-width: 264px;
+  max-width: 348px;
   font-size: 19px;
   font-weight: 600;
   letter-spacing: 0.06em;

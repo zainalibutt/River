@@ -1763,11 +1763,11 @@ function RadialActionMenu({
         : wedge('call', 'CALL', formatAmount(legal.call.amount, false), legal.call.enabled, {
             kind: 'call',
           })}
+      {/* No amount on this wedge. The dial is where the number is set, so it is
+          where it is read; printing it twice cost the dial figure the size it
+          needs at sofa distance. */}
       {legal.raiseTo.enabled
-        ? wedge('raise', 'RAISE TO', formatAmount(clamped, false), true, {
-            kind: 'raiseTo',
-            to: clamped,
-          })
+        ? wedge('raise', 'RAISE TO', null, true, { kind: 'raiseTo', to: clamped })
         : null}
       {wedge(
         'all-in',
