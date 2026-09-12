@@ -634,6 +634,82 @@ def remove_helpers(body):
     print('HELPERS removed=%d remaining=%d' % (len(doomed), len(body.data.vertices)))
 
 
+def orient_eyes(obj):
+    """Turn each eyeball so the iris the texture paints lands on the front of the eye.
+
+    The stock eyes rendered as white discs with a slit at gameplay distance. Measured
+    properly through the UV loops, the iris centre sits low in the painted eyeball. The
+    fix is measured, not painted: the strongly brown vertices (more than 0.22 redder than
+    blue) dominate the painted iris disc, so their mean UV is the iris centre; take the
+    vertex nearest that UV, and rotate the ball about its own centre until that vertex
+    faces forward. Colour alone is not enough - the sclera veins are warm too, and a wider
+    warm threshold once swung the iris round to the back of the eye - so the target is
+    the vertex the texture's iris centre actually maps to. No geometry is added or removed
+    and the face and expression are untouched. The imported eyes carry custom split
+    normals authored for the standing import; rotating the geometry without clearing them
+    would shade the rotated ball with the old normals, so they are cleared and the sphere
+    falls back to its own smooth normals.
+    """
+    material = obj.material_slots[0].material
+    image = next((node.image for node in material.node_tree.nodes
+                  if node.type == 'TEX_IMAGE' and node.image is not None), None)
+    if image is None:
+        fail('the eye material carries no texture to find the iris in')
+    width, height = image.size
+    pixels = list(image.pixels)
+    mesh = obj.data
+    uv_data = mesh.uv_layers.active.data
+    vertex_uv = {}
+    for polygon in mesh.polygons:
+        for loop_index in polygon.loop_indices:
+            loop = mesh.loops[loop_index]
+            uv = uv_data[loop_index].uv
+            vertex_uv.setdefault(loop.vertex_index, []).append((uv.x, uv.y))
+    for side in ('L', 'R'):
+        vertices = [vertex for vertex in mesh.vertices
+                    if (vertex.co.x > 0.0) == (side == 'L')]
+        if len(vertices) < 100:
+            fail('the %s eye has only %d vertices' % (side, len(vertices)))
+        centre = sum((vertex.co for vertex in vertices), Vector()) / len(vertices)
+        mean_uv = {}
+        iris_uvs = []
+        for vertex in vertices:
+            uvs = vertex_uv.get(vertex.index)
+            if not uvs:
+                fail('the %s eye vertex %d has no UV loop' % (side, vertex.index))
+            ux = sum(entry[0] for entry in uvs) / len(uvs)
+            uy = sum(entry[1] for entry in uvs) / len(uvs)
+            mean_uv[vertex.index] = (ux, uy)
+            px = min(width - 1, max(0, int(ux * (width - 1))))
+            py = min(height - 1, max(0, int(uy * (height - 1))))
+            offset = (py * width + px) * 4
+            if pixels[offset] - pixels[offset + 2] > 0.22:
+                iris_uvs.append((ux, uy))
+        if len(iris_uvs) < 20:
+            fail('only %d %s eye vertices sample iris colour' % (len(iris_uvs), side))
+        iris_uv = (sum(entry[0] for entry in iris_uvs) / len(iris_uvs),
+                   sum(entry[1] for entry in iris_uvs) / len(iris_uvs))
+        target = min(vertices, key=lambda vertex: (
+            mean_uv[vertex.index][0] - iris_uv[0]) ** 2
+            + (mean_uv[vertex.index][1] - iris_uv[1]) ** 2)
+        direction = (target.co - centre).normalized()
+        forward = Vector((0.0, -1.0, 0.0))
+        angle = math.degrees(direction.angle(forward))
+        rotation = direction.rotation_difference(forward)
+        for vertex in vertices:
+            vertex.co = centre + rotation @ (vertex.co - centre)
+        print('EYES %s iris_uv=(%.3f,%.3f) iris_direction=%s rotated=%.1fdeg vertices=%d'
+              % (side, iris_uv[0], iris_uv[1],
+                 tuple(round(v, 3) for v in direction), angle, len(vertices)))
+    mesh.update()
+    if 'custom_normal' in mesh.attributes:
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.mesh.customdata_custom_splitnormals_clear()
+        print('EYES custom split normals cleared after rotation')
+
+
 def conform_hair(body, hair):
     """Lift any hair vertex that the morphed head has grown through.
 
@@ -641,6 +717,10 @@ def conform_hair(body, hair):
     the forehead and hollowed the temples far enough that the hair cap passes through the
     face, which rendered as black slashes across the brow. Any hair vertex inside the
     seated body surface is moved just outside it, measured against the body itself.
+
+    The cheek and jaw band takes a wider standoff: the side edges of the silver shell were
+    sitting in front of the cheek plane and rendered as the blue-grey streaks across the
+    face. The band is the part of the face a gameplay camera can read past the cheekbone.
     """
     depsgraph = bpy.context.evaluated_depsgraph_get()
     evaluated = body.evaluated_get(depsgraph)
@@ -650,8 +730,10 @@ def conform_hair(body, hair):
         if not hit:
             continue
         signed = (vertex.co - location).dot(normal)
-        if signed < 0.002:
-            vertex.co = location + normal * 0.004
+        cheek_band = abs(vertex.co.x) > 0.045 and 1.12 <= vertex.co.z <= 1.30
+        standoff = 0.009 if cheek_band else 0.002
+        if signed < standoff:
+            vertex.co = location + normal * (standoff + 0.002)
             fixed += 1
     hair.data.update()
     print('HAIR_CONFORM fixed=%d of %d' % (fixed, len(hair.data.vertices)))
@@ -883,14 +965,16 @@ def check_furniture(meshes, armature, label):
     print('FURNITURE %s probes_passed=%d' % (label, len(probes)))
 
 
-def open_creases(obj, armature, radius=0.22, rounds=24, factor=0.55, cap=0.014):
+def open_creases(obj, armature, radius=0.22, rounds=36, factor=0.55, cap=0.022):
     """Fill the valley linear blend skinning digs on the inside of the shoulder turn.
 
     The shoulder region of this jacket carried pits up to 18mm deep after the arm carry,
     which rendered as the dark craters at the armholes. Only concavities move: a vertex
     whose neighbours average outside the surface is in a valley and is pulled towards it;
     a vertex on a ridge is left alone. Plain smoothing flattens ridges too, which thins
-    the sleeve and fuses the arm to the torso.
+    the sleeve and fuses the arm to the torso. A3 raises the per-vertex travel budget from
+    14mm to 22mm: the A2 pass left the worst valley at 7.1mm because those vertices had
+    spent their budget, and 7.1mm still read as dark facets on the sleeves.
     """
     joints = [armature.data.bones['upperarm01.' + side].head_local
               for side in ('L', 'R')]
@@ -1223,7 +1307,14 @@ TROUSER_MARKERS = ('upperleg', 'lowerleg', 'foot', 'toe')
 
 
 def bake_suit_maps(obj, pixels):
-    """Bottle-green velvet above the waist, black trousers below, in one atlas."""
+    """Bottle-green velvet above the waist, black trousers below, in one atlas.
+
+    The recolour keeps the stock texture's luminance, because it carries the tailoring
+    shading, but the A2 range 0.25..1.6 amplified the stock suit's painted shoulder and
+    lapel highlights into pale fragmented patches. A3 compresses the factor to 0.60..1.18
+    so the jacket reads as one continuous garment, and drops the sheen from 0.28 to 0.10
+    so the deltoids stop catching the key light as pale plates.
+    """
     height, width = pixels.shape[0], pixels.shape[1]
     region = np.zeros((height, width), dtype=np.uint8)
     uv_layer = obj.data.uv_layers.active.data
@@ -1253,7 +1344,7 @@ def bake_suit_maps(obj, pixels):
                 if inside:
                     region[y, x] = target
     luminance = pixels[:, :, :3].mean(axis=2)
-    factor = np.clip(0.45 + 1.15 * luminance, 0.25, 1.6)[:, :, None]
+    factor = np.clip(0.78 + 0.44 * luminance, 0.60, 1.18)[:, :, None]
     palette = np.array(((0.075, 0.200, 0.115), (0.028, 0.028, 0.032)))
     out = palette[region] * factor
     covered = region.copy()
@@ -1304,7 +1395,7 @@ def bake_suit_maps(obj, pixels):
             bsdf.inputs['Roughness'].default_value = 0.60
         sheen = bsdf.inputs.get('Sheen Weight') if bsdf is not None else None
         if sheen is not None:
-            sheen.default_value = 0.28
+            sheen.default_value = 0.10
     print('SUIT_MAPS diffuse=%s' % os.path.basename(image.filepath_raw))
     return image, rough_image
 
@@ -1343,16 +1434,43 @@ def bake_hair_texture(obj):
 
 
 def build_rollneck(body, armature):
-    """A black roll-neck derived from Amber's own neck and upper chest skin.
+    """A dark roll-neck cut from Amber's own neck and upper-chest skin.
 
-    The patch is cut from the body surface after the seated carry, offset along its own
-    normals, and the top ring is extruded into a folded collar. Because it is the body's
-    own surface it cannot float, and it carries the body's weights so it cannot detach.
+    The patch is the body surface itself, offset along its normals and folded into a
+    collar, so it cannot float or detach. A3 tightens it: the chin is measured as the
+    lowest midline head-weighted vertex, the finished collar top is set 14mm below it, and
+    the patch rim is cut one 24mm fold lower so the extruded roll lands on that line. The
+    chest footprint stays inside the lapels and below the collar rim, so the only boundary
+    edge high enough to grow from is the neck rim. Any vertex left outside the jacket below
+    the collar is pulled inside the suit, and any vertex the body has grown through is
+    lifted clear the way the hair is. The upper band is the neck column alone (radius
+    under 84mm), which is what stops grey fabric appearing over the lapels; that takes the
+    selected region from the A2 yoke's 500-plus faces to a measured 157, so the count gate
+    is a guard against a broken selection rather than a coverage target. The material is a
+    dark neutral knit rather than a grey placeholder.
     """
     neck_base = armature.data.bones['neck01'].head_local.copy()
     head = armature.data.bones['head'].head_local.copy()
     axis = (head - neck_base).normalized()
-    collar_top = neck_base + axis * ((head - neck_base).length * 0.62)
+
+    chin = None
+    for vertex in body.data.vertices:
+        weight = 0.0
+        for group in vertex.groups:
+            if body.vertex_groups[group.group].name == 'head':
+                weight = group.weight
+        point = vertex.co
+        if weight > 0.5 and abs(point.x) < 0.05 and point.y < -0.04 and point.z > 1.00:
+            chin = point.z if chin is None else min(chin, point.z)
+    if chin is None:
+        fail('no head-weighted chin vertices found to measure the collar height from')
+    fold_height = 0.024
+    collar_top = chin - 0.014
+    rim_z = collar_top - fold_height
+    if not chin - 0.060 <= collar_top <= chin - 0.006:
+        fail('the collar top %.3f m is not 6-60mm below the measured chin %.3f m'
+             % (collar_top, chin))
+    print('ROLLNECK chin=%.3f collar_top=%.3f rim=%.3f' % (chin, collar_top, rim_z))
     chest_low = neck_base.z - 0.20
 
     bm = bmesh.new()
@@ -1367,56 +1485,84 @@ def build_rollneck(body, armature):
     for face in bm.faces:
         centre = face.calc_center_median()
         radius = to_axis(centre)
-        along = (centre - neck_base).dot(axis)
-        neck = 0.0 <= along <= (collar_top - neck_base).length + 0.015 and radius < 0.115
-        chest = (chest_low <= centre.z <= neck_base.z + 0.03
-                 and centre.y < -0.02 and centre.y > -0.16 and abs(centre.x) < 0.17)
-        if neck or chest:
+        if centre.z < chest_low or centre.z > rim_z + 0.004:
+            continue
+        if centre.z > 1.045:
+            selected = radius < 0.084
+        else:
+            selected = (centre.y < -0.02 and centre.y > -0.16
+                        and abs(centre.x) < 0.17 and radius < 0.20)
+        if selected:
             keep.append(face)
-    if len(keep) < 200:
+    if len(keep) < 140:
         fail('roll-neck region selected only %d faces' % len(keep))
     keep_set = set(keep)
     bmesh.ops.delete(bm, geom=[f for f in bm.faces if f not in keep_set], context='FACES')
     bm.normal_update()
     for vertex in bm.verts:
-        vertex.co += vertex.normal * 0.009
+        vertex.co += vertex.normal * 0.008
 
     def boundary_ring(min_z):
         edges = [edge for edge in bm.edges if edge.is_boundary]
         kept = []
         for edge in edges:
             middle = (edge.verts[0].co + edge.verts[1].co) * 0.5
-            if middle.z >= min_z and to_axis(middle) < 0.14:
+            if middle.z >= min_z and to_axis(middle) < 0.10:
                 kept.append(edge)
         return kept
 
-    top_edges = boundary_ring(collar_top.z - 0.02)
+    top_edges = boundary_ring(rim_z - 0.020)
     if len(top_edges) < 20:
         fail('roll-neck collar ring has %d edges' % len(top_edges))
 
     def grow(edges, up, out):
+        """Extrude a collar ring and rebuild it as a clean circle.
+
+        The rim is the boundary of a face selection cut through a coarse neck mesh, so its
+        vertices sit at ragged heights and radii; extruding that boundary straight up
+        produces the pointed flaps the first A3 pass rendered. Each ring is therefore
+        replaced by the circle with the ring's own mean radius and mean axial position plus
+        the step, which keeps the measured fold profile and loses the scallops.
+        """
         result = bmesh.ops.extrude_edge_only(bm, edges=edges)
         verts = [element for element in result['geom']
                  if isinstance(element, bmesh.types.BMVert)]
+        if not verts:
+            fail('the collar extrude produced no vertices')
+        ring_radius = sum(to_axis(vertex.co) for vertex in verts) / len(verts)
+        ring_axial = sum((vertex.co - neck_base).dot(axis)
+                         for vertex in verts) / len(verts)
         for vertex in verts:
             offset = vertex.co - neck_base
             radial = offset - axis * offset.dot(axis)
-            outward = radial.normalized() if radial.length > 1e-6 else Vector((0, 0, 0))
-            vertex.co += axis * up + outward * out
+            outward = radial.normalized() if radial.length > 1e-6 else axis.cross(Vector((0, 0, 1)))
+            vertex.co = (neck_base + axis * (ring_axial + up)
+                         + outward * (ring_radius + out))
         bm.normal_update()
         return verts
 
-    grow(top_edges, 0.030, 0.007)
-    ring = boundary_ring(collar_top.z + 0.020)
-    grow(ring, 0.014, -0.008)
-    ring = boundary_ring(collar_top.z + 0.030)
-    grow(ring, -0.012, -0.002)
+    def ring_edges(verts):
+        verts_set = set(verts)
+        return [edge for edge in bm.edges if edge.is_boundary
+                and edge.verts[0] in verts_set and edge.verts[1] in verts_set]
+
+    ring = grow(top_edges, 0.022, 0.006)
+    if len(ring_edges(ring)) < 20:
+        fail('the first collar extrude left only %d boundary edges'
+             % len(ring_edges(ring)))
+    ring = grow(ring_edges(ring), 0.011, -0.005)
+    if len(ring_edges(ring)) < 20:
+        fail('the second collar extrude left only %d boundary edges'
+             % len(ring_edges(ring)))
+    ring = grow(ring_edges(ring), -0.009, -0.002)
 
     mesh = bpy.data.meshes.new('river_amber_rollneck_mesh')
     bm.to_mesh(mesh)
     bm.free()
     obj = bpy.data.objects.new('river_amber_rollneck', mesh)
     bpy.context.scene.collection.objects.link(obj)
+    obj['amberCollarTopZ'] = collar_top
+    obj['amberChinZ'] = chin
     for group in body.vertex_groups:
         obj.vertex_groups.new(name=group.name)
     bpy.ops.object.select_all(action='DESELECT')
@@ -1426,24 +1572,101 @@ def build_rollneck(body, armature):
     decimate.ratio = 0.38
     bpy.ops.object.modifier_apply(modifier=decimate.name)
     mesh = obj.data
+
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    evaluated_body = body.evaluated_get(depsgraph)
+    suit = bpy.data.objects['river_amber_suit']
+    suit_bvh, suit_boundary = suit_surface(suit)
+    contained = 0
+    for vertex in mesh.vertices:
+        if vertex.co.z > collar_top - 0.005:
+            continue
+        location, normal, face, distance = suit_bvh.find_nearest(vertex.co)
+        if location is None or distance > 0.06:
+            continue
+        if suit_boundary[face] < 3:
+            continue
+        if (vertex.co - location).dot(normal) > 0.002:
+            vertex.co = location - normal * 0.004
+            contained += 1
+    clamped = 0
+    for vertex in mesh.vertices:
+        hit, location, normal, _ = evaluated_body.closest_point_on_mesh(vertex.co)
+        if not hit:
+            continue
+        if (vertex.co - location).dot(normal) < 0.005:
+            vertex.co = location + normal * 0.007
+            clamped += 1
+    mesh.update()
+    print('ROLLNECK contained=%d body_clamped=%d' % (contained, clamped))
+
     modifier = obj.modifiers.new('Armature', 'ARMATURE')
     modifier.object = armature
     obj.parent = armature
     material = bpy.data.materials.new('river_amber_rollneck_material')
     material.use_nodes = True
     bsdf = material.node_tree.nodes.get('Principled BSDF')
-    bsdf.inputs['Base Color'].default_value = (0.013, 0.013, 0.015, 1.0)
-    bsdf.inputs['Roughness'].default_value = 0.68
+    bsdf.inputs['Base Color'].default_value = (0.021, 0.020, 0.019, 1.0)
+    bsdf.inputs['Roughness'].default_value = 0.74
     sheen = bsdf.inputs.get('Sheen Weight')
     if sheen is not None:
-        sheen.default_value = 0.22
+        sheen.default_value = 0.04
+    specular = bsdf.inputs.get('Specular IOR Level')
+    if specular is not None:
+        specular.default_value = 0.25
     mesh.materials.append(material)
     mesh.calc_loop_triangles()
     for polygon in mesh.polygons:
         polygon.use_smooth = True
-    print('ROLLNECK verts=%d tris=%d groups=%d' % (
-        len(mesh.vertices), len(mesh.loop_triangles), len(obj.vertex_groups)))
+    print('ROLLNECK verts=%d tris=%d groups=%d fold=%.3f'
+          % (len(mesh.vertices), len(mesh.loop_triangles), len(obj.vertex_groups),
+             fold_height))
     return obj
+
+
+def suit_surface(suit):
+    """A BVH over the suit's rendered surface plus each face's distance to an opening.
+
+    The suit still carries a subdivision modifier, so the evaluated mesh's faces do not
+    line up with the base mesh; the base mesh is already in the seated rest (the carry has
+    run) and is what the vertex groups and the seam distances refer to. Boundary distance
+    is measured in edge steps from the open edges, so a roll-neck vertex near the lapel
+    opening is recognised as legitimately visible and is not pulled inside.
+    """
+    from mathutils.bvhtree import BVHTree
+
+    counters = {}
+    for polygon in suit.data.polygons:
+        for key in polygon.edge_keys:
+            counters[key] = counters.get(key, 0) + 1
+    adjacency = {}
+    for edge in suit.data.edges:
+        first, second = edge.vertices
+        adjacency.setdefault(first, []).append(second)
+        adjacency.setdefault(second, []).append(first)
+    from collections import deque
+
+    steps = {}
+    queue = deque()
+    for edge in suit.data.edges:
+        if counters.get(tuple(sorted(edge.vertices)), 0) == 1:
+            for index in edge.vertices:
+                if index not in steps:
+                    steps[index] = 0
+                    queue.append(index)
+    while queue:
+        current = queue.popleft()
+        for neighbour in adjacency.get(current, ()):
+            if neighbour not in steps:
+                steps[neighbour] = steps[current] + 1
+                queue.append(neighbour)
+    polygons = [tuple(polygon.vertices) for polygon in suit.data.polygons]
+    vertices = [vertex.co.copy() for vertex in suit.data.vertices]
+    bvh = BVHTree.FromPolygons(vertices, polygons)
+    face_steps = []
+    for polygon in suit.data.polygons:
+        face_steps.append(min(steps.get(index, 999) for index in polygon.vertices))
+    return bvh, face_steps
 
 
 def add_guides(seat=None):
@@ -1586,6 +1809,7 @@ def run_build():
     seat = seated_bake(armature, meshes)
     remove_helpers(human)
     conform_hair(human, attached['hair'])
+    orient_eyes(attached['eyes'])
 
     rollneck = build_rollneck(human, armature)
     apply_materials(human, attached, rollneck)
@@ -1926,12 +2150,13 @@ def export_and_parse(armature):
     return parse_glb()
 
 
-A2_VIEWS = (
+A3_VIEWS = (
     ('front', (0.02, -1.85, 1.20), (0.0, -0.22, 1.02), 60.0),
     ('three_quarter_l', (-1.15, -1.55, 1.24), (0.0, -0.16, 1.00), 60.0),
     ('three_quarter_r', (1.15, -1.55, 1.24), (0.0, -0.16, 1.00), 60.0),
     ('side', (-1.85, -0.05, 1.15), (0.0, -0.05, 0.98), 60.0),
-    ('overhead', (0.10, -1.55, 1.75), (0.0, -0.25, 0.92), 45.0),
+    ('face', (0.0, -0.62, 1.27), (0.0, -0.05, 1.24), 85.0),
+    ('rear_three_quarter', (0.95, 1.45, 1.42), (0.0, -0.08, 1.04), 60.0),
 )
 
 
@@ -1977,7 +2202,7 @@ def assign_action(armature, action):
 
 
 def run_render(which='both'):
-    """One render pass: five contact views at idle start, then the three idle endpoints."""
+    """One render pass: six contact views at idle start, then the three idle endpoints."""
     bpy.ops.wm.open_mainfile(filepath=BLEND)
     scene = bpy.context.scene
     engines = {item.identifier for item in
@@ -2000,19 +2225,21 @@ def run_render(which='both'):
     assign_action(armature, idle)
     scene.frame_set(int(frames[0]))
     entries = []
-    for name, location, target, lens in A2_VIEWS:
+    for name, location, target, lens in A3_VIEWS:
         path = render_tile(scene, camera, name, location, target, lens, True)
         entries.append(('view', name, path))
     for frame in frames:
         scene.frame_set(int(frame))
         path = render_tile(scene, camera, 'idle_%d' % frame,
-                           A2_VIEWS[0][1], A2_VIEWS[0][2], A2_VIEWS[0][3], True)
+                           A3_VIEWS[0][1], A3_VIEWS[0][2], A3_VIEWS[0][3], True)
         entries.append(('idle', str(frame), path))
 
     arrays = load_tiles([path for _, _, path in entries])
-    compose_arrays(arrays, 4, 'native_amber_contact_sheet', CONTACT_SHEET)
+    view_arrays = [arrays[index] for index, entry in enumerate(entries)
+                   if entry[0] == 'view']
     idle_arrays = [arrays[index] for index, entry in enumerate(entries)
                    if entry[0] == 'idle']
+    compose_arrays(view_arrays, 3, 'native_amber_contact_sheet', CONTACT_SHEET)
     compose_arrays(idle_arrays, 3, 'native_amber_idle_sheet', IDLE_SHEET)
     for _, _, path in entries:
         os.remove(path)
