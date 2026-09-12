@@ -153,13 +153,6 @@ AMBER_IDLE = {
     ],
 }
 
-# Ported from export_native_silver.py, where they were measured on this exact rig. A hand
-# resting on a surface is nearly flat, so positive X (which lifts the fingertip) is wrong
-# for a curl; the thumb's frame is rolled ninety degrees and takes its bend on Z.
-RELAXED_FINGER_CURL = (-22.0, -26.0, -14.0)
-RELAXED_THUMB_CURL = ((5.0, 0.0, -9.0), (4.0, 0.0, -7.0), (3.0, 0.0, -4.0))
-RELAXED_WRIST = (6.0, 0.0, 7.0)
-
 TILE_W, TILE_H = 640, 820
 
 
@@ -245,6 +238,8 @@ def set_material_scalar(obj, key, value):
 
 def bake_rest(armature):
     """Turn the current pose into the rest pose. Meshes are only carried once, later."""
+    if bpy.context.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.select_all(action='DESELECT')
     armature.select_set(True)
     bpy.context.view_layer.objects.active = armature
@@ -293,100 +288,160 @@ def palm_frame(armature, side):
     return joints, forward.normalized(), normal
 
 
-def relax_hands(armature):
-    touched = 0
+ARM_STEMS = ('clavicle', 'shoulder01', 'upperarm01', 'upperarm02',
+             'lowerarm01', 'lowerarm02', 'wrist')
+
+# Deliberately unequal roles. The left hand is the supported hand: flat on the rail,
+# fingers together, palm down. The right is the available betting hand: lifted off the
+# rail, fingers half-curled toward the palm, ready to move a chip. The previous build
+# gave both hands the same relaxed curl, which is what "mirrored open palms" was.
+ARM_ROLES = {
+    'L': {
+        'finger_curl': (-16.0, -20.0, -8.0),
+        'thumb_curl': ((4.0, 0.0, -7.0), (3.0, 0.0, -6.0), (2.0, 0.0, -3.0)),
+        'splay': 0.85,
+        'aim': (0.02, -1.0, -0.03),
+        'roll': 0.0,
+        'pole': (0.35, 0.0, -1.0),
+        'wrist_dx': -0.085,
+        'wrist_y': -0.105,
+        'wrist_lift': 0.020,
+    },
+    'R': {
+        'finger_curl': (-38.0, -50.0, -32.0),
+        'thumb_curl': ((6.0, 0.0, -12.0), (5.0, 0.0, -10.0), (4.0, 0.0, -6.0)),
+        'splay': 0.70,
+        'aim': (-0.10, -1.0, -0.28),
+        'roll': -22.0,
+        'pole': (-0.35, 0.0, -1.0),
+        'wrist_dx': 0.070,
+        'wrist_y': -0.135,
+        'wrist_lift': 0.075,
+    },
+}
+
+# The clavicle and shoulder take a share of the reach before the upper arm carries the
+# remainder. Linear blend skinning averages a vertex between the transforms of the bones
+# that own it, so one joint doing all the work is the worst case for the sleeve around it.
+GIRDLE_AIM = {
+    'L': {'clavicle': (0.975, -0.02, 0.12), 'shoulder01': (0.78, -0.16, -0.60)},
+    'R': {'clavicle': (-0.975, -0.02, 0.12), 'shoulder01': (-0.78, -0.16, -0.60)},
+}
+
+
+def measure_arm_lengths(armature):
+    lengths = {}
     for side in ('L', 'R'):
-        sign = 1.0 if side == 'L' else -1.0
-        wrist = armature.pose.bones.get('wrist.' + side)
-        if wrist is not None:
-            wrist.rotation_mode = 'XYZ'
-            wrist.rotation_euler = (
-                math.radians(RELAXED_WRIST[0]),
-                math.radians(RELAXED_WRIST[1]),
-                math.radians(sign * RELAXED_WRIST[2]),
-            )
-            touched += 1
-        for joint, angles in enumerate(RELAXED_THUMB_CURL, start=1):
-            bone = armature.pose.bones.get('finger1-%d.%s' % (joint, side))
+        for stem in ARM_STEMS:
+            bone = armature.data.bones.get(stem + '.' + side)
+            if bone is not None:
+                lengths[stem + '.' + side] = bone.length
+    return lengths
+
+
+def aim_bone(bone, direction):
+    """Rotate a pose bone about its own head so it points along a world direction.
+
+    Rotation only: no location channel and no scale is written, so the bone keeps the
+    source segment length that was measured before any of this was authored.
+    """
+    current = (bone.tail - bone.head).normalized()
+    direction = Vector(direction).normalized()
+    rotate_pose_bone(bone, current.rotation_difference(direction).to_matrix().to_4x4())
+
+
+def solve_arm(armature, side, wrist_target, pole, source):
+    """Two-link analytic IK with the measured source lengths, rotation only.
+
+    The previous build solved through a Blender IK constraint and baked the visual
+    transform, which left upperarm01 nine percent longer than the source and the forearm
+    2.5 percent shorter: the collapsed limb lengths this packet names. Every step here
+    aims one bone at a direction and touches nothing else.
+    """
+    upper = armature.pose.bones['upperarm01.' + side]
+    upper_twist = armature.pose.bones['upperarm02.' + side]
+    fore = armature.pose.bones['lowerarm01.' + side]
+    fore_twist = armature.pose.bones['lowerarm02.' + side]
+    upper_length = source['upperarm01.' + side] + source['upperarm02.' + side]
+    fore_length = source['lowerarm01.' + side] + source['lowerarm02.' + side]
+    shoulder = upper.head.copy()
+    target = Vector(wrist_target)
+    offset = target - shoulder
+    distance = min(max(offset.length, abs(upper_length - fore_length) + 1e-4),
+                   upper_length + fore_length - 1e-4)
+    direction = offset.normalized()
+    cosine = (upper_length * upper_length + distance * distance
+              - fore_length * fore_length) / (2.0 * upper_length * distance)
+    cosine = max(-1.0, min(1.0, cosine))
+    sine = math.sqrt(max(0.0, 1.0 - cosine * cosine))
+    pole = Vector(pole)
+    perpendicular = pole - direction * pole.dot(direction)
+    if perpendicular.length < 1e-5:
+        fail('the %s arm pole is parallel to the shoulder-wrist line' % side)
+    perpendicular.normalize()
+    elbow = shoulder + (direction * cosine + perpendicular * sine) * upper_length
+    aim_bone(upper, elbow - shoulder)
+    aim_bone(upper_twist, elbow - upper_twist.head)
+    aim_bone(fore, target - fore.head)
+    aim_bone(fore_twist, target - fore_twist.head)
+    landed = fore_twist.tail.copy()
+    return {
+        'shoulder': shoulder,
+        'elbow': elbow,
+        'wrist': landed,
+        'error': (landed - target).length,
+    }
+
+
+def curl_hand(armature, side, role):
+    sign = 1.0 if side == 'L' else -1.0
+    touched = 0
+    for joint, angles in enumerate(role['thumb_curl'], start=1):
+        bone = armature.pose.bones.get('finger1-%d.%s' % (joint, side))
+        if bone is None:
+            continue
+        bone.rotation_mode = 'XYZ'
+        bone.rotation_euler = (
+            math.radians(angles[0]), math.radians(angles[1]),
+            math.radians(sign * angles[2]))
+        touched += 1
+    for finger in range(2, 6):
+        for joint, degrees in enumerate(role['finger_curl'], start=1):
+            bone = armature.pose.bones.get('finger%d-%d.%s' % (finger, joint, side))
             if bone is None:
                 continue
             bone.rotation_mode = 'XYZ'
-            bone.rotation_euler = (
-                math.radians(angles[0]),
-                math.radians(angles[1]),
-                math.radians(sign * angles[2]),
-            )
+            bone.rotation_euler = (math.radians(degrees), 0.0, 0.0)
             touched += 1
-        for finger in range(2, 6):
-            for joint, degrees in enumerate(RELAXED_FINGER_CURL, start=1):
-                bone = armature.pose.bones.get('finger%d-%d.%s' % (finger, joint, side))
-                if bone is None:
-                    continue
-                bone.rotation_mode = 'XYZ'
-                bone.rotation_euler = (math.radians(degrees), 0.0, 0.0)
-                touched += 1
-    if touched < 20:
-        fail('relaxed only %d finger joints' % touched)
+    if touched < 10:
+        fail('curled only %d finger joints on side %s' % (touched, side))
     bpy.context.view_layer.update()
-    close_finger_splay(armature)
-    print('HANDS relaxed joints=%d' % touched)
+    close_finger_splay(armature, side, role['splay'])
+    print('HAND %s curled joints=%d' % (side, touched))
 
 
-def close_finger_splay(armature, factor=0.72):
-    closed = []
-    for side in ('L', 'R'):
-        joints, forward, normal = palm_frame(armature, side)
+def close_finger_splay(armature, side, factor):
+    joints, forward, normal = palm_frame(armature, side)
 
-        def in_plane(vector):
-            flattened = vector - normal * vector.dot(normal)
-            return flattened.normalized() if flattened.length > 1e-6 else None
+    def in_plane(vector):
+        flattened = vector - normal * vector.dot(normal)
+        return flattened.normalized() if flattened.length > 1e-6 else None
 
-        reference = in_plane(forward)
-        for finger, bones in joints.items():
-            if finger == 3 or reference is None:
-                continue
-            base, _, tip = bones
-            direction = in_plane(tip.matrix.translation - base.matrix.translation)
-            if direction is None:
-                continue
-            angle = direction.angle(reference)
-            if direction.cross(reference).dot(normal) < 0.0:
-                angle = -angle
-            closed.append((side, finger, math.degrees(angle)))
-            rotate_pose_bone(base, Matrix.Rotation(angle * factor, 4, normal))
-    spread = max(abs(angle) for _, _, angle in closed)
-    print('SPLAY closed %d fingers, widest was %.1f degrees' % (len(closed), spread))
-
-
-def retarget_arm(armature, side, bone_name, target_world, pole_world, chain_count):
-    target = bpy.data.objects.new('amber_wrist_target.' + side, None)
-    pole = bpy.data.objects.new('amber_elbow_pole.' + side, None)
-    bpy.context.scene.collection.objects.link(target)
-    bpy.context.scene.collection.objects.link(pole)
-    target.location = target_world
-    pole.location = pole_world
-    bone = armature.pose.bones[bone_name]
-    constraint = bone.constraints.new('IK')
-    constraint.target = target
-    constraint.pole_target = pole
-    constraint.chain_count = chain_count
-    bpy.context.view_layer.update()
-    bpy.ops.object.select_all(action='DESELECT')
-    armature.select_set(True)
-    bpy.context.view_layer.objects.active = armature
-    bpy.ops.object.mode_set(mode='POSE')
-    bpy.ops.pose.select_all(action='SELECT')
-    bpy.ops.pose.visual_transform_apply()
-    landed = bone.tail.copy()
-    error = (landed - target_world).length
-    print('IK %s %s landed_error=%.4f tail=%s' % (
-        side, bone_name, error, [round(v, 3) for v in landed]))
-    if error > 0.02:
-        fail('the %s hand IK landed %.4f from its rail target' % (side, error))
-    bpy.ops.object.mode_set(mode='OBJECT')
-    bone.constraints.remove(constraint)
-    bpy.data.objects.remove(target, do_unlink=True)
-    bpy.data.objects.remove(pole, do_unlink=True)
+    reference = in_plane(forward)
+    closed = 0
+    for finger, bones in joints.items():
+        if finger == 3 or reference is None:
+            continue
+        base, _, tip = bones
+        direction = in_plane(tip.matrix.translation - base.matrix.translation)
+        if direction is None:
+            continue
+        angle = direction.angle(reference)
+        if direction.cross(reference).dot(normal) < 0.0:
+            angle = -angle
+        rotate_pose_bone(base, Matrix.Rotation(angle * factor, 4, normal))
+        closed += 1
+    print('SPLAY %s closed %d fingers factor=%.2f' % (side, closed, factor))
 
 
 def signed_angle(first, second, axis):
@@ -396,33 +451,42 @@ def signed_angle(first, second, axis):
     return angle
 
 
-def settle_hand(armature, side, direction):
-    """Aim the hand along the rail and roll the palm down around that aim.
+def settle_hand(armature, side, direction, roll_degrees=0.0):
+    """Pronate roughly, aim the hand, then roll the palm about the aim.
 
-    The IK places the wrist joint; this then rotates the wrist bone about its own head,
-    which is the joint the IK placed, so the aim cannot drag the wrist off the rail. The
-    pronation is a roll about the aim axis, because the minimal rotation that
-    export_native_silver's level_palm used bent the hand back at the wrist to force the
-    palm normal down while the fingers kept pointing wherever the IK left them.
+    The order matters: a roll on lowerarm02 swings the fingers, so it has to happen
+    before the aim, not after it. The bulk of the pronation goes on the forearm twist and
+    the remainder is a roll about the aim axis at the wrist, which cannot drag the fingers
+    off the aim. A ninety degree turn on one joint wrings the mesh around it.
     """
     wrist = armature.pose.bones['wrist.' + side]
-    direction = direction.normalized()
-    for _ in range(2):
+    fore_twist = armature.pose.bones['lowerarm02.' + side]
+    direction = Vector(direction).normalized()
+    down = Vector((0.0, 0.0, -1.0))
+    fore_axis = (fore_twist.tail - fore_twist.head).normalized()
+    _, _, normal = palm_frame(armature, side)
+    rotate_pose_bone(
+        fore_twist,
+        Matrix.Rotation(signed_angle(normal, down, fore_axis) * 0.5, 4, fore_axis))
+    for _ in range(3):
         _, forward, _ = palm_frame(armature, side)
         rotate_pose_bone(wrist, forward.rotation_difference(direction).to_matrix().to_4x4())
-    _, forward, normal = palm_frame(armature, side)
-    down = Vector((0.0, 0.0, -1.0))
+    _, _, normal = palm_frame(armature, side)
     rotate_pose_bone(
         wrist, Matrix.Rotation(signed_angle(normal, down, direction), 4, direction))
+    if abs(roll_degrees) > 1e-6:
+        rotate_pose_bone(
+            wrist, Matrix.Rotation(math.radians(roll_degrees), 4, direction))
     joints, forward, normal = palm_frame(armature, side)
-    joint = joints[3][2].matrix.translation
-    print('HAND %s aim=%.1fdeg palm=(%+.2f,%+.2f,%+.2f) fingertip_z=%.3f'
+    fingertip = joints[3][2].matrix.translation
+    print('HAND %s aim=%.1fdeg palm=(%+.2f,%+.2f,%+.2f) fingertip=(%.3f,%.3f,%.3f)'
           % (side, math.degrees(forward.angle(direction)), normal.x, normal.y, normal.z,
-             joint.z))
-    if forward.dot(direction) < 0.96:
-        fail('the %s hand is not aimed at the rail' % side)
-    if normal.z > -0.80:
-        fail('the %s palm is not down on the rail' % side)
+             fingertip.x, fingertip.y, fingertip.z))
+    if forward.dot(direction) < 0.94:
+        fail('the %s hand is not aimed at its target direction' % side)
+    if normal.z > -0.55:
+        fail('the %s palm is on edge, normal (%+.2f,%+.2f,%+.2f)'
+             % (side, normal.x, normal.y, normal.z))
 
 
 def carry_meshes(armature, meshes, before):
@@ -627,6 +691,269 @@ def relax_creased(obj, before_positions, threshold=0.05, factor=0.35, rounds=2):
     print('RELAX %s moved=%d threshold=%.3f' % (obj.name, len(moved), threshold))
 
 
+def smooth_weights(obj, centres, radius, rounds, factor, bone_names):
+    """Blur the bone weights across the shoulder and elbow rings of a garment.
+
+    The jacket body and its sleeve are one mesh but are owned by different bones; a large
+    upper-arm rotation makes them pull apart at the armhole, which is the gap and the
+    collapsed panel the front views showed. Averaging weights across that ring hands the
+    seam to both bone sets, so the surface deforms through it instead of separating.
+    """
+    index_names = {group.index: group.name for group in obj.vertex_groups}
+    bone_indices = {index for index, name in index_names.items() if name in bone_names}
+    mesh = obj.data
+    selected = [vertex.index for vertex in mesh.vertices
+                if any((obj.matrix_world @ vertex.co - centre).length < radius
+                       for centre in centres)]
+    if not selected:
+        fail('weight smoothing found no %s vertices near the joints' % obj.name)
+    weights = {}
+    for index in selected:
+        weights[index] = {group.group: group.weight
+                          for group in mesh.vertices[index].groups
+                          if group.group in bone_indices and group.weight > 0.0}
+    adjacency = [[] for _ in mesh.vertices]
+    for edge in mesh.edges:
+        first, second = edge.vertices
+        adjacency[first].append(second)
+        adjacency[second].append(first)
+    selected_set = set(selected)
+    for _ in range(rounds):
+        updated = {}
+        for index in selected:
+            neighbours = [neighbour for neighbour in adjacency[index]
+                          if neighbour in selected_set] or adjacency[index]
+            if not neighbours:
+                continue
+            totals = {}
+            for neighbour in neighbours:
+                source = weights.get(neighbour)
+                if source is None:
+                    source = {group.group: group.weight
+                              for group in mesh.vertices[neighbour].groups
+                              if group.group in bone_indices and group.weight > 0.0}
+                for group, weight in source.items():
+                    totals[group] = totals.get(group, 0.0) + weight
+            count = len(neighbours)
+            blended = {}
+            for group in set(totals) | set(weights[index]):
+                blended[group] = (
+                    (1.0 - factor) * weights[index].get(group, 0.0)
+                    + factor * totals.get(group, 0.0) / count)
+            updated[index] = blended
+        weights.update(updated)
+    for index, weight_map in weights.items():
+        for group in bone_indices:
+            obj.vertex_groups[group].remove([index])
+        total = sum(weight_map.values())
+        if total <= 0.0:
+            continue
+        for group, weight in weight_map.items():
+            obj.vertex_groups[group].add([index], weight / total, 'REPLACE')
+    print('WEIGHTS %s smoothed=%d radius=%.3f rounds=%d'
+          % (obj.name, len(selected), radius, rounds))
+
+
+RAIL_BOX = ((-0.425, -0.371183, 0.786957), (0.425, -0.181183, 0.836957))
+FELT_BOX = ((-0.55, -1.001183, 0.751957), (0.55, -0.371183, 0.791956))
+
+
+def inside_box(point, box):
+    return all(box[0][axis] <= point[axis] <= box[1][axis] for axis in range(3))
+
+
+def segment_distance(point, start, end):
+    direction = end - start
+    if direction.length < 1e-9:
+        return (point - start).length
+    t = max(0.0, min(1.0, (point - start).dot(direction) / direction.length_squared))
+    return (point - (start + direction * t)).length
+
+
+# Capsule radii around the arm segments: the sleeve is thickest at the shoulder, the cuff
+# is a little wider than the forearm, and the hand is thin. A bare distance to the bone
+# line counted the jacket hem and the hip as arm geometry because the hand segment is a
+# long line, so the test is a clearance against these radii.
+ARM_RADII = (0.080, 0.070, 0.045)
+
+
+def arm_clearance(point, armature, side):
+    joints = [armature.data.bones[stem + '.' + side].head_local
+              for stem in ('upperarm01', 'lowerarm01', 'wrist')]
+    joints.append(armature.data.bones['finger3-3.' + side].tail_local)
+    return min(segment_distance(point, joints[index], joints[index + 1]) - ARM_RADII[index]
+               for index in range(3))
+
+
+def evaluated_points(meshes):
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    points = {}
+    for obj in meshes:
+        evaluated = obj.evaluated_get(depsgraph)
+        mesh = evaluated.to_mesh()
+        points[obj.name] = [evaluated.matrix_world @ vertex.co for vertex in mesh.vertices]
+        evaluated.to_mesh_clear()
+    return points
+
+
+def check_furniture(meshes, armature, label):
+    """Collision and contact gates, validated against a known penetrating condition.
+
+    The instrument is the box test itself: the same points shifted 60mm down must report
+    intersections, or the check is not observing the table and its result is worthless.
+    """
+    points = evaluated_points(meshes)
+    flat = [(name, point) for name, values in points.items() for point in values]
+    sunk = [(name, point) for name, point in flat
+            if point.z < 0.95
+            and any(inside_box(point, box) for box in (RAIL_BOX, FELT_BOX))]
+    arm_sunk = [(name, point) for name, point in sunk
+                if min(arm_clearance(point, armature, 'L'),
+                       arm_clearance(point, armature, 'R')) < 0.0]
+    validation = sum(1 for name, point in flat
+                     if point.z < 0.95
+                     and any(inside_box(point + Vector((0.0, 0.0, -0.06)), box)
+                             for box in (RAIL_BOX, FELT_BOX))
+                     and min(arm_clearance(point + Vector((0.0, 0.0, -0.06)),
+                                           armature, 'L'),
+                             arm_clearance(point + Vector((0.0, 0.0, -0.06)),
+                                           armature, 'R')) < 0.0)
+    sinks = {}
+    for name, point in sunk:
+        sinks[name] = sinks.get(name, 0) + 1
+    print('FURNITURE %s arm_sunk=%d other_contacts=%d by_mesh=%s validation_arm_sunk=%d'
+          % (label, len(arm_sunk), len(sunk) - len(arm_sunk), sinks, validation))
+    if validation <= 0:
+        fail('the arm penetration check did not fire on the known penetrating condition')
+    if arm_sunk:
+        worst = min(arm_sunk, key=lambda entry: entry[1].z)
+        fail('%d arm, sleeve or hand vertices penetrate the furniture, worst %s '
+             '(%.3f,%.3f,%.3f) at %.3f m from the arm line'
+             % (len(arm_sunk), worst[0], worst[1].x, worst[1].y, worst[1].z,
+                min(segment_distance(worst[1],
+                                     armature.data.bones['lowerarm01.L'].head_local,
+                                     armature.data.bones['finger3-3.L'].tail_local),
+                    segment_distance(worst[1],
+                                     armature.data.bones['lowerarm01.R'].head_local,
+                                     armature.data.bones['finger3-3.R'].tail_local))))
+
+    rail_top = RAIL_BOX[1][2]
+    for side in ('L', 'R'):
+        near = [point for point in
+                points.get('river_native_amber_body', [])
+                + points.get('river_amber_suit', [])
+                if arm_clearance(point, armature, side) <= 0.02]
+        over = [point for point in near
+                if RAIL_BOX[0][0] <= point.x <= RAIL_BOX[1][0]
+                and RAIL_BOX[0][1] <= point.y <= RAIL_BOX[1][1]]
+        if not over:
+            fail('no %s hand geometry over the rail to measure contact' % side)
+        delta = min(point.z for point in over) - rail_top
+        print('CONTACT %s delta=%+.4f m (%d points)' % (side, delta, len(over)))
+        if side == 'L' and not (-0.006 <= delta <= 0.015):
+            fail('the supported hand contact is %.4f m from the rail top' % delta)
+        if side == 'R' and delta < 0.012:
+            fail('the available hand is only %.4f m above the rail' % delta)
+
+    scene = bpy.context.scene
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    probes = []
+    for side in ('L', 'R'):
+        shoulder = armature.data.bones['upperarm01.' + side].head_local
+        wrist = armature.data.bones['wrist.' + side].head_local
+        outward = Vector((0.9 if side == 'L' else -0.9, -0.35, 0.25)).normalized()
+        for fraction in (0.15, 0.35, 0.55, 0.75):
+            axis = shoulder + (wrist - shoulder) * fraction
+            probes.append(('sleeve_%s_%.2f' % (side, fraction),
+                           axis + outward * 0.20, -outward, 'river_amber_suit'))
+    hand_points = [point for point in points.get('river_native_amber_body', [])
+                   if (point - armature.data.bones['finger3-3.L'].tail_local).length <= 0.06]
+    if not hand_points:
+        fail('no left-hand skin within 60mm of the middle fingertip')
+    hand_centre = sum(hand_points, Vector((0.0, 0.0, 0.0))) / len(hand_points)
+    probes.append(('hand_L', hand_centre + Vector((0.0, 0.0, 0.12)),
+                   Vector((0.0, 0.0, -1.0)), 'river_native_amber_body'))
+    for probe_label, origin, direction, expected in probes:
+        hit, location, normal, index, obj, matrix = scene.ray_cast(
+            depsgraph, origin, direction, distance=0.5)
+        name = obj.name if hit else 'none'
+        print('PROBE %s hit=%s expected=%s' % (probe_label, name, expected))
+        if name != expected:
+            fail('the %s probe hit %s, expected %s' % (probe_label, name, expected))
+    print('FURNITURE %s probes_passed=%d' % (label, len(probes)))
+
+
+def open_creases(obj, armature, radius=0.22, rounds=24, factor=0.55, cap=0.014):
+    """Fill the valley linear blend skinning digs on the inside of the shoulder turn.
+
+    The shoulder region of this jacket carried pits up to 18mm deep after the arm carry,
+    which rendered as the dark craters at the armholes. Only concavities move: a vertex
+    whose neighbours average outside the surface is in a valley and is pulled towards it;
+    a vertex on a ridge is left alone. Plain smoothing flattens ridges too, which thins
+    the sleeve and fuses the arm to the torso.
+    """
+    joints = [armature.data.bones['upperarm01.' + side].head_local
+              for side in ('L', 'R')]
+    mesh = obj.data
+    matrix = obj.matrix_world
+    rotation = matrix.to_3x3()
+    inverse = matrix.inverted()
+    region = [vertex.index for vertex in mesh.vertices
+              if min(((matrix @ vertex.co) - joint).length for joint in joints) < radius]
+    if len(region) < 200:
+        fail('only %d suit vertices are within %.0fmm of a shoulder'
+             % (len(region), radius * 1000.0))
+    neighbours = {index: set() for index in region}
+    for edge in mesh.edges:
+        first, second = edge.vertices
+        if first in neighbours:
+            neighbours[first].add(second)
+        if second in neighbours:
+            neighbours[second].add(first)
+
+    def depth_map():
+        out = {}
+        for index in region:
+            around = neighbours[index]
+            if len(around) < 3:
+                continue
+            here = matrix @ mesh.vertices[index].co
+            average = sum((matrix @ mesh.vertices[other].co for other in around),
+                          Vector((0.0, 0.0, 0.0))) / len(around)
+            normal = (rotation @ mesh.vertices[index].normal).normalized()
+            out[index] = (average - here).dot(normal)
+        return out
+
+    start = depth_map()
+    worst_before = max(start.values()) if start else 0.0
+    travelled = {}
+    for _ in range(rounds):
+        moved = False
+        for index, depth in depth_map().items():
+            if depth <= 0.0002:
+                continue
+            budget = cap - travelled.get(index, 0.0)
+            if budget <= 0.0:
+                continue
+            normal = (rotation @ mesh.vertices[index].normal).normalized()
+            shift = min(depth * factor, budget)
+            mesh.vertices[index].co = inverse @ (
+                (matrix @ mesh.vertices[index].co) + normal * shift)
+            travelled[index] = travelled.get(index, 0.0) + shift
+            moved = True
+        if not moved:
+            break
+    mesh.update()
+    after = depth_map()
+    worst_after = max(after.values()) if after else 0.0
+    print('CREASE %s vertices=%d deepest %.1fmm -> %.1fmm'
+          % (obj.name, len(region), worst_before * 1000.0, worst_after * 1000.0))
+    if worst_after >= worst_before:
+        fail('the crease pass did not improve the shoulder valley')
+    if worst_after > 0.008:
+        fail('the shoulder valley is still %.1fmm deep' % (worst_after * 1000.0))
+
+
 def seat_on_floor(armature, meshes):
     """Drop the folded figure until the soles are on the local floor.
 
@@ -709,10 +1036,21 @@ def seat_on_floor(armature, meshes):
 
 
 def seated_bake(armature, meshes):
-    """Bake the shared seated rest, settle it on the floor, then author both arms."""
+    """Bake the shared seated rest, settle it, then author the arm chain from the source.
+
+    The arm pose is authored from measured source segment lengths and rotation only. It
+    puts the elbows below the shoulders, the forearms onto the furniture, and gives the
+    hands their two different roles.
+    """
     sys.path.insert(0, HERE)
     os.environ.setdefault('RIVER_OUT', os.path.join(ROOT, 'out'))
     import build_assets
+
+    source_lengths = measure_arm_lengths(armature)
+    print('ARM_SOURCE %s' % json.dumps(
+        {name: round(value, 5) for name, value in sorted(source_lengths.items())}))
+    armature['amberArmSourceLengths'] = json.dumps(
+        {name: value for name, value in sorted(source_lengths.items())})
 
     before = capture_rest(armature)
     build_assets.apply_seated_rest_pose(armature, pose_arms=False)
@@ -724,43 +1062,63 @@ def seated_bake(armature, meshes):
     before_arms = capture_rest(armature)
     arm_snapshots = {obj.name: [vertex.co.copy() for vertex in obj.data.vertices]
                      for obj in meshes}
+
+    bpy.ops.object.select_all(action='DESELECT')
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode='POSE')
+
+    arm_report = {}
     for side in ('L', 'R'):
-        sign = 1.0 if side == 'L' else -1.0
-        if side == 'R':
-            # The supported left arm keeps the shared rail contact. The right hand is
-            # pulled back along the rail and lifted a hair, so the forearm is steeper,
-            # unweighted and free to bet.
-            target = Vector((-0.105, -(reach - 0.105), rail_height + 0.022))
-            pole = Vector((-0.40, -reach * 0.30, rail_height + 0.14))
-            aim = Vector((-0.08, -1.0, -0.20))
-        else:
-            target = Vector((sign * 0.10, -(reach - 0.030), rail_height + 0.020))
-            pole = Vector((sign * 0.42, -reach * 0.34, rail_height + 0.16))
-            aim = Vector((0.02, -1.0, -0.20))
-        retarget_arm(armature, side, 'lowerarm02.' + side, target, pole, 4)
-    relax_hands(armature)
-    for side in ('L', 'R'):
-        settle_hand(
-            armature, side,
-            Vector((-0.08, -1.0, -0.20)) if side == 'R' else Vector((0.02, -1.0, -0.20)))
+        role = ARM_ROLES[side]
+        aim_bone(armature.pose.bones['clavicle.' + side],
+                 Vector(GIRDLE_AIM[side]['clavicle']))
+        aim_bone(armature.pose.bones['shoulder01.' + side],
+                 Vector(GIRDLE_AIM[side]['shoulder01']))
+        shoulder = armature.pose.bones['upperarm01.' + side].head.copy()
+        target = Vector((shoulder.x + role['wrist_dx'], role['wrist_y'],
+                         rail_height + role['wrist_lift']))
+        solve = solve_arm(armature, side, target, Vector(role['pole']), source_lengths)
+        if solve['error'] > 0.002:
+            fail('the %s wrist landed %.4f m from its target' % (side, solve['error']))
+        if shoulder.z - solve['elbow'].z < 0.04:
+            fail('the %s elbow is not below its shoulder' % side)
+        curl_hand(armature, side, role)
+        settle_hand(armature, side, Vector(role['aim']), role['roll'])
+        arm_report[side] = {
+            'shoulder': [round(v, 4) for v in solve['shoulder']],
+            'elbow': [round(v, 4) for v in solve['elbow']],
+            'wrist': [round(v, 4) for v in solve['wrist']],
+            'elbow_below_shoulder': round(shoulder.z - solve['elbow'].z, 4),
+            'reach': round((solve['wrist'] - solve['shoulder']).length, 4),
+        }
     bake_rest(armature)
     carry_meshes(armature, meshes, before_arms)
+
+    posed_lengths = measure_arm_lengths(armature)
+    worst = max(abs(posed_lengths[name] - source_lengths[name])
+                for name in source_lengths)
+    print('ARM_LENGTHS worst_delta=%.6f m' % worst)
+    if worst > 1e-5:
+        fail('the authored pose changed a source segment length by %.6f m' % worst)
+    print('ARM_POSE %s' % json.dumps(arm_report, sort_keys=True))
+
+    bone_names = {bone.name for bone in armature.data.bones}
+    for obj in meshes:
+        if 'suit' in obj.name:
+            centres = []
+            for side in ('L', 'R'):
+                centres.append(Vector(arm_report[side]['shoulder']))
+                centres.append(Vector(arm_report[side]['elbow']))
+            smooth_weights(obj, centres, radius=0.14, rounds=3, factor=0.5,
+                           bone_names=bone_names)
     for obj in meshes:
         if 'suit' in obj.name or 'body' in obj.name:
-            relax_creased(obj, arm_snapshots[obj.name])
-
-    report = {}
-    for side in ('L', 'R'):
-        wrist = armature.pose.bones['wrist.' + side]
-        tip = armature.pose.bones['finger3-3.' + side]
-        report[side] = {
-            'wrist': [round(v, 4) for v in wrist.head],
-            'fingertip': [round(v, 4) for v in tip.tail],
-        }
-        if tip.tail.z < 0.837 - 0.012 and -0.371 < tip.tail.y < -0.181 \
-                and abs(tip.tail.x) < 0.425:
-            fail('the %s hand reaches %.3f below the rail top' % (side, tip.tail.z))
-    print('HAND_CONTACT %s' % json.dumps(report, sort_keys=True))
+            relax_creased(obj, arm_snapshots[obj.name], threshold=0.06, factor=0.30,
+                          rounds=2)
+    for obj in meshes:
+        if 'suit' in obj.name:
+            open_creases(obj, armature)
     return seat
 
 
@@ -1237,6 +1595,7 @@ def run_build():
     add_guides(seat)
     add_lights_and_camera()
     author_actions(armature)
+    check_furniture([human, *attached.values(), rollneck], armature, 'build')
 
     bpy.ops.wm.save_as_mainfile(filepath=BLEND)
     triangles = 0
@@ -1445,6 +1804,43 @@ def run_verify():
                 if not math.isfinite(point.co[1]):
                     fail('non-finite keyframe in ' + action.name)
 
+    source_lengths = json.loads(armature.get('amberArmSourceLengths') or 'null')
+    if not source_lengths:
+        fail('the saved blend does not carry amberArmSourceLengths')
+    posed_lengths = measure_arm_lengths(armature)
+    worst_length = max(abs(posed_lengths[name] - source_lengths[name])
+                       for name in source_lengths)
+    print('VERIFY_ARM_LENGTHS worst_delta=%.6f m' % worst_length)
+    if worst_length > 1e-5:
+        fail('a saved segment length differs from its source by %.6f m' % worst_length)
+
+    assign_action(armature, idle)
+    worst_idle = 0.0
+    for frame in (round(frame_start), round((frame_start + frame_end) / 2),
+                  round(frame_end)):
+        bpy.context.scene.frame_set(int(frame))
+        evaluated_rig = armature.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        for side in ('L', 'R'):
+            for stem in ARM_STEMS:
+                bone = evaluated_rig.pose.bones.get(stem + '.' + side)
+                if bone is None:
+                    continue
+                worst_idle = max(
+                    worst_idle,
+                    abs((bone.tail - bone.head).length - source_lengths[stem + '.' + side]))
+    print('VERIFY_IDLE_LENGTHS worst_delta=%.6f m' % worst_idle)
+    if worst_idle > 1e-4:
+        fail('the idle changes a segment length by %.6f m' % worst_idle)
+    armature.animation_data.action = None
+    bpy.context.scene.frame_set(0)
+    for bone in armature.pose.bones:
+        bone.location = (0.0, 0.0, 0.0)
+        bone.rotation_euler = (0.0, 0.0, 0.0)
+        bone.rotation_quaternion = (1.0, 0.0, 0.0, 0.0)
+        bone.scale = (1.0, 1.0, 1.0)
+    check_furniture([bpy.data.objects[name] for name in CHARACTER_MESHES],
+                    armature, 'verify')
+
     durations = {name: [round(action.frame_range[0], 2), round(action.frame_range[1], 2)]
                  for name, action in actions.items()}
     material_names = sorted({material for report in mesh_report.values()
@@ -1464,6 +1860,10 @@ def run_verify():
         'material_count': len(material_names),
         'draw_calls_estimate': sum(
             max(1, len(report['materials'])) for report in mesh_report.values()),
+        'arm_source_lengths_m': {name: round(value, 5)
+                                 for name, value in sorted(source_lengths.items())},
+        'arm_length_worst_delta_m': worst_length,
+        'idle_length_worst_delta_m': worst_idle,
     }
     report['glb'] = export_and_parse(armature)
     with open(REPORT_JSON, 'w', encoding='utf-8') as handle:
@@ -1526,17 +1926,13 @@ def export_and_parse(armature):
     return parse_glb()
 
 
-TILES = (
-    ('front', (0.02, -2.55, 1.30), (0.0, -0.10, 1.16), 62.0, False),
-    ('three_quarter_l', (-1.55, -2.05, 1.34), (0.0, -0.05, 1.12), 62.0, False),
-    ('three_quarter_r', (1.55, -2.05, 1.34), (0.0, -0.05, 1.12), 62.0, False),
-    ('profile', (-2.45, 0.10, 1.30), (0.0, 0.02, 1.12), 62.0, False),
-    ('rear', (0.55, 1.85, 1.42), (0.0, 0.05, 1.18), 62.0, False),
-    ('rear_three_quarter', (-1.45, 1.75, 1.40), (0.0, 0.02, 1.15), 62.0, False),
-    ('face', (0.52, -1.05, 1.30), (0.0, -0.10, 1.27), 85.0, False),
-    ('gameplay', (0.0, -2.30, 1.20), (0.0, -0.35, 1.05), 40.0, True),
+A2_VIEWS = (
+    ('front', (0.02, -1.85, 1.20), (0.0, -0.22, 1.02), 60.0),
+    ('three_quarter_l', (-1.15, -1.55, 1.24), (0.0, -0.16, 1.00), 60.0),
+    ('three_quarter_r', (1.15, -1.55, 1.24), (0.0, -0.16, 1.00), 60.0),
+    ('side', (-1.85, -0.05, 1.15), (0.0, -0.05, 0.98), 60.0),
+    ('overhead', (0.10, -1.55, 1.75), (0.0, -0.25, 0.92), 45.0),
 )
-GAME_VIEW = ((0.0, -2.30, 1.20), (0.0, -0.35, 1.05), 40.0)
 
 
 def render_tile(scene, camera, name, location, target, lens, show_guides):
@@ -1551,14 +1947,17 @@ def render_tile(scene, camera, name, location, target, lens, show_guides):
     return scene.render.filepath
 
 
-def compose_sheet(paths, columns, name, path):
+def load_tiles(paths):
     tiles = []
     for tile_path in paths:
         image = bpy.data.images.load(tile_path)
         width, height = image.size
         tiles.append(np.array(image.pixels[:], dtype=np.float32).reshape(height, width, 4))
         bpy.data.images.remove(image)
-        os.remove(tile_path)
+    return tiles
+
+
+def compose_arrays(tiles, columns, name, path):
     rows = [np.hstack(tiles[i:i + columns]) for i in range(0, len(tiles), columns)]
     grid = np.vstack(list(reversed(rows)))
     image = bpy.data.images.new(name, grid.shape[1], grid.shape[0], alpha=True)
@@ -1577,7 +1976,8 @@ def assign_action(armature, action):
         animation.action_slot = action.slots[0]
 
 
-def run_render(which):
+def run_render(which='both'):
+    """One render pass: five contact views at idle start, then the three idle endpoints."""
     bpy.ops.wm.open_mainfile(filepath=BLEND)
     scene = bpy.context.scene
     engines = {item.identifier for item in
@@ -1593,25 +1993,31 @@ def run_render(which):
     camera = bpy.data.objects['amber_camera']
     scene.camera = camera
     armature = bpy.data.objects['river_native_amber_body.rig']
+    idle = bpy.data.actions['IDLE_breathe']
+    start, end = idle.frame_range
+    frames = [round(start), round((start + end) / 2), round(end)]
 
-    if which in ('contact', 'both'):
-        paths = [render_tile(scene, camera, name, location, target, lens, guides)
-                 for name, location, target, lens, guides in TILES]
-        compose_sheet(paths, 4, 'native_amber_contact_sheet', CONTACT_SHEET)
+    assign_action(armature, idle)
+    scene.frame_set(int(frames[0]))
+    entries = []
+    for name, location, target, lens in A2_VIEWS:
+        path = render_tile(scene, camera, name, location, target, lens, True)
+        entries.append(('view', name, path))
+    for frame in frames:
+        scene.frame_set(int(frame))
+        path = render_tile(scene, camera, 'idle_%d' % frame,
+                           A2_VIEWS[0][1], A2_VIEWS[0][2], A2_VIEWS[0][3], True)
+        entries.append(('idle', str(frame), path))
 
-    if which in ('idle', 'both'):
-        assign_action(armature, bpy.data.actions['IDLE_breathe'])
-        start, end = bpy.data.actions['IDLE_breathe'].frame_range
-        frames = [round(start), round((start + end) / 2), round(end)]
-        paths = []
-        for frame in frames:
-            scene.frame_set(int(frame))
-            paths.append(render_tile(
-                scene, camera, 'idle_%d' % frame, *GAME_VIEW[:2],
-                lens=GAME_VIEW[2], show_guides=True))
-        compose_sheet(paths, 3, 'native_amber_idle_sheet', IDLE_SHEET)
-        armature.animation_data.action = None
-        scene.frame_set(0)
+    arrays = load_tiles([path for _, _, path in entries])
+    compose_arrays(arrays, 4, 'native_amber_contact_sheet', CONTACT_SHEET)
+    idle_arrays = [arrays[index] for index, entry in enumerate(entries)
+                   if entry[0] == 'idle']
+    compose_arrays(idle_arrays, 3, 'native_amber_idle_sheet', IDLE_SHEET)
+    for _, _, path in entries:
+        os.remove(path)
+    armature.animation_data.action = None
+    scene.frame_set(0)
 
 
 def write_report_md(report):
