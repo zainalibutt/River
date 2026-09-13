@@ -94,6 +94,17 @@ docs/handoff/migration-state.md
 read_this_codex.md
 read_this_astra.md
 
+# Operating laws and character-lane packets - working notes, not the record.
+#
+# Each lane's laws are written from its own incidents while the work is live,
+# and the character packets brief work that is still being judged. Both stay on
+# disk beside the handoff. Older engine and venue packets were already public
+# and remain tracked.
+docs/handoff/*-laws.md
+docs/handoff/*_laws.md
+docs/handoff/packet-A*.md
+docs/handoff/packet-deepseek-*.md
+
 # Playwright
 test-results/
 playwright-report/

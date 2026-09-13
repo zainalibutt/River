@@ -15,9 +15,10 @@ River is built by Claude, Codex, DeepSeek and Fable working in parallel in one
 repository under one owner. **That is a headline theme, not a footnote.**
 
 Write about it directly: the lane split and why the work has different shapes,
-the shared-index incidents and what they cost, `deepseek-laws.md` as laws traced
-to specific failures rather than stated preferences, and the review discipline
-that came out of it.
+the shared-index incidents and what they cost, operating laws traced to specific
+failures rather than stated as preferences, and the review discipline that came
+out of it. The laws themselves are working notes and stay out of the tracked
+tree; the record describes them rather than linking to them.
 
 The orchestration is the least common thing here. Do not bury it out of
 modesty, and do not inflate it either — it earns its place because there are

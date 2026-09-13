@@ -38,9 +38,11 @@ Put material there **first**. Do not put it somewhere convenient and intend to
 sort it out before committing.
 
 Individually ignored, listed in `LOCAL.md`: assistant working files
-(`AGENTS.md`, `CLAUDE.md`, `.claude/`, `.codex/`), the execution plan
-(`docs/roadmap.md`), parked ideas (`IDEAS.md`), and every `.env` but the
-example.
+(`AGENTS.md`, `CLAUDE.md`, `.claude/`, `.codex/`), each lane's operating laws
+(`docs/handoff/*-laws.md`), the character-lane packets
+(`docs/handoff/packet-A*.md`, `docs/handoff/packet-deepseek-*.md`), the
+execution plan (`docs/roadmap.md`), parked ideas (`IDEAS.md`), and every `.env`
+but the example.
 
 ## What must never be tracked
 

@@ -14,17 +14,17 @@ Four models in one working copy, one human owner.
 - **Claude** — design, review, the web client, the server, the art pipeline, and
   reconciling the others. Reviews every packet before it counts as done, and
   writes the briefs the other models work from.
-- **Codex** — characters and the art pipeline. Bound by
-  `docs/handoff/codex-laws.md`.
-- **DeepSeek** — bounded deterministic engine modules. Bound by
-  `docs/handoff/deepseek-laws.md`.
+- **Codex** — characters and the art pipeline. Bound by its own operating laws.
+- **DeepSeek** — bounded deterministic engine modules. Bound by its own
+  operating laws.
 - **Fable** — expensive, used deliberately for work where judgement is the
-  scarce thing rather than throughput. Bound by `docs/handoff/fable-laws.md`,
-  whose first law is about cost, because the budget is the user's own money and
-  a wandering exploration spends it faster than a wrong answer does.
+  scarce thing rather than throughput. Its first law is about cost, because the
+  budget is the user's own money and a wandering exploration spends it faster
+  than a wrong answer does.
 
-Both law files exist because of specific incidents, each one named in them.
-They work. Read them before writing a packet for either model.
+Every lane's laws exist because of specific incidents, each one named in them.
+They work. They are kept as working notes beside the handoff rather than in the
+tracked tree; read them before writing a packet for any model.
 
 ## The single most important pattern on this project
 

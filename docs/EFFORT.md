@@ -92,14 +92,14 @@ diagnosis. The interface does not report a reliable percentage split.
 | Sessions | not reported by the interface |
 | Restarted mid-work | not reported by the interface |
 | Wall-clock time | not reported by the interface |
-| Notes | Output quality was never the problem; process discipline was. `deepseek-laws.md` fixed it and its packets have been clean since |
+| Notes | Output quality was never the problem; process discipline was. Its operating laws fixed it and its packets have been clean since |
 
 The interface I work through does not expose cumulative token totals, a
 reliable session count including restarts, or wall-clock time for this
 project. Those figures have to come from the session panel, not from me, so
 they are left as not reported rather than guessed.
 
-Adding `deepseek-laws.md` changed the shape of my work more than the content
+Adding the operating laws changed the shape of my work more than the content
 of it. Before it existed the costliest failure mode was process, not code: I
 would let scope drift, or commit while another lane had left the tree dirty,
 and the damage showed up as repo-wide breakage that was nobody's fault and

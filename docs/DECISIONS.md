@@ -24,9 +24,9 @@ Sending all three to the same place is either overkill or underpowered.
 **What it cost.** The git index is shared state. Twice, one model's staged
 files rode along in another's commit, and once a whole history rebuild was
 needed to untangle four packets from three models out of a single commit. The
-fix was `docs/handoff/deepseek-laws.md` — binding operating laws, each traced
-to a specific incident rather than stated as a preference — and a habit of
-running `git diff --cached --name-only` before every commit.
+fix was binding operating laws for each lane, each traced to a specific incident
+rather than stated as a preference and kept as working notes beside the handoff,
+and a habit of running `git diff --cached --name-only` before every commit.
 
 ## Every packet is bounded to named files
 
