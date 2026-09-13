@@ -30,9 +30,11 @@ Fable used selectively for bounded visual judgement.
 
 The table above is the historical measurement snapshot from the first two
 days; it is retained so the original claim remains auditable. Current checkpoint
-(2026-09-01): `HEAD`/`origin/main` are `defa10a`, the native-gold F3A character
-packet is reviewed, and curated visual captures 24–34 are tracked in
-`docs/progress/`. The generated `art/out/` tree remains intentionally ignored.
+(2026-09-13): the silver male and Amber are recorded in `PROGRESS.md` with
+curated captures 40–46, character pose and fit have moved to hand-authoring
+with the models assisting (`DECISIONS.md`), and the generated `art/out/` tree
+remains intentionally ignored. The fleet now includes Sol and Astra as the
+character lanes; their usage is not yet recorded here.
 
 ---
 
@@ -86,13 +88,14 @@ diagnosis. The interface does not report a reliable percentage split.
 ### DeepSeek — bounded deterministic engine modules
 
 | Metric | Value |
-|---|---|---|
+|---|---|
 | Role | Pure `packages/engine` modules: economy, REP, challenges, table items, cosmetics, seat presentation, betting dial, showdown order, hand history, bot personalities |
 | Tokens | not reported by the interface |
 | Sessions | not reported by the interface |
 | Restarted mid-work | not reported by the interface |
 | Wall-clock time | not reported by the interface |
 | Notes | Output quality was never the problem; process discipline was. Its operating laws fixed it and its packets have been clean since |
+| Amber, September | The seated Amber character proof came out of an iterative generation loop on DeepSeek 4.1, for about 5 US dollars in total |
 
 The interface I work through does not expose cumulative token totals, a
 reliable session count including restarts, or wall-clock time for this
