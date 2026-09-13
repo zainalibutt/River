@@ -68,7 +68,7 @@ glTF export, validated naming, loaded in the R3F scene.
 
 ## Prerequisites — resolved 2026-08-24
 
-Blender **5.2.0 LTS** is installed at `D:/Blender/Blender 5.2/blender.exe`, the Blender Lab MCP add-on is enabled, and the MCP bridge runs headlessly via `blender --command blender_mcp`. Headless scripting and live-scene inspection are both verified working.
+Blender **5.2.0 LTS** is installed on the build machine, the Blender Lab MCP add-on is enabled, and the MCP bridge runs headlessly via `blender --command blender_mcp`. Headless scripting and live-scene inspection are both verified working.
 
 One prerequisite remains: **a parametric human generator is not installed.** MakeHuman, MPFB2 or an equivalent Blender addon is required before stages 1 to 3 can begin. Nothing else blocks the pipeline.
 

@@ -29,6 +29,9 @@ const FORBIDDEN: readonly { pattern: RegExp; why: string }[] = [
   { pattern: /project_ref\s*[=:]\s*['"]?[a-z0-9]{20}/, why: 'a project ref in config' },
   { pattern: /eyJhbGciOi[A-Za-z0-9_-]{6,}/, why: 'looks like a signed token' },
   { pattern: /sb_(publishable|secret)_[A-Za-z0-9_-]{12,}/, why: 'looks like a Supabase key' },
+  // A home directory names the machine and the person on it, and it only ever
+  // arrives by pasting a working command into a document.
+  { pattern: /\b[A-Za-z]:[\\/]+Users[\\/]/, why: 'a local machine path' },
 ]
 
 /** Binary and generated paths where a match would be meaningless. */
@@ -67,6 +70,9 @@ describe('repository hygiene', () => {
     expect(files.length).toBeGreaterThan(50)
     expect(files).toContain('README.md')
     expect(FORBIDDEN.some(({ pattern }) => pattern.test('a Prominence Poker clone'))).toBe(true)
+    expect(FORBIDDEN.some(({ pattern }) => pattern.test('C:\\Users\\someone\\River'))).toBe(true)
+    expect(FORBIDDEN.some(({ pattern }) => pattern.test('C:/Users/someone/River'))).toBe(true)
     expect(FORBIDDEN.some(({ pattern }) => pattern.test('an ordinary sentence'))).toBe(false)
+    expect(FORBIDDEN.some(({ pattern }) => pattern.test('users of the C: drive'))).toBe(false)
   })
 })
