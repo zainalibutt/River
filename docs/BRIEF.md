@@ -28,12 +28,13 @@ holds up on the things a studio would be judged on:
   actions with public tells, chat that cannot steal focus mid-decision.
 - **Real multiplayer**, server-authoritative, with reconnect, away policy and a
   clock the client never owns.
-- **Generated art**, not bought assets. Venues, characters, chips and cards all
-  come out of a Blender pipeline in the repository.
+- **Made art**, not bought assets. Venues, chips and cards come out of a Blender
+  pipeline in the repository; characters are built on that pipeline and posed
+  and fitted by hand.
 
 ## How it is being answered
 
-Four models working in parallel in one repository under one owner:
+Several models working in parallel in one repository under one owner:
 
 | Lane | Work |
 |---|---|
@@ -41,6 +42,8 @@ Four models working in parallel in one repository under one owner:
 | **Codex** | Server, security, transport, migrations, the asset pipeline |
 | **DeepSeek** | Bounded deterministic engine modules — pure, tested, no I/O |
 | **Fable** | Bounded visual judgement and character/art review when the scarce input is taste rather than throughput |
+| **Sol and Astra** | Character lanes from September: Sol chooses each next step and the evidence it needs, Astra builds in Blender |
+| **Zain** | The owner. From 13 September, character pose and garment fit by hand in Blender |
 
 The delegation is the method, not a convenience. The work has genuinely
 different shapes: a crypto construction wants adversarial reasoning, a state
@@ -48,6 +51,17 @@ machine wants exhaustive enumeration, a design contract wants judgement about
 what a player will feel, and a visual gold-standard pass needs a controlled
 review budget. Sending every lane to the same place is either overkill or
 underpowered.
+
+### Where delegation stopped paying, so far
+
+Character art was the most delegated part of River, and it is the first place
+the experiment has given a clear answer. More than thirty bounded Blender passes
+between 7 and 12 September produced an accepted standing character and a usable
+seated base, and no accepted seated pose. Working on the file by hand turned out
+far quicker and far cheaper than briefing another pass, so characters are now
+posed and fitted by hand, with the models measuring, rendering and gating around
+that work. Finding the edge of useful delegation is part of what River set out
+to measure; the reasoning is in `DECISIONS.md`.
 
 ## Why it is measured
 

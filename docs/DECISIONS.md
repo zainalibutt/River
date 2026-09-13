@@ -28,6 +28,11 @@ fix was binding operating laws for each lane, each traced to a specific incident
 rather than stated as a preference and kept as working notes beside the handoff,
 and a habit of running `git diff --cached --name-only` before every commit.
 
+**Since then.** Character work gained two lanes of its own in September - Sol,
+choosing each next step and the evidence it needs, and Astra, building in
+Blender - and from 13 September the owner poses and fits characters by hand,
+with the models working around that. The last decision in this file says why.
+
 ## Every packet is bounded to named files
 
 A model is told exactly which files it may create or modify. Anything else is
@@ -93,6 +98,13 @@ rather than the work.
 camera parameters, prop placement — lives in `art/pipeline/` as code, and the
 build is the only way a venue comes into existence. `docs/design/14-venue-build-spec.md`
 records the measured values that seeded it.
+
+**Scope, from 13 September.** This still holds for every venue. It no longer
+holds for a character's pose and garment fit, which are now made by hand in
+Blender (see *Character art is hand-authored, with the models assisting*). The
+pipeline still builds, exports and gates every character the browser loads; the
+hand-authored `.blend` is the source for what the pipeline cannot regenerate,
+and it is kept locally rather than in the repository while it is being worked.
 
 ## Characters push realism, not stylisation
 
@@ -428,3 +440,41 @@ and every outside camera has the rail across them.
 
 *Rule this belongs to:* a review instrument that cannot see the failure is not
 evidence of its absence.
+
+## Character art is hand-authored, with the models assisting
+
+River's experiment is how far one developer gets by delegating hard, and the
+character art was the most delegated part of it. From 7 to 12 September the
+Blender work ran as bounded lane packets - Sol choosing the next step and the
+evidence it needed, Astra building in Blender - and most passes ended in a proof
+sheet for review. More than thirty numbered passes, A1 to A38b, took the silver
+male from a stock suit to a tailored black-tie standing figure that was accepted
+(A11), and to a seated state in the default pose that was good enough to build
+on (A22). No pass after that produced a seated poker pose that was accepted.
+
+On the night of 12 September the current candidate, A38b, was opened by hand
+instead: bones posed directly, edges smoothed in sculpt mode, a corrective shape
+key on the jacket at the armpit. Zain found that far quicker and far cheaper
+than briefing another pass.
+
+**Decision.** Characters are posed and fitted by hand in Blender. The models do
+the work they have been reliably good at here: measurement and gates, proof
+renders from fixed bearings, export and budget checks, and bounded mechanical
+edits to a file someone has already shaped.
+
+**Why this is a result rather than a retreat.** A seated pose is accepted by
+looking at it from several bearings at once. A lane pass could not keep the file
+open: each one rendered, reported, waited for a verdict and started again from a
+saved candidate, so every judgement cost a full cycle. With the file open, the
+same judgement takes seconds. The character pipeline contract had already noted
+that no model on the project could hand-key animation in Blender, and listed the
+owner doing it as one of the options.
+
+**What stays delegated.** Venues remain pipeline code end to end. Character
+bodies are still built by script, the export and its budgets still gate
+everything the browser loads, and the penetration check still measures the
+result against the furniture. What moved is the authorship of pose and fit.
+
+*Rule this belongs to:* when the acceptance test is a person looking, the
+shortest loop is that person with the file open. Delegate the work around the
+loop, not the loop.
