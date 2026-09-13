@@ -1,9 +1,15 @@
 # Progress captures
 
-Every image here is a Blender render produced by `art/pipeline/build_assets.py`
-from committed code. Nothing is hand-modelled and nothing is touched up. The
-same commit regenerates the same frame, which is the point: the venues are the
-pipeline, not a `.blend` file on somebody's drive.
+Every venue image here is a Blender render produced by `art/pipeline/` from
+committed code. Nothing in a venue is hand-modelled and nothing is touched up.
+The same commit regenerates the same frame, which is the point: the venues are
+the pipeline, not a `.blend` file on somebody's drive.
+
+Characters are different from 40 onward, because character pose and fit are now
+made by hand (see `DECISIONS.md`). Each of those entries says where its frame
+came from - committed pipeline code, a lane's proof pass, or a `.blend` worked
+by hand - and whether the repository can regenerate it. Frames are cropped and
+downscaled to keep them small; none is retouched.
 
 Numbered in the order taken. The debugging sequence is kept because the wrong
 frames are more useful than the right ones.
@@ -114,3 +120,19 @@ remaining cast stay deferred until this gold character is accepted.
 This is the first progress entry that describes the character source actually
 served by the app. Earlier entries remain valuable as the record of the
 placeholder and debugging sequence rather than as the current visual state.
+
+## 40-46 — the silver male, Amber, and the pose that moved to a person
+
+From 7 to 13 September. The silver character's pipeline build, its black-tie
+wardrobe and seated passes, Amber, and the first frame of a character posed by
+hand. The narrative is in `PROGRESS.md`.
+
+| Capture | What it shows | Source | Regenerable from the repository |
+|---|---|---|---|
+| `40-silver-hair-conform-rear.png` | The production hair cut from rear-left and directly behind, before and after the conform: the shell buried in the skull, then covering it. | `art/pipeline/diagnose_hair_coverage.py`, 7 Sep | Yes |
+| `41-silver-standing-black-tie.png` | The accepted standing black tie, A11, after its light and material finish: face, both three-quarters, profile, rear and gameplay bust. | Astra proof pass A11, 10 Sep | No |
+| `42-silver-seated-jacket-breakthrough.png` | The wrong frame kept from the seated jacket work: in the seated pose the jacket opens at both shoulders from behind. It is the frame that led to a seated state of its own. | Astra proof pass A19, 10 Sep | No |
+| `43-silver-seated-default-pose.png` | The accepted seated default pose, A22: profile, front and rear, shoulders covered. | Astra proof pass A22, 10 Sep | No |
+| `44-amber-seated-proof.png` | Amber seated at the rail from the front and both three-quarters, built by DeepSeek. An isolated proof, not in the venue. | `art/pipeline/build_native_amber.py`, 12 Sep | Yes |
+| `45-silver-a38b-rail-rest.png` | A38b at frame 0, the last lane candidate: a centred hand-over-hand rest. Not accepted; the true side shows the forearms rising toward the hands. | Astra proof pass A38b, 12 Sep | No |
+| `46-silver-a38b-hand-edited.png` | A38b worked by hand - bones posed directly, edges smoothed, a corrective shape key at the right armpit - at frame 0 from the front, both three-quarters, both sides and the rear. Work in progress. | Hand-worked `.blend`, rendered 13 Sep | No |

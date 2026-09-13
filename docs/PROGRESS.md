@@ -139,6 +139,89 @@ the authored poker deltas. Only after those checks and Zain's acceptance does
 the recipe expand to the rest of the cast. The Laundromat and Executive Suite
 remain deferred.
 
+## The silver male, and the pose that moved to a person
+
+Silver is the male counterpart to the gold character: the same MPFB source
+method, with his own identity, black-tie wardrobe and motion. Between 4 and 13
+September he went from a source builder to a seated, animated character in the
+Rooftop, gained a tailored black-tie wardrobe that is still in review, and
+became the reason River's character art is now posed by hand.
+
+![A38b worked by hand in Blender, rendered from the review bearings](progress/46-silver-a38b-hand-edited.png)
+
+**Seated and moving in the room (4-7 September).** The character pipeline bakes
+the seated pose into the mesh rather than leaving it in a pose something
+downstream can reset, sizes him against the furniture, solves the rail's
+geometry to put the hands on it, and keeps every mesh skinned so the suit and
+hair follow the body. The published Rooftop carries one skin over 137 joints
+and nine clips, read out of the GLB rather than judged by eye. A camera pointed
+at the back of his head for the first time showed the hair shell buried inside
+the skull; the conform was rewritten to project onto the skull at the shell's
+own measured standoff, and the rebuilt venue shipped with the back of the head
+covered.
+
+![The production hair cut from behind, before and after the conform](progress/40-silver-hair-conform-rear.png)
+
+**Black tie (8-10 September).** Astra replaced the stock suit with authored
+garments and took the result through repair, a triangle budget closed at
+exactly 40,000, and a lighting and material finish. That standing state, A11,
+was accepted.
+
+![The accepted standing black tie, A11](progress/41-silver-standing-black-tie.png)
+
+**Seated black tie (10 September).** A jacket tailored to stand up does not
+survive sitting down. Carried into the seated pose, it opened at both shoulders
+and armholes from behind, and local corrections to the standing garment traded
+one fault for another. This is the one wrong frame kept from that stretch,
+because it is the frame that decided it:
+
+![A19: the jacket in the seated pose from behind, before it had a seated state of its own](progress/42-silver-seated-jacket-breakthrough.png)
+
+The answer was a seated state of its own rather than more correction of the
+standing one. A22, in the default seated pose with the shoulders covered, was
+accepted as the base to pose from.
+
+![The accepted seated default pose, A22](progress/43-silver-seated-default-pose.png)
+
+**Posing, and the move to the hand (11-13 September).** Further passes worked
+toward a relaxed, supported poker rest with the forearms carried by the rail;
+none was accepted. A38b, a centred hand-over-hand rest, was the last candidate a
+lane produced.
+
+![A38b at frame 0: front, both three-quarters, true side](progress/45-silver-a38b-rail-rest.png)
+
+Zain then opened A38b and worked it directly: bones posed by hand, edges
+smoothed in sculpt mode, a corrective shape key on the jacket at the right
+armpit. Zain found that far quicker and cheaper than briefing another pass, and characters are now posed
+and fitted by hand with the models measuring, rendering and gating around that
+work. The reasoning is in `DECISIONS.md`. Frame 46 above is that file, rendered
+on 13 September. It is work in progress rather than an accepted pose, and it
+cannot be regenerated from the repository: its source is a hand-worked `.blend`
+kept locally.
+
+**Open, and visible in these frames.**
+
+- No seated poker pose is accepted yet. In A38b the true side shows the forearms
+  rising toward the hands rather than resting on the rail.
+- The black-tie wardrobe is not in the served venue. The Rooftop the browser
+  loads carries the earlier pipeline suit.
+- The A11 jacket was built on salvaged donor topology released under CC-BY, so
+  its attribution has to ship with any asset derived from it.
+
+## Amber
+
+Amber is a second seated character, built by DeepSeek through an iterative
+generation loop and regenerable from `art/pipeline/build_native_amber.py`. It is
+an isolated proof: legible at gameplay distance, and not yet in the venue. The
+builder's own report names what is still open - a pale band in the V between the
+roll-neck and the chest, two small wings where the collar meets the lapel notch,
+and specular highlights on both deltoids.
+
+![Amber seated at the rail: front and both three-quarters](progress/44-amber-seated-proof.png)
+
+A third character, Bronze, has been started and will continue. There is no
+capture of it yet.
+
 ## Earlier open items, now historical
 
 The old list below described the placeholder era. Characters no longer lack
