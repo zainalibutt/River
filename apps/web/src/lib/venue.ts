@@ -106,7 +106,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     asset: '/assets/rooftop_assets.glb',
     // Set against the reference rather than against the lookdev render - see
     // docs/design/22-shot-composition.md, which measures all three numbers off
-    // a frame of the game this one is cloning.
+    // a frame of the genre reference.
     //
     // It was 6.1m out and 4.05m up, looking down 29.9 degrees. Three
     // consequences, all of them visible: the terrace is only 4.0m across, so

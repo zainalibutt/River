@@ -21,6 +21,7 @@ const FORBIDDEN: readonly { pattern: RegExp; why: string }[] = [
   { pattern: /prominence/i, why: 'names the reference game' },
   { pattern: /\bclone of\b/i, why: 'frames River as a reproduction' },
   { pattern: /\b(a|the)\s+\w+\s+clone\b/i, why: 'frames River as a reproduction' },
+  { pattern: /\bcloning\b/i, why: 'frames River as a reproduction' },
   // A bare twenty-letter run also matches ordinary English - the word
   // "internationalisation" is exactly twenty - so match the context a project
   // ref actually appears in rather than its shape. A gate that fires on prose
@@ -70,6 +71,7 @@ describe('repository hygiene', () => {
     expect(files.length).toBeGreaterThan(50)
     expect(files).toContain('README.md')
     expect(FORBIDDEN.some(({ pattern }) => pattern.test('a Prominence Poker clone'))).toBe(true)
+    expect(FORBIDDEN.some(({ pattern }) => pattern.test('the game this one is cloning'))).toBe(true)
     expect(FORBIDDEN.some(({ pattern }) => pattern.test('C:\\Users\\someone\\River'))).toBe(true)
     expect(FORBIDDEN.some(({ pattern }) => pattern.test('C:/Users/someone/River'))).toBe(true)
     expect(FORBIDDEN.some(({ pattern }) => pattern.test('an ordinary sentence'))).toBe(false)
