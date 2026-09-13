@@ -1,6 +1,6 @@
 # River
 
-> Multiplayer Texas Hold'em for friend groups. PC browser + PS5 browser couch play. Born the day its creator got banned from Blackjackist.
+> Multiplayer Texas Hold'em for friend groups. PC browser + PS5 browser couch play. Born the day its creator got banned from a favourite card game.
 
 **Status:** playable end to end. Three 3D venues with seated, animated characters; server-authoritative multiplayer over WebSockets; an append-only chip ledger; provably fair shuffles; an economy with daily grants, cosmetics and table items; a lobby and private tables. 901 tests across 78 files, green on Node 22 and 24. Product decisions live in [`docs/spec.md`](docs/spec.md).
 
