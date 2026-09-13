@@ -2,7 +2,7 @@
 
 > Multiplayer Texas Hold'em for friend groups. PC browser + PS5 browser couch play. Born the day its creator got banned from a favourite card game.
 
-**Status:** playable end to end. Three 3D venues with seated, animated characters; server-authoritative multiplayer over WebSockets; an append-only chip ledger; provably fair shuffles; an economy with daily grants, cosmetics and table items; a lobby and private tables. 901 tests across 78 files, green on Node 22 and 24. Product decisions live in [`docs/spec.md`](docs/spec.md).
+**Status:** playable end to end. Server-authoritative multiplayer over WebSockets; an append-only chip ledger; provably fair shuffles; an economy with daily grants, cosmetics and table items; a lobby and private tables. Three 3D venues are built from Python, and the Rooftop - the one being finished - has a seated, animated character at its table. 909 tests across 79 files, run in CI on Node 22 and 24. Product decisions live in [`docs/spec.md`](docs/spec.md).
 
 ## Problem
 
@@ -24,7 +24,7 @@ The development record is a deliverable here, not a by-product.
 
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) - decisions that shaped River and the reasoning that produced them, including the ones that were reversed.
 - [`docs/PROGRESS.md`](docs/PROGRESS.md) and [`docs/progress/`](docs/progress/) - what shipped, with renders at every meaningful art change.
-- [`docs/design/`](docs/design/) - 23 design contracts. Each names the commit it was written against.
+- [`docs/design/`](docs/design/) - 22 design contracts. Each names the commit it was written against.
 - [`docs/EFFORT.md`](docs/EFFORT.md) - what it cost, measured rather than estimated.
 - [`PUBLISHING.md`](PUBLISHING.md) - what may go into a public repository, and what enforces it.
 
