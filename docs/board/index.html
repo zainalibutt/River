@@ -398,14 +398,17 @@
 <div class="wrap">
 
   <header>
-    <p class="eyebrow">Four lanes · updated 2026-09-01, after the native-gold handoff</p>
+    <p class="eyebrow">Updated 2026-09-13, after the silver male, Amber and the move to posing by hand</p>
     <h1>River build board</h1>
     <p class="sub">
       Where the build actually stands, measured against the tree rather than
       against memory. Phases 1&ndash;4 are complete and in production; Phase&nbsp;5 &mdash; art, characters
-      and the long tail &mdash; is the active phase. The poker foundation is live,
-      and the current visual focus is one native-gold character in the Rooftop:
-      58,110 triangles, 30 materials, 46 draw calls and 6,096 KB in the served proof.
+      and the long tail &mdash; is the active phase. The Rooftop now seats the silver
+      male: one skin over 137 joints and nine clips, with his head and spine moving
+      under the idle in Chrome. His black-tie wardrobe is accepted standing and in the
+      default seated pose, and the seated poker pose is being finished by hand in
+      Blender &mdash; more than thirty lane passes brought the character that far, and
+      working the file directly proved far quicker than another pass.
     </p>
   </header>
 
@@ -426,19 +429,45 @@
       <span class="k">Design &amp; contracts</span>
       <span class="n">80%</span>
       <div class="track"><i style="width:80%"></i></div>
-      <span class="d">Nineteen documents. Every hard decision resolved. This is why the remaining build is transcription, not invention.</span>
+      <span class="d">Twenty-two documents. Every hard decision resolved. This is why the remaining build is transcription, not invention.</span>
     </div>
   </section>
 
   <section>
-    <h2>The four lanes</h2>
+    <h2>The lanes</h2>
     <p class="note">
       One owner per packet, no concurrent edits to the same files. Claude owns
       design, review and client work; Codex owns integration and long grinds;
       DeepSeek owns deterministic engine modules; Fable is reserved for bounded
-      visual judgement.
+      visual judgement; Sol and Astra are the character lanes. From 13 September
+      character pose and fit are made by hand, and the models work around that.
     </p>
     <div class="lanes">
+
+      <article class="lane">
+        <header>
+          <h3>By hand</h3>
+          <span class="pill flight">In flight</span>
+        </header>
+        <span class="role">Zain &middot; character pose and fit in Blender</span>
+        <ul>
+          <li><span class="dot flight"></span><span><b>A38b, worked directly</b> &mdash; the last lane candidate, opened in Blender: bones posed by hand, edges smoothed in sculpt mode, a corrective shape key on the jacket at the right armpit. Far quicker and cheaper than briefing another pass, so this is now how characters are posed and fitted. Work in progress, rendered from the review bearings as capture 46. The reasoning is in <code>DECISIONS.md</code>.</span></li>
+        </ul>
+      </article>
+
+      <article class="lane">
+        <header>
+          <h3>Astra</h3>
+          <span class="pill next">On call</span>
+        </header>
+        <span class="role">Character lane, briefed by Sol &middot; Blender, garments, poses</span>
+        <ul>
+          <li><span class="dot done"></span><span><b>A22 seated default pose</b> &mdash; accepted as the base to pose from. A seated state of its own, with the shoulders covered, rather than the standing jacket corrected into a chair. Capture 43.</span></li>
+          <li><span class="dot done"></span><span><b>A11 standing black tie</b> &mdash; accepted. Authored garments taken through repair, a triangle budget closed at exactly 40,000, and a light and material finish. The jacket is built on salvaged donor topology released under CC-BY, so its attribution ships with anything derived from it. Capture 41.</span></li>
+          <li><span class="dot done"></span><span><b>Silver hair conform, shipped</b> &mdash; <code>d6ab627</code>. The rear and crown project onto the evaluated skull at the shell's own measured standoff instead of shrinking toward a bounding box, and the rebuilt Rooftop shipped with the back of his head covered. Capture 40.</span></li>
+          <li><span class="dot done"></span><span><b>The silver male in the Rooftop</b> &mdash; <code>7b66994</code> to <code>8e4c17a</code>. The seated pose baked into the mesh, scale measured against the furniture, rail contact solved rather than assumed, arms authored joint by joint, and an additive idle over nine clips. The venue carries one skin over 137 joints and seven skinned meshes; in Chrome on 13 Sep the head turned 4.7 to 9.2 degrees across four stepped frames.</span></li>
+        </ul>
+      </article>
 
       <article class="lane">
         <header>
@@ -448,7 +477,7 @@
         <span class="role">Sol High &middot; integration, art pipeline, long grinds</span>
         <ul>
           <li><span class="dot flight"></span><span><b>F3A native gold character</b> &mdash; published at <code>ec3936f</code> and routed to Claude for review. The source-first MPFB export preserves native skin, eye, brow, lash, dress and ponytail textures; only the Rooftop is integrated while corneal occlusion, gameplay lighting, temple transition, couture termination and poker-motion deltas remain open.</span></li>
-          <li><span class="dot flight"></span><span><b>5X clip amplitude</b> &mdash; opened. A full breathe cycle rotates the head <b>0.099 degrees</b>, measured in the browser and matching the 0.05-degree source constant exactly. Worse, three clips key nothing at all: their targets are named <code>upperarm01.R</code> while the rig carries <code>upperarm01R</code>, so the lookup returns None and <code>continue</code> runs silently &mdash; a chip toss that moves no arm, and an all-in stand-up that does not use its legs. Brief at <code>docs/handoff/packet-5X-clip-amplitude.md</code>.</span></li>
+          <li><span class="dot flight"></span><span><b>5X clip amplitude</b> &mdash; re-measured straight from the GLB sampler with <code>art/pipeline/measure_clip_amplitude.mjs</code>, no browser involved: the silver clips are sound, all nine visible over 137 rotation channels, <code>CHIP_toss</code> turning the forearm <b>34.4 degrees</b> and <code>ALLIN_standup</code> both upper legs <b>33.0</b>. The loss 5X described happens after the file; <code>retargetToRig</code>, which maps tracks by index position, is the suspect for the generic characters, and that is still open.</span></li>
           <li><span class="dot done"></span><span><b>5W the blue palms</b> &mdash; landed at <code>08f5d58</code>, and it landed while the client lane was open in the same working copy without touching a file outside its own. <code>COLOR_0</code> renders green in Blender and vivid blue in the browser, because Blender ignores a colour attribute unless a shader node reads it while three.js multiplies by it automatically. The bake moves to <code>FLOAT_COLOR</code>, the base tint is neutralised into the vertex colour, and <code>baseColorFactor</code> is restored from a <code>riverVertexColourBase</code> extra after export. Published on 2 Sep and verified in the browser on 6 Sep: the palm vertex colour reads a neutral <code>0.63, 0.63, 0.63</code> against a <code>baseColorFactor</code> of <code>0.016, 0.033, 0.021</code>, so the product is green-dominant. The note that it <em>still needed a republish</em> stood for four days after it no longer did.</span></li>
                     <li><span class="dot done"></span><span><b>5V nighttime depth</b> &mdash; accepted, and the first art packet that improved the picture rather than the numbers. Baked occlusion in vertex colours, a dark wet-concrete terrace, and palms that are palms rather than traffic cones. Rooftop 71,343 triangles against a gate of 250,000.</span></li>
           <li><span class="dot done"></span><span><b>5U clothes and clips</b> &mdash; accepted. Nine clothed seats with distinct loadouts, and all nine animation clips finally carried into every venue export &mdash; so the driver that shipped with nothing to play has something to play.</span></li>
@@ -477,6 +506,7 @@
         </header>
         <span class="role">V4 Flash &middot; bounded deterministic work</span>
         <ul>
+          <li><span class="dot done"></span><span><b>Amber seated proof</b> &mdash; <code>e174b5b</code> to <code>edd40b5</code>. A second seated character from <code>art/pipeline/build_native_amber.py</code>, reached through an iterative generation loop and legible at gameplay distance. An isolated proof, not yet in the venue; its own report names what is open &mdash; a pale band in the collar V, two collar wings, highlights on both deltoids. Capture 44.</span></li>
           <li><span class="dot flight"></span><span><b>4Z voice pack</b> &mdash; dispatched. 480 lines across thirteen personalities and twelve events, written to the trait numbers rather than to the names. Both consuming modules were already finished and idle: the schema and weighted picker in <code>voice-lines.ts</code>, the speak chance and cooldowns in <code>bot-chatter.ts</code>. Brief at <code>docs/handoff/packet-4Z-voice-pack.md</code>.</span></li>
           <li><span class="dot done"></span><span><b>Chatter wiring</b> &mdash; landed, review pending. The <code>chatter</code> field was set on all thirteen personalities and only ever read for a timing delay. It now drives speak chance per event class and a per-personality cooldown, so a silent rookie and a constant og no longer talk at the same rate.</span></li>
                     <li><span class="dot done"></span><span><b>5H palette check</b> &mdash; accepted, and it did the thing the laws are for: two of its own tests failed, and rather than adjusting the code it worked out that its fixture was wrong and said so.</span></li>
@@ -509,6 +539,10 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>The repository reads as what landed</b> &mdash; 13 Sep. The unpushed history was reshaped from 77 commits across three branches to 35, each explaining the thing that landed; operating laws and character packets left the tree for working notes; one author through a mailmap; and two new hygiene patterns, for local user paths and for the word that framed River as a reproduction, each proved to fire on a planted violation before being trusted. Lint had been failing on one unformatted script and passes again. The record now covers the silver male, Amber and the move to posing by hand, with captures 40&ndash;46.</span></li>
+          <li><span class="dot done"></span><span><b>The action surface is the ring the anatomy describes</b> &mdash; merged 13 Sep, <code>26f7b1a</code> to <code>dece0f0</code>. Raise presets sized against the pot the raiser leaves behind; a layout harness measured at a stage scale of exactly 1, eight of eight invariants green; the hand you are reading at 168 by 235; brass lit from the room's one lamp; seat furniture on the seats, and the rest behind Tab.</span></li>
+          <li><span class="dot done"></span><span><b>The clipping became a number that can only go down</b> &mdash; <code>b508617</code>. The triangle-intersection check runs from <code>npm run check:penetration</code> and holds a measured budget per surface: <b>1,449</b> self-intersecting pairs in the suit, <b>277</b> faces through the rail, <b>205</b> chair, <b>192</b> wood, <b>49</b> felt. Exceeding one fails. Missing furniture and an unbudgeted site both fail rather than report clear.</span></li>
+          <li><span class="dot done"></span><span><b>Dusk in the room, not just on the menu</b> &mdash; <code>409662d</code>, <code>3ed7377</code>. The menu backdrop is regenerated from the venue rather than frozen as a screenshot, and the Rooftop has a gradient dome keyed by venue, so an interior keeps its flat colour.</span></li>
           <li><span class="dot done"></span><span><b>The characters stopped being made of rags</b> &mdash; sixteen opaque hair planes, 214 faces, were sitting <em>in front of</em> every face and occluding the geometry behind them; the runtime had a stripper removing them on import, and the venue build now reports <code>stripped hair components=0</code> because there is nothing left to strip. The torn hems were a raw vertex-delete cull leaving a triangular tear across the lower body, plus garment boundaries that were never welded &mdash; 335 boundary edges down to 276, manifold, 0.642 vertices per triangle. Character work cannot reach the game on its own: the venues import the built character files and bake them in, so a repaired character sits in <code>art/out</code> doing nothing until the assembly runs. The lane split meant the fix and the thing that consumes it were owned by different models, which is a real cost of the split and worth naming.</span></li>
           <li><span class="dot done"></span><span><b>There was nowhere to sign in</b> &mdash; every visitor gets an anonymous session on load, which is the zero-friction guest play the spec asks for, and nothing anywhere could keep one. The only sign-in in the product was a SAVE button <em>on the table</em>, so somebody who had not sat down yet could not make an account, and the menu greeted its own developer as a guest. It is on the player capsule now, as a line of type rather than a second filled button, because the dominant action on that screen is Play.</span></li>
           <li><span class="dot done"></span><span><b>A second screen, and it shows you the room</b> &mdash; <code>/play</code> opens a private table, and changing the venue changes the picture behind the folio. All three rooms render from the same pipeline as the main menu, empty and after dark, at about 100KB each. The venue is a live control because <code>enter</code> can carry it; seats, buy-in and turn timer are <em>reported</em> and read dimmer, because RoomConfig supports them and the client protocol has no way to send them. A stepper that changes a number the server ignores is worse than no stepper - it is a lie the player only discovers once they are sitting down.</span></li>
@@ -588,12 +622,12 @@
     <h2>The work, as a tree</h2>
     <p class="note">
       Every branch that exists in the repository, with what is standing and what
-      is not. The red leaves are the honest ones &mdash; each is a module that
-      passes its own tests and that nothing calls.
+      is not. A red leaf, when there is one, is a module that passes its own
+      tests and that nothing calls; there is none today.
     </p>
     <div class="tree">
       <ul>
-        <li><span class="node"><span class="root">ENGINE</span><span class="tag t-done">complete</span><span class="why">pure, no I/O, 312 tests</span></span>
+        <li><span class="node"><span class="root">ENGINE</span><span class="tag t-done">complete</span><span class="why">pure, no I/O</span></span>
           <ul>
 <li><span class="node"><span class="branch">├─</span><span class="leaf">rules, evaluator, betting</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">provably fair shuffle</span><span class="tag t-done">done</span><span class="why">fresh seed per hand, commit before reveal</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">economy, REP, challenges</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">table items, cosmetics</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">lobby model</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand history, replay, narration</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">camera and seat projection</span><span class="tag t-done">done</span><span class="why">the conversion both renderers now share</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">HUD plaque layout</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand strength naming</span><span class="tag t-done">done</span><span class="why">on screen under the board</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">bot personalities and decisions</span><span class="tag t-done">done</span><span class="why">seated and playing</span></span></li>
           </ul>
@@ -605,17 +639,17 @@
         </li>
         <li><span class="node"><span class="root">CLIENT</span><span class="tag t-flight">near</span><span class="why">3D by default, DOM HUD over it</span></span>
           <ul>
-<li><span class="node"><span class="branch">├─</span><span class="leaf">table HUD, preset actions</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">lobby, shop, wardrobe</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">fairness verify panel</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand history and scrubber</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">venue scene, lighting, camera</span><span class="tag t-done">done</span><span class="why">matches the lookdev transform now</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">seat plaques</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">animation driver</span><span class="tag t-done">live</span><span class="why">clips arrived, cues firing</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">sound</span><span class="tag t-held">deferred</span><span class="why">plan in docs/handoff/audio-plan.md</span></span></li>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">table HUD, preset actions</span><span class="tag t-done">done</span><span class="why">action ring, pot-sized raises, lit brass</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">lobby, shop, wardrobe</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">fairness verify panel</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand history and scrubber</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">venue scene, lighting, camera</span><span class="tag t-done">done</span><span class="why">matches the lookdev transform now</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">seat plaques</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">animation driver</span><span class="tag t-done">live</span><span class="why">clips arrived, cues firing</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">sound</span><span class="tag t-held">deferred</span><span class="why">plan in docs/handoff/audio-plan.md</span></span></li>
           </ul>
         </li>
-        <li><span class="node"><span class="root">ART</span><span class="tag t-flight">in flight</span><span class="why">everything generated from Python</span></span>
+        <li><span class="node"><span class="root">ART</span><span class="tag t-flight">in flight</span><span class="why">venues from Python; characters built by script, posed by hand</span></span>
           <ul>
-<li><span class="node"><span class="branch">├─</span><span class="leaf">three venues, measured light rigs</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">chips, cards, props, skyline</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">characters: body, rig, face atlas</span><span class="tag t-done">done</span><span class="why">MPFB base, 62,499 tris on the rooftop</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">clothing</span><span class="tag t-done">done</span><span class="why">palette-driven, nine distinct loadouts</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">clips carried into venues</span><span class="tag t-done">done</span><span class="why">nine clips in all three venues</span></span></li>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">three venues, measured light rigs</span><span class="tag t-done">done</span><span class="why">the Rooftop is the one being finished</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">chips, cards, props, skyline, dusk sky</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">silver male seated in the Rooftop</span><span class="tag t-done">done</span><span class="why">one skin, 137 joints, nine clips</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">black-tie wardrobe</span><span class="tag t-flight">accepted</span><span class="why">standing and default seated; not yet in the venue</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">seated poker pose</span><span class="tag t-flight">in flight</span><span class="why">by hand in Blender</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">Amber</span><span class="tag t-flight">proof</span><span class="why">isolated, not in the venue</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">Bronze</span><span class="tag t-held">started</span><span class="why">no capture yet</span></span></li>
           </ul>
         </li>
         <li><span class="node"><span class="root">OPS</span><span class="tag t-flight">partial</span></span>
           <ul>
-<li><span class="node"><span class="branch">├─</span><span class="leaf">CI on two Node versions</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">Supabase migrations, RLS</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">continuous deploy</span><span class="tag t-gap"><b>manual</b></span><span class="why">only ci.yml exists</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">PS5 hardware spike</span><span class="tag t-held">held</span><span class="why">deferred by decision, not by effort</span></span></li>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">CI on two Node versions</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">Supabase migrations, RLS</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">deploy workflow</span><span class="tag t-done">done</span><span class="why">manual dispatch or version tag, behind CI</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hygiene gate</span><span class="tag t-done">done</span><span class="why">reference name, keys, local paths</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">PS5 hardware spike</span><span class="tag t-held">held</span><span class="why">deferred by decision, not by effort</span></span></li>
           </ul>
         </li>
       </ul>
@@ -668,104 +702,76 @@
     <h2>What is next, in order</h2>
     <p class="note">
       The route map, fixed so the lanes cannot collide. Claude builds the shell
-      in <code>apps/web</code>, plus props, scenery and venues; Astra has the
-      people, in <code>build_characters.py</code>, the character exporters and
-      the clips. There is no file in common.
+      in <code>apps/web</code>, plus props, scenery and venues. Character pose
+      and fit are made by hand in Blender; the character lanes, the exporters and
+      the gates work around that on request.
     </p>
     <p class="note">
       <b>Read this section sceptically and check the code before acting on it.</b>
-      On 6 Sep it still listed the design system and the front door as the next
-      two jobs. Both had shipped: <code>club.css</code> carries twenty tokens and
-      726 lines, and <code>/</code>, <code>/play</code> and <code>/table</code>
-      have existed since <code>050b053</code>. A stale route map does not sit
-      there harmlessly, it sends the next session to build something twice.
+      Until 13 Sep it still sent the next session to review the gold character and
+      to wire a showdown reel that <code>river-room-table.tsx</code> was already
+      building. A stale route map does not sit there harmlessly, it sends the next
+      session to build something twice.
     </p>
     <div class="steps">
       <article class="step">
-        <h4>1 &middot; The design system &mdash; <em>done</em></h4>
+        <h4>1 &middot; The seated silver pose, by hand</h4>
         <p>
-          Shipped. <code>club.css</code> holds twenty <code>--club-*</code>
-          tokens across 726 lines, and the route scaffold is in place. The claim
-          that every screen after it is assembly rather than invention held up:
-          the front door was built on top of it in four commits.
+          Zain is finishing A38b in Blender. It is accepted when it reads right from
+          the front, both three-quarters, the side and the rear at gameplay scale,
+          with the forearms resting on the rail rather than rising toward the hands.
         </p>
       </article>
       <article class="step">
-        <h4>2 &middot; The front door &mdash; <em>done, minus three services</em></h4>
+        <h4>2 &middot; The black tie into the served venue</h4>
         <p>
-          <code>/</code> is the menu and it honours its own rule: WARDROBE,
-          COLLECTION and SETTINGS each carry a <b>SOON</b> badge rather than
-          being a live button that does nothing. PLAY, PRIVATE TABLE and JOIN
-          FRIENDS all work. The three badged services are what remains, and they
-          are the reason this is not simply closed.
-        </p>
-        <p>
-          The venue picker has come out of both the private table screen and the
-          table HUD. Only the Rooftop is being dressed and reviewed, so two of
-          its three buttons opened a room nobody is working on. Deferred, not
-          deleted &mdash; the venues and their rigs are still built.
+          After the pose is accepted. The export and its budgets gate it, the
+          penetration budget must not rise, and the CC-BY attribution for the
+          jacket's donor topology ships with it.
         </p>
       </article>
       <article class="step">
-        <h4>3 &middot; The gold character review</h4>
+        <h4>3 &middot; Amber's open items</h4>
         <p>
-          The one-character vertical slice is now published and visible in the
-          Rooftop. Review the tracked progress gallery and the live Chrome tab
-          together: front, three-quarter, profile, seated contact and expression
-          frames are all recorded. The gold identity remains the source of truth
-          until Claude and Zain accept it.
+          The pale band in the collar V, the two collar wings and the deltoid
+          highlights its report names, then a decision on whether Amber joins the
+          Rooftop.
         </p>
       </article>
       <article class="step">
-        <h4>4 &middot; Finish the people before multiplying them</h4>
+        <h4>4 &middot; The three services behind a badge</h4>
         <p>
-          Close corneal occlusion and gameplay lighting, resolve the temple
-          transition, finish couture garment termination and replace scaffold
-          motion with authored poker deltas. Only then expand the gold recipe to
-          the cast; the Laundromat and Executive Suite stay deferred until that
-          quality bar is portable.
+          WARDROBE, COLLECTION and SETTINGS still carry a <b>SOON</b> badge on the
+          menu rather than a live button that does nothing. PLAY, PRIVATE TABLE and
+          JOIN FRIENDS all work.
         </p>
       </article>
       <article class="step">
-        <h4>5 &middot; The held beat</h4>
+        <h4>5 &middot; Bronze, then the other two rooms</h4>
         <p>
-          The showdown reel is built and drives nothing. A hand result deserves
-          the room still visible underneath, a strong hand label, the amount,
-          and one way forward &mdash; reveal, hold, then offer. It is also the
-          clearest place for a score to attach later, which is why transitions
-          are being centralised now rather than retrofitted.
+          Bronze has been started and continues. The Laundromat and the Executive
+          Suite stay deferred until the Rooftop is finished; their venues and
+          rigs are still built.
         </p>
       </article>
     </div>
   </section>
 
   <section class="flag">
-    <p><strong>The reference was in the repository the whole time and nobody opened it.</strong> Fifteen frames of the genre reference were already in the study material, and every visual judgement made here was against taste rather than against them. That is how a camera two and a half metres too high survived weeks of art packets, and how two confident arithmetic errors - linear base colours read as sRGB, rect-area nits compared against spot candela - both reached written findings and one of them reached another lane as a packet. The scores above are revised down accordingly. <em>Look at the target before measuring the thing.</em></p>
-    <p><strong>The Rooftop reads flat, and it is now a number.</strong> The terrace at <code>#30383a</code> and the parapet at <code>#2a2f3a</code> each exceed twelve percent of room area with a contrast ratio under 1.4, so the floor and the wall read as one shape rather than two. This is the complaint that cost two days when it was only ever a feeling.</p>
-    <p><strong>The economy drift is closed.</strong> It was carried as open from 5J on the 25th - <code>economy_config</code> holding only <code>signup_bankroll</code>, with the streak table and the 4H views absent. Checked against production directly on the 26th: all five config keys are present, and <code>economy_daily_streak_bonus</code> carries its full seven-day ladder from 0 to 90,000. The defect was real when it was written up and the schema has since been applied. <em>Nothing had re-checked it for a day and a half</em>, which is its own lesson: an open defect nobody re-measures stays open on the board long after it is fixed in the world.</p>
-    <p><strong>Separately, six engine modules were finished and wired to nothing, and a seventh is live right now.</strong> REP had no producer, challenges had no tally, table items had no consumer, the measured light rigs shipped to a browser that ignored them, hand history had nothing showing it, and the bots had no caller for a fortnight. <code>venue-palette.ts</code> is the seventh and is still uncalled today. Each passed its own gates and read as complete in the commit log. With several lanes running, the seam between packets is where work quietly dies &mdash; so the first review question is now "does anything actually call this?", not the last.</p>
-    <p>
-      The Rooftop is now 71,343 triangles against a gate of 250,000, with a real skyline, a
-      wet-concrete terrace and baked occlusion. The Basement and Suite were still blockouts
-      at 1,368 and 2,614 when the camera gate was repaired, and it showed they were
-      <strong>mis-scaled, not merely sparse</strong> &mdash; string lights ran in a line across the
-      table and through the camera orbit, and walls stood 2m from the felt against specs of 6m and
-      8.2m. Three such defects are fixed. Closing the rest is most of what stands between the art
-      direction and the game.
-    </p>
-    <p>
-      Everything requiring pixels is still unverified &mdash; orbit camera, instanced chips, shadow
-      casting, seat-plate projection. R3F is observer-driven and observers do not fire in a hidden
-      tab, so a real visual pass needs the browser pane displayed.
-    </p>
+    <p><strong>No seated poker pose is accepted yet.</strong> The last lane candidate, A38b, shows the forearms rising toward the hands from the true side rather than resting on the rail. The pose is now being finished by hand, and nothing about it is claimed until it has been looked at from every bearing.</p>
+    <p><strong>The black-tie wardrobe is not in the served venue.</strong> The Rooftop the browser loads still dresses the silver male in the earlier pipeline suit. The accepted A11 jacket is built on salvaged donor topology released under CC-BY, so its attribution has to ship with any asset derived from it.</p>
+    <p><strong>The character still passes through the furniture, and the number can only go down.</strong> The penetration budget stands at 277 faces through the rail, 205 through the chair, 192 through the wood and 49 through the felt, with 1,449 self-intersecting pairs in the suit. It counts faces, not depth: a graze and an arm buried to the elbow each count as one.</p>
+    <p><strong>Amber is legible, not finished.</strong> A pale band shows in the V between the roll-neck and the chest, two small wings sit where the collar meets the lapel notch, and both deltoids carry specular highlights. Its report names the measured cause of each.</p>
+    <p><strong>Chrome can be hidden too.</strong> A tab in a window that is not in front reports <code>document.hidden</code>, throttles its timers and stops the render loop; on 13 Sep the Rooftop measured as a blank canvas until frames were stepped through the scene handle's <code>advance()</code>. Check <code>document.hidden</code> before believing anything a tab says.</p>
+    <p><strong>Closed since the last update.</strong> The Rooftop no longer reads flat: <code>venue-palette.ts</code>, once the seventh module wired to nothing, grades the shipped venues in the suite and passes. The palms are green in the browser. The showdown reel is built into the table.</p>
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> ec3936f</span>
-    <span><b>Targeted gates</b> clean</span>
-    <span><b>Lint &amp; typecheck</b> typecheck clean</span>
-    <span><b>Production</b> live</span>
-    <span><b>Progress gallery</b> native-gold captures included</span>
+    <span><b>HEAD</b> 768996f, 13 Sep</span>
+    <span><b>Tests</b> 909 passing across 79 files</span>
+    <span><b>Lint &amp; typecheck</b> lint passes with 3 warnings, typecheck clean</span>
+    <span><b>Production</b> not re-checked on 13 Sep</span>
+    <span><b>Progress gallery</b> captures 40&ndash;46 added</span>
   </div>
 
 </div>
