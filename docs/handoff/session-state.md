@@ -1,7 +1,8 @@
 # Where River is, and what a successor needs to know
 
-Written 2026-08-26. Read this, then `docs/DECISIONS.md`. Between them there
-should be nothing about this project that has to be rediscovered.
+Written 2026-08-26, brought up to date 2026-09-13. Read this, then
+`docs/DECISIONS.md`. Between them there should be nothing about this project
+that has to be rediscovered.
 
 For the state of the work at a glance, `docs/board/` holds the build board —
 `index.html` is the source of the published page and its README carries the
@@ -21,6 +22,12 @@ Four models in one working copy, one human owner.
   scarce thing rather than throughput. Its first law is about cost, because the
   budget is the user's own money and a wandering exploration spends it faster
   than a wrong answer does.
+
+- **Sol and Astra** — the character lanes from September. Sol chooses each next
+  step and the evidence it needs; Astra builds in Blender.
+- **Zain** — the owner. From 13 September, character pose and garment fit are
+  done by hand in Blender, with the models measuring, rendering and gating
+  around that work.
 
 Every lane's laws exist because of specific incidents, each one named in them.
 They work. They are kept as working notes beside the handoff rather than in the
@@ -47,8 +54,8 @@ because they were checked in the renderer that does not exhibit them:
   unless a shader node reads them, while three.js multiplies by them
   automatically
 
-The last one is **open**: the Rooftop palms render green in Blender and blue in
-the browser. Codex packet 5W has the diagnosis.
+The last one was fixed and published on 2 September; the palms are green in the
+browser as well as in Blender.
 
 **The browser is the reference surface.** The scene puts its camera, controls
 and graph on `window.riverScene` in development for exactly this reason - four
@@ -56,8 +63,8 @@ attempts to measure it failed before that existed.
 
 ## Current state
 
-725 tests. Lint has one long-standing CSS specificity warning and is otherwise
-clean. Typecheck clean.
+909 tests across 79 files. Lint passes with three warnings - two CSS
+specificity, one optional chain. Typecheck clean.
 
 Narrow scope - the poker game itself - is essentially finished. Broad scope is
 around ninety percent, and everything remaining is visible rather than
@@ -73,8 +80,13 @@ themselves and play, and an animation driver fed by live room events.
 - **Sound** — deferred. The whole plan, including why, is in
   `docs/handoff/audio-plan.md`. Do not restart it from scratch.
 - **Voice lines** — the schema exists (`voice-lines.ts`), the lines do not.
-- **Continuous deploy** — only `ci.yml` exists; Railway is manual.
+- **Continuous deploy** — deliberately not. `deploy.yml` runs on a manual
+  dispatch or a version tag, behind the full CI suite.
 - **Console** — deferred by decision, not by effort. See DECISIONS.md.
+- **A seated poker pose** — none is accepted yet. The silver character's
+  standing black tie (A11) and seated default pose (A22) are accepted; the pose
+  is now being finished by hand, and the black-tie wardrobe is not yet in the
+  served venue.
 
 ## Things that will bite
 
@@ -92,16 +104,23 @@ themselves and play, and an animation driver fed by live room events.
 - **The in-app browser pane does not composite when hidden**, so R3F never
   sizes its canvas and nothing renders. Use real Chrome to judge anything
   visual.
+- **Chrome can be hidden too.** A tab in a window that is not in front reports
+  `document.hidden`, throttles timers and stops the render loop. Check
+  `document.hidden` before believing anything a tab says, and step frames with
+  the scene handle's `advance()` if the window cannot be brought forward.
 
 ## What I would do next, in order
 
-1. **Watch the characters move.** The clips landed in packet 5U and the mixer
-   binding was corrected immediately after, but nothing has been seen animating
-   yet. Expect at least one more fault; this scene has produced four.
-2. **The blue palms** — Codex 5W.
-3. **Wire the palette check as a gate.** DeepSeek's `venue-palette.ts` can
-   answer "is the biggest thing in frame also the brightest", which is what was
-   wrong with the Rooftop for two days. Nothing calls it yet, so it is
-   currently the seventh module in the list above.
-4. **Deploy.** One workflow file stands between this and a link somebody can
-   click.
+As of 13 September. The earlier list - watch the characters move, the blue
+palms, the palette gate, a deploy workflow - is done: the silver character's
+head and spine move under the idle in Chrome, the palms are green, and
+`deploy.yml` exists.
+
+1. **The seated silver pose, by hand.** Zain is finishing it in Blender. When it
+   is accepted, bring the black-tie wardrobe into the served venue - with the
+   CC-BY attribution its jacket's donor topology carries.
+2. **Amber's open items.** The report names a pale band in the collar V, two
+   collar wings and deltoid highlights. Then decide whether Amber joins the
+   venue.
+3. **Bronze** continues.
+4. **The other two venues** stay deferred until the Rooftop is finished.
