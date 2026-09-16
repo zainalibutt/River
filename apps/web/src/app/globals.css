@@ -1414,254 +1414,13 @@ button.invite-chip.showing-code {
   bottom: 96px;
   left: 50%;
   z-index: 22;
-  /* 420 base-canvas pixels of outer diameter, from 04-anatomy.md. The width and
-     height themselves are set inline from ram-geometry.ts, which also generates
-     the wedge clip paths, so one module owns the number rather than this file
-     and that one drifting apart. */
+  /* Positions the waiting, deal, rebuy and recovery pills. The action menu and
+     the raise layer carry their own placement. */
   border: 0;
   border-radius: 50%;
   background: none;
   box-shadow: none;
   transform: translateX(-50%);
-}
-
-.ram.urgent::before {
-  position: absolute;
-  inset: -12px;
-  border: 5px solid var(--river-danger);
-  border-radius: 50%;
-  content: "";
-  pointer-events: none;
-  animation: ram-urgency 900ms ease-in-out infinite alternate;
-}
-
-/* Each wedge fills the whole 420 box and is clipped to its own annulus segment.
-   The clip is the hit area as well as the paint, so a player aiming at the
-   visible edge of a wedge cannot land on the one behind it. */
-/* Every wedge shares the same 420 box and the same centre, so one radial
-   background gives the whole ring a brass line on the inner and outer edge of
-   the annulus without any wedge knowing where it sits. The stops are the same
-   96 and 210 radii that ram-geometry.ts cuts the clip path at. */
-.ram-wedge {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background:
-    var(--river-grain), radial-gradient(circle at 32% 20%, rgb(255 216 154 / 13%), transparent 56%),
-    radial-gradient(
-      circle 210px at 50% 50%,
-      transparent 0 94px,
-      var(--river-brass-hi) 95px 96px,
-      #2b3730 97px,
-      #202a25 150px,
-      #161d1a 202px,
-      var(--river-brass) 205px 208px,
-      var(--river-brass-lo) 209px 210px,
-      transparent 210px
-    );
-  background-blend-mode: overlay, screen, normal;
-  color: var(--river-cream);
-  transition: filter 140ms var(--ease-out);
-}
-
-.ram-wedge:hover:not(:disabled),
-.ram-wedge:focus-visible {
-  filter: brightness(1.32) saturate(1.06);
-  outline: none;
-}
-
-.ram-wedge:active:not(:disabled) {
-  filter: brightness(0.94);
-}
-
-.ram-wedge:disabled {
-  opacity: 0.3;
-}
-
-.ram-wedge-label {
-  position: absolute;
-  display: grid;
-  width: 118px;
-  gap: 1px;
-  justify-items: center;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
-.ram-wedge-word {
-  color: var(--river-cream-dim);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
-}
-
-/* Money is set in the serif. The pairing was already wired into the layout and
-   used elsewhere in the app; the action surface was the one place still reading
-   as an unstyled control because it inherited the label sans for figures. */
-.ram-wedge-amount {
-  color: var(--river-amber-bright);
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-size: 27px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums lining-nums;
-  letter-spacing: 0.01em;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 76%);
-}
-
-.ram-wedge.fold .ram-wedge-word {
-  color: var(--river-danger);
-}
-
-.ram-wedge.all-in .ram-wedge-word {
-  color: var(--river-amber-bright);
-}
-
-/* "Keep holding" reads as the wedge filling, not as a bar crossing it. A
-   left-to-right sweep is drawn across the full 420 box before the clip, so on
-   the top wedge it arrived from somewhere off the shape. */
-.ram-wedge.holding::after {
-  position: absolute;
-  inset: 0;
-  background: var(--river-amber);
-  content: "";
-  opacity: 0;
-  animation: wedge-hold-fill var(--hold-duration) linear forwards;
-}
-
-@keyframes wedge-hold-fill {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 0.5;
-  }
-}
-
-/* A machined bezel rather than a bordered circle: a brass ring turned on the
-   lamp side, a dark well sunk into the middle, and the cast shadow falling away
-   from the light like everything else in the room. */
-.betting-dial,
-.ram-centre {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  display: grid;
-  border: 0;
-  border-radius: 50%;
-  background:
-    var(--river-grain), radial-gradient(circle at 36% 24%, rgb(255 218 158 / 12%), transparent 62%),
-    radial-gradient(circle at 50% 50%, #1d2922 0 58%, #131b17 80%, #0b100e 100%);
-  background-blend-mode: overlay, screen, normal;
-  box-shadow:
-    0 0 0 2px var(--river-brass-lo),
-    0 0 0 3px var(--river-brass-face),
-    0 1px 0 3px rgb(255 216 154 / 26%),
-    0 20px 46px rgb(0 0 0 / 62%),
-    inset 0 2px 10px rgb(0 0 0 / 66%),
-    inset 0 -1px 0 rgb(255 216 154 / 10%);
-  color: var(--river-cream);
-  place-items: center;
-  text-align: center;
-  transform: translate(-50%, -50%);
-}
-
-.betting-dial {
-  cursor: ns-resize;
-}
-
-.betting-dial:focus-visible {
-  box-shadow:
-    0 0 0 2px var(--river-amber-bright),
-    0 0 0 5px rgb(232 169 60 / 30%),
-    0 20px 46px rgb(0 0 0 / 62%),
-    inset 0 2px 10px rgb(0 0 0 / 66%);
-  outline: none;
-}
-
-.ram-centre {
-  width: 180px;
-  height: 180px;
-  color: var(--river-cream-dim);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-}
-
-.betting-dial output {
-  display: grid;
-  gap: 2px;
-  color: var(--river-cream-faint);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-}
-
-.betting-dial output strong {
-  display: block;
-  margin-top: -2px;
-  color: var(--river-amber-bright);
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-size: 42px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums lining-nums;
-  line-height: 1;
-  text-shadow: 0 2px 12px rgb(232 169 60 / 26%);
-}
-
-/* Sizing sits outside the ring rather than inside the dial. Six controls at the
-   56 floor do not fit in a 180 interior, and the interior is the one place on
-   screen the raise total has to be readable from the sofa. */
-.dial-presets {
-  position: absolute;
-  top: calc(100% + 14px);
-  left: 50%;
-  display: grid;
-  grid-auto-flow: column;
-  gap: 8px;
-  transform: translateX(-50%);
-}
-
-.dial-presets button {
-  min-width: 66px;
-  min-height: 56px;
-  border: 1px solid var(--river-brass-lo);
-  border-radius: 12px;
-  background: var(--river-grain), linear-gradient(180deg, #232e28, #131a17);
-  background-blend-mode: overlay, normal;
-  box-shadow: var(--river-lift-1);
-  color: var(--river-cream-dim);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  transition:
-    color 140ms var(--ease-out),
-    border-color 140ms var(--ease-out),
-    filter 140ms var(--ease-out);
-}
-
-.dial-presets button:hover,
-.dial-presets button:focus-visible {
-  border-color: var(--river-brass);
-  color: var(--river-amber-bright);
-  filter: brightness(1.2);
-  outline: none;
-}
-
-.dial-presets button:active {
-  box-shadow: inset 0 2px 6px rgb(0 0 0 / 62%);
-  filter: brightness(0.94);
-}
-
-.dial-presets .dial-step {
-  min-width: 56px;
-  font-size: 22px;
 }
 
 .ram-waiting {
@@ -3641,4 +3400,459 @@ button.verify-pill.verify-mismatch {
   grid-column: 1 / -1;
   letter-spacing: 0.18em;
   text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------------ */
+/* The action menu. Three buttons on a machined base at the lower centre, the
+   turn arc around it, and the name of whatever is under the pointer above it.
+   Seams at twelve, four and eight o'clock divide call, raise and fold. */
+
+.action-menu {
+  position: absolute;
+  bottom: 92px;
+  left: 50%;
+  z-index: 22;
+  width: 244px;
+  height: 244px;
+  transform: translateX(-50%);
+}
+
+.action-menu.ghosted {
+  opacity: 0.6;
+  transition: opacity 140ms var(--ease-out);
+}
+
+.action-menu.ghosted:hover,
+.action-menu.ghosted:focus-within {
+  opacity: 0.94;
+}
+
+.action-label {
+  position: absolute;
+  top: -42px;
+  left: 50%;
+  margin: 0;
+  color: var(--river-amber-bright);
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 10px rgb(0 0 0 / 85%);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.action-base {
+  position: absolute;
+  border-radius: 50%;
+  background:
+    var(--river-grain), radial-gradient(circle at 36% 26%, rgb(255 218 158 / 11%), transparent 60%),
+    radial-gradient(circle, #1d2721 0 52%, #0d1310 100%);
+  background-blend-mode: overlay, screen, normal;
+  box-shadow:
+    0 0 0 2px var(--river-brass-lo),
+    0 0 0 3px var(--river-brass-face),
+    0 1px 0 3px rgb(255 216 154 / 24%),
+    0 24px 50px rgb(0 0 0 / 62%),
+    inset 0 2px 14px rgb(0 0 0 / 68%);
+  inset: 14px;
+}
+
+.action-base::before {
+  position: absolute;
+  border-radius: 50%;
+  content: "";
+  inset: 0;
+  opacity: 0;
+  transition: opacity 140ms var(--ease-out);
+}
+
+.action-base[data-lit]::before {
+  opacity: 1;
+}
+
+.action-base[data-lit="raise"]::before {
+  background: conic-gradient(rgb(99 209 138 / 20%) 0 120deg, transparent 120deg);
+}
+
+.action-base[data-lit="fold"]::before {
+  background: conic-gradient(
+    transparent 0 120deg,
+    rgb(230 125 99 / 18%) 120deg 240deg,
+    transparent 240deg
+  );
+}
+
+.action-base[data-lit="call"]::before {
+  background: conic-gradient(transparent 0 240deg, rgb(98 166 242 / 18%) 240deg 360deg);
+}
+
+/* The hub. */
+.action-base::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--river-brass-hi), var(--river-brass-lo));
+  box-shadow:
+    0 2px 4px rgb(0 0 0 / 60%),
+    inset 0 1px 0 rgb(255 240 200 / 40%);
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.action-seams {
+  position: absolute;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from -0.8deg,
+    rgb(168 124 66 / 85%) 0 1.6deg,
+    transparent 1.6deg 120deg
+  );
+  inset: 0;
+  mask: radial-gradient(circle, transparent 0 22px, #000 23px 100%);
+}
+
+.action-slot {
+  position: absolute;
+  width: 66px;
+  height: 66px;
+}
+
+.action-slot.call {
+  top: 59px;
+  left: 37px;
+}
+
+.action-slot.raise {
+  top: 59px;
+  left: 141px;
+}
+
+.action-slot.fold {
+  top: 149px;
+  left: 89px;
+}
+
+.action-button {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 34%, #27312b, #0a0e0c 74%);
+  box-shadow:
+    0 0 0 2px var(--river-brass-lo),
+    0 0 0 3px var(--river-brass-face),
+    0 1px 0 3px rgb(255 216 154 / 20%),
+    0 8px 18px rgb(0 0 0 / 55%),
+    inset 0 0 0 2px color-mix(in srgb, currentColor 30%, transparent);
+  cursor: pointer;
+  place-items: center;
+  transition:
+    filter 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+
+.action-button svg {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, currentColor 45%, transparent));
+}
+
+.action-button:hover:not(:disabled),
+.action-button:focus-visible {
+  filter: brightness(1.3);
+  outline: none;
+  transform: scale(1.06);
+}
+
+.action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.32;
+}
+
+.action-slot.call .action-button {
+  color: #62a6f2;
+}
+
+.action-slot.call .action-button.check {
+  color: var(--river-cream);
+}
+
+.action-slot.raise .action-button {
+  color: #63d18a;
+}
+
+.action-slot.raise .action-button.all-in {
+  color: var(--river-amber-bright);
+}
+
+.action-slot.fold .action-button {
+  color: var(--river-danger);
+}
+
+.action-button.armed {
+  box-shadow:
+    0 0 0 2px currentColor,
+    0 0 20px color-mix(in srgb, currentColor 50%, transparent),
+    0 8px 18px rgb(0 0 0 / 55%);
+  filter: brightness(1.35);
+}
+
+.action-button.placeholder {
+  cursor: default;
+  opacity: 0.22;
+}
+
+/* Hold to confirm fills the button round from twelve o'clock, so "keep
+   holding" reads as a dial completing rather than a bar crossing a circle. */
+@property --hold-p {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+.action-button.holding::after,
+.raise-action.holding::after {
+  position: absolute;
+  border-radius: inherit;
+  background: conic-gradient(
+    color-mix(in srgb, currentColor 55%, transparent) calc(var(--hold-p) * 360deg),
+    transparent 0
+  );
+  content: "";
+  inset: 0;
+  animation: hold-sweep var(--hold-duration) linear forwards;
+}
+
+@keyframes hold-sweep {
+  to {
+    --hold-p: 1;
+  }
+}
+
+.action-timer {
+  position: absolute;
+  border-radius: 50%;
+  background: conic-gradient(
+    currentColor calc((1 - var(--watch-p)) * 360deg),
+    rgb(255 255 255 / 7%) 0
+  );
+  color: var(--river-amber);
+  inset: 4px;
+  mask: radial-gradient(circle, transparent 0 113px, #000 114px 118px, transparent 119px);
+  animation:
+    watch-sweep var(--turn-budget) linear var(--turn-elapsed) forwards,
+    menu-timer-urgent var(--turn-budget) linear var(--turn-elapsed) forwards;
+}
+
+@keyframes menu-timer-urgent {
+  0%,
+  74.9% {
+    color: var(--river-amber);
+  }
+  75%,
+  100% {
+    color: var(--river-danger);
+  }
+}
+
+/* The raise layer, in the same place the menu was. */
+.raise-layer {
+  position: absolute;
+  bottom: 34px;
+  left: 50%;
+  z-index: 22;
+  display: grid;
+  width: 380px;
+  gap: 8px;
+  justify-items: center;
+  transform: translateX(-50%);
+}
+
+.raise-arc {
+  position: relative;
+  width: 300px;
+  height: 158px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.raise-arc:active {
+  cursor: grabbing;
+}
+
+.raise-arc:focus-visible {
+  outline: none;
+}
+
+.raise-arc svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.raise-rim {
+  fill: none;
+  stroke: var(--river-brass);
+  stroke-linecap: round;
+  stroke-width: 26;
+  filter: drop-shadow(0 10px 18px rgb(0 0 0 / 60%));
+}
+
+.raise-track {
+  fill: none;
+  stroke: #1b2520;
+  stroke-linecap: round;
+  stroke-width: 20;
+}
+
+.raise-fill {
+  fill: none;
+  stroke: url(#raise-fill);
+  stroke-linecap: round;
+  stroke-width: 14;
+  filter: drop-shadow(0 0 6px rgb(99 209 138 / 40%));
+}
+
+.raise-notch {
+  stroke: var(--river-brass-hi);
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.raise-notch-label {
+  fill: var(--river-cream-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+.raise-end {
+  fill: var(--river-cream-faint);
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 13px;
+}
+
+.raise-knob circle {
+  fill: var(--river-brass-hi);
+  stroke: var(--river-brass-lo);
+  stroke-width: 2;
+  filter: drop-shadow(0 3px 5px rgb(0 0 0 / 70%));
+}
+
+.raise-knob .raise-knob-well {
+  fill: #141a16;
+  stroke: rgb(255 236 196 / 35%);
+  stroke-dasharray: 2 2.7;
+  stroke-width: 1.5;
+}
+
+.raise-readout {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.raise-readout span {
+  color: var(--river-cream-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+}
+
+.raise-readout strong {
+  color: var(--river-amber-bright);
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 44px;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: 600;
+  line-height: 1;
+  text-shadow: 0 2px 14px rgb(232 169 60 / 28%);
+}
+
+.raise-steps {
+  display: flex;
+  gap: 76px;
+}
+
+.raise-step,
+.raise-action {
+  position: relative;
+  display: flex;
+  min-width: 56px;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--river-brass-lo);
+  border-radius: 999px;
+  background: var(--river-grain), linear-gradient(180deg, #27322b, #111814);
+  background-blend-mode: overlay, normal;
+  box-shadow: var(--river-lift-1);
+  color: var(--river-cream);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 8px;
+  letter-spacing: 0.14em;
+  transition: filter 140ms var(--ease-out);
+  white-space: nowrap;
+}
+
+.raise-action {
+  padding: 0 18px 0 14px;
+}
+
+.raise-step svg,
+.raise-action svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.6;
+}
+
+.raise-step:hover,
+.raise-action:hover:not(:disabled),
+.raise-step:focus-visible,
+.raise-action:focus-visible {
+  filter: brightness(1.25);
+  outline: none;
+}
+
+.raise-action.all-in {
+  color: var(--river-amber-bright);
+}
+
+.raise-action.cancel {
+  color: var(--river-danger);
+}
+
+.raise-action.confirm {
+  border-color: rgb(99 209 138 / 55%);
+  color: #6fe09a;
+}
+
+.raise-actions {
+  display: flex;
+  gap: 10px;
 }

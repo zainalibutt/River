@@ -42,19 +42,11 @@ import { readoutFor } from '@/lib/hand-readout'
 import { formatAmount } from '@/lib/presentation'
 import {
   canArmPreset,
-  PRESET_KINDS,
   PRESET_LABELS,
   type PresetKind,
   resolvePreset,
   shouldClearPreset,
 } from '@/lib/preset'
-import {
-  DIAL_DIAMETER,
-  RAM_DIAMETER,
-  type WedgeSlot,
-  wedgeClipPath,
-  wedgeLabelOffset,
-} from '@/lib/ram-geometry'
 import { type RepFlash, repFlashFor, shouldShowRate } from '@/lib/rep-feedback'
 import {
   actionLabel,
@@ -575,8 +567,6 @@ export function RiverRoomTable() {
         if (view.legal?.check.enabled) command({ kind: 'act', action: { kind: 'check' } })
         else if (view.legal?.call.enabled) command({ kind: 'act', action: { kind: 'call' } })
       }
-      if (event.key.toLowerCase() === 'r' && view.legal?.raiseTo.enabled)
-        document.querySelector<HTMLElement>('.betting-dial')?.focus()
     }
     const up = (event: KeyboardEvent) => {
       if (event.code === 'Space') setPeek(false)
@@ -709,7 +699,7 @@ export function RiverRoomTable() {
     return () => window.clearTimeout(timer)
   }, [presetNotice])
   const turnRemaining = useTurnRemaining(view.turnDeadlineMs)
-  const urgency =
+  const _urgency =
     localTurn &&
     turnRemaining !== null &&
     view.turnBudgetMs !== null &&
@@ -1304,30 +1294,14 @@ export function RiverRoomTable() {
                 </form>
               </aside>
             ) : null}
-            {presetArmable ? (
-              <fieldset className="preset-rail" aria-label="Preset actions">
-                {PRESET_KINDS.map((kind) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    className={`preset-chip${preset === kind ? ' armed' : ''}`}
-                    aria-pressed={preset === kind}
-                    onClick={() => setPreset((current) => (current === kind ? null : kind))}
-                  >
-                    {PRESET_LABELS[kind]}
-                  </button>
-                ))}
-              </fieldset>
-            ) : null}
             {presetNotice === null ? null : (
               <div className="preset-notice" role="status">
                 {presetNotice}
               </div>
             )}
-            <RadialActionMenu
+            <ActionMenu
               view={view}
               localTurn={localTurn}
-              urgency={urgency}
               raiseTo={raiseTo}
               onRaiseTo={setRaiseTo}
               onAction={(action) => command({ kind: 'act', action })}
@@ -1340,6 +1314,12 @@ export function RiverRoomTable() {
               canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
               seated={selfSeat !== null}
               kicked={kick !== null}
+              preset={preset}
+              onPreset={setPreset}
+              presetArmable={presetArmable}
+              remainingMs={turnRemaining}
+              budgetMs={view.turnBudgetMs}
+              turnKey={`${view.handNumber}:${view.street}:${view.currentActor?.playerId ?? ''}:${view.turnDeadlineMs ?? ''}`}
               onRejoin={() => {
                 kickRef.current = null
                 setKick(null)
@@ -1669,10 +1649,31 @@ function TurnWatch({ remainingMs, budgetMs }: { remainingMs: number; budgetMs: n
   )
 }
 
-function RadialActionMenu({
+type MenuSlot = 'call' | 'raise' | 'fold'
+
+const MENU_ICON = {
+  check: <path d="M5 12.5 9.5 17 19 7.5" />,
+  call: <path d="M12 19V6M6.5 11.5 12 6l5.5 5.5" />,
+  raise: <path d="M12 21V11M7 15.5l5-5 5 5M7 9.5l5-5 5 5" />,
+  fold: <path d="M7 7l10 10M17 7 7 17" />,
+  allIn: <path d="M12 21V9M7 13.5l5-5 5 5M6 4h12" />,
+  checkFold: <path d="M3 12.5 6.5 16 13 9M15 9l6 6M21 9l-6 6" />,
+  back: <path d="M15 5 8 12l7 7" />,
+  forward: <path d="m9 5 7 7-7 7" />,
+}
+
+/**
+ * The action menu: three buttons, fixed at the lower centre of the screen.
+ *
+ * Call or check at the top left, bet or raise at the top right, fold at the
+ * bottom. The slots never move, so fold is in the same place whether or not a
+ * raise is legal. Before your turn the same three buttons arm presets, ghosted,
+ * which keeps every action in one place instead of a second row of chips.
+ * Raising opens a layer in the same spot rather than a second surface.
+ */
+function ActionMenu({
   view,
   localTurn,
-  urgency,
   raiseTo,
   onRaiseTo,
   onAction,
@@ -1686,10 +1687,15 @@ function RadialActionMenu({
   seated,
   kicked,
   onRejoin,
+  preset,
+  onPreset,
+  presetArmable,
+  remainingMs,
+  budgetMs,
+  turnKey,
 }: {
   view: RoomView
   localTurn: boolean
-  urgency: boolean
   raiseTo: number
   onRaiseTo: (value: number) => void
   onAction: (action: TurnAction) => void
@@ -1703,7 +1709,50 @@ function RadialActionMenu({
   seated: boolean
   kicked: boolean
   onRejoin: () => void
+  preset: PresetKind | null
+  onPreset: (kind: PresetKind | null) => void
+  presetArmable: boolean
+  remainingMs: number | null
+  budgetMs: number | null
+  turnKey: string
 }) {
+  const [lit, setLit] = useState<MenuSlot | null>(null)
+  const [raising, setRaising] = useState(false)
+  const legal = localTurn ? view.legal : null
+
+  // A raise layer left open, or a slot left lit, must not survive into the
+  // next decision.
+  useEffect(() => {
+    if (turnKey.length === 0) return
+    setRaising(false)
+    setLit(null)
+  }, [turnKey])
+
+  useEffect(() => {
+    if (legal === null) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return
+      const key = event.key.toLowerCase()
+      if (!raising && key === 'r' && legal.raiseTo.enabled) {
+        event.preventDefault()
+        setRaising(true)
+      } else if (raising && key === 'escape') {
+        event.preventDefault()
+        setRaising(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [legal, raising])
+
+  const slotEvents = (slot: MenuSlot) => ({
+    onPointerEnter: () => setLit(slot),
+    onPointerLeave: () => setLit(null),
+    onFocus: () => setLit(slot),
+    onBlur: () => setLit(null),
+  })
+
   if (kicked)
     return (
       <div className="ram ram-waiting">
@@ -1732,7 +1781,7 @@ function RadialActionMenu({
         ) : null}
       </div>
     )
-  if (!localTurn || view.legal === null) {
+  if (legal === null) {
     if (view.phase === 'open' && canDeal)
       return (
         <div className="ram ram-waiting">
@@ -1752,176 +1801,418 @@ function RadialActionMenu({
           </button>
         </div>
       )
+    if (presetArmable) {
+      const arm = (kind: PresetKind) => onPreset(preset === kind ? null : kind)
+      const presetLabel =
+        lit === 'call'
+          ? PRESET_LABELS['call-any']
+          : lit === 'fold'
+            ? PRESET_LABELS['check-fold']
+            : preset === null
+              ? 'PRESET'
+              : `${PRESET_LABELS[preset]} ARMED`
+      return (
+        <section className="action-menu ghosted" aria-label="Preset actions">
+          <p className="action-label">{presetLabel}</p>
+          <div className="action-base" data-lit={lit ?? undefined}>
+            <span className="action-seams" />
+          </div>
+          <span className="action-slot call" {...slotEvents('call')}>
+            <button
+              type="button"
+              className={`action-button${preset === 'call-any' ? ' armed' : ''}`}
+              aria-pressed={preset === 'call-any'}
+              aria-label={PRESET_LABELS['call-any']}
+              onClick={() => arm('call-any')}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                {MENU_ICON.call}
+              </svg>
+            </button>
+          </span>
+          <span className="action-slot raise">
+            <span className="action-button placeholder" aria-hidden="true" />
+          </span>
+          <span className="action-slot fold" {...slotEvents('fold')}>
+            <button
+              type="button"
+              className={`action-button${preset === 'check-fold' ? ' armed' : ''}`}
+              aria-pressed={preset === 'check-fold'}
+              aria-label={PRESET_LABELS['check-fold']}
+              onClick={() => arm('check-fold')}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                {MENU_ICON.checkFold}
+              </svg>
+            </button>
+          </span>
+        </section>
+      )
+    }
     return (
       <div className="ram ram-waiting">
         <span>WAITING</span>
       </div>
     )
   }
-  const legal = view.legal
+
   const min = legal.raiseTo.min
   const max = legal.allIn.amount
-  const clamped = Math.min(max, Math.max(min, raiseTo))
-  const step = DEFAULT_STAKE.bigBlind
-  const setDialValue = (value: number) => onRaiseTo(Math.min(max, Math.max(min, value)))
-  const wedge = (
-    slot: WedgeSlot,
-    word: string,
-    amount: string | null,
-    enabled: boolean,
-    action: TurnAction,
-    hold = 0,
-  ) => (
-    <HoldAction
-      className={`ram-wedge ${slot}`}
-      disabled={!enabled}
-      duration={hold}
-      style={{ clipPath: wedgeClipPath(slot) }}
-      onComplete={() => onAction(action)}
-    >
-      <span className="ram-wedge-label" style={wedgeLabelOffset(slot)}>
-        <span className="ram-wedge-word">{word}</span>
-        {amount === null ? null : <span className="ram-wedge-amount">{amount}</span>}
-      </span>
-    </HoldAction>
-  )
+  const clampRaise = (value: number) => Math.min(max, Math.max(min, Math.round(value)))
+  const clamped = clampRaise(raiseTo)
+  const checking = legal.check.enabled
+
+  if (raising && legal.raiseTo.enabled) {
+    return (
+      <RaiseLayer
+        view={view}
+        legal={legal}
+        value={clamped}
+        onValue={(value) => onRaiseTo(clampRaise(value))}
+        onRaise={() => onAction({ kind: 'raiseTo', to: clamped })}
+        onAllIn={() => onAction({ kind: 'allIn' })}
+        onCancel={() => setRaising(false)}
+      />
+    )
+  }
+
+  const labels: Record<MenuSlot, string> = {
+    call: checking ? 'CHECK' : `CALL ${formatAmount(legal.call.amount, false)}`,
+    raise: legal.raiseTo.enabled
+      ? checking
+        ? 'BET'
+        : 'RAISE'
+      : `ALL IN ${formatAmount(max, false)}`,
+    fold: 'FOLD',
+  }
   return (
-    <section
-      className={`ram${urgency ? ' urgent' : ''}`}
-      aria-label="Radial action menu"
-      style={{ width: RAM_DIAMETER, height: RAM_DIAMETER }}
-    >
-      {wedge(
-        'fold',
-        'FOLD',
-        null,
-        legal.fold.enabled,
-        { kind: 'fold' },
-        legal.check.enabled ? 400 : 0,
-      )}
-      {legal.check.enabled
-        ? wedge('call', 'CHECK', null, true, { kind: 'check' })
-        : wedge('call', 'CALL', formatAmount(legal.call.amount, false), legal.call.enabled, {
-            kind: 'call',
-          })}
-      {/* No amount on this wedge. The dial is where the number is set, so it is
-          where it is read; printing it twice cost the dial figure the size it
-          needs at sofa distance. */}
-      {legal.raiseTo.enabled
-        ? wedge('raise', 'RAISE TO', null, true, { kind: 'raiseTo', to: clamped })
-        : null}
-      {wedge(
-        'all-in',
-        'ALL IN',
-        formatAmount(max, false),
-        legal.allIn.enabled,
-        { kind: 'allIn' },
-        600,
-      )}
-      {legal.raiseTo.enabled ? (
-        <>
-          <BettingDial value={clamped} step={step} onValue={setDialValue} />
-          <div className="dial-presets">
-            <button
-              type="button"
-              className="dial-step"
-              aria-label="Decrease raise amount"
-              onClick={() => setDialValue(clamped - step)}
-            >
-              −
-            </button>
-            {sizingPresets({
-              pot: view.pot,
-              currentBet: view.currentBet,
-              toCall: legal.call.amount,
-              minRaiseTo: min,
-              allInTo: max,
-            }).map(({ id, label, amount }) => (
-              <button
-                type="button"
-                key={id}
-                aria-label={`${label}, raise to ${formatAmount(amount, false)}`}
-                onClick={() => onRaiseTo(amount)}
-              >
-                {label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="dial-step"
-              aria-label="Increase raise amount"
-              onClick={() => setDialValue(clamped + step)}
-            >
-              +
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="ram-centre">YOUR TURN</div>
-      )}
+    <section className="action-menu" aria-label="Your action">
+      <TurnArc key={turnKey} remainingMs={remainingMs} budgetMs={budgetMs} />
+      <p className="action-label">{lit === null ? 'YOUR TURN' : labels[lit]}</p>
+      <div className="action-base" data-lit={lit ?? undefined}>
+        <span className="action-seams" />
+      </div>
+      <span className="action-slot call" {...slotEvents('call')}>
+        <HoldAction
+          className={`action-button${checking ? ' check' : ''}`}
+          duration={0}
+          disabled={!(checking || legal.call.enabled)}
+          ariaLabel={labels.call}
+          onComplete={() => onAction(checking ? { kind: 'check' } : { kind: 'call' })}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {checking ? MENU_ICON.check : MENU_ICON.call}
+          </svg>
+        </HoldAction>
+      </span>
+      <span className="action-slot raise" {...slotEvents('raise')}>
+        {legal.raiseTo.enabled ? (
+          <button
+            type="button"
+            className="action-button"
+            aria-label={labels.raise}
+            onClick={() => setRaising(true)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              {MENU_ICON.raise}
+            </svg>
+          </button>
+        ) : (
+          <HoldAction
+            className="action-button all-in"
+            duration={600}
+            disabled={!legal.allIn.enabled}
+            ariaLabel={labels.raise}
+            onComplete={() => onAction({ kind: 'allIn' })}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              {MENU_ICON.allIn}
+            </svg>
+          </HoldAction>
+        )}
+      </span>
+      <span className="action-slot fold" {...slotEvents('fold')}>
+        {/* Folding when checking is free is always a mistake, so it is the one
+            ordinary action that asks for a short hold. Facing a bet it is a
+            normal decision and takes a plain press. */}
+        <HoldAction
+          className="action-button"
+          duration={checking ? 400 : 0}
+          disabled={!legal.fold.enabled}
+          ariaLabel={checking ? 'Fold, hold to confirm' : 'Fold'}
+          onComplete={() => onAction({ kind: 'fold' })}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {MENU_ICON.fold}
+          </svg>
+        </HoldAction>
+      </span>
     </section>
   )
 }
 
-/**
- * The dial's own wheel listener, bound non-passively.
- *
- * React attaches `wheel` at the root as a passive listener, so the
- * `preventDefault` inside an `onWheel` prop silently does nothing and the page
- * scrolls while the raise changes. Binding it here with `passive: false` is the
- * only way to own the gesture.
- */
-function BettingDial({
-  value,
-  step,
-  onValue,
+/** The turn clock around your own menu, on the same sweep as the watch. */
+function TurnArc({
+  remainingMs,
+  budgetMs,
 }: {
-  value: number
-  step: number
-  onValue: (next: number) => void
+  remainingMs: number | null
+  budgetMs: number | null
 }) {
-  const host = useRef<HTMLDivElement | null>(null)
-  const latest = useRef({ value, step, onValue })
-  latest.current = { value, step, onValue }
+  const [elapsed] = useState(() =>
+    remainingMs === null || budgetMs === null
+      ? 0
+      : Math.max(0, Math.min(budgetMs, budgetMs - remainingMs)),
+  )
+  if (remainingMs === null || budgetMs === null) return null
+  return (
+    <span
+      className="action-timer"
+      aria-hidden="true"
+      style={
+        { '--turn-budget': `${budgetMs}ms`, '--turn-elapsed': `-${elapsed}ms` } as CSSProperties
+      }
+    />
+  )
+}
+
+const ARC = { cx: 150, cy: 146, r: 124 }
+const ARC_LENGTH = Math.PI * ARC.r
+/** Within this fraction of the arc, the knob snaps to a pot size. */
+const NOTCH_SNAP = 0.03
+/** How hard the arc favours small raises; see RaiseLayer. */
+const ARC_CURVE = 200
+/** Notch labels closer than this, in arc fraction, are staggered outward. */
+const LABEL_CLEARANCE = 0.09
+
+function arcPoint(fraction: number, radius = ARC.r): { x: number; y: number } {
+  const angle = Math.PI * (1 - fraction)
+  return { x: ARC.cx + radius * Math.cos(angle), y: ARC.cy - radius * Math.sin(angle) }
+}
+
+/**
+ * The raise layer: a half arc from the minimum raise to your stack.
+ *
+ * The arc is logarithmic. A stack is often forty times a pot-sized raise, and on
+ * a linear arc every sensible raise sat in the first few degrees. A square-root
+ * curve was tried first and still stacked the half, three-quarter and pot
+ * labels on top of one another against a 100K stack; the log curve spread the
+ * same three across about 35 degrees. Half, three-quarter and full pot are
+ * notches the knob snaps to, and keys 1 to 4 jump to minimum, half,
+ * three-quarter and pot.
+ */
+function RaiseLayer({
+  view,
+  legal,
+  value,
+  onValue,
+  onRaise,
+  onAllIn,
+  onCancel,
+}: {
+  view: RoomView
+  legal: NonNullable<RoomView['legal']>
+  value: number
+  onValue: (value: number) => void
+  onRaise: () => void
+  onAllIn: () => void
+  onCancel: () => void
+}) {
+  const min = legal.raiseTo.min
+  const max = legal.allIn.amount
+  const step = DEFAULT_STAKE.bigBlind
+  const sizes = sizingPresets({
+    pot: view.pot,
+    currentBet: view.currentBet,
+    toCall: legal.call.amount,
+    minRaiseTo: min,
+    allInTo: max,
+  })
+  const span = Math.max(1, max - min)
+  const fractionOf = (amount: number) =>
+    Math.log1p(ARC_CURVE * Math.min(1, Math.max(0, (amount - min) / span))) / Math.log1p(ARC_CURVE)
+  const amountAt = (fraction: number) =>
+    min + (span * Math.expm1(fraction * Math.log1p(ARC_CURVE))) / ARC_CURVE
+  const arc = useRef<HTMLDivElement | null>(null)
+  const latest = useRef({ value, onValue, onRaise, onCancel, sizes })
+  latest.current = { value, onValue, onRaise, onCancel, sizes }
+
   useEffect(() => {
-    const node = host.current
-    if (node === null) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return
+      const current = latest.current
+      if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
+        event.preventDefault()
+        current.onValue(current.value + step)
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
+        event.preventDefault()
+        current.onValue(current.value - step)
+      } else if (event.key === 'Enter') {
+        event.preventDefault()
+        current.onRaise()
+      } else if (/^[1-4]$/.test(event.key)) {
+        const size = current.sizes[Number(event.key) - 1]
+        if (size !== undefined) current.onValue(size.amount)
+      }
+    }
+    // Bound here rather than through onWheel: React attaches wheel passively,
+    // so preventDefault there is ignored and the page scrolls with the raise.
+    const node = arc.current
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
-      const { value: current, step: bigBlind, onValue: commit } = latest.current
-      commit(current + (event.deltaY > 0 ? -bigBlind : bigBlind))
+      latest.current.onValue(latest.current.value + (event.deltaY > 0 ? -step : step))
     }
-    node.addEventListener('wheel', onWheel, { passive: false })
-    return () => node.removeEventListener('wheel', onWheel)
+    window.addEventListener('keydown', onKey)
+    node?.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      node?.removeEventListener('wheel', onWheel)
+    }
   }, [])
+
+  const pick = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const box = event.currentTarget.getBoundingClientRect()
+    const scale = box.width / 300
+    const centreX = box.left + ARC.cx * scale
+    const centreY = box.top + ARC.cy * scale
+    let angle = Math.atan2(centreY - event.clientY, event.clientX - centreX)
+    if (angle < 0) angle = event.clientX < centreX ? Math.PI : 0
+    const fraction = 1 - angle / Math.PI
+    const snapped = sizes
+      .slice(1)
+      .find((size) => Math.abs(fractionOf(size.amount) - fraction) < NOTCH_SNAP)
+    if (snapped !== undefined) {
+      onValue(snapped.amount)
+      return
+    }
+    const raw = amountAt(fraction)
+    onValue(fraction >= 0.995 ? max : Math.round(raw / step) * step)
+  }
+
+  const fraction = fractionOf(value)
+  const knob = arcPoint(fraction)
+  const track = `M ${ARC.cx - ARC.r} ${ARC.cy} A ${ARC.r} ${ARC.r} 0 0 1 ${ARC.cx + ARC.r} ${ARC.cy}`
   return (
-    <div
-      ref={host}
-      className="betting-dial"
-      role="slider"
-      tabIndex={0}
-      aria-label="Raise to"
-      aria-valuenow={value}
-      aria-valuetext={formatAmount(value, false)}
-      style={{ width: DIAL_DIAMETER, height: DIAL_DIAMETER }}
-      onKeyDown={(event) => {
-        const direction =
-          event.key === 'ArrowUp' || event.key === 'ArrowRight'
-            ? 1
-            : event.key === 'ArrowDown' || event.key === 'ArrowLeft'
-              ? -1
-              : 0
-        if (direction === 0) return
-        event.preventDefault()
-        onValue(value + direction * step)
-      }}
-    >
-      <output>
-        RAISE TO
-        <br />
-        <strong>{formatAmount(value, false)}</strong>
-      </output>
-    </div>
+    <section className="raise-layer" aria-label="Raise">
+      <div
+        ref={arc}
+        className="raise-arc"
+        role="slider"
+        tabIndex={0}
+        aria-label="Raise to"
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
+        aria-valuetext={formatAmount(value, false)}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId)
+          pick(event)
+        }}
+        onPointerMove={(event) => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) pick(event)
+        }}
+      >
+        <svg viewBox="0 0 300 158" aria-hidden="true">
+          <defs>
+            <linearGradient id="raise-fill" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0" stopColor="#2f7d4e" />
+              <stop offset="1" stopColor="#6fe09a" />
+            </linearGradient>
+          </defs>
+          <path className="raise-rim" d={track} />
+          <path className="raise-track" d={track} />
+          <path
+            className="raise-fill"
+            d={track}
+            strokeDasharray={`${fraction * ARC_LENGTH} ${ARC_LENGTH}`}
+          />
+          {sizes.slice(1).map((size, index, all) => {
+            if (size.amount <= min || size.amount >= max) return null
+            const at = fractionOf(size.amount)
+            const previous = all[index - 1]
+            const crowded =
+              previous !== undefined &&
+              previous.amount > min &&
+              Math.abs(fractionOf(previous.amount) - at) < LABEL_CLEARANCE &&
+              index % 2 === 1
+            const inner = arcPoint(at, ARC.r - 15)
+            const outer = arcPoint(at, ARC.r + 15)
+            const label = arcPoint(at, ARC.r + (crowded ? 44 : 28))
+            return (
+              <g key={size.id}>
+                <line className="raise-notch" x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} />
+                <text className="raise-notch-label" x={label.x} y={label.y} textAnchor="middle">
+                  {size.label}
+                </text>
+              </g>
+            )
+          })}
+          <text className="raise-end" x={ARC.cx - ARC.r} y={ARC.cy + 26} textAnchor="middle">
+            {formatAmount(min, true)}
+          </text>
+          <text className="raise-end" x={ARC.cx + ARC.r} y={ARC.cy + 26} textAnchor="middle">
+            {formatAmount(max, true)}
+          </text>
+          <g className="raise-knob" transform={`translate(${knob.x} ${knob.y})`}>
+            <circle r="15" />
+            <circle className="raise-knob-well" r="9" />
+          </g>
+        </svg>
+        <div className="raise-readout">
+          <span>{legal.check.enabled ? 'BET' : 'RAISE TO'}</span>
+          <strong>{formatAmount(value, false)}</strong>
+        </div>
+      </div>
+      <div className="raise-steps">
+        <button
+          type="button"
+          className="raise-step"
+          aria-label="One big blind less"
+          onClick={() => onValue(value - step)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {MENU_ICON.back}
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="raise-step"
+          aria-label="One big blind more"
+          onClick={() => onValue(value + step)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {MENU_ICON.forward}
+          </svg>
+        </button>
+      </div>
+      <div className="raise-actions">
+        <HoldAction
+          className="raise-action all-in"
+          duration={600}
+          disabled={!legal.allIn.enabled}
+          ariaLabel={`All in ${formatAmount(max, false)}, hold to confirm`}
+          onComplete={onAllIn}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {MENU_ICON.allIn}
+          </svg>
+          ALL IN
+        </HoldAction>
+        <button type="button" className="raise-action cancel" onClick={onCancel}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {MENU_ICON.fold}
+          </svg>
+          CANCEL
+        </button>
+        <button type="button" className="raise-action confirm" onClick={onRaise}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {MENU_ICON.raise}
+          </svg>
+          {legal.check.enabled ? 'BET' : 'RAISE'}
+        </button>
+      </div>
+    </section>
   )
 }
 
@@ -1930,6 +2221,7 @@ function HoldAction({
   disabled = false,
   className,
   style,
+  ariaLabel,
   onComplete,
   children,
 }: {
@@ -1937,6 +2229,7 @@ function HoldAction({
   disabled?: boolean
   className: string
   style?: CSSProperties
+  ariaLabel?: string
   onComplete: () => void
   children: React.ReactNode
 }) {
@@ -1967,6 +2260,7 @@ function HoldAction({
       type="button"
       className={`${className}${holding ? ' holding' : ''}`}
       disabled={disabled}
+      aria-label={ariaLabel}
       style={{ ...style, '--hold-duration': `${duration}ms` } as CSSProperties}
       onPointerDown={begin}
       onPointerUp={cancel}
