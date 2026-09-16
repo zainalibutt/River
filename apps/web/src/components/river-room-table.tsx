@@ -9,12 +9,9 @@ import {
   itemCatalogue,
   type ShowdownReel,
   type Street,
-  seatMood,
-  seatPin,
   showdownReel,
   type TableSummary,
   type TurnAction,
-  turnClock,
 } from '@river/engine'
 import type { RoomEvent, RoomSeatView, RoomView } from '@river/server'
 import type { ClientRoomCommand, ServerMessage } from '@river/server/wire'
@@ -632,7 +629,7 @@ export function RiverRoomTable() {
 
   const seats = useMemo(() => orderedSeats(view), [view])
 
-  const seatIds = useMemo(() => seats.map((seat) => seat.playerId ?? `seat-${seat.seat}`), [seats])
+  const _seatIds = useMemo(() => seats.map((seat) => seat.playerId ?? `seat-${seat.seat}`), [seats])
 
   /**
    * Where each player's chips sit in the world.
@@ -1214,6 +1211,7 @@ export function RiverRoomTable() {
                   local={seat.playerId === view.selfId}
                   timer={seat.playerId === view.currentActor?.playerId ? turnRemaining : null}
                   timerTotal={view.turnBudgetMs ?? 1}
+                  turnKey={`${view.handNumber}:${view.street}:${view.currentActor?.playerId ?? ''}:${view.turnDeadlineMs ?? ''}`}
                   actionFlag={
                     seat.playerId === null ? null : (seatActions.get(seat.playerId) ?? null)
                   }
@@ -1490,14 +1488,14 @@ function CardBack() {
 }
 
 /** What a glyph pin draws, and what a screen reader hears instead. */
-const GLYPH_MARK: Record<'check' | 'fold' | 'away' | 'sittingOut', string> = {
+const _GLYPH_MARK: Record<'check' | 'fold' | 'away' | 'sittingOut', string> = {
   check: '✓',
   fold: '✕',
   away: '⏸',
   sittingOut: '—',
 }
 
-const GLYPH_LABEL: Record<'check' | 'fold' | 'away' | 'sittingOut', string> = {
+const _GLYPH_LABEL: Record<'check' | 'fold' | 'away' | 'sittingOut', string> = {
   check: 'Checked',
   fold: 'Folded',
   away: 'Away',
@@ -1511,6 +1509,7 @@ function RoomSeat({
   local,
   timer,
   timerTotal,
+  turnKey,
   actionFlag,
   buyIn,
   onSit,
@@ -1524,6 +1523,8 @@ function RoomSeat({
   local: boolean
   timer: number | null
   timerTotal: number
+  /** Changes once per turn, so the watch restarts only when a new turn does. */
+  turnKey: string
   actionFlag: SeatActionFlag | null
   buyIn: number | null
   onSit: () => void
@@ -1533,58 +1534,19 @@ function RoomSeat({
   projected: boolean
 }) {
   const position = seatPositions[index] ?? seatPositions[0]
-  // One rule decides what floats over this seat. The engine owns it so the
-  // world-space pins and this DOM layer cannot drift apart.
-  const pin = seatPin({
-    mood: seatMood({
-      occupied: seat.playerId !== null,
-      stack: seat.stack,
-      hasHole: seat.hasHole,
-      folded: seat.folded,
-      allIn: seat.allIn,
-      busted: seat.busted,
-      sittingOut: seat.sittingOut,
-      disconnected: seat.disconnected,
-      isActor: active,
-      wonLastHand: false,
-      handLive: seat.hasHole || seat.betStreet > 0,
-    }),
-    committed: seat.betStreet,
-    isActing: active,
-    clock: timer === null ? null : turnClock(timer, 0, Math.max(1, timerTotal)),
-  })
-  const label = seat.disconnected
-    ? 'RECONNECTING'
-    : seat.folded
-      ? 'FOLDED'
-      : seat.allIn
-        ? 'ALL IN'
-        : active
-          ? 'TO ACT'
-          : seat.sittingOut
-            ? 'SITTING OUT'
-            : local
-              ? 'YOU'
-              : null
+  const style = projected
+    ? undefined
+    : ({
+        '--seat-x': `${position.x}%`,
+        '--seat-y': `${position.y}%`,
+        '--chair-x': `${position.x}%`,
+        '--chair-y': `${position.y}%`,
+      } as CSSProperties)
   if (seat.playerId === null) {
     return (
-      <article
-        ref={anchorRef}
-        className="seat open-seat"
-        style={
-          projected
-            ? undefined
-            : ({
-                '--seat-x': `${position.x}%`,
-                '--seat-y': `${position.y}%`,
-                '--chair-x': `${position.x}%`,
-                '--chair-y': `${position.y}%`,
-              } as CSSProperties)
-        }
-      >
+      <article ref={anchorRef} className="seat open-seat" style={style}>
         <button type="button" onClick={onSit} disabled={buyIn === null}>
           SIT
-          <br />
           <small>
             {buyIn === null
               ? `NEED ${formatAmount(DEFAULT_STAKE.minBuyIn, false)}`
@@ -1594,20 +1556,31 @@ function RoomSeat({
       </article>
     )
   }
+  // One marker over a player, never two. The acting player shows the watch,
+  // anyone who has acted this street shows what they did until the next card,
+  // and a player all in from an earlier street keeps saying so. Your own seat
+  // shows none of them: the action menu is yours, and a pin over your own head
+  // would sit on top of it.
+  let marker: React.ReactNode = null
+  if (!local && active && timer !== null) {
+    marker = <TurnWatch key={turnKey} remainingMs={timer} budgetMs={timerTotal} />
+  } else if (!local && actionFlag !== null) {
+    marker = <ActionPin flag={actionFlag} amount={seat.betStreet} />
+  } else if (!local && seat.allIn) {
+    marker = <ActionPin flag={{ label: 'ALL IN', tone: 'danger' }} amount={null} />
+  }
+  const note = seat.disconnected
+    ? 'Reconnecting'
+    : seat.sittingOut
+      ? 'Sitting out'
+      : seat.folded
+        ? 'Folded'
+        : null
   return (
     <article
       ref={anchorRef}
-      className={`seat${active ? ' active' : ''}${seat.disconnected ? ' reconnecting' : ''}${local ? ' hero-seat' : ''}`}
-      style={
-        projected
-          ? undefined
-          : ({
-              '--seat-x': `${position.x}%`,
-              '--seat-y': `${position.y}%`,
-              '--chair-x': `${position.x}%`,
-              '--chair-y': `${position.y}%`,
-            } as CSSProperties)
-      }
+      className={`seat-anchor${active ? ' active' : ''}${local ? ' hero-seat' : ''}${seat.folded ? ' folded' : ''}${seat.disconnected ? ' reconnecting' : ''}`}
+      style={style}
     >
       <button
         className="seat-select"
@@ -1615,58 +1588,84 @@ function RoomSeat({
         onClick={onSelect}
         aria-label={`Inspect ${seat.name}`}
       />
-      {/* Nobody's cards float over their head.
-
-          Eighteen card backs hovered above the table - two per seat, on every
-          seat, for the whole hand, including seats that had folded. The
-          reference has none: hole cards lie flat on the felt in front of the
-          player, and the only cards that ever float are the ones revealed at a
-          showdown, which is what makes that moment read as a reveal.
-
-          Whether somebody is still in the hand is said by their pin, which is
-          the size of a fingertip and already carries the fold, check, away and
-          sitting-out states. Eighteen billboards said the same thing eighteen
-          times and said it loudest for the players it no longer applied to.
-
-          The hero's own hand is the fixed bottom-left block, not here. */}
-      <div className="avatar" aria-hidden="true">
-        {seat.name?.slice(0, 1) ?? '?'}
+      {marker}
+      {seat.dealer ? (
+        <span className="seat-dealer" role="img" aria-label="Dealer">
+          D
+        </span>
+      ) : null}
+      {/* Title and level are designed slots holding placeholders. The engine
+          already models both; the table protocol does not carry them yet. */}
+      <div className="seat-plate">
+        <span className="seat-plate-name">{seat.name}</span>
+        <span className="seat-plate-level">
+          LEVEL <b>—</b>
+        </span>
+        <span className="seat-plate-title">—</span>
+        <span className="seat-plate-chips">
+          <i aria-hidden="true" />
+          {formatAmount(seat.stack, !local)}
+        </span>
+        {note === null ? null : <span className="seat-plate-note">{note}</span>}
       </div>
-      <div className="seat-copy">
-        <span>{seat.name}</span>
-        <strong>{formatAmount(seat.stack, !local)}</strong>
-        <small>{label}</small>
-      </div>
-      {seat.dealer ? <div className="dealer-button">D</div> : null}
-      {/* Exactly one marker floats over a seat, never two.
-
-          The clock and the bet used to render independently, so the acting
-          player showed a timer ring and a chip stack at once - the reference
-          never stacks them, and seatPin makes the precedence a rule rather
-          than two conditionals that happen not to overlap most of the time. */}
-      {pin.kind === 'clock' && !local ? (
-        <div
-          className={`remote-timer${pin.urgent ? ' urgent' : ''}`}
-          style={{ '--timer-progress': `${pin.fraction ?? 0}` } as CSSProperties}
-        >
-          TURN
-        </div>
-      ) : null}
-      {pin.kind === 'amount' && pin.amount !== null ? (
-        <div className="seat-bet">
-          <i />
-          <b>{formatAmount(pin.amount, !local)}</b>
-        </div>
-      ) : null}
-      {actionFlag !== null && !active ? (
-        <div className={`seat-action ${actionFlag.tone}`}>{actionFlag.label}</div>
-      ) : null}
-      {pin.kind === 'glyph' && pin.glyph !== null && actionFlag === null ? (
-        <div className={`seat-glyph ${pin.glyph}`} role="img" aria-label={GLYPH_LABEL[pin.glyph]}>
-          {GLYPH_MARK[pin.glyph]}
-        </div>
-      ) : null}
     </article>
+  )
+}
+
+const PIN_ICON: Record<SeatActionFlag['label'], React.ReactNode> = {
+  CALL: <path d="M12 19V6M6.5 11.5 12 6l5.5 5.5" />,
+  RAISE: <path d="M12 21V11M7 15.5l5-5 5 5M7 9.5l5-5 5 5" />,
+  CHECK: <path d="M5 12.5 9.5 17 19 7.5" />,
+  FOLD: <path d="M7 7l10 10M17 7 7 17" />,
+  'ALL IN': <path d="M12 21V9M7 13.5l5-5 5 5M6 4h12" />,
+}
+
+function ActionPin({ flag, amount }: { flag: SeatActionFlag; amount: number | null }) {
+  const kind = flag.label === 'ALL IN' ? 'all-in' : flag.label.toLowerCase()
+  const shown =
+    amount !== null && amount > 0 && (kind === 'call' || kind === 'raise' || kind === 'all-in')
+      ? amount
+      : null
+  return (
+    <div
+      className={`seat-pin action-pin ${kind}`}
+      role="img"
+      aria-label={shown === null ? flag.label : `${flag.label} ${formatAmount(shown, false)}`}
+    >
+      {shown === null ? null : <b className="action-pin-amount">{formatAmount(shown, true)}</b>}
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        {PIN_ICON[flag.label]}
+      </svg>
+    </div>
+  )
+}
+
+/**
+ * The acting player's clock.
+ *
+ * The sweep is one CSS animation started at the point this turn had already
+ * reached when the seat began acting. Driving the hand from the ticking
+ * remaining-time state would re-render the dial every tick and step the hand in
+ * visible jumps, and a turn that is already half gone when you join must show
+ * half gone rather than start again.
+ */
+function TurnWatch({ remainingMs, budgetMs }: { remainingMs: number; budgetMs: number }) {
+  const [elapsed] = useState(() => Math.max(0, Math.min(budgetMs, budgetMs - remainingMs)))
+  return (
+    <div
+      className="seat-pin turn-watch"
+      role="timer"
+      aria-label={`${Math.max(0, Math.ceil(remainingMs / 1000))} seconds to act`}
+      style={
+        { '--turn-budget': `${budgetMs}ms`, '--turn-elapsed': `-${elapsed}ms` } as CSSProperties
+      }
+    >
+      <span className="turn-watch-face" aria-hidden="true">
+        <span className="turn-watch-spent" />
+        <span className="turn-watch-indices" />
+        <span className="turn-watch-hand" />
+      </span>
+    </div>
   )
 }
 
