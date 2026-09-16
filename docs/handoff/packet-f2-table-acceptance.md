@@ -75,6 +75,13 @@ remains above the 1,000 threshold. A zero-balance player can rescue directly to
 one legal minimum seat. This ordering needs explicit UI copy during the
 recovery proof.
 
+**Superseded 16 September.** Zain moved the rescue threshold to the minimum
+buy-in, 50,000, in `20260916230000_rescue_below_one_buy_in.sql`: a bankroll that
+cannot buy a seat can be rescued, whatever the order of claims. The live value
+changes when that migration is applied. The same day the table gained a way out
+of a seat - a held LEAVE TABLE, and STAND UP beside the rebuy when busted - since
+the rescue is refused to anybody still seated.
+
 ## Remaining exit evidence
 
 1. Prove zero-balance recovery to a legal seat in Chrome.

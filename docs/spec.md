@@ -47,9 +47,9 @@ The hardware spike (Packet 5A) is **deferred, not cancelled**. It runs the momen
 
 ## Economy (server-authoritative, append-only ledger, config-driven)
 
-- Signup bankroll: **100,000**.
+- Signup bankroll: **150,000** (raised Aug 2026 from 100,000, so a first default buy-in still leaves one minimum buy-in in the bank).
 - Stakes ladder: entry **250/500** (min buy-in 50,000 = 100 BB, default buy-in 100,000 = 200 BB, max 200,000 = 400 BB), higher tiers gated by buy-in. *(Aug 2026: chip scale ×10 — 25/50 → 250/500, economy figures scaled to match — cosmetic denomination change, ratios unchanged.)*
-- Bust rescue (amended Aug 2026): when broke, instant top-up to **50,000** chips — one legal 100 BB entry buy-in — capped claims/day (config-driven), so nobody sits out friends-night at zero. Supersedes the claim-5,000-per-24h rule and the unusable 25,000 floor.
+- Bust rescue (amended Aug 2026): when broke, instant top-up to **50,000** chips — one legal 100 BB entry buy-in — capped claims/day (config-driven), so nobody sits out friends-night at zero. Supersedes the claim-5,000-per-24h rule and the unusable 25,000 floor. *(Sep 2026: broke means out of a seat with less than one minimum buy-in. The rescue used to pay only below 1,000, so a bankroll between 1,000 and 49,999 could neither sit nor be rescued.)*
 - Daily login: flat grant + growing streak, day 7 largest (~100k). Percentage compounding rejected.
 - Chip sink: cosmetics purchasable *with chips* (legal — chips unbuyable).
 
