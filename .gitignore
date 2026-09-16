@@ -108,6 +108,9 @@ docs/handoff/*_laws.md
 docs/handoff/packet-A*.md
 docs/handoff/packet-deepseek-*.md
 
+# Blender recovery backups beside deliberately tracked source scenes
+*.blend1
+
 # Playwright
 test-results/
 playwright-report/

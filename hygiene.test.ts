@@ -36,7 +36,7 @@ const FORBIDDEN: readonly { pattern: RegExp; why: string }[] = [
 ]
 
 /** Binary and generated paths where a match would be meaningless. */
-const SKIP = /\.(glb|png|jpe?g|webp|mp4|mov|ico|woff2?|ttf|lock)$|^package-lock\.json$/i
+const SKIP = /\.(blend|glb|png|jpe?g|webp|mp4|mov|ico|woff2?|ttf|lock)$|^package-lock\.json$/i
 
 function trackedFiles(): string[] {
   const out = execFileSync('git', ['ls-files'], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
