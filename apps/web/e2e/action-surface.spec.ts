@@ -1,16 +1,8 @@
 import { type Browser, type BrowserContext, expect, type Page, test } from '@playwright/test'
 
 const MIN_TARGET = 56
-/**
- * `04-anatomy.md` gives the RAM an outer diameter of 420 and says the betting
- * dial occupies its interior. An earlier version of this file asserted a
- * 330-pixel dial, a figure that came from a comment in `globals.css` rather
- * than from the spec, so the gate measured a quantity nothing had decided.
- */
-const RAM_DIAMETER = 420
-const CONCENTRIC_TOLERANCE = 2
+const CENTRE_TOLERANCE = 2
 const HOLE_CARD = { width: 168, height: 235 }
-const RADIUS_SPREAD = 1.15
 
 interface Rect {
   x: number
@@ -19,232 +11,209 @@ interface Rect {
   height: number
 }
 
-interface Snapshot {
-  scale: number
-  controls: { label: string; width: number; height: number }[]
-  dial: Rect | null
-  ram: Rect | null
-  concentricOffset: number | null
-  statusLine: Rect | null
-  overlapping: { label: string; width: number; height: number }[]
-  radii: number[]
-  card: Rect | null
-  presets: { label: string; amount: number }[]
-  allInAmount: number
+interface Control {
+  label: string
+  width: number
+  height: number
 }
 
-/**
- * One live turn, one snapshot, then every invariant asserts against it.
- *
- * Reaching a live turn costs about forty seconds: navigate, sit, deal, wait for
- * a bot ring to act. Paying that per assertion made the first version of this
- * file take longer than the fix it was written to gate, so the page is driven
- * once in `beforeAll` and the tests read numbers rather than the DOM.
- */
+interface Snapshot {
+  scale: number
+  menu: Rect | null
+  menuControls: Control[]
+  statusLine: Rect | null
+  menuOverStatus: boolean
+  card: Rect | null
+  layerOpenedByKey: boolean
+  layerControls: Control[]
+  notchLabels: Rect[]
+}
+
 let snapshot: Snapshot
 let page: Page
 let context: BrowserContext
 
+/**
+ * Reach the local player's turn from a session this run created.
+ *
+ * A fresh anonymous session carries the signup bankroll. An inherited one can
+ * be empty, which disables every seat and used to surface as a setup timeout.
+ * The seat click is forced because the targets move while the opening camera
+ * settles; the harness measures the menu, not the click.
+ */
 async function reachLiveTurn(target: Page): Promise<void> {
+  await target.goto('/')
+  await target.evaluate(() => {
+    localStorage.clear()
+    sessionStorage.clear()
+  })
   await target.goto('/table')
-  // The guest bankroll empties after a few runs and every SIT is then disabled,
-  // which surfaced as a thirty second click timeout rather than as the empty
-  // wallet it actually was. Claim before sitting.
-  const rescue = target.getByRole('button', { name: 'BUST RESCUE', exact: true })
-  if (await rescue.isVisible().catch(() => false)) {
-    await rescue.click().catch(() => {})
-  }
-  const seat = target.getByRole('button', { name: /^SIT/ }).first()
-  // Say what actually went wrong. An exhausted rescue claim leaves every seat
-  // disabled, and without this it surfaced as a click timeout on a button that
-  // was never going to enable.
-  await expect(seat)
-    .toBeEnabled({ timeout: 20_000 })
-    .catch(() => {
-      throw new Error(
-        'cannot sit: the guest bankroll is under the minimum buy-in and the rescue claim granted nothing',
+  await target.waitForFunction(
+    () => {
+      const seats = [...document.querySelectorAll('.seat')]
+      return seats.length > 0 && seats.every((el) => el.style.getPropertyValue('--chair-x') !== '')
+    },
+    null,
+    { timeout: 90_000, polling: 300 },
+  )
+  await target.waitForTimeout(5_000)
+  await target.locator('.open-seat button').nth(3).click({ force: true, timeout: 15_000 })
+  await target.waitForFunction(
+    () => {
+      const deal = [...document.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'DEAL',
       )
-    })
-  await seat.click({ timeout: 20_000 })
-  const deal = target.getByRole('button', { name: 'DEAL', exact: true })
-  const dial = target.locator('.betting-dial')
-  const deadline = Date.now() + 60_000
-  while (Date.now() < deadline) {
-    if (await dial.isVisible().catch(() => false)) return
-    if (await deal.isVisible().catch(() => false)) await deal.click().catch(() => {})
-    await target.waitForTimeout(250)
-  }
-  throw new Error('no live turn with a betting dial inside 60s of sitting down')
+      if (deal) deal.click()
+      return document.querySelector('.action-menu:not(.ghosted)') !== null
+    },
+    null,
+    { timeout: 150_000, polling: 150 },
+  )
 }
 
-function capture(): Snapshot {
+function measureMenu(): Omit<Snapshot, 'layerOpenedByKey' | 'layerControls' | 'notchLabels'> {
   const rect = (el: Element | null): Rect | null => {
     if (el === null) return null
     const box = el.getBoundingClientRect()
     return { x: box.x, y: box.y, width: box.width, height: box.height }
   }
-  const name = (el: Element): string =>
-    (el.getAttribute('aria-label') ?? el.textContent ?? 'unlabelled').replace(/\s+/g, ' ').trim()
-
-  const dial = rect(document.querySelector('.betting-dial'))
-  const ram = rect(document.querySelector('.ram'))
-  const statusLine = rect(document.querySelector('.status-line'))
-  const dialCentre =
-    dial === null ? null : { x: dial.x + dial.width / 2, y: dial.y + dial.height / 2 }
-  const ramCentre = ram === null ? null : { x: ram.x + ram.width / 2, y: ram.y + ram.height / 2 }
-
-  const controls = [...document.querySelectorAll('.ram button')]
-    .map((el) => ({ el, box: rect(el) }))
-    .filter((entry) => entry.box !== null && entry.box.width > 0)
-    .map((entry) => ({
-      label: name(entry.el),
-      width: Math.round(entry.box?.width ?? 0),
-      height: Math.round(entry.box?.height ?? 0),
-    }))
-
-  const overlapping =
-    statusLine === null
-      ? []
-      : [...document.querySelectorAll('.betting-dial, .dial-presets, .ram button')]
-          .map((el) => ({ el, box: rect(el) }))
-          .flatMap(({ el, box }) => {
-            if (box === null) return []
-            const width =
-              Math.min(box.x + box.width, statusLine.x + statusLine.width) -
-              Math.max(box.x, statusLine.x)
-            const height =
-              Math.min(box.y + box.height, statusLine.y + statusLine.height) -
-              Math.max(box.y, statusLine.y)
-            if (width <= 0 || height <= 0) return []
-            return [{ label: name(el), width: Math.round(width), height: Math.round(height) }]
-          })
-
-  /**
-   * Measured on the labels, not the buttons. Each wedge button fills the whole
-   * 420 box and is cut to its segment by `clip-path`, which
-   * `getBoundingClientRect` ignores, so every button reports the same box and a
-   * correct ring measures as four radii of zero.
-   */
-  const radii =
-    ramCentre === null
-      ? []
-      : [...document.querySelectorAll('.ram-wedge-label')].flatMap((el) => {
-          const box = rect(el)
-          if (box === null) return []
-          return [
-            Math.round(
-              Math.hypot(box.x + box.width / 2 - ramCentre.x, box.y + box.height / 2 - ramCentre.y),
-            ),
-          ]
-        })
-
-  const presets = [...document.querySelectorAll('.dial-presets button:not(.dial-step)')].map(
-    (el) => {
-      const label = el.getAttribute('aria-label') ?? ''
-      return {
-        label: (el.textContent ?? '').trim(),
-        amount: Number(label.replace(/^.*raise to /, '').replace(/,/g, '')),
-      }
-    },
-  )
-
+  const menu = rect(document.querySelector('.action-menu'))
+  const statusLine = rect(document.querySelector('.status-line.populated'))
+  const overlap = (a: Rect | null, b: Rect | null) =>
+    a !== null &&
+    b !== null &&
+    Math.min(a.x + a.width, b.x + b.width) > Math.max(a.x, b.x) &&
+    Math.min(a.y + a.height, b.y + b.height) > Math.max(a.y, b.y)
   return {
     scale: Math.min(window.innerWidth / 1920, window.innerHeight / 1080),
-    controls,
-    dial,
-    ram,
-    concentricOffset:
-      dialCentre === null || ramCentre === null
-        ? null
-        : Math.round(Math.hypot(dialCentre.x - ramCentre.x, dialCentre.y - ramCentre.y)),
+    menu,
+    menuControls: [...document.querySelectorAll('.action-menu button')].map((el) => {
+      const box = el.getBoundingClientRect()
+      return {
+        label: el.getAttribute('aria-label') ?? '',
+        width: Math.round(box.width),
+        height: Math.round(box.height),
+      }
+    }),
     statusLine,
-    overlapping,
-    radii,
-    card: rect(document.querySelector('.playing-card')),
-    presets,
-    allInAmount: Number(
-      (document.querySelector('.ram-wedge.all-in')?.textContent ?? '').replace(/[^\d]/g, ''),
-    ),
+    menuOverStatus: overlap(menu, statusLine),
+    // Layout size, not the on-screen box. The hand is tilted five degrees and
+    // deals in from 0.85 scale, so its bounding box is never the card's size.
+    card: (() => {
+      const el = document.querySelector<HTMLElement>('.hero-hand .playing-card')
+      return el === null ? null : { x: 0, y: 0, width: el.offsetWidth, height: el.offsetHeight }
+    })(),
+  }
+}
+
+function measureLayer(): Pick<Snapshot, 'layerControls' | 'notchLabels'> {
+  return {
+    layerControls: [...document.querySelectorAll('.raise-layer button')].map((el) => {
+      const box = el.getBoundingClientRect()
+      return {
+        label: (el.textContent ?? '').trim() || (el.getAttribute('aria-label') ?? ''),
+        width: Math.round(box.width),
+        height: Math.round(box.height),
+      }
+    }),
+    notchLabels: [...document.querySelectorAll('.raise-notch-label')].map((el) => {
+      const box = el.getBoundingClientRect()
+      return { x: box.x, y: box.y, width: box.width, height: box.height }
+    }),
   }
 }
 
 test.describe('the action surface, in base-canvas pixels', () => {
-  /**
-   * The page is created from a context this file owns rather than from
-   * `browser.newPage`. A page opened straight off the browser fixture inside
-   * `beforeAll` was being closed underneath the setup, which surfaced as
-   * "target closed" partway through reaching a turn rather than as anything to
-   * do with the table.
-   */
   test.beforeAll(async ({ browser }: { browser: Browser }) => {
     test.setTimeout(300_000)
     context = await browser.newContext({ viewport: { width: 1920, height: 1080 } })
     page = await context.newPage()
     await reachLiveTurn(page)
-    snapshot = await page.evaluate(capture)
+    // Measured in the state the defect lives in. The menu mounts in the same
+    // frame the turn opens, before its key listener is attached, and the hole
+    // cards are still in their deal animation at 0.85 scale. Measuring at that
+    // instant failed a raise layer that opens and a card that is full size.
+    await page.waitForTimeout(700)
+    const menu = await page.evaluate(measureMenu)
+    await page.keyboard.press('r')
+    // Presence, not Playwright's visibility check, which reported the layer
+    // hidden while the page had already rendered it.
+    const layerOpenedByKey = await page
+      .waitForFunction(() => document.querySelector('.raise-layer') !== null, null, {
+        timeout: 3_000,
+        polling: 100,
+      })
+      .then(() => true)
+      .catch(() => false)
+    const layer = layerOpenedByKey
+      ? await page.evaluate(measureLayer)
+      : { layerControls: [], notchLabels: [] }
+    snapshot = { ...menu, layerOpenedByKey, ...layer }
   })
 
   test.afterAll(async () => {
     await context?.close()
   })
 
-  /**
-   * The scale guard, and the reason it runs first. Every figure below comes
-   * from `04-anatomy.md` and `06-interaction.md` in base-canvas pixels, and the
-   * stage shrinks itself to fit the window. A viewport that is not 1920x1080
-   * compares against the wrong numbers silently rather than failing.
-   */
   test('measures at a stage scale of 1', () => {
     expect(snapshot.scale).toBeCloseTo(1, 3)
   })
 
-  test('gives every control under time pressure at least 56 x 56', () => {
-    expect(snapshot.controls.length).toBeGreaterThan(0)
-    const undersized = snapshot.controls
+  test('keeps the menu at the lower centre of the screen', () => {
+    expect(snapshot.menu).not.toBeNull()
+    const menu = snapshot.menu as Rect
+    expect(Math.abs(menu.x + menu.width / 2 - 960)).toBeLessThanOrEqual(CENTRE_TOLERANCE)
+    expect(menu.y + menu.height).toBeLessThanOrEqual(1080)
+  })
+
+  test('offers three named actions, each at least 56 x 56', () => {
+    expect(snapshot.menuControls).toHaveLength(3)
+    expect(snapshot.menuControls.every((control) => control.label.length > 0)).toBe(true)
+    const undersized = snapshot.menuControls
       .filter((control) => control.width < MIN_TARGET || control.height < MIN_TARGET)
       .map((control) => `${control.label} at ${control.width}x${control.height}`)
     expect(undersized).toEqual([])
   })
 
-  test('gives the menu the outer diameter the anatomy gives it', () => {
-    expect(snapshot.ram).not.toBeNull()
-    expect(Math.round(snapshot.ram?.width ?? 0)).toBe(RAM_DIAMETER)
-    expect(Math.round(snapshot.ram?.height ?? 0)).toBe(RAM_DIAMETER)
+  test('keeps the menu off the status line', () => {
+    expect(snapshot.menuOverStatus).toBe(false)
   })
 
-  test('seats the betting dial in the centre of the menu', () => {
-    expect(snapshot.concentricOffset).not.toBeNull()
-    expect(snapshot.concentricOffset ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
-      CONCENTRIC_TOLERANCE,
-    )
+  test('opens the raise layer from the keyboard', () => {
+    expect(snapshot.layerOpenedByKey).toBe(true)
   })
 
-  test('keeps the action surface off the status line', () => {
-    expect(snapshot.overlapping.map((hit) => `${hit.label} by ${hit.width}x${hit.height}`)).toEqual(
-      [],
-    )
+  test('gives every raise control at least 56 x 56', () => {
+    expect(snapshot.layerControls.length).toBeGreaterThanOrEqual(5)
+    const undersized = snapshot.layerControls
+      .filter((control) => control.width < MIN_TARGET || control.height < MIN_TARGET)
+      .map((control) => `${control.label} at ${control.width}x${control.height}`)
+    expect(undersized).toEqual([])
   })
 
-  test('lays the wedges on a ring rather than in a grid', () => {
-    expect(snapshot.radii.length).toBeGreaterThanOrEqual(3)
-    const spread = Math.max(...snapshot.radii) / Math.min(...snapshot.radii)
-    expect(
-      spread,
-      `wedge label radii from the menu centre: ${snapshot.radii.join(', ')}`,
-    ).toBeLessThanOrEqual(RADIUS_SPREAD)
+  /**
+   * The arc started square-root and stacked the half, three-quarter and pot
+   * labels on top of one another against a deep stack. Overlap is the defect,
+   * so overlap is what this measures.
+   */
+  test('keeps the pot notch labels from overlapping', () => {
+    const labels = snapshot.notchLabels
+    const collisions: string[] = []
+    for (let i = 0; i < labels.length; i += 1) {
+      for (let j = i + 1; j < labels.length; j += 1) {
+        const a = labels[i] as Rect
+        const b = labels[j] as Rect
+        const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
+        const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+        if (width > 0 && height > 0) collisions.push(`${i} and ${j}`)
+      }
+    }
+    expect(collisions).toEqual([])
   })
 
   test('gives the local hand the size the anatomy gives it', () => {
     expect(snapshot.card).not.toBeNull()
     expect(Math.round(snapshot.card?.width ?? 0)).toBeGreaterThanOrEqual(HOLE_CARD.width)
     expect(Math.round(snapshot.card?.height ?? 0)).toBeGreaterThanOrEqual(HOLE_CARD.height)
-  })
-
-  test('offers four distinct raises and no second all-in', () => {
-    expect(snapshot.presets).toHaveLength(4)
-    const amounts = snapshot.presets.map((preset) => preset.amount)
-    expect(amounts.every((amount) => Number.isFinite(amount))).toBe(true)
-    expect(new Set(amounts).size, `sizing rail returned ${amounts.join(', ')}`).toBe(4)
-    expect(amounts).not.toContain(snapshot.allInAmount)
   })
 })

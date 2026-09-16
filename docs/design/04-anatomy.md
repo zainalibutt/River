@@ -92,37 +92,64 @@ A bet or raise must visibly: decrement the available stack, create or update a f
 
 Zain's choreography notes: street bets **glide** into the centre rather than being swept; side pots form as separate but still-clumped groups sized contextually to their amount; on award the pot slides toward the winner with a gathering animation and the numeric stack updates **after** movement.
 
-## Radial Action Menu
+## Action menu
 
-The primary action surface. Replaces the action rail entirely.
+Amended September 2026. The 420-pixel radial menu, with its interior betting dial and six sizing controls, read as a wheel of options rather than a decision. It is replaced by three buttons and a raise layer.
 
 | Property | Value |
 |---|---|
-| Position | Anchored to the local player area, lower centre |
-| Outer diameter | 420 base-canvas pixels |
-| Wedge count | Only currently legal actions |
-| Wedge label | Action name plus exact amount — `CALL 4,000`, `RAISE TO 8,000`, `ALL IN 87,250` |
-| Centre | Betting dial value readout when raising |
-| Urgency ring | Appears around the outer edge at 50% turn remaining |
+| Position | Fixed at the lower centre of the screen, independent of the camera orbit |
+| Base | Machined disc, 216 base-canvas pixels, seams at twelve, four and eight o'clock |
+| Buttons | Three, 66 by 66 base-canvas pixels, each in its own sector |
+| Top left | Check, or call with the exact amount |
+| Top right | Bet or raise, opening the raise layer. All-in, held for 600ms, when a raise is not legal but a shove is |
+| Bottom | Fold. Held for 400ms when checking is free |
+| Label | The hovered or focused action and its exact amount, above the base |
+| Turn arc | Around the base, on the same sweep as the opponents' watch; red for the last quarter |
 
-Wedges render only for legal actions. Check and call never both appear.
+Slots are pinned. Fold is in the same place whether or not raising is legal.
 
-### Betting dial
+### Raise layer
 
-Circular, occupying the RAM interior when a raise is focused. Ranges halve and double for coarse control; fine adjustment steps by one big blind. Value expressed as a raise-to total.
+Opens in the same place as the menu and replaces it until committed or cancelled.
 
-### Preset icons
+| Property | Value |
+|---|---|
+| Control | Half arc from `legal.raiseTo.min` to `legal.allIn.amount`, with a draggable knob |
+| Curve | Logarithmic, so raises near pot size get most of the travel against a deep stack |
+| Notches | Half, three-quarter and full pot, from `sizingPresets`; the knob snaps within 3% of the arc |
+| Fine step | One big blind, by arrow buttons, arrow keys or the wheel |
+| Readout | Exact raise-to total in the serif, large, at the centre of the arc |
+| Actions | ALL IN (held 600ms), CANCEL, RAISE or BET |
 
-When an action is preset before your turn, its icon renders in the RAM **slightly transparent and without the enclosing wedge circle** — the reference is specific about this. This state is private to the local client. The public signal is the avatar gesture, not the icon.
+The value is a raise-to total, never an increment.
+
+### Presets
+
+Before your turn the same three buttons arm presets: call any at the top left, check or fold at the bottom. The menu is ghosted until your turn and an armed preset stays lit. This state is private to the local client; the public signal is the avatar gesture, not the menu.
 
 ## Turn indication
 
 | Owner | Presentation |
 |---|---|
-| Active opponent | Timer **above their head**, world-space, attached to the seat |
-| Local player | RAM actionable immediately, **no countdown**; urgency ring appears at 50% remaining |
+| Acting opponent | A watch pinned above their head: brass bezel, dark dial, one hand sweeping once per turn while the spent part of the dial darkens. The last quarter turns the hand red and lights the bezel |
+| Local player | The menu is actionable at once. The turn arc around it runs the full turn and turns red for the last quarter |
 
-There is no single global marker moving between seats. Each active seat owns its own indicator.
+There is no single global marker moving between seats. Each acting seat owns its own indicator.
+
+## Action pins
+
+Every opponent's last action this street hangs as a pin above their head, anchored to the loaded venue so it stays attached through an orbit.
+
+| Action | Pin |
+|---|---|
+| Bet or raise | Green double arrow, committed amount above in gold |
+| Call | Blue arrow, committed amount above in gold |
+| Check | Cream tick |
+| Fold | Red cross |
+| All-in | Gold arrow to a bar; persists across streets while the player is all in |
+
+A pin stays until the next card lands. Colour carries the action and the icon carries it again. The local seat carries no pin.
 
 ## Nameplates
 

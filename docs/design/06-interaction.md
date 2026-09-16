@@ -71,44 +71,33 @@ type CameraMode = "orbit" | "allInCinematic" | "winnerCinematic" | "venueIntro"
 
 Qualification is policy, not hardcoded — see the cinematic policy in `01-thesis.md`.
 
-## Radial Action Menu
+## Action menu
 
-The RAM is the primary action surface and replaces the button rail entirely.
+Amended September 2026: three buttons fixed at the lower centre, replacing the radial menu. Anatomy and dimensions are in `04-anatomy.md`.
 
 ```ts
-type RamState = {
-  legalActions: ActionType[]
-  focusedAction?: ActionType
-  betAmount?: number
-  minRaise?: number
-  maxRaise?: number
-  isPreset: boolean
-  turnRemainingMs?: number
-}
+type MenuSlot = "call" | "raise" | "fold"
 ```
 
-Only currently legal actions appear as wedges. Check and call are mutually exclusive by construction and never both render.
+Only legal actions are enabled. Check and call share the top-left slot and never both render.
 
 | Control | Behaviour |
 |---|---|
-| Stick or directional input | Select wedge |
-| Confirm | Commit the focused action |
-| Cancel | Back out, or cancel a preset |
-| Mouse | Direct wedge selection; the spatial model is preserved, not replaced by a list |
+| Pointer | Hover or focus names the action above the menu; press commits it |
+| Top right | Opens the raise layer, or holds for all-in when only a shove is legal |
+| Bottom | Folds; a 400ms hold when checking is free |
 
-### Betting dial
+### Raise layer
 
-Bet sizing is a **circular dial divided into ranges**, not a linear slider. Ranges double and halve to give coarse and fine control within one control.
-
-| Property | Value |
+| Input | Behaviour |
 |---|---|
-| Range | `legal.raiseTo.min` to `legal.allIn.amount` |
-| Coarse step | Range halves and doubles |
-| Fine step | One big blind |
-| Initial value | `legal.raiseTo.min` |
-| Readout | Exact, tabular, raise-to total |
+| Drag the knob | Moves along a logarithmic arc; snaps to half, three-quarter and pot notches |
+| Arrows, arrow keys, wheel | One big blind |
+| `1`–`4` | Minimum, half pot, three-quarter pot, pot |
+| `Enter` | Raise or bet |
+| `Esc` | Cancel back to the menu |
 
-The value is a **raise-to total**, matching `BettingHand.raiseTo`. Never labelled or computed as an increment.
+The wheel is bound with a non-passive listener. React attaches `wheel` passively at the root, so `preventDefault` in an `onWheel` prop is ignored and the page scrolls with the amount.
 
 ## Turn indication and timers
 
@@ -120,9 +109,9 @@ type TurnIndicator =
   | { kind: "local"; remainingMs: number; showUrgencyRing: boolean }
 ```
 
-**Remote:** the active opponent's timer appears **above their head**, attached to their seat. There is no single global pointer teleporting from seat to seat.
+**Remote:** the acting opponent's watch is pinned above their head, attached to their seat. There is no single global pointer teleporting from seat to seat.
 
-**Local:** the RAM becomes actionable immediately with no countdown. The urgency ring appears around the RAM only at **50% remaining**. The reference deliberately delays the local urgency treatment and it reads much better than a timer screaming from second one.
+**Local:** the menu is actionable immediately. A turn arc runs round it for the whole turn and turns red for the last quarter, on the same sweep as the opponents' watch.
 
 ### Action windows
 
@@ -155,7 +144,7 @@ turnBegins
 
 | Layer | Visibility |
 |---|---|
-| Preset icons in your HUD | **Private.** Slightly transparent, not enclosed by the normal wedge circle |
+| Preset buttons in your HUD | **Private.** The three menu buttons, ghosted until your turn; an armed preset stays lit |
 | Avatar gesture | **Public.** Everyone sees you reach toward your chips |
 
 This is not a leak to be fixed. It is poker body language, and the reference is explicit that it is deliberate. If River ever wants a competitive mode without tells, it becomes a ruleset option — never a silent removal.
@@ -203,9 +192,9 @@ Others see **that** you checked. They never see what you saw.
 | `Space` held | Hole-card peek |
 | `F` | Fold — with confirm when checking is free |
 | `C` | Check or call, whichever is legal |
-| `R` | Focus the betting dial |
+| `R` | Open the raise layer |
 | `A` | All-in — **hold 600ms** |
-| `1`–`4` | Bet presets |
+| `1`–`4` | In the raise layer: minimum, half, three-quarter, pot |
 | `E` | Emote wheel |
 | `V` | Verify panel |
 | `Esc` | Menu, or close the topmost panel |
