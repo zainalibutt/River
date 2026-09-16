@@ -542,9 +542,9 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
-          <li><span class="dot done"></span><span><b>Nobody could leave a seat with their chips</b> &mdash; 17 Sep, <code>e304377</code> on <code>claude-hud</code>, not pushed. The server had always taken a stand and a leave and paid the stack straight back, and nothing on the table sent either, so leaving meant closing the page and waiting on the reconnect grace. Busted, a player was offered one full rebuy the bankroll often could not cover, and the rescue is refused to anybody seated: a dead end. Leave table is a held control in the table menu now, returning the stack and going to the club; busted, the table offers a rebuy the bankroll covers and stand up. The room takes these only in the three-second gap between hands, so one asked for during a hand waits for the gap instead of asking the player to catch it. Verified with a fresh guest: seated with 100,000 of 150,000, left between hands and again during a hand, and reached the club with 150,000 both times.</span></li>
+          <li><span class="dot done"></span><span><b>Nobody could leave a seat with their chips</b> &mdash; 17 Sep, <code>e304377</code>. The server had always taken a stand and a leave and paid the stack straight back, and nothing on the table sent either, so leaving meant closing the page and waiting on the reconnect grace. Busted, a player was offered one full rebuy the bankroll often could not cover, and the rescue is refused to anybody seated: a dead end. Leave table is a held control in the table menu now, returning the stack and going to the club; busted, the table offers a rebuy the bankroll covers and stand up. The room takes these only in the three-second gap between hands, so one asked for during a hand waits for the gap instead of asking the player to catch it. Verified with a fresh guest: seated with 100,000 of 150,000, left between hands and again during a hand, and reached the club with 150,000 both times.</span></li>
           <li><span class="dot done"></span><span><b>A second seating was never paid back</b> &mdash; <code>fd8b130</code>. The payout for an expired seat and the settlement at shutdown were referenced by room, player and hand number, and the ledger skips a reference it has already applied. Sit down again before the next hand, or at a table recreated after a restart, and the second stack was simply gone. An expiry that landed during a hand's seed collection was also refused and never retried, leaving the seat and its stack at the table posting blinds for somebody who had left. Three tests reproduced it and failed first; every seating now names itself in its payout.</span></li>
-          <li><span class="dot done"></span><span><b>The rescue could not reach the players it exists for</b> &mdash; <code>ff73b7c</code>. It paid only below 1,000 chips while the cheapest seat costs 50,000, so a bankroll anywhere between the two could neither sit nor be rescued, and claiming the daily 10,000 at zero walked straight into that gap. The threshold moves to the minimum buy-in. <em>The migration is committed and not yet applied to the live database.</em></span></li>
+          <li><span class="dot done"></span><span><b>The rescue could not reach the players it exists for</b> &mdash; <code>ff73b7c</code>. It paid only below 1,000 chips while the cheapest seat costs 50,000, so a bankroll anywhere between the two could neither sit nor be rescued, and claiming the daily 10,000 at zero walked straight into that gap. The threshold moves to the minimum buy-in, and the live database has read 50,000 since 17 Sep.</span></li>
           <li><span class="dot done"></span><span><b>Somebody else's edit cost you your stack</b> &mdash; <code>26806bf</code>. The development server restarted the whole game server whenever the web app rebuilt one of its compiled chunks, five times in half a minute of editing, and on Windows a restart ends the process before seated stacks are handed back. The watcher ignores the web build now, and a forced rebuild restarted it zero times.</span></li>
           <li><span class="dot done"></span><span><b>The fold cross over a player who was calling</b> &mdash; <code>38eebc6</code>, pushed. A connection that had already been replaced still marked its player away when it closed, and the room folds an away player the moment their turn is driven, so a second tab or a reconnect whose old socket closed late folded a live player in the middle of their own turn.</span></li>
           <li><span class="dot done"></span><span><b>Nobody could tell what an opponent had just done</b> &mdash; 16 Sep, <code>4ae8616</code> to <code>5bd1e4d</code>, pushed. Seat markers were projected in the rotated order the 2D ring uses, so markers and chip counts sat over the wrong chairs, and a bot's bet left no trace. Markers are pinned to each chair and head bone now; an action pin, green for a raise and blue for a call with its amount, stays until the next card; the actor wears a watch-dial clock. The ring became three buttons fixed at the lower centre, with presets ghosted in the same buttons and a logarithmic raise arc with pot notches that drags. You sit by pressing the chair itself, which lights under the pointer; your hand stays face down until held; hand, chips, board and pot read top to bottom at the lower left with the flop dealt a card at a time; the deck is two colours; Tab is held rather than toggled.</span></li>
@@ -724,24 +724,16 @@
     </p>
     <div class="steps">
       <article class="step">
-        <h4>1 &middot; The rescue threshold, on the live database</h4>
+        <h4>1 &middot; Deploy what landed on 17 September</h4>
         <p>
-          <code>20260916230000_rescue_below_one_buy_in.sql</code> is committed and not
-          applied: applying it from a session was stopped as a production change, so
-          it waits for Zain, in the Supabase SQL editor or by approving it. Until then
-          the live threshold is 1,000.
+          Main carries the seat payouts, leaving and busting, but the live table runs
+          the code of its last deploy until the Actions button or a version tag
+          replaces it. The rescue threshold is already live, because it lives in the
+          database.
         </p>
       </article>
       <article class="step">
-        <h4>2 &middot; Push <code>claude-hud</code>, then deploy</h4>
-        <p>
-          Four commits past main at <code>38eebc6</code>: seat payouts, the development
-          watcher, the rescue migration, and leaving and busting. A push only runs CI;
-          the live table changes on the Actions button or a version tag.
-        </p>
-      </article>
-      <article class="step">
-        <h4>3 &middot; The seated silver pose, by hand</h4>
+        <h4>2 &middot; The seated silver pose, by hand</h4>
         <p>
           Zain is finishing A38b in Blender. It is accepted when it reads right from
           the front, both three-quarters, the side and the rear at gameplay scale,
@@ -749,7 +741,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>4 &middot; The black tie into the served venue</h4>
+        <h4>3 &middot; The black tie into the served venue</h4>
         <p>
           After the pose is accepted. The export and its budgets gate it, the
           penetration budget must not rise, and the CC-BY attribution for the
@@ -757,7 +749,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>5 &middot; Amber's open items</h4>
+        <h4>4 &middot; Amber's open items</h4>
         <p>
           The pale band in the collar V, the two collar wings and the deltoid
           highlights its report names, then a decision on whether Amber joins the
@@ -765,7 +757,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>6 &middot; What the table HUD still owes</h4>
+        <h4>5 &middot; What the table HUD still owes</h4>
         <p>
           Level and title on the Tab plates are placeholders until the room view
           carries them; neighbouring far seats' plates can overlap; held controls
@@ -774,7 +766,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>7 &middot; The three services behind a badge</h4>
+        <h4>6 &middot; The three services behind a badge</h4>
         <p>
           WARDROBE, COLLECTION and SETTINGS still carry a <b>SOON</b> badge on the
           menu rather than a live button that does nothing. PLAY, PRIVATE TABLE and
@@ -782,7 +774,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>8 &middot; Bronze, then the other two rooms</h4>
+        <h4>7 &middot; Bronze, then the other two rooms</h4>
         <p>
           Bronze has been started and continues. The Laundromat and the Executive
           Suite stay deferred until the Rooftop is finished; their venues and
@@ -793,7 +785,7 @@
   </section>
 
   <section class="flag">
-    <p><strong>The live rescue threshold is still 1,000.</strong> The migration that moves it to the 50,000 minimum buy-in is committed and was not applied, so on the live table a bankroll between 1,000 and 49,999 still can neither sit nor be rescued.</p>
+    <p><strong>The live table is not running these fixes until it is deployed.</strong> The last deploy through Actions was on 31 August. Leaving, busting and the seat payouts are on main; only the rescue threshold, which lives in the database, is already live.</p>
     <p><strong>Opening the table in a second tab during your own turn still folds you.</strong> Read from the code, not reproduced: a new connection for a seated player disconnects the old one before it takes over, and the room plays a disconnected player's pending turn at once. The stale-close half of the fold was fixed at <code>38eebc6</code>; this takeover half was not.</p>
     <p><strong>A hard kill still loses seated stacks.</strong> Shutdown hands them back, but a process that is killed outright never runs it. The fix is reconciling unreturned buy-ins on startup, not a longer shutdown.</p>
     <p><strong>The headless test browser plays the room at about one frame a second.</strong> Chromium without a GPU draws the venue in software: frames of 820 to 870ms, and a 600ms timer firing after about 1,650ms. A hold shorter than that cannot complete there, which is the likelier reason two layout checks are parked than the gestures they drive.</p>
@@ -803,11 +795,11 @@
     <p><strong>The character still passes through the furniture, and the number can only go down.</strong> The penetration budget stands at 277 faces through the rail, 205 through the chair, 192 through the wood and 49 through the felt, with 1,449 self-intersecting pairs in the suit. It counts faces, not depth: a graze and an arm buried to the elbow each count as one.</p>
     <p><strong>Amber is legible, not finished.</strong> A pale band shows in the V between the roll-neck and the chest, two small wings sit where the collar meets the lapel notch, and both deltoids carry specular highlights. Its report names the measured cause of each.</p>
     <p><strong>Chrome can be hidden too.</strong> A tab in a window that is not in front reports <code>document.hidden</code>, throttles its timers and stops the render loop; on 13 Sep the Rooftop measured as a blank canvas until frames were stepped through the scene handle's <code>advance()</code>. Check <code>document.hidden</code> before believing anything a tab says.</p>
-    <p><strong>Closed since the last update.</strong> The fold cross over a player who was calling. Chips that never came back from a seat: a second seating's payout, an expiry refused during seed collection, and a development server that restarted on every web edit. The dead end at a bust, with no way out of the seat and a rescue that could not be claimed from one.</p>
+    <p><strong>Closed since the last update.</strong> The fold cross over a player who was calling. Chips that never came back from a seat: a second seating's payout, an expiry refused during seed collection, and a development server that restarted on every web edit. The dead end at a bust, with no way out of the seat and a rescue that could not be claimed from one. The rescue gap itself: the live threshold reads 50,000.</p>
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> e304377 on claude-hud, 17 Sep; main at 38eebc6</span>
+    <span><b>HEAD</b> e304377, 17 Sep</span>
     <span><b>Tests</b> 918 passing across 80 files</span>
     <span><b>Lint &amp; typecheck</b> lint passes with 4 warnings, typecheck clean</span>
     <span><b>Production</b> not re-checked on 17 Sep</span>
