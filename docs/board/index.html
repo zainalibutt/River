@@ -398,12 +398,15 @@
 <div class="wrap">
 
   <header>
-    <p class="eyebrow">Updated 2026-09-13, after the silver male, Amber and the move to posing by hand</p>
+    <p class="eyebrow">Updated 2026-09-17, after the table HUD rebuild and the fixes to leaving a seat and going bust</p>
     <h1>River build board</h1>
     <p class="sub">
       Where the build actually stands, measured against the tree rather than
       against memory. Phases 1&ndash;4 are complete and in production; Phase&nbsp;5 &mdash; art, characters
-      and the long tail &mdash; is the active phase. The Rooftop now seats the silver
+      and the long tail &mdash; is the active phase. On 16 September the table HUD was
+      rebuilt around three buttons, a raise arc and markers pinned to every chair, and
+      on 17 September a player could finally leave a seat with their chips and climb
+      back out of a bust. The Rooftop now seats the silver
       male: one skin over 137 joints and nine clips, with his head and spine moving
       under the idle in Chrome. His black-tie wardrobe is accepted standing and in the
       default seated pose, and the seated poker pose is being finished by hand in
@@ -539,6 +542,12 @@
         </header>
         <span class="role">Opus 5 &middot; design, review, client, art</span>
         <ul>
+          <li><span class="dot done"></span><span><b>Nobody could leave a seat with their chips</b> &mdash; 17 Sep, <code>e304377</code> on <code>claude-hud</code>, not pushed. The server had always taken a stand and a leave and paid the stack straight back, and nothing on the table sent either, so leaving meant closing the page and waiting on the reconnect grace. Busted, a player was offered one full rebuy the bankroll often could not cover, and the rescue is refused to anybody seated: a dead end. Leave table is a held control in the table menu now, returning the stack and going to the club; busted, the table offers a rebuy the bankroll covers and stand up. The room takes these only in the three-second gap between hands, so one asked for during a hand waits for the gap instead of asking the player to catch it. Verified with a fresh guest: seated with 100,000 of 150,000, left between hands and again during a hand, and reached the club with 150,000 both times.</span></li>
+          <li><span class="dot done"></span><span><b>A second seating was never paid back</b> &mdash; <code>fd8b130</code>. The payout for an expired seat and the settlement at shutdown were referenced by room, player and hand number, and the ledger skips a reference it has already applied. Sit down again before the next hand, or at a table recreated after a restart, and the second stack was simply gone. An expiry that landed during a hand's seed collection was also refused and never retried, leaving the seat and its stack at the table posting blinds for somebody who had left. Three tests reproduced it and failed first; every seating now names itself in its payout.</span></li>
+          <li><span class="dot done"></span><span><b>The rescue could not reach the players it exists for</b> &mdash; <code>ff73b7c</code>. It paid only below 1,000 chips while the cheapest seat costs 50,000, so a bankroll anywhere between the two could neither sit nor be rescued, and claiming the daily 10,000 at zero walked straight into that gap. The threshold moves to the minimum buy-in. <em>The migration is committed and not yet applied to the live database.</em></span></li>
+          <li><span class="dot done"></span><span><b>Somebody else's edit cost you your stack</b> &mdash; <code>26806bf</code>. The development server restarted the whole game server whenever the web app rebuilt one of its compiled chunks, five times in half a minute of editing, and on Windows a restart ends the process before seated stacks are handed back. The watcher ignores the web build now, and a forced rebuild restarted it zero times.</span></li>
+          <li><span class="dot done"></span><span><b>The fold cross over a player who was calling</b> &mdash; <code>38eebc6</code>, pushed. A connection that had already been replaced still marked its player away when it closed, and the room folds an away player the moment their turn is driven, so a second tab or a reconnect whose old socket closed late folded a live player in the middle of their own turn.</span></li>
+          <li><span class="dot done"></span><span><b>Nobody could tell what an opponent had just done</b> &mdash; 16 Sep, <code>4ae8616</code> to <code>5bd1e4d</code>, pushed. Seat markers were projected in the rotated order the 2D ring uses, so markers and chip counts sat over the wrong chairs, and a bot's bet left no trace. Markers are pinned to each chair and head bone now; an action pin, green for a raise and blue for a call with its amount, stays until the next card; the actor wears a watch-dial clock. The ring became three buttons fixed at the lower centre, with presets ghosted in the same buttons and a logarithmic raise arc with pot notches that drags. You sit by pressing the chair itself, which lights under the pointer; your hand stays face down until held; hand, chips, board and pot read top to bottom at the lower left with the flop dealt a card at a time; the deck is two colours; Tab is held rather than toggled.</span></li>
           <li><span class="dot done"></span><span><b>The repository reads as what landed</b> &mdash; 13 Sep. The unpushed history was reshaped from 77 commits across three branches to 35, each explaining the thing that landed; operating laws and character packets left the tree for working notes; one author through a mailmap; and two new hygiene patterns, for local user paths and for the word that framed River as a reproduction, each proved to fire on a planted violation before being trusted. Lint had been failing on one unformatted script and passes again. The record now covers the silver male, Amber and the move to posing by hand, with captures 40&ndash;46.</span></li>
           <li><span class="dot done"></span><span><b>The action surface is the ring the anatomy describes</b> &mdash; merged 13 Sep, <code>26f7b1a</code> to <code>dece0f0</code>. Raise presets sized against the pot the raiser leaves behind; a layout harness measured at a stage scale of exactly 1, eight of eight invariants green; the hand you are reading at 168 by 235; brass lit from the room's one lamp; seat furniture on the seats, and the rest behind Tab.</span></li>
           <li><span class="dot done"></span><span><b>The clipping became a number that can only go down</b> &mdash; <code>b508617</code>. The triangle-intersection check runs from <code>npm run check:penetration</code> and holds a measured budget per surface: <b>1,449</b> self-intersecting pairs in the suit, <b>277</b> faces through the rail, <b>205</b> chair, <b>192</b> wood, <b>49</b> felt. Exceeding one fails. Missing furniture and an unbudgeted site both fail rather than report clear.</span></li>
@@ -634,12 +643,12 @@
         </li>
         <li><span class="node"><span class="root">SERVER</span><span class="tag t-done">complete</span><span class="why">authority for every rule</span></span>
           <ul>
-<li><span class="node"><span class="branch">├─</span><span class="leaf">WebSocket transport, rooms</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">Supabase auth, JWKS verify</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">append-only chip ledger</span><span class="tag t-done">done</span><span class="why">idempotent by ref</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">turn timers, away policy</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">social wire, rate limited</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand recorder</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">venue per table</span><span class="tag t-done">done</span><span class="why">all three rooms reachable at last</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">bots taking a seat</span><span class="tag t-done">done</span><span class="why">off by default, on in production</span></span></li>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">WebSocket transport, rooms</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">Supabase auth, JWKS verify</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">append-only chip ledger</span><span class="tag t-done">done</span><span class="why">idempotent by ref</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">seat payouts</span><span class="tag t-done">done</span><span class="why">one ledger reference per seating</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">turn timers, away policy</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">social wire, rate limited</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand recorder</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">venue per table</span><span class="tag t-done">done</span><span class="why">all three rooms reachable at last</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">bots taking a seat</span><span class="tag t-done">done</span><span class="why">off by default, on in production</span></span></li>
           </ul>
         </li>
         <li><span class="node"><span class="root">CLIENT</span><span class="tag t-flight">near</span><span class="why">3D by default, DOM HUD over it</span></span>
           <ul>
-<li><span class="node"><span class="branch">├─</span><span class="leaf">table HUD, preset actions</span><span class="tag t-done">done</span><span class="why">action ring, pot-sized raises, lit brass</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">lobby, shop, wardrobe</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">fairness verify panel</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand history and scrubber</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">venue scene, lighting, camera</span><span class="tag t-done">done</span><span class="why">matches the lookdev transform now</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">seat plaques</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">animation driver</span><span class="tag t-done">live</span><span class="why">clips arrived, cues firing</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">sound</span><span class="tag t-held">deferred</span><span class="why">plan in docs/handoff/audio-plan.md</span></span></li>
+<li><span class="node"><span class="branch">├─</span><span class="leaf">table HUD, preset actions</span><span class="tag t-done">done</span><span class="why">three buttons, raise arc, a pin on every chair</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">leave, stand up, rebuy</span><span class="tag t-done">done</span><span class="why">held for the gap between hands</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">lobby, shop, wardrobe</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">fairness verify panel</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">hand history and scrubber</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">venue scene, lighting, camera</span><span class="tag t-done">done</span><span class="why">matches the lookdev transform now</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">seat plaques</span><span class="tag t-done">done</span></span></li><li><span class="node"><span class="branch">├─</span><span class="leaf">animation driver</span><span class="tag t-done">live</span><span class="why">clips arrived, cues firing</span></span></li><li><span class="node"><span class="branch">└─</span><span class="leaf">sound</span><span class="tag t-held">deferred</span><span class="why">plan in docs/handoff/audio-plan.md</span></span></li>
           </ul>
         </li>
         <li><span class="node"><span class="root">ART</span><span class="tag t-flight">in flight</span><span class="why">venues from Python; characters built by script, posed by hand</span></span>
@@ -668,7 +677,7 @@
       <div class="bar"><span class="label">Bots</span><span class="rail"><i class="fill" style="width:88%"></i></span><span class="pct">88</span></div>
       <div class="bar"><span class="label">Server &amp; transport</span><span class="rail"><i class="fill" style="width:91%"></i></span><span class="pct">91</span></div>
       <div class="bar"><span class="label">Accounts &amp; auth</span><span class="rail"><i class="fill" style="width:90%"></i></span><span class="pct">90</span></div>
-      <div class="bar"><span class="label">Client HUD</span><span class="rail"><i class="fill" style="width:55%"></i></span><span class="pct">55</span></div>
+      <div class="bar"><span class="label">Client HUD</span><span class="rail"><i class="fill" style="width:70%"></i></span><span class="pct">70</span></div>
       <div class="bar"><span class="label">Multiplayer UX</span><span class="rail"><i class="fill" style="width:84%"></i></span><span class="pct">84</span></div>
       <div class="bar"><span class="label">Deploy &amp; ops</span><span class="rail"><i class="fill" style="width:78%"></i></span><span class="pct">78</span></div>
       <div class="bar"><span class="label">Economy</span><span class="rail"><i class="fill" style="width:96%"></i></span><span class="pct">96</span></div>
@@ -715,7 +724,24 @@
     </p>
     <div class="steps">
       <article class="step">
-        <h4>1 &middot; The seated silver pose, by hand</h4>
+        <h4>1 &middot; The rescue threshold, on the live database</h4>
+        <p>
+          <code>20260916230000_rescue_below_one_buy_in.sql</code> is committed and not
+          applied: applying it from a session was stopped as a production change, so
+          it waits for Zain, in the Supabase SQL editor or by approving it. Until then
+          the live threshold is 1,000.
+        </p>
+      </article>
+      <article class="step">
+        <h4>2 &middot; Push <code>claude-hud</code>, then deploy</h4>
+        <p>
+          Four commits past main at <code>38eebc6</code>: seat payouts, the development
+          watcher, the rescue migration, and leaving and busting. A push only runs CI;
+          the live table changes on the Actions button or a version tag.
+        </p>
+      </article>
+      <article class="step">
+        <h4>3 &middot; The seated silver pose, by hand</h4>
         <p>
           Zain is finishing A38b in Blender. It is accepted when it reads right from
           the front, both three-quarters, the side and the rear at gameplay scale,
@@ -723,7 +749,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>2 &middot; The black tie into the served venue</h4>
+        <h4>4 &middot; The black tie into the served venue</h4>
         <p>
           After the pose is accepted. The export and its budgets gate it, the
           penetration budget must not rise, and the CC-BY attribution for the
@@ -731,7 +757,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>3 &middot; Amber's open items</h4>
+        <h4>5 &middot; Amber's open items</h4>
         <p>
           The pale band in the collar V, the two collar wings and the deltoid
           highlights its report names, then a decision on whether Amber joins the
@@ -739,7 +765,16 @@
         </p>
       </article>
       <article class="step">
-        <h4>4 &middot; The three services behind a badge</h4>
+        <h4>6 &middot; What the table HUD still owes</h4>
+        <p>
+          Level and title on the Tab plates are placeholders until the room view
+          carries them; neighbouring far seats' plates can overlap; held controls
+          have no keyboard path; the card redesign is on standby; the walk to a seat
+          belongs to the animation lane.
+        </p>
+      </article>
+      <article class="step">
+        <h4>7 &middot; The three services behind a badge</h4>
         <p>
           WARDROBE, COLLECTION and SETTINGS still carry a <b>SOON</b> badge on the
           menu rather than a live button that does nothing. PLAY, PRIVATE TABLE and
@@ -747,7 +782,7 @@
         </p>
       </article>
       <article class="step">
-        <h4>5 &middot; Bronze, then the other two rooms</h4>
+        <h4>8 &middot; Bronze, then the other two rooms</h4>
         <p>
           Bronze has been started and continues. The Laundromat and the Executive
           Suite stay deferred until the Rooftop is finished; their venues and
@@ -758,20 +793,25 @@
   </section>
 
   <section class="flag">
+    <p><strong>The live rescue threshold is still 1,000.</strong> The migration that moves it to the 50,000 minimum buy-in is committed and was not applied, so on the live table a bankroll between 1,000 and 49,999 still can neither sit nor be rescued.</p>
+    <p><strong>Opening the table in a second tab during your own turn still folds you.</strong> Read from the code, not reproduced: a new connection for a seated player disconnects the old one before it takes over, and the room plays a disconnected player's pending turn at once. The stale-close half of the fold was fixed at <code>38eebc6</code>; this takeover half was not.</p>
+    <p><strong>A hard kill still loses seated stacks.</strong> Shutdown hands them back, but a process that is killed outright never runs it. The fix is reconciling unreturned buy-ins on startup, not a longer shutdown.</p>
+    <p><strong>The headless test browser plays the room at about one frame a second.</strong> Chromium without a GPU draws the venue in software: frames of 820 to 870ms, and a 600ms timer firing after about 1,650ms. A hold shorter than that cannot complete there, which is the likelier reason two layout checks are parked than the gestures they drive.</p>
+    <p><strong>Held controls answer only to a pointer, and the table-menu buttons are 44px.</strong> LEAVE TABLE and HOLD TO REMOVE have no keyboard path, and the corner row sits under the 56px target floor the interaction contract sets.</p>
     <p><strong>No seated poker pose is accepted yet.</strong> The last lane candidate, A38b, shows the forearms rising toward the hands from the true side rather than resting on the rail. The pose is now being finished by hand, and nothing about it is claimed until it has been looked at from every bearing.</p>
     <p><strong>The black-tie wardrobe is not in the served venue.</strong> The Rooftop the browser loads still dresses the silver male in the earlier pipeline suit. The accepted A11 jacket is built on salvaged donor topology released under CC-BY, so its attribution has to ship with any asset derived from it.</p>
     <p><strong>The character still passes through the furniture, and the number can only go down.</strong> The penetration budget stands at 277 faces through the rail, 205 through the chair, 192 through the wood and 49 through the felt, with 1,449 self-intersecting pairs in the suit. It counts faces, not depth: a graze and an arm buried to the elbow each count as one.</p>
     <p><strong>Amber is legible, not finished.</strong> A pale band shows in the V between the roll-neck and the chest, two small wings sit where the collar meets the lapel notch, and both deltoids carry specular highlights. Its report names the measured cause of each.</p>
     <p><strong>Chrome can be hidden too.</strong> A tab in a window that is not in front reports <code>document.hidden</code>, throttles its timers and stops the render loop; on 13 Sep the Rooftop measured as a blank canvas until frames were stepped through the scene handle's <code>advance()</code>. Check <code>document.hidden</code> before believing anything a tab says.</p>
-    <p><strong>Closed since the last update.</strong> The Rooftop no longer reads flat: <code>venue-palette.ts</code>, once the seventh module wired to nothing, grades the shipped venues in the suite and passes. The palms are green in the browser. The showdown reel is built into the table.</p>
+    <p><strong>Closed since the last update.</strong> The fold cross over a player who was calling. Chips that never came back from a seat: a second seating's payout, an expiry refused during seed collection, and a development server that restarted on every web edit. The dead end at a bust, with no way out of the seat and a rescue that could not be claimed from one.</p>
   </section>
 
   <div class="meta">
-    <span><b>HEAD</b> 768996f, 13 Sep</span>
-    <span><b>Tests</b> 909 passing across 79 files</span>
-    <span><b>Lint &amp; typecheck</b> lint passes with 3 warnings, typecheck clean</span>
-    <span><b>Production</b> not re-checked on 13 Sep</span>
-    <span><b>Progress gallery</b> captures 40&ndash;46 added</span>
+    <span><b>HEAD</b> e304377 on claude-hud, 17 Sep; main at 38eebc6</span>
+    <span><b>Tests</b> 918 passing across 80 files</span>
+    <span><b>Lint &amp; typecheck</b> lint passes with 4 warnings, typecheck clean</span>
+    <span><b>Production</b> not re-checked on 17 Sep</span>
+    <span><b>Progress gallery</b> unchanged since 13 Sep</span>
   </div>
 
 </div>
