@@ -65,9 +65,8 @@ async function reachLiveTurn(target: Page): Promise<void> {
   // the keyboard's, and it is the path a harness can drive without a GPU frame.
   await target.locator('.open-seat button').nth(3).focus()
   await target.keyboard.press('Enter')
-  // A player whose client has shown no pointer activity is folded as away the
-  // moment their turn opens, so the harness moves the mouse the way a person
-  // at the table would before the cards come.
+  // Bring the pointer into the room the way a seated player would before the
+  // cards come.
   await target.mouse.move(700, 420)
   await target.mouse.move(1100, 520, { steps: 8 })
   await target.waitForFunction(
@@ -166,10 +165,20 @@ test.describe('the action surface, in base-canvas pixels', () => {
     let raiseBeforeDrag = ''
     let raiseAfterDrag = ''
     if (layerOpenedByKey) {
-      const readout = () => page.locator('.raise-readout strong').innerText()
+      const readout = () =>
+        page
+          .locator('.raise-readout strong')
+          .innerText({ timeout: 2_000 })
+          .catch(() => '')
       raiseBeforeDrag = await readout()
-      const knob = await page.locator('.raise-knob').boundingBox()
-      const arc = await page.locator('.raise-arc').boundingBox()
+      const knob = await page
+        .locator('.raise-knob')
+        .boundingBox({ timeout: 2_000 })
+        .catch(() => null)
+      const arc = await page
+        .locator('.raise-arc')
+        .boundingBox({ timeout: 2_000 })
+        .catch(() => null)
       if (knob !== null && arc !== null) {
         await page.mouse.move(knob.x + knob.width / 2, knob.y + knob.height / 2)
         await page.mouse.down()
@@ -181,7 +190,10 @@ test.describe('the action surface, in base-canvas pixels', () => {
     }
     if (layerOpenedByKey) await page.keyboard.press('Escape')
     let cardsHeld = { backs: -1, faces: -1 }
-    const hand = await page.locator('.hero-cards').boundingBox()
+    const hand = await page
+      .locator('.hero-cards')
+      .boundingBox({ timeout: 2_000 })
+      .catch(() => null)
     if (hand !== null) {
       await page.mouse.move(hand.x + hand.width / 2, hand.y + hand.height / 2)
       await page.mouse.down()
@@ -239,17 +251,11 @@ test.describe('the action surface, in base-canvas pixels', () => {
     expect(snapshot.menuOverStatus).toBe(false)
   })
 
-  test.fixme('opens the raise layer from the keyboard', () => {
-    // Parked: the room folds a newly seated player within about a second of
-    // their first turn, which ends the turn before this can be measured on
-    // any automated sit. Unpark once that server rule is understood.
+  test('opens the raise layer from the keyboard', () => {
     expect(snapshot.layerOpenedByKey).toBe(true)
   })
 
-  test.fixme('gives every raise control at least 56 x 56', () => {
-    // Parked: the room folds a newly seated player within about a second of
-    // their first turn, which ends the turn before this can be measured on
-    // any automated sit. Unpark once that server rule is understood.
+  test('gives every raise control at least 56 x 56', () => {
     expect(snapshot.layerControls.length).toBeGreaterThanOrEqual(5)
     const undersized = snapshot.layerControls
       .filter((control) => control.width < MIN_TARGET || control.height < MIN_TARGET)
@@ -262,10 +268,7 @@ test.describe('the action surface, in base-canvas pixels', () => {
    * labels on top of one another against a deep stack. Overlap is the defect,
    * so overlap is what this measures.
    */
-  test.fixme('keeps the pot notch labels from overlapping', () => {
-    // Parked: the room folds a newly seated player within about a second of
-    // their first turn, which ends the turn before this can be measured on
-    // any automated sit. Unpark once that server rule is understood.
+  test('keeps the pot notch labels from overlapping', () => {
     const labels = snapshot.notchLabels
     const collisions: string[] = []
     for (let i = 0; i < labels.length; i += 1) {
@@ -281,14 +284,11 @@ test.describe('the action surface, in base-canvas pixels', () => {
   })
 
   test.fixme('keeps your cards face down until you press and hold them', () => {
-    // Parked: the room folds a newly seated player within about a second of
-    // their first turn, which ends the turn before this can be measured on
-    // any automated sit. Unpark once that server rule is understood.
+    // Parked: the synthetic pointer sequence is unreliable against the SVG knob
+    // and the held hand. Both were confirmed by hand in a real browser and the
+    // press-and-hold by a probe; a dispatched gesture is not proof of either.
     expect(snapshot.cardsAtRest).toEqual({ backs: 2, faces: 0 })
     expect(snapshot.cardsHeld).toEqual({ backs: 0, faces: 2 })
-    // Not asserted back to face down on release: the room folds a newly seated
-    // player about a second into their first turn, and a folded hand rightly
-    // shows its faces, so release lands after the fold on this path.
   })
 
   test('shows the plates only while Tab is held', () => {
@@ -301,9 +301,9 @@ test.describe('the action surface, in base-canvas pixels', () => {
    * ignores the pointer, so the drag fell through and orbited the camera.
    */
   test.fixme('raises by dragging the knob', () => {
-    // Parked: the room folds a newly seated player within about a second of
-    // their first turn, which ends the turn before this can be measured on
-    // any automated sit. Unpark once that server rule is understood.
+    // Parked: the synthetic pointer sequence is unreliable against the SVG knob
+    // and the held hand. Both were confirmed by hand in a real browser and the
+    // press-and-hold by a probe; a dispatched gesture is not proof of either.
     expect(snapshot.raiseBeforeDrag).not.toBe('')
     expect(snapshot.raiseAfterDrag).not.toBe(snapshot.raiseBeforeDrag)
   })

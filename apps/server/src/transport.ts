@@ -1216,13 +1216,25 @@ export class RoomHub {
   private async disconnect(connection: ConnectionState): Promise<void> {
     const player = connection.player
     if (player === null) return
-    if (this.activePlayers.get(player.playerId) === connection) {
+    const active = this.activePlayers.get(player.playerId)
+    if (active === connection) {
       this.activePlayers.delete(player.playerId)
     }
+    // A newer connection for this player is already live, so this close is a
+    // stale socket going away, not the player leaving. Treating it as a
+    // disconnect marked a player who was actively playing as away, and the room
+    // folds an away player the moment their turn is driven: a second tab, a
+    // reconnect whose old socket closed late, or a development double mount all
+    // folded a live player in the middle of their own turn.
+    const superseded = active !== undefined && active !== connection
     if (connection.roomId === null) return
     const state = this.rooms.get(connection.roomId)
     if (state === undefined) return
     await this.enqueue(state, async () => {
+      if (superseded) {
+        state.connections.delete(connection)
+        return
+      }
       if (state.speakingPlayers.delete(player.playerId)) {
         this.broadcastSocial(state, null, {
           kind: 'speaking',
