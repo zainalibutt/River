@@ -48,6 +48,13 @@ import {
 } from '@/lib/preset'
 import { type RepFlash, repFlashFor, shouldShowRate } from '@/lib/rep-feedback'
 import {
+  type PendingSeatRequest,
+  requeueSeatRequest,
+  type SeatRequest,
+  seatChangeOpen,
+  toggleSeatRequest,
+} from '@/lib/seat-request'
+import {
   actionLabel,
   equippedRatePercent,
   isActionable,
@@ -88,6 +95,20 @@ type KickState = { reason: 'host' | 'idle' | 'duplicate-session' } | null
 type SeatActionFlag = {
   label: 'CHECK' | 'CALL' | 'RAISE' | 'ALL IN' | 'FOLD'
   tone: 'quiet' | 'commit' | 'danger'
+}
+
+/**
+ * Back to the club, forgetting the table. A remembered table exists so a reload
+ * finds the seat that holds your buy-in; once the stack is back in the bankroll
+ * it would only put Play straight back at the table you just left.
+ */
+function returnToClub(): void {
+  try {
+    window.localStorage.removeItem(LAST_TABLE_KEY)
+  } catch {
+    // Storage can be unavailable. Remembering the table costs a rejoin, not chips.
+  }
+  window.location.assign('/')
 }
 
 function emptyView(selfId = 'pending', venueId: VenueId = DEFAULT_VENUE): RoomView {
@@ -281,6 +302,11 @@ export function RiverRoomTable() {
   const [upgradeState, setUpgradeState] = useState<UpgradeState>(expired ? 'expired' : 'idle')
   const [upgradeEmail, setUpgradeEmail] = useState('')
   const [kick, setKick] = useState<KickState>(null)
+  // A stand, rebuy or leave waiting for the gap between hands, or sent and
+  // waiting for the server. The socket handler is bound once per table, so it
+  // reads the ref to tell which reply answers it.
+  const [seatRequest, setSeatRequest] = useState<PendingSeatRequest | null>(null)
+  const seatRequestRef = useRef<PendingSeatRequest | null>(null)
   const [peek, setPeek] = useState(false)
   const [platesHeld, setPlatesHeld] = useState(false)
   const [seatActions, setSeatActions] = useState<ReadonlyMap<string, SeatActionFlag>>(
@@ -367,6 +393,25 @@ export function RiverRoomTable() {
     }
   }, [])
 
+  // Send the waiting seat change if the room will take it. The socket handler
+  // calls this as soon as a snapshot opens the gap, because waiting for a render
+  // cost a slow machine two of the gap's three seconds and the next hand had
+  // started by the time the request landed. The ref keeps it to one send.
+  const flushSeatRequest = useCallback((phase: RoomView['phase']) => {
+    const waiting = seatRequestRef.current
+    if (waiting === null || waiting.requestId !== null || !seatChangeOpen(phase)) return
+    try {
+      const requestId = socketRef.current?.command(waiting.request) ?? null
+      const sent = requestId === null ? null : { ...waiting, requestId }
+      seatRequestRef.current = sent
+      setSeatRequest(sent)
+    } catch {
+      seatRequestRef.current = null
+      setNotice('Reconnecting…')
+      setSeatRequest(null)
+    }
+  }, [])
+
   useEffect(() => {
     let disposed = false
     let unsubscribeMessage: (() => void) | null = null
@@ -384,6 +429,19 @@ export function RiverRoomTable() {
         socketRef.current = socket
         unsubscribeMessage = socket.subscribe((message: ServerMessage) => {
           if (message.kind === 'error') {
+            const refused = seatRequestRef.current
+            if (
+              refused !== null &&
+              message.requestId !== null &&
+              refused.requestId === message.requestId
+            ) {
+              // Usually refused because the next hand began before it landed. It
+              // waits for another gap, and says nothing unless it gives up.
+              const retry = requeueSeatRequest(refused)
+              seatRequestRef.current = retry
+              setSeatRequest(retry)
+              if (retry !== null) return
+            }
             setNotice(message.message)
             return
           }
@@ -416,13 +474,24 @@ export function RiverRoomTable() {
                   ? 'Daily chips already claimed.'
                   : message.outcome.reason === 'capped'
                     ? 'Rescue limit reached for today.'
-                    : 'Rescue is available only when your bankroll is empty.'
+                    : 'Rescue is for a bankroll short of one buy-in, away from a seat.'
               setNotice(copy)
             }
             return
           }
           if (message.kind !== 'snapshot') return
           setView(message.view)
+          const answered = seatRequestRef.current
+          if (
+            answered !== null &&
+            answered.requestId !== null &&
+            answered.requestId === message.requestId
+          ) {
+            seatRequestRef.current = null
+            setSeatRequest(null)
+            if (answered.request.kind === 'leave') returnToClub()
+          }
+          flushSeatRequest(message.view.phase)
           setBotSeats(message.botSeats)
           setSeatActions((current) => actionFlagsAfter(current, message.events))
           if (
@@ -518,7 +587,7 @@ export function RiverRoomTable() {
     // initialVenue is read once when a new table is opened. It comes from
     // useState's initialiser and never changes, but naming it keeps the rule
     // honest rather than silencing it.
-  }, [inviteCode, roomId, initialVenue])
+  }, [inviteCode, roomId, initialVenue, flushSeatRequest])
 
   useEffect(() => {
     const resize = () =>
@@ -532,6 +601,16 @@ export function RiverRoomTable() {
     const minimum = view.legal?.raiseTo.min ?? 0
     setRaiseTo(minimum)
   }, [view.legal?.raiseTo.min])
+
+  useEffect(() => {
+    seatRequestRef.current = seatRequest
+  }, [seatRequest])
+
+  // A request made while the gap is already open has no snapshot coming to send
+  // it, so it goes after the render that recorded it.
+  useEffect(() => {
+    if (seatRequest !== null) flushSeatRequest(view.phase)
+  }, [seatRequest, view.phase, flushSeatRequest])
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -707,6 +786,17 @@ export function RiverRoomTable() {
     selectedSeat === null ? null : view.seats.find((seat) => seat.seat === selectedSeat)
   const selectedPlayerId = selected?.playerId ?? null
   const entryBuyIn = affordableBuyIn(balance, DEFAULT_STAKE.minBuyIn, DEFAULT_STAKE.defaultBuyIn)
+  // Waiting means held for the gap between hands. A request made between hands
+  // is sent on the next effect, so it reads as already on its way.
+  const pendingSeat =
+    seatRequest === null
+      ? null
+      : {
+          kind: seatRequest.request.kind,
+          waiting: seatRequest.requestId === null && !seatChangeOpen(view.phase),
+        }
+  const leaveState =
+    pendingSeat?.kind !== 'leave' ? 'idle' : pendingSeat.waiting ? 'waiting' : 'sent'
 
   const submitJoinCode = (event: FormEvent) => {
     event.preventDefault()
@@ -806,6 +896,24 @@ export function RiverRoomTable() {
               <div className="dom-table-fallback" aria-hidden="true" />
             ) : null}
             <nav className="hud-corner hud-corner-left" aria-label="Table menu">
+              {/* Leaving hands the stack back and goes to the club. Held, because
+                  it gives up the seat. During a hand it waits for the hand to
+                  end, and holding it again withdraws it. */}
+              <HoldAction
+                duration={600}
+                className={`leave-table${leaveState === 'idle' ? '' : ' armed'}`}
+                disabled={leaveState === 'sent'}
+                onComplete={() => {
+                  if (selfSeat === null) returnToClub()
+                  else setSeatRequest((current) => toggleSeatRequest(current, { kind: 'leave' }))
+                }}
+              >
+                {leaveState === 'idle'
+                  ? 'LEAVE TABLE'
+                  : leaveState === 'waiting'
+                    ? 'LEAVING AFTER HAND'
+                    : 'LEAVING'}
+              </HoldAction>
               <button
                 type="button"
                 onClick={() => setGraphicsMode((mode) => (mode === 'two' ? 'three' : 'two'))}
@@ -1308,7 +1416,14 @@ export function RiverRoomTable() {
               onRaiseTo={setRaiseTo}
               onAction={(action) => command({ kind: 'act', action })}
               onDeal={() => command({ kind: 'startHand' })}
-              onRebuy={() => command({ kind: 'rebuy', amount: DEFAULT_STAKE.defaultBuyIn })}
+              rebuyAmount={entryBuyIn}
+              onRebuy={(amount) =>
+                setSeatRequest((current) => toggleSeatRequest(current, { kind: 'rebuy', amount }))
+              }
+              onStand={() =>
+                setSeatRequest((current) => toggleSeatRequest(current, { kind: 'stand' }))
+              }
+              pendingSeat={pendingSeat}
               balance={balance}
               claimsEnabled={connection === 'connected'}
               onClaimDaily={() => socketRef.current?.claimDaily()}
@@ -1704,7 +1819,10 @@ function ActionMenu({
   onRaiseTo,
   onAction,
   onDeal,
+  rebuyAmount,
   onRebuy,
+  onStand,
+  pendingSeat,
   balance,
   claimsEnabled,
   onClaimDaily,
@@ -1726,7 +1844,11 @@ function ActionMenu({
   onRaiseTo: (value: number) => void
   onAction: (action: TurnAction) => void
   onDeal: () => void
-  onRebuy: () => void
+  /** The rebuy the bankroll can cover, or null when it cannot cover the minimum. */
+  rebuyAmount: number | null
+  onRebuy: (amount: number) => void
+  onStand: () => void
+  pendingSeat: { kind: SeatRequest['kind']; waiting: boolean } | null
   balance: number
   claimsEnabled: boolean
   onClaimDaily: () => void
@@ -1816,17 +1938,46 @@ function ActionMenu({
           </button>
         </div>
       )
-    if (
-      view.phase !== 'hand' &&
-      view.seats.some((seat) => seat.playerId === view.selfId && seat.busted)
-    )
+    // A busted player is not dealt in, so this stays up through the hands that
+    // follow rather than only in the gap between them. It used to offer one
+    // full rebuy the bankroll often could not cover, with no way out of the
+    // seat - and the rescue is only for somebody out of one.
+    if (view.seats.some((seat) => seat.playerId === view.selfId && seat.busted)) {
+      const waitingFor = pendingSeat?.waiting === true ? pendingSeat.kind : null
       return (
-        <div className="ram ram-waiting">
-          <button type="button" onClick={onRebuy}>
-            REBUY {formatAmount(DEFAULT_STAKE.defaultBuyIn, false)}
-          </button>
+        <div className="ram ram-waiting recovery">
+          <span>
+            {waitingFor === 'rebuy'
+              ? 'REBUYING AFTER THIS HAND'
+              : waitingFor === 'stand'
+                ? 'STANDING AFTER THIS HAND'
+                : rebuyAmount === null
+                  ? `NEED ${formatAmount(DEFAULT_STAKE.minBuyIn, false)} TO REBUY`
+                  : 'OUT OF CHIPS'}
+          </span>
+          <div className="recovery-actions">
+            {rebuyAmount === null ? null : (
+              <button
+                type="button"
+                className={pendingSeat?.kind === 'rebuy' ? 'queued' : undefined}
+                aria-pressed={pendingSeat?.kind === 'rebuy'}
+                onClick={() => onRebuy(rebuyAmount)}
+              >
+                REBUY {formatAmount(rebuyAmount, false)}
+              </button>
+            )}
+            <button
+              type="button"
+              className={pendingSeat?.kind === 'stand' ? 'queued' : undefined}
+              aria-pressed={pendingSeat?.kind === 'stand'}
+              onClick={onStand}
+            >
+              STAND UP
+            </button>
+          </div>
         </div>
       )
+    }
     if (presetArmable) {
       const arm = (kind: PresetKind) => onPreset(preset === kind ? null : kind)
       const presetLabel =

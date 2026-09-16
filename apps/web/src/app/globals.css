@@ -1473,9 +1473,29 @@ button.invite-chip.showing-code {
 
 .ram-waiting .recovery-actions button {
   min-width: 118px;
-  min-height: 38px;
+  /* The contract floor for any target. These were 38px. */
+  min-height: 56px;
   border-radius: 999px;
   font-size: 11px;
+}
+
+/* A choice waiting for the gap between hands reads as pressed and brass. */
+.ram-waiting .recovery-actions .queued {
+  border-color: var(--river-brass-hi, var(--river-brass));
+  color: var(--river-cream, var(--river-amber-bright));
+  box-shadow:
+    var(--river-lift-1),
+    inset 0 0 0 1px var(--river-brass);
+}
+
+.hud-corner > .leave-table {
+  position: relative;
+  overflow: hidden;
+}
+
+.hud-corner > .leave-table.armed {
+  border-color: var(--club-brass);
+  color: var(--club-brass);
 }
 
 .upgrade-panel,
@@ -3625,7 +3645,8 @@ button.verify-pill.verify-mismatch {
 }
 
 .action-button.holding::after,
-.raise-action.holding::after {
+.raise-action.holding::after,
+.leave-table.holding::after {
   position: absolute;
   border-radius: inherit;
   background: conic-gradient(

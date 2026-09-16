@@ -204,6 +204,19 @@ Three simultaneous roles: visual identity beside the avatar, ambient interaction
 
 They never affect poker odds. The reference is explicit that drinking and smoking apply no gameplay effect.
 
+## Leaving and busting
+
+**Leave table** is the first control in the table menu, top left, held for 600ms. Between hands it returns the stack to the bankroll and goes to the club, forgetting the table. During a hand it reads `LEAVING AFTER HAND` and is sent in the next gap; holding it again withdraws it.
+
+The room takes a stand, a leave or a rebuy only between hands, and that gap lasts three seconds. So a seat change asked for during a hand waits for the gap rather than asking the player to catch it, and one refused because the next hand started first waits for another gap, up to three times.
+
+| State | Action surface |
+|---|---|
+| Busted in a seat | `OUT OF CHIPS`, or `NEED 50,000 TO REBUY` when the bankroll cannot cover the minimum. `REBUY` at the default buy-in or the whole bankroll, whichever is less, and `STAND UP`. Stays up through the hands that follow |
+| Out of a seat, below the minimum buy-in | `NEED 50,000 TO SIT`, with `DAILY CHIPS` and `BUST RESCUE` |
+
+The rescue is refused to anybody seated, which is why standing up is always offered to a busted player.
+
 ## Verify affordance
 
 Commit-hash pill, quiet, top-right of title-safe. Shows the first 8 characters of `view.commit`; opens a panel with the full hash and, after reveal, a recomputed-match indicator.
