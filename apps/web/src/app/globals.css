@@ -1219,10 +1219,24 @@ button.invite-chip.showing-code {
    light it up rather than hang a disc over it. The disc was legible and
    completely foreign to the room, which is the same mistake the flat HUD was
    making one layer further in. Nothing paints here until the pointer arrives. */
+/* In 3D a seat has no position until the room has projected it, so it stays
+   hidden until then. The scene sets visibility inline once it has placed the
+   seat, and inline wins. Without this every seat piled into the top-left
+   corner for as long as the venue took to load. */
+.seat-ring.projected .seat {
+  visibility: hidden;
+}
+
+/* An empty seat is pinned to its chair, an occupied one above its head. */
+.seat.open-seat {
+  top: var(--chair-y);
+  left: var(--chair-x);
+}
+
 .open-seat {
   display: grid;
-  width: 132px;
-  height: 132px;
+  width: 104px;
+  height: 104px;
   border: 0;
   border-radius: 50%;
   background: none;

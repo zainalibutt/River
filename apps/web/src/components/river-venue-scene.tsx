@@ -2,13 +2,7 @@
 
 import { OrbitControls, useGLTF } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import {
-  denominations,
-  layOutPlaques,
-  projectToScreen,
-  type ScreenCamera,
-  stackLayout,
-} from '@river/engine'
+import { denominations, projectToScreen, type ScreenCamera, stackLayout } from '@river/engine'
 import {
   type RefObject,
   Suspense,
@@ -35,6 +29,7 @@ import {
   cameraPlacement,
   FELT_LIGHT_REACH,
   ORBIT_POLAR_DEGREES,
+  SEAT_SLOTS,
   seatCameraAzimuth,
   TABLE_SURFACE_HEIGHT,
   VENUE_ORDER,
@@ -77,23 +72,72 @@ type SceneProps = {
   heroSeat?: number | null | undefined
   /** Dev-review seat framed from inside the table for a face-side close read. */
   reviewSeat?: number | null | undefined
-  /**
-   * Whether the table-read plaques are showing.
-   *
-   * Nothing else needs it, but seat layout does: the spacing pass reserves a
-   * plaque-sized rectangle per seat and pushes each one outward from the table
-   * until it stops overlapping its neighbours. With nine of them and a table
-   * that projects small, that push ran far enough to put labels in the
-   * skyline, and it ran whether or not a single plaque was visible.
-   */
-  platesHeld?: boolean | undefined
 }
 
-function Seats({ seatIds, seatRefs, venueId, platesHeld = false }: SceneProps) {
+/**
+ * Where each seat's markers are pinned in the world.
+ *
+ * Two anchors per seat: the chair, for the thing a player aims at to sit down,
+ * and a point just above the head, for the action pin, the turn clock and the
+ * Tab plate. Both come from the loaded venue rather than from a formula. The
+ * chairs are named nodes and each character carries its seat number, so a
+ * marker is attached to the object it labels and stays attached through an
+ * orbit. The ellipse in worldSeats is only the fallback while the venue loads.
+ */
+export interface SeatAnchors {
+  /** World points, fixed at load: chairs do not move. */
+  chairs: Map<number, THREE.Vector3>
+  heads: Map<number, THREE.Object3D>
+}
+
+/**
+ * How far below a chair's highest point its sit target sits.
+ *
+ * The target used to be the seat cushion at 0.46m. From the default camera the
+ * two chairs behind the table have their cushions hidden by the tabletop, so
+ * their targets landed on the felt and hovering the table offered a seat. The
+ * top of a chair is the part visible from every orbit angle, and taking it from
+ * each chair's own bounds means a backless stool in another venue gets its seat
+ * rather than a point in the air where a backrest would be.
+ */
+const CHAIR_TOP_INSET = 0.14
+/** From the head bone to just above the crown, so a pin's tail meets the hair. */
+const HEAD_CLEARANCE = 0.26
+/** A seated head above the floor, for an occupied seat with no rig to ask. */
+const SEATED_HEAD_HEIGHT = 1.16
+
+function shownInScene(object: THREE.Object3D): boolean {
+  for (let node: THREE.Object3D | null = object; node !== null; node = node.parent) {
+    if (!node.visible) return false
+  }
+  return true
+}
+
+function Seats({
+  seatIds,
+  seatRefs,
+  venueId,
+  anchors,
+}: SceneProps & { anchors: RefObject<SeatAnchors | null> }) {
   const venue = venueOf(venueId)
   const seats = useMemo(() => worldSeats(seatIds, venue.seatRing), [seatIds, venue.seatRing])
   const { camera, controls } = useThree()
   const focus = useMemo(() => new THREE.Vector3(), [])
+  const scratch = useMemo(() => new THREE.Vector3(), [])
+
+  // Leaving 3D must not strand a hidden seat or a projected position on an
+  // element the 2D renderer is about to lay out for itself.
+  useEffect(() => {
+    const refs = seatRefs.current
+    return () => {
+      for (const element of refs.values()) {
+        element.style.removeProperty('visibility')
+        for (const name of ['--seat-x', '--seat-y', '--chair-x', '--chair-y']) {
+          element.style.removeProperty(name)
+        }
+      }
+    }
+  }, [seatRefs])
 
   useFrame(() => {
     const orbit = controls as OrbitControlsImpl | null
@@ -108,63 +152,42 @@ function Seats({ seatIds, seatRefs, venueId, platesHeld = false }: SceneProps) {
       near: perspective.near,
       far: perspective.far,
     }
-    // Anchored at the chair, not at head height.
-    //
-    // worldSeats puts the anchor at 1.46m so a plaque reads as belonging to the
-    // player under it. The Rooftop camera sits at 1.50m. Four centimetres below
-    // the lens means every seat, near and far, projects onto the horizon: the
-    // nine anchors measured 18.57 to 19.91 percent down the frame, a spread of
-    // 1.3 percent across a whole table. That is why labels and SIT targets sat
-    // in the skyline, and no amount of spacing could fix it, because the
-    // spacing was pushing points that were already all in the same place.
-    //
-    // The height a target belongs at is the chair anyway. A plaque that wants
-    // to float above its player is offset in screen space by the HUD, where the
-    // offset is a constant instead of a function of where the camera is.
-    const screens = seats.map((seat) =>
-      projectToScreen({ x: seat.x, y: SEAT_ANCHOR_HEIGHT, z: seat.z }, spec),
-    )
-    // Anchors alone put nine plaques on top of each other and over the board.
-    // The table centre is the point they are pushed away from, so a label
-    // never crosses to the far side and stops being that player's label.
-    const table = projectToScreen({ x: 0, y: focus.y, z: 0 }, spec)
-    // Spacing is only owed to plaques. With them hidden the anchor carries a
-    // pin or a SIT target, and a target has to be exactly where the seat is or
-    // the player aims at a chair and misses.
-    const laidOut = platesHeld
-      ? layOutPlaques(
-          screens.map((screen) => ({ xPercent: screen.xPercent, yPercent: screen.yPercent })),
-          PLAQUE,
-          STAGE,
-          { xPercent: table.xPercent, yPercent: table.yPercent },
-        )
-      : screens.map((screen, index) => ({
-          index,
-          xPercent: screen.xPercent,
-          yPercent: screen.yPercent,
-          pushed: false,
-        }))
+    const found = anchors.current
+    // The index here is the seat number: the table passes ids in seat order.
+    // It used to pass them rotated so the local player came first, which put
+    // every marker and chip stack one or more chairs away from its player as
+    // soon as anyone sat anywhere but seat zero.
     seats.forEach((seat, index) => {
       const element = seatRefs.current.get(seat.id)
-      const screen = screens[index]
-      const placement = laidOut[index]
-      if (element === undefined || screen === undefined || placement === undefined) return
-      // A seat behind the camera projects to a coordinate that looks perfectly
-      // reasonable and is on the wrong side of the screen. Set directly rather
-      // than through a custom property: several seat states already own
-      // opacity, and a folded player must still look folded while a seat
-      // behind the camera stays hidden.
-      element.style.visibility = screen.behind ? 'hidden' : 'visible'
-      element.style.setProperty('--seat-x', `${placement.xPercent}%`)
-      element.style.setProperty('--seat-y', `${placement.yPercent}%`)
+      if (element === undefined) return
+      // Seat n sits in chair n + 1. Slot zero of the nine-slot ring is the
+      // dealer's, the same offset worldSeats applies to its angle.
+      const chair = found?.chairs.get((index + 1) % SEAT_SLOTS)
+      const chairPoint = chair ?? { x: seat.x, y: 0.8, z: seat.z }
+      const chairScreen = projectToScreen(
+        { x: chairPoint.x, y: chairPoint.y, z: chairPoint.z },
+        spec,
+      )
+      let head = { x: chairPoint.x, y: SEATED_HEAD_HEIGHT, z: chairPoint.z }
+      const bone = found?.heads.get(index)
+      if (bone !== undefined && shownInScene(bone)) {
+        bone.getWorldPosition(scratch)
+        head = { x: scratch.x, y: scratch.y + HEAD_CLEARANCE, z: scratch.z }
+      }
+      const headScreen = projectToScreen(head, spec)
+      // A point behind the camera projects to a plausible coordinate on the
+      // wrong side of the screen. Set directly rather than through a class:
+      // several seat states already own opacity.
+      element.style.visibility = headScreen.behind && chairScreen.behind ? 'hidden' : 'visible'
+      element.style.setProperty('--seat-x', `${headScreen.xPercent}%`)
+      element.style.setProperty('--seat-y', `${headScreen.yPercent}%`)
+      element.style.setProperty('--chair-x', `${chairScreen.xPercent}%`)
+      element.style.setProperty('--chair-y', `${chairScreen.yPercent}%`)
     })
   })
 
   return <group />
 }
-
-/** Chair-seat height in metres, measured from the venue build spec's chairs. */
-const SEAT_ANCHOR_HEIGHT = 0.46
 
 const seatIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 
@@ -229,22 +252,55 @@ function retargetToRig(
 }
 
 /** The plaque and the stage, as percentages of the 1920 by 1080 design box. */
-const PLAQUE = { widthPercent: (208 / 1920) * 100, heightPercent: (76 / 1080) * 100 }
-const STAGE = { widthPercent: 100, heightPercent: 100 }
 
 function VenueAsset({
   venueId,
   cues,
   occupiedSeats,
+  anchors,
 }: {
   venueId: VenueId
   cues: readonly AnimationCue[]
   occupiedSeats: readonly number[] | undefined
+  anchors: RefObject<SeatAnchors | null>
 }) {
   const venue = venueOf(venueId)
   const asset = useGLTF(freshAsset(venue.asset))
   const mixers = useRef<THREE.AnimationMixer[]>([])
   const actions = useRef<Map<string, THREE.AnimationAction>>(new Map())
+
+  // Chairs are named <venue>_chair_<n>; the first node to claim a number wins,
+  // so a parent is used rather than a mesh child the loader renamed. The head
+  // comes from each character's skeleton rather than a scene search, because a
+  // glTF bone is not required to sit under the root that owns the skin.
+  useLayoutEffect(() => {
+    const chairs = new Map<number, THREE.Vector3>()
+    const heads = new Map<number, THREE.Object3D>()
+    asset.scene.updateMatrixWorld(true)
+    const bounds = new THREE.Box3()
+    asset.scene.traverse((object) => {
+      const chair = /chair_(\d+)$/.exec(object.name)
+      if (chair !== null && !chairs.has(Number(chair[1]))) {
+        bounds.setFromObject(object)
+        const centre = bounds.getCenter(new THREE.Vector3())
+        chairs.set(
+          Number(chair[1]),
+          new THREE.Vector3(centre.x, bounds.max.y - CHAIR_TOP_INSET, centre.z),
+        )
+      }
+      const seat = object.userData?.seatIndex
+      if (typeof seat !== 'number' || heads.has(seat)) return
+      object.traverse((child) => {
+        if (heads.has(seat) || !(child instanceof THREE.SkinnedMesh)) return
+        const head = child.skeleton.bones.find((bone) => /^head(_\d+)?$/.test(bone.name))
+        if (head !== undefined) heads.set(seat, head)
+      })
+    })
+    anchors.current = { chairs, heads }
+    return () => {
+      anchors.current = null
+    }
+  }, [asset.scene, anchors])
 
   useLayoutEffect(() => {
     asset.scene.traverse((object) => {
@@ -917,9 +973,9 @@ function Scene({
   seatChips = [],
   heroSeat,
   reviewSeat,
-  platesHeld,
 }: SceneProps) {
   const [sidecar, setSidecar] = useState<LightingSidecar>({})
+  const anchors = useRef<SeatAnchors | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -942,10 +998,10 @@ function Scene({
       <SunsetSky venueId={venueId} />
       <VenueLights lights={lights} ambient={ambient} />
       <Suspense fallback={null}>
-        <VenueAsset venueId={venueId} cues={cues} occupiedSeats={occupiedSeats} />
+        <VenueAsset venueId={venueId} cues={cues} occupiedSeats={occupiedSeats} anchors={anchors} />
       </Suspense>
       <InstancedTablePieces seatChips={seatChips} />
-      <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} platesHeld={platesHeld} />
+      <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} anchors={anchors} />
       <CameraOrbit venueId={venueId} heroSeat={heroSeat ?? null} reviewSeat={reviewSeat ?? null} />
     </>
   )
@@ -960,7 +1016,6 @@ export function RiverScene({
   seatChips,
   heroSeat,
   reviewSeat,
-  platesHeld,
 }: SceneProps) {
   const venue = venueOf(venueId)
   return (
@@ -1042,7 +1097,6 @@ export function RiverScene({
         seatChips={seatChips}
         heroSeat={heroSeat}
         reviewSeat={reviewSeat}
-        platesHeld={platesHeld}
       />
     </Canvas>
   )

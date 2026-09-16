@@ -24,8 +24,6 @@ type RiverVenueProps = {
   seatChips?: readonly SeatChips[] | undefined
   heroSeat?: number | null | undefined
   reviewSeat?: number | null | undefined
-  /** Whether the table-read plaques are showing, which decides seat layout. */
-  platesHeld?: boolean | undefined
 }
 
 export function RiverVenue({
@@ -37,7 +35,6 @@ export function RiverVenue({
   seatChips,
   heroSeat,
   reviewSeat,
-  platesHeld,
 }: RiverVenueProps) {
   return (
     <RiverScene
@@ -49,7 +46,6 @@ export function RiverVenue({
       seatChips={seatChips}
       heroSeat={heroSeat}
       reviewSeat={reviewSeat}
-      platesHeld={platesHeld}
     />
   )
 }

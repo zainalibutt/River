@@ -641,14 +641,22 @@ export function RiverRoomTable() {
    * The plaques drifted a metre from the chairs they labelled once already,
    * because two places each had their own idea of where a seat was.
    */
+  // The world is laid out by seat number, never by the rotated order the 2D
+  // ring uses to put the local player at the bottom. Rotated ids put every
+  // chip stack and marker in front of somebody else's chair once the local
+  // player sat anywhere but seat zero.
+  const sceneSeatIds = useMemo(
+    () => view.seats.map((seat) => seat.playerId ?? `seat-${seat.seat}`),
+    [view.seats],
+  )
   const seatChips = useMemo(() => {
-    const ring = worldSeats(seatIds, venueOf(venueId).seatRing)
-    return seats.flatMap((seat, index) => {
-      const place = ring[index]
+    const ring = worldSeats(sceneSeatIds, venueOf(venueId).seatRing)
+    return view.seats.flatMap((seat) => {
+      const place = ring[seat.seat]
       if (seat.playerId === null || seat.stack <= 0 || place === undefined) return []
       return [{ seat: seat.seat, amount: seat.stack, x: place.x, z: place.z }]
     })
-  }, [seats, seatIds, venueId])
+  }, [view.seats, sceneSeatIds, venueId])
 
   const selfSeat = view.seats.find((seat) => seat.playerId === view.selfId) ?? null
   const seatedCount = view.seats.filter((seat) => seat.playerId !== null && seat.stack > 0).length
@@ -794,10 +802,9 @@ export function RiverRoomTable() {
                 .filter((seat) => seat.playerId !== null)
                 .map((seat) => seat.seat)}
               seatChips={seatChips}
-              seatIds={seatIds}
+              seatIds={sceneSeatIds}
               seatRefs={seatRefs}
               heroSeat={selfSeat?.seat ?? null}
-              platesHeld={platesHeld}
             />
           ) : null}
           <div className={`hud-layer${platesHeld ? ' plates-held' : ''}`}>
@@ -1195,7 +1202,9 @@ export function RiverRoomTable() {
                 </div>
               )
             })()}
-            <div className={`seat-ring${platesHeld ? ' plates-held' : ''}`}>
+            <div
+              className={`seat-ring${platesHeld ? ' plates-held' : ''}${graphicsMode === 'three' ? ' projected' : ''}`}
+            >
               {seats.map((seat, index) => (
                 <RoomSeat
                   key={seat.seat}
@@ -1214,6 +1223,7 @@ export function RiverRoomTable() {
                       command({ kind: 'sit', seat: seat.seat, buyIn: entryBuyIn })
                   }}
                   onSelect={() => setSelectedSeat(seat.seat)}
+                  projected={graphicsMode === 'three'}
                   anchorRef={(element) => {
                     const key = seat.playerId ?? `seat-${seat.seat}`
                     if (element === null) seatRefs.current.delete(key)
@@ -1506,6 +1516,7 @@ function RoomSeat({
   onSit,
   onSelect,
   anchorRef,
+  projected,
 }: {
   seat: RoomSeatView
   index: number
@@ -1518,6 +1529,8 @@ function RoomSeat({
   onSit: () => void
   onSelect: () => void
   anchorRef: (element: HTMLElement | null) => void
+  /** 3D projects this seat's position every frame, so React must not also set it. */
+  projected: boolean
 }) {
   const position = seatPositions[index] ?? seatPositions[0]
   // One rule decides what floats over this seat. The engine owns it so the
@@ -1558,7 +1571,16 @@ function RoomSeat({
       <article
         ref={anchorRef}
         className="seat open-seat"
-        style={{ '--seat-x': `${position.x}%`, '--seat-y': `${position.y}%` } as CSSProperties}
+        style={
+          projected
+            ? undefined
+            : ({
+                '--seat-x': `${position.x}%`,
+                '--seat-y': `${position.y}%`,
+                '--chair-x': `${position.x}%`,
+                '--chair-y': `${position.y}%`,
+              } as CSSProperties)
+        }
       >
         <button type="button" onClick={onSit} disabled={buyIn === null}>
           SIT
@@ -1576,7 +1598,16 @@ function RoomSeat({
     <article
       ref={anchorRef}
       className={`seat${active ? ' active' : ''}${seat.disconnected ? ' reconnecting' : ''}${local ? ' hero-seat' : ''}`}
-      style={{ '--seat-x': `${position.x}%`, '--seat-y': `${position.y}%` } as CSSProperties}
+      style={
+        projected
+          ? undefined
+          : ({
+              '--seat-x': `${position.x}%`,
+              '--seat-y': `${position.y}%`,
+              '--chair-x': `${position.x}%`,
+              '--chair-y': `${position.y}%`,
+            } as CSSProperties)
+      }
     >
       <button
         className="seat-select"
