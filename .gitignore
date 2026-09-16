@@ -21,6 +21,9 @@ apps/web/public/dev-proofs/
 **/__pycache__/
 *.pyc
 
+# Unfinished isolated Bronze character proof. Promote deliberately after review.
+art/pipeline/build_native_bronze.py
+
 # local working docs & assistant state (manifest in LOCAL.md)
 AGENTS.md
 CLAUDE.md

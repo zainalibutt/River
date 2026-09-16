@@ -1,0 +1,40 @@
+{
+  "status": "accepted",
+  "acceptedBy": "Zain",
+  "acceptedOn": "2026-09-16",
+  "master": "art/source/native-silver/a51-animation-baseline/a51-animation-master.blend",
+  "masterSha256": "fdfb90040499330641fa431414cd97688d24d6492b009b4a5be7eab0fa5b5f21",
+  "actionCount": 27,
+  "acceptedClips": {
+    "idle": {
+      "action": "IDLE_thinking_readable",
+      "range": [0, 120]
+    },
+    "check": {
+      "action": "CHECK_tap",
+      "range": [0, 36]
+    },
+    "peek": {
+      "action": "PEEK_card",
+      "range": [0, 48],
+      "proofActions": ["A44d proof card motion 0", "A44d proof card motion 1"]
+    },
+    "betCallRaise": {
+      "action": "CHIP_toss",
+      "range": [0, 30],
+      "proofActionPrefix": "A47 proof stack"
+    },
+    "allIn": {
+      "action": "ALLIN_standup",
+      "range": [0, 90],
+      "proofActionPrefix": "A49 ALLIN proof stack",
+      "chairActions": ["A49 A21 chair back retreat", "A49 A21 chair pan retreat"]
+    }
+  },
+  "verification": {
+    "reviewFilesReopened": true,
+    "allActionSignaturesMatched": true,
+    "allActionsHaveFakeUsers": true,
+    "sourceWasByteIdenticalAfterConsolidation": true
+  }
+}
