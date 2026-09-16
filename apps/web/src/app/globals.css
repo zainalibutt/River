@@ -3856,3 +3856,159 @@ button.verify-pill.verify-mismatch {
   display: flex;
   gap: 10px;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Lit brass.
+   Every piece of metal was one flat tan line, and that more than anything read
+   as web UI. It is now a single material lit from the upper-left lamp: bright
+   at half past ten, dark at half past four, with a hairline of shadow where it
+   meets what it frames. Round things take it as a gradient border so they stay
+   round. These rules sit last on purpose and override the flat versions above. */
+:root {
+  --river-brass-lit: conic-gradient(
+    from -45deg,
+    #f4dfae,
+    #c2953f 25%,
+    #6a4716 50%,
+    #c2953f 75%,
+    #f4dfae
+  );
+}
+
+.seat-pin {
+  border: 2px solid transparent;
+  background:
+    radial-gradient(circle at 50% 34%, #202a24, #090d0b 72%) padding-box,
+    var(--river-brass-lit) border-box;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 55%),
+    0 10px 20px rgb(0 0 0 / 50%),
+    inset 0 2px 4px rgb(0 0 0 / 65%);
+}
+
+.action-pin {
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 55%),
+    0 10px 20px rgb(0 0 0 / 50%),
+    inset 0 2px 4px rgb(0 0 0 / 65%),
+    inset 0 0 0 2px color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.seat-pin::after {
+  border-top-color: #c2953f;
+}
+
+/* The amount sits on a plaque fused to the top of its pin rather than floating
+   as loose text above it. */
+.action-pin-amount {
+  bottom: calc(100% + 2px);
+  padding: 3px 8px 2px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, #161d19, #090d0b) padding-box,
+    var(--river-brass-lit) border-box;
+  box-shadow: 0 4px 8px rgb(0 0 0 / 50%);
+  font-size: 18px;
+}
+
+/* A stem from a pin down to its chair, for seats with no body under the pin. */
+.seat-anchor:has(.seat-pin)::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: calc(var(--stem, 0) * 10.8px);
+  background: linear-gradient(180deg, #c2953f, rgb(194 149 63 / 0%));
+  content: "";
+  pointer-events: none;
+  transform: translateX(-0.5px);
+}
+
+/* The watch bezel is the lit brass itself; the knurl drops to a whisper, since
+   at sixty pixels a strong knurl read as noise. */
+.turn-watch {
+  border: 0;
+  background:
+    repeating-conic-gradient(rgb(255 240 205 / 14%) 0 1.4deg, transparent 1.4deg 7.2deg),
+    var(--river-brass-lit);
+}
+
+.turn-watch-face {
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 75%),
+    inset 0 2px 7px rgb(0 0 0 / 85%);
+}
+
+.action-base {
+  border: 3px solid transparent;
+  background:
+    var(--river-grain) padding-box,
+    radial-gradient(circle at 36% 26%, rgb(255 218 158 / 11%), transparent 60%) padding-box,
+    radial-gradient(circle, #1d2721 0 52%, #0d1310 100%) padding-box,
+    var(--river-brass-lit) border-box;
+  background-blend-mode: overlay, screen, normal, normal;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 60%),
+    inset 0 2px 14px rgb(0 0 0 / 68%);
+}
+
+.action-base::after {
+  background: var(--river-brass-lit);
+}
+
+.action-menu,
+.raise-layer {
+  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 45%));
+}
+
+/* Buttons are wells sunk into the base, not discs set on top of it. */
+.action-button {
+  border: 2px solid transparent;
+  background:
+    radial-gradient(circle at 50% 30%, #1c2520, #060908 76%) padding-box,
+    var(--river-brass-lit) border-box;
+  box-shadow:
+    inset 0 2px 4px rgb(0 0 0 / 65%),
+    inset 0 -1px 0 rgb(214 170 96 / 40%),
+    inset 0 0 0 2px color-mix(in srgb, currentColor 22%, transparent),
+    0 1px 0 rgb(255 226 170 / 16%);
+}
+
+.action-button.armed {
+  box-shadow:
+    inset 0 2px 4px rgb(0 0 0 / 65%),
+    0 0 0 2px currentColor,
+    0 0 20px color-mix(in srgb, currentColor 50%, transparent);
+}
+
+/* Raise controls sit on one brass baseline with a felt fill, a lit hairline
+   edge and a small radius, rather than as floating rounded web buttons. */
+.raise-step,
+.raise-action {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background:
+    var(--river-grain) padding-box,
+    linear-gradient(180deg, #1f2a24, #0f1512) padding-box,
+    var(--river-brass-lit) border-box;
+  background-blend-mode: overlay, normal, normal;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 55%);
+}
+
+.raise-action.confirm {
+  border-color: transparent;
+}
+
+.raise-actions {
+  padding-top: 12px;
+  border-top: 1px solid rgb(194 149 63 / 45%);
+}
+
+.raise-rim {
+  stroke: url(#raise-brass);
+}
+
+.raise-knob circle {
+  fill: url(#raise-brass);
+}

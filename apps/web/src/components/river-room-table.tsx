@@ -2115,6 +2115,11 @@ function RaiseLayer({
       >
         <svg viewBox="0 0 300 158" aria-hidden="true">
           <defs>
+            <linearGradient id="raise-brass" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0" stopColor="#f4dfae" />
+              <stop offset="0.45" stopColor="#c2953f" />
+              <stop offset="1" stopColor="#6a4716" />
+            </linearGradient>
             <linearGradient id="raise-fill" x1="0" x2="1" y1="0" y2="0">
               <stop offset="0" stopColor="#2f7d4e" />
               <stop offset="1" stopColor="#6fe09a" />

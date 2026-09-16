@@ -132,7 +132,7 @@ function Seats({
     return () => {
       for (const element of refs.values()) {
         element.style.removeProperty('visibility')
-        for (const name of ['--seat-x', '--seat-y', '--chair-x', '--chair-y']) {
+        for (const name of ['--seat-x', '--seat-y', '--chair-x', '--chair-y', '--stem']) {
           element.style.removeProperty(name)
         }
       }
@@ -170,7 +170,8 @@ function Seats({
       )
       let head = { x: chairPoint.x, y: SEATED_HEAD_HEIGHT, z: chairPoint.z }
       const bone = found?.heads.get(index)
-      if (bone !== undefined && shownInScene(bone)) {
+      const rigged = bone !== undefined && shownInScene(bone)
+      if (bone !== undefined && rigged) {
         bone.getWorldPosition(scratch)
         head = { x: scratch.x, y: scratch.y + HEAD_CLEARANCE, z: scratch.z }
       }
@@ -183,6 +184,12 @@ function Seats({
       element.style.setProperty('--seat-y', `${headScreen.yPercent}%`)
       element.style.setProperty('--chair-x', `${chairScreen.xPercent}%`)
       element.style.setProperty('--chair-y', `${chairScreen.yPercent}%`)
+      // A pin over a seat with no body in it floats in the air, so it gets a stem
+      // down to its chair. A seat with a rig has a head under the pin already.
+      element.style.setProperty(
+        '--stem',
+        rigged ? '0' : `${Math.max(0, chairScreen.yPercent - headScreen.yPercent)}`,
+      )
     })
   })
 
