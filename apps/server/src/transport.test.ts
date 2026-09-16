@@ -66,8 +66,8 @@ function setup(
   socialRateLimit?: { maxActions: number; windowMs: number },
   economy?: SupabaseEconomy,
   botSeats = 0,
+  ledger = new MemoryLedger(),
 ) {
-  const ledger = new MemoryLedger()
   const players: Record<string, AuthenticatedPlayer> = {
     alice: { playerId: ALICE, anonymous: true, admin: false },
     aliceSaved: { playerId: ALICE, anonymous: false, admin: false },
@@ -584,6 +584,61 @@ describe('room hub', () => {
     )
   })
 
+  it('returns the stack of a second seating that expires at the same hand number', async () => {
+    // Sitting down again before a hand is dealt used to give the second cash-out
+    // the first one's ledger reference, and the ledger skips a reference it has
+    // already applied.
+    vi.useFakeTimers()
+    const { hub, ledger } = setup(20)
+    for (const round of [1, 2]) {
+      const alice = await connectAndEnter(hub, 'alice', 'Alice')
+      await alice.connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId: `sit-${round}`,
+          command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+        }),
+      )
+      expect(ledger.balances.get(ALICE)).toBe(50_000)
+      await alice.connection.close()
+      await vi.advanceTimersByTimeAsync(21)
+      expect(ledger.balances.get(ALICE)).toBe(100_000)
+    }
+  })
+
+  it('retries a reconnect expiry that lands while seeds are being collected', async () => {
+    // The room removes nobody during seed collection. The expiry used to take
+    // that refusal as final, so the seat and its stack stayed at the table.
+    vi.useFakeTimers()
+    const { hub, ledger } = setup(20, 1_000)
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    for (const [client, seat, requestId] of [
+      [alice, 0, 'alice-sit'],
+      [bob, 1, 'bob-sit'],
+    ] as const) {
+      await client.connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId,
+          command: { kind: 'sit', seat, buyIn: 50_000 },
+        }),
+      )
+    }
+    await bob.connection.close()
+    await alice.connection.receive(
+      JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+    )
+    expect(alice.peer.last('snapshot')).toMatchObject({ view: { phase: 'seeding' } })
+    await vi.advanceTimersByTimeAsync(21)
+    await vi.advanceTimersByTimeAsync(5_000)
+    const last = alice.peer.last('snapshot')
+    if (last?.kind !== 'snapshot') throw new Error('expected a snapshot')
+    expect(last.view.seats.some((seat) => seat.playerId === BOB)).toBe(false)
+    // Dealt in before the retry landed, Bob can have lost at most the big blind.
+    expect(ledger.balances.get(BOB)).toBeGreaterThanOrEqual(100_000 - 500)
+  })
+
   it('announces an identity upgrade without moving a seat or ledger balance', async () => {
     const { hub, ledger } = setup()
     const first = await connectAndEnter(hub, 'alice', 'Alice')
@@ -849,6 +904,26 @@ describe('a table that stops existing', () => {
     // Called twice - a second signal, or a close racing a timeout - settles once.
     await hub.settleAllTables()
     expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
+
+  it('hands back a second seating at a table recreated after a restart', async () => {
+    // A recreated table counts hands from zero again, so settling a new seating
+    // at it used to repeat the previous settlement's ledger reference.
+    const ledger = new MemoryLedger()
+    for (const round of [1, 2]) {
+      const { hub } = setup(30_000, 0, undefined, undefined, undefined, 0, ledger)
+      const { connection } = await connectAndEnter(hub, 'alice', 'Alice')
+      await connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId: `sit-${round}`,
+          command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+        }),
+      )
+      expect(await ledger.balance(ALICE)).toBe(50_000)
+      await hub.settleAllTables()
+      expect(await ledger.balance(ALICE)).toBe(100_000)
+    }
   })
 })
 

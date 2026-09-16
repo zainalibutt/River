@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import {
   type BotPersonality,
   nextUtterance,
@@ -28,7 +28,7 @@ import { buyCosmetic, wearCosmetic } from './cosmetic-service.js'
 import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-service.js'
 import { claimDailyFor, claimRescueFor } from './economy-service.js'
 import { isFairnessSeed } from './fairness.js'
-import type { Ledger } from './ledger.js'
+import type { Ledger, LedgerEntry } from './ledger.js'
 import type {
   Emote,
   RoomCommand,
@@ -156,11 +156,34 @@ interface ConnectionState {
   identityUpgraded: boolean
 }
 
+/**
+ * How soon an expired seat is asked for again when the room cannot release it
+ * yet. The room removes nobody while a hand's seeds are collected, which lasts
+ * a moment at the start of every hand, so the first retry is short.
+ */
+const RELEASE_RETRY_MS = 1_000
+/** The longest wait between retries, so a ledger outage is not hammered. */
+const RELEASE_RETRY_MAX_MS = 30_000
+/** Attempts to return a stack before it is left to the error log. */
+const PAY_OUT_ATTEMPTS = 12
+
+function retryDelay(attempt: number): number {
+  return Math.min(RELEASE_RETRY_MS * 2 ** attempt, RELEASE_RETRY_MAX_MS)
+}
+
 interface RoomState {
   room: Room
   connections: Set<ConnectionState>
   queue: Promise<void>
   reconnectTimers: Map<string, ReturnType<typeof setTimeout>>
+  /**
+   * The request that seated each player, which names the seating in the ledger
+   * reference of whatever ends it. A reference built from the room, the player
+   * and the hand number repeated whenever someone sat again before the next
+   * hand, or at a table recreated after a restart, and the ledger skips a
+   * reference it has already applied: that stack was never paid back.
+   */
+  seatings: Map<string, string>
   seedTimer: ReturnType<typeof setTimeout> | null
   turnTimer: ReturnType<typeof setTimeout> | null
   /** Deals the next hand after the one that just finished. */
@@ -1145,6 +1168,8 @@ export class RoomHub {
         reason: `${reason}_refund`,
         ref: `${connection.roomId}:${requestId}:refund`,
       })
+    } else if (command.kind === 'sit') {
+      state.seatings.set(player.playerId, `${connection.roomId}:${requestId}`)
     }
     return result
   }
@@ -1261,6 +1286,7 @@ export class RoomHub {
       connections: new Set(),
       queue: Promise.resolve(),
       reconnectTimers: new Map(),
+      seatings: new Map(),
       seedTimer: null,
       turnTimer: null,
       socialActions: new Map(),
@@ -1290,12 +1316,12 @@ export class RoomHub {
    * that way: signup grant in, buy-in out, nothing back. On a deployed server
    * that is every seated player, every deploy.
    *
-   * Idempotent by ref, so a second call during the same hand settles once. A
-   * hard kill still loses them - the fix for that is reconciliation on startup,
-   * not a longer shutdown.
+   * Idempotent by ref, so a second call settles each seating once. A hard kill
+   * still loses them - the fix for that is reconciliation on startup, not a
+   * longer shutdown.
    */
   async settleAllTables(): Promise<void> {
-    for (const [roomId, state] of this.rooms) {
+    for (const state of this.rooms.values()) {
       const view = state.room.viewFor('')
       for (const seat of view.seats) {
         const playerId = seat.playerId
@@ -1307,7 +1333,7 @@ export class RoomHub {
             playerId,
             delta: seat.stack,
             reason: 'table_shutdown_cash_out',
-            ref: `${roomId}:shutdown:${playerId}:${view.handNumber}`,
+            ref: `${this.seatingRef(state, playerId)}:shutdown`,
           })
         } catch (error) {
           // One player's failure must not strand the rest of the table.
@@ -1317,36 +1343,99 @@ export class RoomHub {
     }
   }
 
-  private scheduleReconnectExpiry(state: RoomState, playerId: string): void {
+  /**
+   * Release a disconnected player's seat once their reconnect grace runs out.
+   *
+   * The room removes nobody while a hand's seeds are collected, and a refusal
+   * used to be final: the seat and its stack stayed at the table, posting
+   * blinds for somebody who had gone. It is now asked again until the seat is
+   * released or the player is back.
+   */
+  private scheduleReconnectExpiry(
+    state: RoomState,
+    playerId: string,
+    delayMs = state.room.config.reconnectGraceMs,
+    attempt = 0,
+  ): void {
     const existing = state.reconnectTimers.get(playerId)
     if (existing !== undefined) clearTimeout(existing)
     const timer = setTimeout(() => {
       void this.enqueue(state, async () => {
-        const view = state.room.viewFor(playerId)
-        const seat = view.seats.find((item) => item.playerId === playerId)
-        const stack = seat?.stack ?? 0
-        if (stack > 0) {
-          await this.ledger.apply({
-            playerId,
-            delta: stack,
-            reason: 'table_reconnect_expiry_cash_out',
-            ref: `${state.room.id}:reconnect-expiry:${playerId}:${view.handNumber}`,
-          })
-        }
-        const result = state.room.submit({ kind: 'expireReconnect', playerId })
-        if (!result.ok && stack > 0) {
-          await this.ledger.apply({
-            playerId,
-            delta: -stack,
-            reason: 'table_reconnect_expiry_cash_out_refund',
-            ref: `${state.room.id}:reconnect-expiry-refund:${playerId}:${view.handNumber}`,
-          })
-        }
-        if (result.ok) this.broadcast(state, null, result.events)
+        // A reconnect clears the timer, but not a callback that had already
+        // fired and was waiting in the queue behind it.
+        if (state.reconnectTimers.get(playerId) !== timer) return
         state.reconnectTimers.delete(playerId)
+        if (!(await this.releaseExpiredSeat(state, playerId))) {
+          this.scheduleReconnectExpiry(state, playerId, retryDelay(attempt), attempt + 1)
+        }
       })
-    }, state.room.config.reconnectGraceMs)
+    }, delayMs)
     state.reconnectTimers.set(playerId, timer)
+  }
+
+  /**
+   * Release an expired seat, then pay its stack back. False means the room
+   * cannot release it yet.
+   *
+   * Released first, the reverse of a stand. A stand has a player waiting on the
+   * answer, so a failed credit keeps their seat and tells them. Nobody waits on
+   * an expiry, and crediting first meant reversing the credit whenever the room
+   * refused, under a reference the next attempt would repeat.
+   */
+  private async releaseExpiredSeat(state: RoomState, playerId: string): Promise<boolean> {
+    const view = state.room.viewFor(playerId)
+    const seat = view.seats.find((item) => item.playerId === playerId)
+    if (seat !== undefined && !seat.disconnected) return true
+    if (view.phase === 'seeding') return false
+    const result = state.room.submit({ kind: 'expireReconnect', playerId })
+    if (!result.ok) {
+      // Without a seat nothing is at stake: the player is already gone, or back.
+      if (seat === undefined) return true
+      const rejected = result.events.find((event) => event.kind === 'rejected')
+      this.onError(
+        'releaseExpiredSeat: the room kept an expired seat',
+        new Error(rejected?.kind === 'rejected' ? rejected.message : 'rejected'),
+      )
+      return false
+    }
+    this.broadcast(state, null, result.events)
+    if (seat !== undefined && seat.stack > 0) {
+      await this.payOut({
+        playerId,
+        delta: seat.stack,
+        reason: 'table_reconnect_expiry_cash_out',
+        ref: `${this.seatingRef(state, playerId)}:expiry`,
+      })
+    }
+    return true
+  }
+
+  /**
+   * Return a stack to the bankroll that bought it, retrying until the ledger
+   * takes it. The reference names one seating, so a retry after a lost reply
+   * cannot pay twice.
+   */
+  private async payOut(entry: LedgerEntry, attempt = 0): Promise<void> {
+    try {
+      await this.ledger.apply(entry)
+    } catch (error) {
+      this.onError(`payOut: could not return ${entry.delta} chips`, error)
+      if (attempt + 1 >= PAY_OUT_ATTEMPTS) return
+      setTimeout(() => void this.payOut(entry, attempt + 1), retryDelay(attempt))
+    }
+  }
+
+  /**
+   * The ledger name of a player's current seating. Every person sits through a
+   * buy-in, which records one; a seat that somehow was not recorded gets one
+   * minted and kept, so settling it twice still settles once.
+   */
+  private seatingRef(state: RoomState, playerId: string): string {
+    const recorded = state.seatings.get(playerId)
+    if (recorded !== undefined) return recorded
+    const minted = `${state.room.id}:seat-${randomUUID()}`
+    state.seatings.set(playerId, minted)
+    return minted
   }
 
   private scheduleSeedFinalization(state: RoomState): void {
