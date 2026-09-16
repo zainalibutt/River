@@ -84,7 +84,7 @@ export function RiverTable() {
   const [raiseTo, setRaiseTo] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
-  const [twoColour, setTwoColour] = useState(false)
+  const [twoColour, setTwoColour] = useState(true)
   const [tvMode, setTvMode] = useState(false)
   const [stageScale, setStageScale] = useState(2 / 3)
   const timers = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -282,7 +282,7 @@ export function RiverTable() {
   const status = playerMessage(view.message) ?? (view.phase === 'between' ? outcome : null)
 
   return (
-    <main className={twoColour ? 'river-app deck-two-colour' : 'river-app'}>
+    <main className={twoColour ? 'river-app' : 'river-app deck-four-colour'}>
       <div className="stage-fit">
         <section
           className="river-stage three-dimensional"

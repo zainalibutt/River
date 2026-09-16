@@ -4012,3 +4012,262 @@ button.verify-pill.verify-mismatch {
 .raise-knob circle {
   fill: url(#raise-brass);
 }
+
+/* ------------------------------------------------------------------------ */
+/* Two colours. Red hearts and diamonds, black spades and clubs, as a deck in
+   the hand. The four-colour deck stays available on the practice table behind
+   .deck-four-colour. */
+:root {
+  --river-suit-diamond: var(--river-suit-heart);
+  --river-suit-club: var(--river-suit-spade);
+}
+
+.deck-four-colour {
+  --river-suit-diamond: #2a64a0;
+  --river-suit-club: #1c6b3e;
+}
+
+/* The HUD layer ignores the pointer so the camera can be orbited through it.
+   Anything you press or drag has to take the pointer back, and the raise arc is
+   a div rather than a button, so the knob could not be dragged at all: the drag
+   fell through and orbited the camera instead. */
+.action-menu,
+.raise-layer,
+.table-cluster {
+  pointer-events: auto;
+}
+
+/* The sit target is the chair in the room now. The HUD seat button stays in the
+   page, invisible and out of the pointer's way, so a keyboard can still reach
+   it; it only shows itself while focused. */
+.open-seat {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.open-seat:focus-within {
+  opacity: 1;
+}
+
+.table-cluster {
+  position: absolute;
+  bottom: 118px;
+  left: 92px;
+  z-index: 21;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.hero-cards {
+  position: relative;
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  gap: 4px;
+  touch-action: none;
+}
+
+.hero-cards .playing-card,
+.hero-cards .card-back {
+  width: 76px;
+  height: 106px;
+  border-radius: 7px;
+  animation: none;
+}
+
+.hero-cards .playing-card > span:first-child {
+  top: 5px;
+  left: 7px;
+  font-size: 30px;
+}
+
+.hero-cards .playing-card > b {
+  font-size: 34px;
+}
+
+.hero-cards .playing-card .card-corner {
+  right: 6px;
+  bottom: 5px;
+  font-size: 18px;
+}
+
+/* A card back rather than a blank: a wine field inside a lit brass frame with
+   the monogram at the centre. */
+.hero-cards .card-back {
+  display: grid;
+  border: 2px solid transparent;
+  background:
+    repeating-linear-gradient(45deg, rgb(255 230 190 / 5%) 0 2px, transparent 2px 7px) padding-box,
+    radial-gradient(circle at 50% 40%, #6f3140, #3c1720 80%) padding-box,
+    var(--river-brass-lit) border-box;
+  box-shadow:
+    0 6px 14px rgb(0 0 0 / 55%),
+    inset 0 0 0 3px rgb(20 8 12 / 55%);
+  color: #e4c48b;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 26px;
+  font-style: italic;
+  place-items: center;
+  transition: transform 140ms var(--ease-out);
+}
+
+.hero-cards:hover .card-back {
+  transform: translateY(-3px);
+}
+
+.hero-cards .card-back:last-child {
+  transform: rotate(6deg) translateY(2px);
+}
+
+.hero-cards:hover .card-back:last-child {
+  transform: rotate(6deg) translateY(-1px);
+}
+
+/* Peeking: the faces, a warm glow behind them, and the hand lifted a touch. */
+.hero-cards.peeking::before {
+  position: absolute;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 30% 55%, rgb(255 201 107 / 70%), transparent 55%),
+    radial-gradient(ellipse at 72% 40%, rgb(232 169 60 / 55%), transparent 50%),
+    radial-gradient(circle at 50% 50%, rgb(255 214 150 / 35%), transparent 70%);
+  content: "";
+  filter: blur(6px);
+  inset: -22px -26px;
+}
+
+.hero-cards.peeking .playing-card {
+  box-shadow:
+    0 0 0 1px rgb(255 214 150 / 70%),
+    0 10px 22px rgb(0 0 0 / 55%);
+  transform: translateY(-4px);
+}
+
+/* Folded: the faces, greyed, under a red cross. */
+.hero-cards.folded .playing-card {
+  filter: grayscale(0.85) brightness(0.72);
+}
+
+.fold-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 62px;
+  height: 62px;
+  border: 4px solid rgb(214 72 58 / 88%);
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-12deg);
+}
+
+.fold-stamp::before,
+.fold-stamp::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgb(214 72 58 / 92%);
+  content: "";
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.fold-stamp::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.cluster-chips,
+.cluster-pot {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  color: var(--river-amber-bright);
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 30px;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: 700;
+  gap: 10px;
+  line-height: 1;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 85%);
+}
+
+.cluster-chips i {
+  width: 22px;
+  height: 22px;
+  border: 4px dotted var(--river-cream-dim);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 45%);
+}
+
+.cluster-pot i {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--river-brass-lit);
+  box-shadow:
+    inset 0 0 0 4px rgb(0 0 0 / 22%),
+    inset 0 0 0 6px rgb(255 226 170 / 35%),
+    0 2px 5px rgb(0 0 0 / 60%);
+}
+
+.cluster-board {
+  display: flex;
+  padding-left: 2px;
+}
+
+.cluster-board-card {
+  margin-right: -8px;
+  animation: board-card-in 320ms var(--ease-out) both;
+}
+
+.cluster-board-card:nth-child(odd) {
+  rotate: -2deg;
+}
+
+.cluster-board-card:nth-child(even) {
+  rotate: 1.5deg;
+}
+
+.cluster-board .playing-card {
+  width: 60px;
+  height: 84px;
+  border-radius: 6px;
+  animation: none;
+}
+
+.cluster-board .playing-card > span:first-child {
+  top: 4px;
+  left: 6px;
+  font-size: 24px;
+}
+
+.cluster-board .playing-card > b {
+  font-size: 26px;
+}
+
+.cluster-board .playing-card .card-corner {
+  display: none;
+}
+
+@keyframes board-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.9);
+  }
+}
+
+.cluster-readout {
+  margin: 0;
+  color: var(--river-amber);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 80%);
+  text-transform: uppercase;
+}

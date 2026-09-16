@@ -38,8 +38,9 @@ Confirmed by Zain: in the reference you cannot peek under a card in the world. T
 
 | Property | Value |
 |---|---|
-| Location | Local player area, lower frame — never centre table |
-| Size | 168 x 235 base-canvas pixels |
+| Location | The table cluster at the lower left: your cards, your chips, the board dealt one card at a time, then the pot |
+| Size | 76 x 106 base-canvas pixels |
+| Default | Face down. Pressing and holding the cards, or holding Space, shows the faces with a warm glow. A folded hand shows its faces greyed under a red cross |
 | Faces | Four-colour deck, rank-dominant |
 | Privacy | Never transmitted to other clients |
 | Peek | Held input emphasises them and drives the avatar animation (`06-interaction.md`) |

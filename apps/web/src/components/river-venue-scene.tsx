@@ -72,6 +72,9 @@ type SceneProps = {
   heroSeat?: number | null | undefined
   /** Dev-review seat framed from inside the table for a face-side close read. */
   reviewSeat?: number | null | undefined
+  /** Empty seats the local player may take; hovering one lights its chair. */
+  sittableSeats?: readonly number[] | undefined
+  onSit?: ((seat: number) => void) | undefined
 }
 
 /**
@@ -88,6 +91,8 @@ export interface SeatAnchors {
   /** World points, fixed at load: chairs do not move. */
   chairs: Map<number, THREE.Vector3>
   heads: Map<number, THREE.Object3D>
+  /** The chair nodes themselves, for hover and glow. */
+  chairObjects: Map<number, THREE.Object3D>
 }
 
 /**
@@ -196,6 +201,136 @@ function Seats({
   return <group />
 }
 
+const NO_SEATS: readonly number[] = []
+
+/**
+ * The glow on a chair you can sit in.
+ *
+ * The sit target used to be a disc of HUD over the chair with a buy-in on it.
+ * The chair itself is the target now: point at an empty chair you can afford
+ * and it lights green, press it and you sit. Only the chairs of sittable seats
+ * are raycast, and only while the pointer is over the canvas, so the cost is a
+ * handful of low-poly chairs rather than the whole venue on every move.
+ */
+const CHAIR_GLOW = new THREE.Color('#5fd08e')
+const CHAIR_GLOW_INTENSITY = 0.42
+/** A press that travels further than this is an orbit drag, not a click. */
+const CLICK_SLOP = 6
+
+function withinObject(node: THREE.Object3D | null, ancestor: THREE.Object3D): boolean {
+  for (let current = node; current !== null; current = current.parent) {
+    if (current === ancestor) return true
+  }
+  return false
+}
+
+function glowChair(chair: THREE.Object3D | undefined, on: boolean): void {
+  chair?.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return
+    if (node.userData.riverBaseMaterial === undefined)
+      node.userData.riverBaseMaterial = node.material
+    const base = node.userData.riverBaseMaterial as THREE.Material | THREE.Material[]
+    if (!on) {
+      node.material = base
+      return
+    }
+    // Chairs share materials, so the glow is a clone per mesh; lighting the
+    // shared material would light every chair in the room.
+    if (node.userData.riverGlowMaterial === undefined) {
+      const lit = (material: THREE.Material) => {
+        const clone = material.clone()
+        if (clone instanceof THREE.MeshStandardMaterial) {
+          clone.emissive = CHAIR_GLOW.clone()
+          clone.emissiveIntensity = CHAIR_GLOW_INTENSITY
+        }
+        return clone
+      }
+      node.userData.riverGlowMaterial = Array.isArray(base) ? base.map(lit) : lit(base)
+    }
+    node.material = node.userData.riverGlowMaterial as THREE.Material | THREE.Material[]
+  })
+}
+
+function ChairHighlight({
+  anchors,
+  sittableSeats,
+  onSit,
+}: {
+  anchors: RefObject<SeatAnchors | null>
+  sittableSeats: readonly number[]
+  onSit: ((seat: number) => void) | undefined
+}) {
+  const { camera, gl, pointer } = useThree()
+  const raycaster = useMemo(() => new THREE.Raycaster(), [])
+  const lit = useRef<number | null>(null)
+  const inside = useRef(false)
+  const latest = useRef({ sittableSeats, onSit })
+  latest.current = { sittableSeats, onSit }
+
+  useEffect(() => {
+    const canvas = gl.domElement
+    let pressed: { x: number; y: number } | null = null
+    const enter = () => {
+      inside.current = true
+    }
+    const leave = () => {
+      inside.current = false
+    }
+    const press = (event: PointerEvent) => {
+      pressed = { x: event.clientX, y: event.clientY }
+    }
+    const release = (event: PointerEvent) => {
+      const start = pressed
+      pressed = null
+      if (start === null) return
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP) return
+      const seat = lit.current
+      if (seat !== null && latest.current.sittableSeats.includes(seat)) latest.current.onSit?.(seat)
+    }
+    canvas.addEventListener('pointerenter', enter)
+    canvas.addEventListener('pointermove', enter)
+    canvas.addEventListener('pointerleave', leave)
+    canvas.addEventListener('pointerdown', press)
+    canvas.addEventListener('pointerup', release)
+    return () => {
+      canvas.removeEventListener('pointerenter', enter)
+      canvas.removeEventListener('pointermove', enter)
+      canvas.removeEventListener('pointerleave', leave)
+      canvas.removeEventListener('pointerdown', press)
+      canvas.removeEventListener('pointerup', release)
+      canvas.style.cursor = ''
+    }
+  }, [gl])
+
+  useFrame(() => {
+    const found = anchors.current
+    const sittable = latest.current.sittableSeats
+    let next: number | null = null
+    if (found !== null && sittable.length > 0 && inside.current) {
+      const chairs = sittable.flatMap((seat) => {
+        const chair = found.chairObjects.get((seat + 1) % SEAT_SLOTS)
+        return chair === undefined ? [] : [{ seat, chair }]
+      })
+      raycaster.setFromCamera(pointer, camera)
+      const hit = raycaster.intersectObjects(
+        chairs.map((entry) => entry.chair),
+        true,
+      )[0]
+      if (hit !== undefined) {
+        next = chairs.find((entry) => withinObject(hit.object, entry.chair))?.seat ?? null
+      }
+    }
+    if (next === lit.current) return
+    if (lit.current !== null)
+      glowChair(found?.chairObjects.get((lit.current + 1) % SEAT_SLOTS), false)
+    if (next !== null) glowChair(found?.chairObjects.get((next + 1) % SEAT_SLOTS), true)
+    lit.current = next
+    gl.domElement.style.cursor = next === null ? '' : 'pointer'
+  })
+
+  return null
+}
+
 const seatIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 
 type SeatRig = { seat: number; boneNames: string[] }
@@ -283,12 +418,14 @@ function VenueAsset({
   useLayoutEffect(() => {
     const chairs = new Map<number, THREE.Vector3>()
     const heads = new Map<number, THREE.Object3D>()
+    const chairObjects = new Map<number, THREE.Object3D>()
     asset.scene.updateMatrixWorld(true)
     const bounds = new THREE.Box3()
     asset.scene.traverse((object) => {
       const chair = /chair_(\d+)$/.exec(object.name)
       if (chair !== null && !chairs.has(Number(chair[1]))) {
         bounds.setFromObject(object)
+        chairObjects.set(Number(chair[1]), object)
         const centre = bounds.getCenter(new THREE.Vector3())
         chairs.set(
           Number(chair[1]),
@@ -303,7 +440,7 @@ function VenueAsset({
         if (head !== undefined) heads.set(seat, head)
       })
     })
-    anchors.current = { chairs, heads }
+    anchors.current = { chairs, heads, chairObjects }
     return () => {
       anchors.current = null
     }
@@ -980,6 +1117,8 @@ function Scene({
   seatChips = [],
   heroSeat,
   reviewSeat,
+  sittableSeats = NO_SEATS,
+  onSit,
 }: SceneProps) {
   const [sidecar, setSidecar] = useState<LightingSidecar>({})
   const anchors = useRef<SeatAnchors | null>(null)
@@ -1009,6 +1148,7 @@ function Scene({
       </Suspense>
       <InstancedTablePieces seatChips={seatChips} />
       <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} anchors={anchors} />
+      <ChairHighlight anchors={anchors} sittableSeats={sittableSeats} onSit={onSit} />
       <CameraOrbit venueId={venueId} heroSeat={heroSeat ?? null} reviewSeat={reviewSeat ?? null} />
     </>
   )
@@ -1023,6 +1163,8 @@ export function RiverScene({
   seatChips,
   heroSeat,
   reviewSeat,
+  sittableSeats,
+  onSit,
 }: SceneProps) {
   const venue = venueOf(venueId)
   return (
@@ -1104,6 +1246,8 @@ export function RiverScene({
         seatChips={seatChips}
         heroSeat={heroSeat}
         reviewSeat={reviewSeat}
+        sittableSeats={sittableSeats}
+        onSit={onSit}
       />
     </Canvas>
   )

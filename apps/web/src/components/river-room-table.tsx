@@ -8,7 +8,6 @@ import {
   type HandRecord,
   itemCatalogue,
   type ShowdownReel,
-  type Street,
   showdownReel,
   type TableSummary,
   type TurnAction,
@@ -561,7 +560,7 @@ export function RiverRoomTable() {
         current.phase === 'hand' && current.seats.some((seat) => seat.playerId === current.selfId)
       if (event.key === 'Tab' && inHand) {
         event.preventDefault()
-        if (!event.repeat) setPlatesHeld((current) => !current)
+        setPlatesHeld(true)
       }
       if (event.key.toLowerCase() === 'c') {
         if (view.legal?.check.enabled) command({ kind: 'act', action: { kind: 'check' } })
@@ -570,7 +569,7 @@ export function RiverRoomTable() {
     }
     const up = (event: KeyboardEvent) => {
       if (event.code === 'Space') setPeek(false)
-      if (event.key === 'Shift') setPlatesHeld(false)
+      if (event.key === 'Shift' || event.key === 'Tab') setPlatesHeld(false)
     }
     // A key held when the window loses focus never sends its keyup, so the
     // plates would stay up for good after an alt-tab.
@@ -792,6 +791,14 @@ export function RiverRoomTable() {
               seatIds={sceneSeatIds}
               seatRefs={seatRefs}
               heroSeat={selfSeat?.seat ?? null}
+              sittableSeats={
+                selfSeat !== null || entryBuyIn === null
+                  ? []
+                  : view.seats.filter((seat) => seat.playerId === null).map((seat) => seat.seat)
+              }
+              onSit={(seat) => {
+                if (entryBuyIn !== null) command({ kind: 'sit', seat, buyIn: entryBuyIn })
+              }}
             />
           ) : null}
           <div className={`hud-layer${platesHeld ? ' plates-held' : ''}`}>
@@ -1144,11 +1151,6 @@ export function RiverRoomTable() {
                 CHAT
               </button>
             </div>
-            <div className="pot-readout" role="status" aria-label={`Pot ${view.pot}`}>
-              <span>POT</span>
-              <strong>{formatAmount(view.pot, false)}</strong>
-            </div>
-            <Board cards={view.board} street={view.street} />
             {showdownBeat === null ? null : (
               <div className="showdown-card" role="status" aria-live="polite">
                 {showdownBeat.kind === 'name' ? (
@@ -1173,7 +1175,7 @@ export function RiverRoomTable() {
                 ) : null}
               </div>
             )}
-            <HeroHand view={view} peek={peek} />
+            <TableCluster view={view} peek={peek} onPeek={setPeek} />
             {/* `populated` is what paints the glass, so it has to follow the
                 text rather than be hardcoded. It was always on, and during a
                 live hand the copy resolves to an empty string, which left a lit
@@ -1389,57 +1391,81 @@ function kickCopy(reason: Exclude<KickState, null>['reason']): string {
   return 'This table is open in another window.'
 }
 
-function Board({ cards, street }: { cards: Card[]; street: Street }) {
-  return (
-    <section className="board" aria-label={`${street}, ${cards.length} community cards`}>
-      <span className="street-label">{street.toUpperCase()}</span>
-      <div className="board-cards">
-        {boardSlots.map((slot, index) =>
-          cards[index] === undefined ? (
-            <div className="card-well" key={slot} />
-          ) : (
-            <PlayingCard card={cards[index]} key={slot} />
-          ),
-        )}
-      </div>
-    </section>
-  )
-}
-
 /**
- * Your own hand, in one place.
+ * Everything about your own position, in one cluster at the lower left.
  *
- * These used to hang off the hero's seat marker at left: -278px, and the seat
- * marker is positioned from the seat's projected 3D position - so orbiting the
- * camera swung your own cards across the screen and sometimes off the edge of
- * it. The two things a player looks at most, their hole cards and what those
- * cards currently make, were the two things that would not hold still.
+ * Your two cards, your chips, the board and the pot used to be spread across
+ * the screen: the board and pot sat in the middle of the table over the felt,
+ * and the hand sat on its own in the corner. They now read top to bottom as one
+ * column, the way the reference groups them, and nothing sits over the table.
  *
- * docs/design/22-shot-composition.md measured this off the reference and asked
- * for it explicitly: a bottom-left block carrying the hole cards, and hero
- * cards DOM-only rather than tracked in world space. Everyone else keeps card
- * backs at their seat, because whose cards those are is exactly the
- * information a world-space position carries.
+ * Your cards stay face down until you press and hold them, or hold Space,
+ * because in the room nobody reads their cards by leaving them face up. A folded
+ * hand shows its faces greyed under a cross.
  */
-function HeroHand({ view, peek }: { view: RoomView; peek: boolean }) {
+function TableCluster({
+  view,
+  peek,
+  onPeek,
+}: {
+  view: RoomView
+  peek: boolean
+  onPeek: (held: boolean) => void
+}) {
   const hero = view.seats.find((seat) => seat.playerId === view.selfId)
-  if (hero === undefined || !hero.hasHole) return null
-  const readout = readoutFor(hero.hole ?? [], view.board)
+  const holding = hero?.hasHole && hero.hole !== null
+  const showFaces = holding && (peek || hero?.folded === true)
+  const readout = holding && showFaces ? readoutFor(hero?.hole ?? [], view.board) : null
   return (
-    <section className="hero-hand" aria-label="Your hand">
-      <div className="hero-hand-cards">
-        {hero.hole === null ? (
-          <>
-            <CardBack />
-            <CardBack />
-          </>
-        ) : (
-          hero.hole.map((card) => (
-            <PlayingCard key={`${card.rank}${card.suit}`} card={card} peek={peek} />
-          ))
-        )}
-      </div>
-      {readout === null ? null : <p className="hero-hand-readout">{readout.full}</p>}
+    <section className="table-cluster" aria-label="Your hand, chips, board and pot">
+      {hero?.hasHole ? (
+        <button
+          type="button"
+          className={`hero-cards${peek ? ' peeking' : ''}${hero.folded ? ' folded' : ''}`}
+          aria-label={peek ? 'Your cards' : 'Press and hold to look at your cards'}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId)
+            onPeek(true)
+          }}
+          onPointerUp={() => onPeek(false)}
+          onPointerCancel={() => onPeek(false)}
+          onLostPointerCapture={() => onPeek(false)}
+        >
+          {showFaces && hero.hole !== null
+            ? hero.hole.map((card) => <PlayingCard key={`${card.rank}${card.suit}`} card={card} />)
+            : [<CardBack key="first" />, <CardBack key="second" />]}
+          {hero.folded ? <span className="fold-stamp" aria-hidden="true" /> : null}
+        </button>
+      ) : null}
+      {hero === undefined ? null : (
+        <p className="cluster-chips">
+          <i aria-hidden="true" />
+          {formatAmount(hero.stack, true)}
+        </p>
+      )}
+      {view.board.length === 0 ? null : (
+        <section
+          className="cluster-board"
+          aria-label={`${view.street}, ${view.board.length} community cards`}
+        >
+          {view.board.map((card, index) => (
+            // The flop arrives as three cards in one message; each lands a beat
+            // after the last so it reads as dealt rather than appearing at once.
+            <div
+              className="cluster-board-card"
+              key={boardSlots[index] ?? `${card.rank}${card.suit}`}
+              style={{ animationDelay: index < 3 ? `${index * 280}ms` : '0ms' }}
+            >
+              <PlayingCard card={card} />
+            </div>
+          ))}
+        </section>
+      )}
+      <p className="cluster-pot" role="status" aria-label={`Pot ${view.pot}`}>
+        <i aria-hidden="true" />
+        {formatAmount(view.pot, true)}
+      </p>
+      {readout === null ? null : <p className="cluster-readout">{readout.full}</p>}
     </section>
   )
 }

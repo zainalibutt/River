@@ -24,6 +24,9 @@ type RiverVenueProps = {
   seatChips?: readonly SeatChips[] | undefined
   heroSeat?: number | null | undefined
   reviewSeat?: number | null | undefined
+  /** Empty seats the local player may take; hovering one lights its chair. */
+  sittableSeats?: readonly number[] | undefined
+  onSit?: ((seat: number) => void) | undefined
 }
 
 export function RiverVenue({
@@ -35,6 +38,8 @@ export function RiverVenue({
   seatChips,
   heroSeat,
   reviewSeat,
+  sittableSeats,
+  onSit,
 }: RiverVenueProps) {
   return (
     <RiverScene
@@ -46,6 +51,8 @@ export function RiverVenue({
       seatChips={seatChips}
       heroSeat={heroSeat}
       reviewSeat={reviewSeat}
+      sittableSeats={sittableSeats}
+      onSit={onSit}
     />
   )
 }
