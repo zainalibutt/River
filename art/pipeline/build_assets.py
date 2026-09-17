@@ -1299,6 +1299,13 @@ PROOF_RAIL_EDGE = 0.1519
 NATIVE_SILVER_SCALE = (TABLE_TOP - SEAT_H) / (PROOF_FELT_HEIGHT - PROOF_PAN_HEIGHT)
 NATIVE_SILVER_LIFT = SEAT_H - NATIVE_SILVER_SCALE * PROOF_PAN_HEIGHT
 NATIVE_SILVER_RAIL_REACH = NATIVE_SILVER_SCALE * PROOF_RAIL_EDGE
+# Set back from the proof reach. At the proof reach his chest meets this rail - it bulges
+# towards him where the proof rail was a flat face - and his knees reach 101mm into the
+# base's flare. Swept across all eight seats and the seated clips, 60mm back clears the
+# chest and 120mm the knees. His forearms still pass through the raised rail at every
+# set-back measured: this rail stands about 50mm above the felt, and the proof rail the
+# clips were made on was level with it. That is the table's to change, not the placement's.
+NATIVE_SILVER_SET_BACK = 0.12
 NATIVE_SILVER_BACKREST_CONTACT = 0.005
 
 
@@ -1375,8 +1382,8 @@ def build_native_silver_seats(venue, path):
                                      [tuple(p.vertices) for p in mesh.polygons])
     evaluated.to_mesh_clear()
     band = (SEAT_H + 0.06, SEAT_H + 0.42)
-    print('SILVER scale=%.5f lift=%.4fm rail reach=%.4fm'
-          % (NATIVE_SILVER_SCALE, NATIVE_SILVER_LIFT, NATIVE_SILVER_RAIL_REACH))
+    print('SILVER scale=%.5f lift=%.4fm rail reach=%.4fm set back=%.3fm'
+          % (NATIVE_SILVER_SCALE, NATIVE_SILVER_LIFT, NATIVE_SILVER_RAIL_REACH, NATIVE_SILVER_SET_BACK))
     ring = character_seat_positions(venue)
     for seat_index in range(NATIVE_SILVER_SEATS):
         # Seat n sits in chair n + 1; chair 0 is the dealer's.
@@ -1386,7 +1393,7 @@ def build_native_silver_seats(venue, path):
         edge = rail_edge_distance(rail_tree, (x, y), (-outward.x, -outward.y))
         if edge is None:
             raise SystemExit('FAIL: seat %d found no rail in front of it' % seat_index)
-        shift = edge - NATIVE_SILVER_RAIL_REACH
+        shift = edge - NATIVE_SILVER_RAIL_REACH - NATIVE_SILVER_SET_BACK
         origin_x, origin_y = x - outward.x * shift, y - outward.y * shift
         angle = math.atan2(-origin_x, origin_y)
         root = bpy.data.objects.new('river_character_%02d' % seat_index, None)
