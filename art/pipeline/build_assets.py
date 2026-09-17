@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 from mathutils.bvhtree import BVHTree
 
 import check_assets as checker
@@ -1277,7 +1277,176 @@ def duplicate_native_gold(template, seat_index, x, y, angle):
     return root
 
 
+# The native Silver cast.
+#
+# The browser instances one Silver character per occupied seat from his own GLB, so this
+# venue carries where each seat's character goes rather than the character. Eight copies
+# baked into the venue file would be 537,408 triangles and 184 draw calls before any
+# furniture, more than twice the scene triangle budget below.
+#
+# The placement reproduces the stage the Silver clips were reviewed on. Measured in the
+# character's own units on 17 September, the A21 proof chair's pan is 480.2mm and its felt
+# 793.5mm above the character origin, and the proof rail's near edge is 151.9mm in front of
+# it. Scaling the character so that pan-to-felt matches this table's puts the seat and the
+# felt at the heights every clip expects, and each origin is then set back from its own
+# seat's rail by the proof reach at that scale - the table is an ellipse, so that distance
+# is different at every seat. This is the candidate check_silver_seating.py measures every
+# clip against; it is not a claim that the contacts are right.
+NATIVE_SILVER_SEATS = 8
+PROOF_PAN_HEIGHT = 0.4802
+PROOF_FELT_HEIGHT = 0.7935
+PROOF_RAIL_EDGE = 0.1519
+NATIVE_SILVER_SCALE = (TABLE_TOP - SEAT_H) / (PROOF_FELT_HEIGHT - PROOF_PAN_HEIGHT)
+NATIVE_SILVER_LIFT = SEAT_H - NATIVE_SILVER_SCALE * PROOF_PAN_HEIGHT
+NATIVE_SILVER_RAIL_REACH = NATIVE_SILVER_SCALE * PROOF_RAIL_EDGE
+NATIVE_SILVER_BACKREST_CONTACT = 0.005
+
+
+def import_native_silver(path):
+    """The exported Silver character, posed on the first frame of his idle, and his points.
+
+    Imported only to measure against. The venue file does not ship him.
+    """
+    if not os.path.exists(path):
+        raise SystemExit('FAIL: missing native Silver character ' + path)
+    objects_before = set(bpy.data.objects)
+    actions_before = set(bpy.data.actions)
+    bpy.ops.import_scene.gltf(filepath=path)
+    imported = [obj for obj in bpy.data.objects if obj not in objects_before]
+    rig = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
+    # Only what hangs off the rig. The glTF importer adds a unit icosphere of its own to
+    # draw bones with; counted as part of him, it put his back half a metre behind his
+    # chair and failed the backrest measurement at every seat.
+    meshes = [obj for obj in imported if obj.type == 'MESH' and obj.parent is not None and obj.parent == rig]
+    if rig is None or len(meshes) != 20:
+        raise SystemExit('FAIL: the native Silver character has no rig or not 20 meshes (%d)' % len(meshes))
+    # A rig without this flag did not come through export_silver_integration.py, and
+    # nothing else guarantees its clips carry their own seated pose.
+    if not rig.get('riverSeatedBaked'):
+        raise SystemExit('FAIL: the native Silver rig does not carry riverSeatedBaked')
+    idle, slot = None, None
+    for track in (rig.animation_data.nla_tracks if rig.animation_data else []):
+        for strip in track.strips:
+            named = strip.action.name if strip.action is not None else ''
+            if 'IDLE_thinking_readable' in (track.name, strip.name) or named.startswith('IDLE_thinking_readable'):
+                idle, slot = strip.action, getattr(strip, 'action_slot', None)
+        track.mute = True
+    if idle is None:
+        raise SystemExit('FAIL: the native Silver character has no IDLE_thinking_readable')
+    rig.animation_data.action = idle
+    if slot is not None:
+        rig.animation_data.action_slot = slot
+    bpy.context.scene.frame_set(0)
+    bpy.context.view_layer.update()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    points = []
+    for obj in meshes:
+        evaluated = obj.evaluated_get(depsgraph)
+        mesh = evaluated.to_mesh()
+        points.extend(evaluated.matrix_world @ vertex.co for vertex in mesh.vertices)
+        evaluated.to_mesh_clear()
+    imported_actions = [action for action in bpy.data.actions if action not in actions_before]
+    return imported, imported_actions, points
+
+
+def rail_edge_distance(rail_tree, seat_xy, inward):
+    """How far in front of a seat the rail's nearest face is, over the heights a forearm crosses it."""
+    nearest = None
+    for step in range(21):
+        origin = Vector((seat_xy[0], seat_xy[1], TABLE_TOP - 0.02 + step * 0.005))
+        location, _normal, _index, distance = rail_tree.ray_cast(origin, Vector((inward[0], inward[1], 0.0)), 3.0)
+        if location is not None and (nearest is None or distance < nearest):
+            nearest = distance
+    return nearest
+
+
+def build_native_silver_seats(venue, path):
+    if venue['id'] != 'rooftop':
+        raise SystemExit('FAIL: the native Silver cast is Rooftop-only')
+    imported, imported_actions, points = import_native_silver(path)
+    rail = bpy.data.objects.get('river_%s_table_rail' % venue['id'])
+    if rail is None:
+        raise SystemExit('FAIL: no rail to seat the native Silver cast against')
+    bpy.context.view_layer.update()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    evaluated = rail.evaluated_get(depsgraph)
+    mesh = evaluated.to_mesh()
+    rail_tree = BVHTree.FromPolygons([evaluated.matrix_world @ v.co for v in mesh.vertices],
+                                     [tuple(p.vertices) for p in mesh.polygons])
+    evaluated.to_mesh_clear()
+    band = (SEAT_H + 0.06, SEAT_H + 0.42)
+    print('SILVER scale=%.5f lift=%.4fm rail reach=%.4fm'
+          % (NATIVE_SILVER_SCALE, NATIVE_SILVER_LIFT, NATIVE_SILVER_RAIL_REACH))
+    ring = character_seat_positions(venue)
+    for seat_index in range(NATIVE_SILVER_SEATS):
+        # Seat n sits in chair n + 1; chair 0 is the dealer's.
+        x, y = ring[seat_index + 1]
+        radius = math.hypot(x, y)
+        outward = Vector((x / radius, y / radius, 0.0))
+        edge = rail_edge_distance(rail_tree, (x, y), (-outward.x, -outward.y))
+        if edge is None:
+            raise SystemExit('FAIL: seat %d found no rail in front of it' % seat_index)
+        shift = edge - NATIVE_SILVER_RAIL_REACH
+        origin_x, origin_y = x - outward.x * shift, y - outward.y * shift
+        angle = math.atan2(-origin_x, origin_y)
+        root = bpy.data.objects.new('river_character_%02d' % seat_index, None)
+        bpy.context.scene.collection.objects.link(root)
+        root.location = (origin_x, origin_y, NATIVE_SILVER_LIFT)
+        root.rotation_euler = (0.0, 0.0, angle)
+        root.scale = (NATIVE_SILVER_SCALE,) * 3
+        root['seatIndex'] = seat_index
+        root['riverCast'] = 'native_silver'
+        placement = (Matrix.Translation((origin_x, origin_y, NATIVE_SILVER_LIFT))
+                     @ Matrix.Rotation(angle, 4, 'Z')
+                     @ Matrix.Diagonal((NATIVE_SILVER_SCALE,) * 3 + (1.0,)))
+
+        # The chair follows the man, not the ring: its backrest goes to his back.
+        chair = bpy.data.objects.get('%s_chair_%d' % (venue['id'], seat_index + 1))
+        if chair is None:
+            raise SystemExit('FAIL: seat %d has no chair' % seat_index)
+        bpy.context.view_layer.update()
+        backs = []
+        for point in points:
+            placed = placement @ point
+            if band[0] <= placed.z <= band[1]:
+                backs.append(placed.x * outward.x + placed.y * outward.y)
+        seat_axis = Vector((chair.location.x, chair.location.y, 0.0)).dot(outward)
+        rests = []
+        for vertex in chair.data.vertices:
+            point = chair.matrix_world @ vertex.co
+            if band[0] <= point.z <= band[1]:
+                along = Vector((point.x, point.y, 0.0)).dot(outward)
+                if along > seat_axis:
+                    rests.append(along)
+        if not backs or not rests:
+            raise SystemExit('FAIL: seat %d has no back or backrest in the contact band' % seat_index)
+        gap = min(rests) - max(backs) - NATIVE_SILVER_BACKREST_CONTACT
+        if abs(gap) > 0.25:
+            raise SystemExit('FAIL: seat %d measured a %.0fmm backrest gap, too large to be one: '
+                             'origin %.3f, back %.3f, backrest %.3f, chair centre %.3f along the seat axis, '
+                             '%d back points'
+                             % (seat_index, gap * 1000.0, origin_x * outward.x + origin_y * outward.y,
+                                max(backs), min(rests), seat_axis, len(backs)))
+        chair.location.x -= outward.x * gap
+        chair.location.y -= outward.y * gap
+        chair_radius = math.hypot(chair.location.x, chair.location.y)
+        rail_radius = 1.0 / math.sqrt((outward.x / RAIL_X) ** 2 + (outward.y / RAIL_Y) ** 2)
+        if chair_radius <= rail_radius:
+            raise SystemExit('FAIL: seating %d put its chair at %.3f, inside the rail at %.3f'
+                             % (seat_index, chair_radius, rail_radius))
+        print('SILVER seat %d rail edge %.0fmm, origin %+.0fmm and chair %+.0fmm towards the table'
+              % (seat_index, edge * 1000.0, shift * 1000.0, gap * 1000.0))
+
+    for obj in imported:
+        bpy.data.objects.remove(obj, do_unlink=True)
+    for action in imported_actions:
+        bpy.data.actions.remove(action)
+
+
 def build_venue_characters(venue):
+    if os.environ.get('RIVER_NATIVE_SILVER_ASSET'):
+        build_native_silver_seats(venue, os.environ['RIVER_NATIVE_SILVER_ASSET'])
+        return
     if os.environ.get('RIVER_NATIVE_GOLD_ONLY') == '1':
         if venue['id'] != 'rooftop':
             raise SystemExit('FAIL: native gold isolation is Rooftop-only')

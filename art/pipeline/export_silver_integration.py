@@ -22,7 +22,8 @@ named here and for no other reason.
 
 Run:
   node art/pipeline/run_blender.mjs art/pipeline/export_silver_integration.py -- \\
-      --candidate <silver-integration-candidate.blend> --out <output folder>
+      --candidate <silver-integration-candidate.blend> --out <report folder> \\
+      --glb art/out/char_native_silver.glb
 """
 import argparse
 import hashlib
@@ -74,7 +75,8 @@ def arguments():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     parser = argparse.ArgumentParser()
     parser.add_argument('--candidate', required=True)
-    parser.add_argument('--out', required=True)
+    parser.add_argument('--out', required=True, help='folder for the export report')
+    parser.add_argument('--glb', help='where to write the character; defaults to <out>/char_native_silver.glb')
     return parser.parse_args(argv)
 
 
@@ -327,7 +329,8 @@ def main():
     out = os.path.abspath(args.out)
     reports = os.path.join(out, 'reports')
     os.makedirs(reports, exist_ok=True)
-    glb = os.path.join(out, 'char_native_silver.glb')
+    glb = os.path.abspath(args.glb) if args.glb else os.path.join(out, 'char_native_silver.glb')
+    os.makedirs(os.path.dirname(glb), exist_ok=True)
     candidate = os.path.abspath(args.candidate)
     candidate_sha = sha256_file(candidate)
     report = {'candidate': {'path': candidate, 'sha256': candidate_sha}}

@@ -15,6 +15,10 @@ WEB_DIR = os.path.join(HERE, '..', '..', 'apps', 'web', 'public', 'assets')
 
 VENUES = ('rooftop', 'basement', 'suite')
 
+# Characters the browser instances into a venue's seats instead of finding them baked
+# into the venue file. A venue built with seats for one of these is empty without it.
+CHARACTERS = ('char_native_silver.glb',)
+
 
 def main():
     os.makedirs(WEB_DIR, exist_ok=True)
@@ -32,6 +36,15 @@ def main():
         source = os.path.join(OUT_DIR, name)
         if not os.path.exists(source):
             raise SystemExit('missing build output: ' + source)
+        target = os.path.join(WEB_DIR, name)
+        shutil.copyfile(source, target)
+        published.append('%s %.0fKB' % (name, os.path.getsize(target) / 1024.0))
+
+    for name in CHARACTERS:
+        source = os.path.join(OUT_DIR, name)
+        if not os.path.exists(source):
+            print('NOT PUBLISHED %s: no build output at %s' % (name, source))
+            continue
         target = os.path.join(WEB_DIR, name)
         shutil.copyfile(source, target)
         published.append('%s %.0fKB' % (name, os.path.getsize(target) / 1024.0))
