@@ -87,10 +87,8 @@ GEOMETRY_TOLERANCE_MM = 1e-2
 # The jacket creases where the weights fold it, and measured with check_jacket_creasing.py
 # it creases most on the clips that stand him up: 399 folded edges at the worst frame of the
 # all-in and 414 on the leave, against 111 in the seated idle, gathered at the pelvis and
-# the tops of the legs - the skirt fanning as the hips open. Smoothing the jacket's weights
-# twice halves that (all-in 399 to 205, leave 414 to 223, idle 111 to 81) and moves the
-# garment's surface 3.2mm rms. Smoothing harder keeps taking creases off the standing clips
-# and starts putting them back on the seated ones, so two passes is where it is left.
+# the tops of the legs - the skirt fanning as the hips open. Smoothing the jacket's weights,
+# everywhere but the sleeve, takes the all-in to 164 and the leave and the sit with it.
 #
 # Nothing else in the character moves: no bone is touched, and every other mesh is still
 # held to the geometry tolerance above. The ceiling is a guard against a smoothing pass that
@@ -98,6 +96,16 @@ GEOMETRY_TOLERANCE_MM = 1e-2
 JACKET = 'A11 tailored dinner jacket'
 JACKET_SMOOTH_FACTOR = 0.5
 JACKET_MOVEMENT_CEILING_MM = 60.0
+# The sleeve is left alone. Smoothing the whole garment takes the creases down but lifts the
+# sleeve off the elbow, and at the top of the all-in the arm comes through it: rendered at
+# frame 66, skin visible through the sleeve goes from 17 pixels to 70. Holding these groups
+# back both closes that - 18 pixels, which is the accepted file's own - and takes more
+# creases off the standing clips than smoothing everywhere did, because the fold that was
+# being smoothed into the sleeve is the sleeve's own shape.
+JACKET_SMOOTH_EXCLUDES = (
+    'lowerarm01.L', 'lowerarm02.L', 'lowerarm01.R', 'lowerarm02.R',
+    'upperarm02.L', 'upperarm02.R',
+)
 # How much of a frame one refitted garment may repaint. The jacket is most of his upper body
 # from this camera, and only its edges move, so a few percent is generous; a material fault
 # would take the whole figure.
@@ -112,7 +120,7 @@ def arguments():
     parser.add_argument('--out', required=True)
     parser.add_argument('--original-a51')
     parser.add_argument('--original-a53')
-    parser.add_argument('--smooth-jacket', type=int, default=2,
+    parser.add_argument('--smooth-jacket', type=int, default=4,
                         help='passes of weight smoothing over the jacket; 0 leaves it as accepted')
     return parser.parse_args(argv)
 
@@ -294,13 +302,24 @@ def smooth_jacket(scene, rig, passes):
     bpy.context.view_layer.objects.active = jacket
     for obj in bpy.context.view_layer.objects:
         obj.select_set(obj is jacket)
+    # Everything except the sleeve, chosen per vertex by the bone that owns most of it.
+    smoothed = 0
+    for vertex in jacket.data.vertices:
+        held, weight = None, 0.0
+        for group in vertex.groups:
+            if group.weight > weight:
+                held, weight = jacket.vertex_groups[group.group].name, group.weight
+        vertex.select = held not in JACKET_SMOOTH_EXCLUDES
+        smoothed += 1 if vertex.select else 0
     bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.object.vertex_group_smooth(group_select_mode='ALL', factor=JACKET_SMOOTH_FACTOR,
                                        repeat=passes, expand=0.0)
     bpy.ops.object.mode_set(mode='OBJECT')
     jacket.select_set(False)
     bpy.context.view_layer.update()
+    if smoothed == 0 or smoothed == len(jacket.data.vertices):
+        raise SystemExit('FAIL: the sleeve exclusion selected %d of %d jacket vertices'
+                         % (smoothed, len(jacket.data.vertices)))
 
     after = capture_geometry(scene, rig, frames)
     moved = {}
@@ -312,7 +331,9 @@ def smooth_jacket(scene, rig, passes):
                 'rms_mm': max(moved.get(name, {}).get('rms_mm', 0.0),
                               float(np.sqrt((distance ** 2).mean()) * 1000.0)),
             }
-    return {'garment': JACKET, 'passes': passes, 'factor': JACKET_SMOOTH_FACTOR, 'moved': moved}
+    return {'garment': JACKET, 'passes': passes, 'factor': JACKET_SMOOTH_FACTOR,
+            'vertices_smoothed': smoothed, 'vertices': len(jacket.data.vertices),
+            'held_back': list(JACKET_SMOOTH_EXCLUDES), 'moved': moved}
 
 
 def pose_distance(first, second, bone_names):
@@ -587,8 +608,9 @@ def main():
         garment = report['wardrobe']['moved'][JACKET]
         others = {name: entry['max_mm'] for name, entry in report['wardrobe']['moved'].items()
                   if name != JACKET and entry['max_mm'] > GEOMETRY_TOLERANCE_MM}
-        print('WARDROBE %s smoothed %d passes: moved %.1fmm rms, %.1fmm at most'
-              % (JACKET, args.smooth_jacket, garment['rms_mm'], garment['max_mm']))
+        print('WARDROBE %s smoothed %d passes over %d of %d vertices: moved %.1fmm rms, %.1fmm at most'
+              % (JACKET, args.smooth_jacket, report['wardrobe']['vertices_smoothed'],
+                 report['wardrobe']['vertices'], garment['rms_mm'], garment['max_mm']))
         if others:
             failures.append('wardrobe: smoothing the jacket moved %s'
                             % ', '.join('%s by %.2fmm' % row for row in sorted(others.items())))
