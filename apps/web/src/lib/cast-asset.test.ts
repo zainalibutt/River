@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { CLIPS } from './animation.js'
 import { ACCENT_MATERIAL, PLAYER_SEATS } from './seat-accents.js'
-import { venueOf } from './venue.js'
+import { AUTHORED_FELT_Y, CHIP_STACK_PLACE, HOLE_CARD_PEEK } from './seat-props.js'
+import { TABLE_SURFACE_HEIGHT, venueOf } from './venue.js'
 
 /**
  * What the scene assumes about the two files it loads.
@@ -40,6 +41,9 @@ interface Node {
   name?: string
   mesh?: number
   skin?: number
+  translation?: [number, number, number]
+  rotation?: [number, number, number, number]
+  scale?: [number, number, number]
   extras?: { seatIndex?: number; riverCast?: string }
 }
 
@@ -89,6 +93,56 @@ describe('the Rooftop and its cast, as built', () => {
       const seat = anchor.extras?.seatIndex as number
       expect(names.has(`rooftop_chair_${seat + 1}`), `seat ${seat} has no chair`).toBe(true)
     }
+  })
+
+  it('seats him so the felt he was authored on is the felt he is sitting at', () => {
+    // Every prop place in seat-props is measured on the proof stage's felt, and they are
+    // used unchanged because the venue's scale is chosen to land that height exactly on
+    // this table. If that stops being true the cards float above the felt or sink into it,
+    // and nothing else in the build would say so.
+    const document = readGlbJson(assetPath(rooftop.asset))
+    const nodes = (document.nodes as Node[]) ?? []
+    const anchors = nodes.filter((node) => node.extras?.riverCast === 'native_silver')
+    expect(anchors.length).toBe(PLAYER_SEATS)
+    for (const anchor of anchors) {
+      const lift = anchor.translation?.[1] ?? 0
+      const scale = anchor.scale?.[0] ?? 1
+      expect(lift + scale * AUTHORED_FELT_Y).toBeCloseTo(TABLE_SURFACE_HEIGHT, 3)
+      expect(anchor.scale?.[0]).toBeCloseTo(anchor.scale?.[2] ?? 0, 6)
+    }
+  })
+
+  it('turns every anchor to face the felt, so a stack lands in front of a player', () => {
+    // The chips go through the anchor's own matrix: his +Z is where his hands reach. An
+    // anchor turned the wrong way would put a player's stack on the floor behind him, and
+    // the only way to tell is to ask which way it points.
+    const document = readGlbJson(assetPath(rooftop.asset))
+    const nodes = (document.nodes as Node[]) ?? []
+    for (const anchor of nodes.filter((node) => node.extras?.riverCast === 'native_silver')) {
+      const [x = 0, y = 0, z = 0, w = 1] = anchor.rotation ?? [0, 0, 0, 1]
+      // The local +Z axis, turned by the anchor's quaternion.
+      const forward = {
+        x: 2 * (x * z + w * y),
+        z: 1 - 2 * (x * x + y * y),
+      }
+      const place = anchor.translation ?? [0, 0, 0]
+      const outward = { x: place[0], z: place[2] }
+      // Facing the middle of the felt: his forward and the way out from the table oppose.
+      expect(forward.x * outward.x + forward.z * outward.z).toBeLessThan(0)
+      // And the stack he was authored to reach lands inside the ring he sits on.
+      const reach = Math.hypot(
+        place[0] + forward.x * CHIP_STACK_PLACE.rest[2],
+        place[2] + forward.z * CHIP_STACK_PLACE.rest[2],
+      )
+      expect(reach).toBeLessThan(Math.hypot(outward.x, outward.z))
+    }
+  })
+
+  it('carries a peek track as long as the peek clip it belongs to', () => {
+    const document = readGlbJson(assetPath(rooftop.cast as string))
+    const animations = (document.animations as { name?: string }[]) ?? []
+    expect(animations.map((animation) => animation.name)).toContain('PEEK_card')
+    for (const track of HOLE_CARD_PEEK) expect(track.length / 7).toBe(49)
   })
 
   it('carries no bodies of its own, so nothing is drawn twice', () => {

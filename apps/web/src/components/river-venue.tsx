@@ -20,6 +20,8 @@ type RiverVenueProps = {
   cues?: readonly AnimationCue[] | undefined
   /** Seat indexes with somebody in them; the rest render as empty chairs. */
   occupiedSeats?: readonly number[] | undefined
+  /** Seat indexes dealt into the hand; they hold the two cards the peek lifts. */
+  cardSeats?: readonly number[] | undefined
   /** What each occupied seat has in front of it, for the chip stacks. */
   seatChips?: readonly SeatChips[] | undefined
   heroSeat?: number | null | undefined
@@ -37,6 +39,7 @@ export function RiverVenue({
   venueId,
   cues,
   occupiedSeats,
+  cardSeats,
   seatChips,
   heroSeat,
   handSerial,
@@ -51,6 +54,7 @@ export function RiverVenue({
       venueId={venueId}
       cues={cues}
       occupiedSeats={occupiedSeats}
+      cardSeats={cardSeats}
       seatChips={seatChips}
       heroSeat={heroSeat}
       handSerial={handSerial}

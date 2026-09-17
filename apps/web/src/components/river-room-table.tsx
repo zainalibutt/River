@@ -736,6 +736,14 @@ export function RiverRoomTable() {
     })
   }, [view.seats, sceneSeatIds, venueId])
 
+  // Who is holding cards, for the two the scene draws in front of each of them. The view
+  // says whether a seat has a hole card, never what it is - the server does not send another
+  // player's cards - which is all a face-down pair needs.
+  const cardSeats = useMemo(
+    () => view.seats.filter((seat) => seat.hasHole).map((seat) => seat.seat),
+    [view.seats],
+  )
+
   const selfSeat = view.seats.find((seat) => seat.playerId === view.selfId) ?? null
   const seatedCount = view.seats.filter((seat) => seat.playerId !== null && seat.stack > 0).length
   const isHost = view.hostPlayerId === view.selfId
@@ -890,6 +898,7 @@ export function RiverRoomTable() {
               occupiedSeats={seats
                 .filter((seat) => seat.playerId !== null)
                 .map((seat) => seat.seat)}
+              cardSeats={cardSeats}
               seatChips={seatChips}
               seatIds={sceneSeatIds}
               seatRefs={seatRefs}

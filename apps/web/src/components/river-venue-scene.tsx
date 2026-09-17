@@ -49,6 +49,7 @@ import {
   type SeatState,
   syncOccupancy,
 } from '@/lib/seat-motion'
+import { CHIP_STACK_PLACE, HOLE_CARD_SIZE, holeCardAt } from '@/lib/seat-props'
 import { chairBackAway } from '@/lib/seat-transition-timing'
 import {
   cameraPlacement,
@@ -92,6 +93,14 @@ type SceneProps = {
    * room attached.
    */
   occupiedSeats?: readonly number[] | undefined
+  /**
+   * Seats holding two hole cards.
+   *
+   * The character carries himself and nothing else, so the cards he peeks at are drawn
+   * here. Without this the peek is a man lifting an empty hand, which from the gameplay
+   * camera reads as an idle brush at the felt rather than a look at a hand.
+   */
+  cardSeats?: readonly number[] | undefined
   /** What each occupied seat has in front of it, for the chip stacks. */
   seatChips?: readonly SeatChips[] | undefined
   /** The local player's seat. The opening camera starts behind it, and he keeps the accepted look. */
@@ -236,6 +245,8 @@ function Seats({
 }
 
 const NO_SEATS: readonly number[] = []
+/** Stable empty, so a scene with no cast does not rebuild its chips every render. */
+const NO_PLACES: readonly CastPlace[] = []
 
 /**
  * The glow on a chair you can sit in.
@@ -443,6 +454,21 @@ interface CastSeat {
   /** The anchor's world scale, so a chair track authored in his units lands in metres. */
   scale: number
   backAway: number
+  /** The seat anchor's world matrix, which takes a place authored in his frame into the room. */
+  anchorMatrix: THREE.Matrix4
+}
+
+/**
+ * Where a seated character is, for anything the table draws in front of him.
+ *
+ * His chips were placed off the seat ring at a fraction of the way to the middle of the
+ * felt - a number tuned by eye, unrelated to where his hands go - so he pushed at a stack
+ * sitting the better part of half a metre away from them. The anchors carry the only answer
+ * that agrees with the clips, and this is how they reach the chips.
+ */
+export interface CastPlace {
+  seat: number
+  matrix: THREE.Matrix4
 }
 
 /** Enough emission that a lapel colour reads from the gameplay camera. */
@@ -456,6 +482,17 @@ const ACCENT_EMISSIVE = 0.35
  * absorb the cut.
  */
 const CHAIR_FOLLOW_SECONDS = 0.08
+
+/** Two cards a seat, for the eight the venue anchors. */
+const MAX_HOLE_CARDS = (SEAT_SLOTS - 1) * 2
+/**
+ * A card is 0.3mm thick and that is a line at this camera, so it is drawn at a millimetre -
+ * the same cheat the board's cards take, and small enough that it never lifts a card off
+ * the felt visibly.
+ */
+const HOLE_CARD_THICKNESS = 0.001
+/** Anything with nothing to show is parked at no size rather than left where it was. */
+const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0)
 
 function seatState(states: Map<number, SeatState>, seat: number, occupied: boolean): SeatState {
   const held = states.get(seat)
@@ -533,20 +570,32 @@ function SilverCast({
   scene,
   cues,
   occupiedSeats,
+  cardSeats,
   heroSeat,
   handSerial,
   anchors,
+  onPlaced,
 }: {
   venue: Venue
   scene: THREE.Object3D
   cues: readonly AnimationCue[]
   occupiedSeats: readonly number[] | undefined
+  cardSeats: readonly number[] | undefined
   heroSeat: number | null
   handSerial: number
   anchors: RefObject<SeatAnchors | null>
+  onPlaced: (places: readonly CastPlace[]) => void
 }) {
   const cast = useGLTF(freshAsset(venue.cast ?? ''))
   const seats = useRef<CastSeat[]>([])
+  const cards = useRef<THREE.InstancedMesh>(null)
+  const dealt = useRef(cardSeats)
+  dealt.current = cardSeats
+  // Scratch for the card placement, so a frame does not allocate sixteen of each.
+  const cardMatrix = useMemo(() => new THREE.Matrix4(), [])
+  const cardPlace = useMemo(() => new THREE.Vector3(), [])
+  const cardTurn = useMemo(() => new THREE.Quaternion(), [])
+  const cardScale = useMemo(() => new THREE.Vector3(1, 1, 1), [])
   const states = useRef<Map<number, SeatState>>(new Map())
   const pending = useRef<{ seat: number; clip: ClipName; at: number }[]>([])
   const clock = useRef(0)
@@ -642,11 +691,13 @@ function SilverCast({
         outward: new THREE.Vector3(chairBase.x, 0, chairBase.z).normalize(),
         scale: worldScale.x,
         backAway: 0,
+        anchorMatrix: anchor.matrixWorld.clone(),
       })
     }
     built.sort((left, right) => left.seat - right.seat)
     seats.current = built
     applyAccents(built, hero.current)
+    onPlaced(built.map((entry) => ({ seat: entry.seat, matrix: entry.anchorMatrix })))
     if (process.env.NODE_ENV !== 'production') {
       // Both of these have already shipped as silent nothings on this project: a venue with
       // no clips, and clips bound to nothing.
@@ -701,8 +752,9 @@ function SilverCast({
       seats.current = []
       states.current = new Map()
       pending.current = []
+      onPlaced([])
     }
-  }, [cast.animations, cast.scene, scene, venue.id, venue.name, anchors])
+  }, [cast.animations, cast.scene, scene, venue.id, venue.name, anchors, onPlaced])
 
   useEffect(() => {
     applyAccents(seats.current, heroSeat)
@@ -742,6 +794,12 @@ function SilverCast({
           applyCue(seatState(states.current, entry.seat, occupied), entry.clip, now),
         )
       }
+    }
+    // Every card starts the frame parked. An instanced mesh fills with identity matrices, so
+    // a seat holding nothing - or a room where nobody is seated yet - would otherwise show
+    // its two cards full size in the middle of the felt.
+    if (cards.current !== null) {
+      for (let slot = 0; slot < MAX_HOLE_CARDS; slot += 1) cards.current.setMatrixAt(slot, HIDDEN)
     }
     for (const entry of seats.current) {
       const occupied = occupiedSeats === undefined || occupiedSeats.includes(entry.seat)
@@ -790,10 +848,46 @@ function SilverCast({
       ) {
         found.heads.set(entry.seat, entry.head)
       }
+      // The cards he peeks at. They are the browser's to draw - the character carries only
+      // himself - and until now it drew none, so the peek was a man lifting nothing, which
+      // reads from the gameplay camera as a hand brushing the felt. Frame 0 of the authored
+      // track is where a card lies when nobody is looking at it, so an undealt seat simply
+      // has no card rather than a second set of numbers for a resting one.
+      if (dealt.current?.includes(entry.seat) !== true) continue
+      const peeking = pose.body?.clip === 'PEEK_card' ? pose.body.frame : 0
+      for (let index = 0; index < 2; index += 1) {
+        const slot = entry.seat * 2 + index
+        if (slot >= MAX_HOLE_CARDS) continue
+        const place = holeCardAt(index, peeking)
+        cardPlace.set(place.position[0], place.position[1], place.position[2])
+        cardTurn.set(
+          place.quaternion[0],
+          place.quaternion[1],
+          place.quaternion[2],
+          place.quaternion[3],
+        )
+        cardMatrix.compose(cardPlace, cardTurn, cardScale)
+        cards.current?.setMatrixAt(slot, cardMatrix.premultiply(entry.anchorMatrix))
+      }
     }
+    if (cards.current !== null) cards.current.instanceMatrix.needsUpdate = true
   })
 
-  return null
+  return (
+    <instancedMesh
+      ref={cards}
+      args={[undefined, undefined, MAX_HOLE_CARDS]}
+      frustumCulled={false}
+      castShadow={false}
+      receiveShadow
+    >
+      {/* The size of the card his hands were authored around, in his own metres: the seat
+          anchor's scale comes with the matrix. The board's cards are deliberately oversized
+          so they read from across the room; these are held, so they are the real thing. */}
+      <boxGeometry args={[HOLE_CARD_SIZE.width, HOLE_CARD_THICKNESS, HOLE_CARD_SIZE.length]} />
+      <meshStandardMaterial color="#e8ded0" roughness={0.68} />
+    </instancedMesh>
+  )
 }
 
 /** The plaque and the stage, as percentages of the 1920 by 1080 design box. */
@@ -802,16 +896,20 @@ function VenueAsset({
   venueId,
   cues,
   occupiedSeats,
+  cardSeats,
   heroSeat,
   handSerial,
   anchors,
+  onCastPlaced,
 }: {
   venueId: VenueId
   cues: readonly AnimationCue[]
   occupiedSeats: readonly number[] | undefined
+  cardSeats: readonly number[] | undefined
   heroSeat: number | null
   handSerial: number
   anchors: RefObject<SeatAnchors | null>
+  onCastPlaced: (places: readonly CastPlace[]) => void
 }) {
   const venue = venueOf(venueId)
   const asset = useGLTF(freshAsset(venue.asset))
@@ -1033,9 +1131,11 @@ function VenueAsset({
           scene={asset.scene}
           cues={cues}
           occupiedSeats={occupiedSeats}
+          cardSeats={cardSeats}
           heroSeat={heroSeat}
           handSerial={handSerial}
           anchors={anchors}
+          onPlaced={onCastPlaced}
         />
       ) : null}
     </>
@@ -1142,11 +1242,20 @@ const CARD_WIDTH = 0.126
 const CARD_LENGTH = 0.176
 const CARD_THICKNESS = 0.004
 
-function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }) {
+function InstancedTablePieces({
+  seatChips,
+  castPlaces,
+}: {
+  seatChips: readonly SeatChips[]
+  castPlaces: readonly CastPlace[]
+}) {
   const chips = useRef<THREE.InstancedMesh>(null)
   const cards = useRef<THREE.InstancedMesh>(null)
   const matrix = useMemo(() => new THREE.Matrix4(), [])
   const tint = useMemo(() => new THREE.Color(), [])
+  const place = useMemo(() => new THREE.Vector3(), [])
+  const sideways = useMemo(() => new THREE.Vector3(), [])
+  const forwards = useMemo(() => new THREE.Vector3(), [])
   // Cylinder groups are side, top cap, bottom cap - so the rim and the face get
   // different art off one geometry and one draw call.
   const chipMaterials = useMemo(() => {
@@ -1171,22 +1280,38 @@ function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }
   useLayoutEffect(() => {
     const mesh = chips.current
     if (mesh !== null) {
+      const anchored = new Map(castPlaces.map((entry) => [entry.seat, entry.matrix]))
       let placed = 0
       for (const seat of seatChips) {
         // Chips belong to somebody. They used to be a fixed grid of 36 in one
         // spot on the felt, unrelated to what anybody had - a decal of chips
         // rather than a readout of them.
         const columns = stackLayout(seat.amount)
-        // Sit them on the felt between the player and the board, so a stack
-        // reads as that player's without covering the cards.
-        // The seat ring is wider than the felt. At 0.62 the near-seat stack
-        // landed on the rail and projected against the black table apron.
-        // Measured in Chrome against the raised near rail, 0.25 keeps even the
-        // camera-side stack visible on the felt rather than projecting across
-        // the black table apron.
-        const inward = 0.25
-        const baseX = seat.x * inward
-        const baseZ = seat.z * inward
+        const anchor = anchored.get(seat.seat)
+        if (anchor === undefined) {
+          // No character seated here to measure against - an empty venue, or one with its
+          // cast baked in. Sit the stack on the felt between the player and the board so it
+          // still reads as that player's: the seat ring is wider than the felt, and at 0.62
+          // the near-seat stack landed on the rail and projected against the black apron.
+          place.set(seat.x * 0.25, 0, seat.z * 0.25)
+          sideways.set(1, 0, 0)
+          forwards.set(0, 0, 1)
+        } else {
+          // Where his hands were authored to find them. The stack the chip push and the
+          // all-in shove were animated against sits 500mm in front of his chest, and the
+          // fraction above put it the better part of half a metre further in - so he pushed
+          // at nothing and grabbed at nothing. The anchor carries his place, his facing and
+          // the scale the venue seats him at, all three of which the felt needs.
+          place.set(CHIP_STACK_PLACE.rest[0], CHIP_STACK_PLACE.rest[1], CHIP_STACK_PLACE.rest[2])
+          place.applyMatrix4(anchor)
+          // The columns spread along the table edge in front of him rather than along world
+          // X, and at their own real spacing rather than his scaled version of it.
+          sideways.set(1, 0, 0).transformDirection(anchor)
+          forwards.set(0, 0, 1).transformDirection(anchor)
+        }
+        // Centred on the authored place. A stack that grows one way from it walks sideways
+        // out from under the hand as a player's chips go up.
+        const spread = (columns[columns.length - 1]?.offsetX ?? 0) / 2
         for (const column of columns) {
           for (let height = 0; height < column.count; height += 1) {
             if (placed >= MAX_CHIPS) break
@@ -1195,10 +1320,11 @@ function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }
             // the one thing a real stack never has. Hashed off the index rather
             // than Math.random so a chip does not jump on re-render.
             matrix.makeRotationY(((placed * 2654435761) % 1024) * (Math.PI / 512))
+            const across = column.offsetX - spread
             matrix.setPosition(
-              baseX + column.offsetX,
+              place.x + sideways.x * across + forwards.x * column.offsetZ,
               TABLE_SURFACE_HEIGHT + CHIP_HEIGHT / 2 + height * CHIP_HEIGHT,
-              baseZ + column.offsetZ,
+              place.z + sideways.z * across + forwards.z * column.offsetZ,
             )
             mesh.setMatrixAt(placed, matrix)
             mesh.setColorAt(placed, tint.set(CHIP_COLOURS.get(column.denomination) ?? '#d8d2c6'))
@@ -1225,7 +1351,7 @@ function InstancedTablePieces({ seatChips }: { seatChips: readonly SeatChips[] }
       }
       cards.current.instanceMatrix.needsUpdate = true
     }
-  }, [matrix, tint, seatChips])
+  }, [matrix, tint, seatChips, castPlaces, place, sideways, forwards])
 
   return (
     <>
@@ -1542,6 +1668,7 @@ function Scene({
   venueId,
   cues = [],
   occupiedSeats,
+  cardSeats,
   seatChips = [],
   heroSeat,
   handSerial = 0,
@@ -1551,6 +1678,10 @@ function Scene({
 }: SceneProps) {
   const [sidecar, setSidecar] = useState<LightingSidecar>({})
   const anchors = useRef<SeatAnchors | null>(null)
+  // Where the seated characters landed, published once when the cast is built. The chips are
+  // drawn outside the venue's own graph, and they belong in front of the hands that reach
+  // for them, so they need the anchors the cast was instanced into.
+  const [castPlaces, setCastPlaces] = useState<readonly CastPlace[]>(NO_PLACES)
 
   useEffect(() => {
     let cancelled = false
@@ -1577,12 +1708,14 @@ function Scene({
           venueId={venueId}
           cues={cues}
           occupiedSeats={occupiedSeats}
+          cardSeats={cardSeats}
           heroSeat={heroSeat ?? null}
           handSerial={handSerial}
           anchors={anchors}
+          onCastPlaced={setCastPlaces}
         />
       </Suspense>
-      <InstancedTablePieces seatChips={seatChips} />
+      <InstancedTablePieces seatChips={seatChips} castPlaces={castPlaces} />
       <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} anchors={anchors} />
       <ChairHighlight anchors={anchors} sittableSeats={sittableSeats} onSit={onSit} />
       <CameraOrbit venueId={venueId} heroSeat={heroSeat ?? null} reviewSeat={reviewSeat ?? null} />
@@ -1596,6 +1729,7 @@ export function RiverScene({
   venueId,
   cues = [],
   occupiedSeats,
+  cardSeats,
   seatChips,
   heroSeat,
   handSerial,
@@ -1680,6 +1814,7 @@ export function RiverScene({
         venueId={venueId}
         cues={cues}
         occupiedSeats={occupiedSeats}
+        cardSeats={cardSeats}
         seatChips={seatChips}
         heroSeat={heroSeat}
         handSerial={handSerial}
