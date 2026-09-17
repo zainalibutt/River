@@ -81,6 +81,28 @@ TRANSLATION_TOLERANCE_MM = 1e-3
 SCALE_TOLERANCE = 1e-5
 GEOMETRY_TOLERANCE_MM = 1e-2
 
+# The one garment this build is allowed to change, and the only thing in the file that is
+# not required to come out bit-identical to the accepted clips.
+#
+# The jacket creases where the weights fold it, and measured with check_jacket_creasing.py
+# it creases most on the clips that stand him up: 399 folded edges at the worst frame of the
+# all-in and 414 on the leave, against 111 in the seated idle, gathered at the pelvis and
+# the tops of the legs - the skirt fanning as the hips open. Smoothing the jacket's weights
+# twice halves that (all-in 399 to 205, leave 414 to 223, idle 111 to 81) and moves the
+# garment's surface 3.2mm rms. Smoothing harder keeps taking creases off the standing clips
+# and starts putting them back on the seated ones, so two passes is where it is left.
+#
+# Nothing else in the character moves: no bone is touched, and every other mesh is still
+# held to the geometry tolerance above. The ceiling is a guard against a smoothing pass that
+# collapses the garment rather than settles it.
+JACKET = 'A11 tailored dinner jacket'
+JACKET_SMOOTH_FACTOR = 0.5
+JACKET_MOVEMENT_CEILING_MM = 60.0
+# How much of a frame one refitted garment may repaint. The jacket is most of his upper body
+# from this camera, and only its edges move, so a few percent is generous; a material fault
+# would take the whole figure.
+RENDER_GARMENT_FRACTION = 0.10
+
 
 def arguments():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
@@ -90,6 +112,8 @@ def arguments():
     parser.add_argument('--out', required=True)
     parser.add_argument('--original-a51')
     parser.add_argument('--original-a53')
+    parser.add_argument('--smooth-jacket', type=int, default=2,
+                        help='passes of weight smoothing over the jacket; 0 leaves it as accepted')
     return parser.parse_args(argv)
 
 
@@ -221,8 +245,15 @@ def compare_pose(reference, candidate, bone_names):
     return report
 
 
-def compare_geometry(reference, candidate):
-    report = {'worst_mm': 0.0, 'worst_mesh': None, 'worst_frame': None, 'meshes': {}}
+def compare_geometry(reference, candidate, allowed=()):
+    """How far the candidate's surface is from the accepted one, mesh by mesh.
+
+    A mesh in `allowed` is measured and reported like every other, and then left out of the
+    verdict: this build deliberately changes one garment, and a gate that cannot be told
+    which one is being changed either has to pass everything or fail the whole build.
+    """
+    report = {'worst_mm': 0.0, 'worst_mesh': None, 'worst_frame': None, 'meshes': {},
+              'allowed': sorted(allowed)}
     for frame, shapes in reference.items():
         for name, points in shapes.items():
             other = candidate[frame][name]
@@ -231,10 +262,57 @@ def compare_geometry(reference, candidate):
                                  % (name, len(other), frame, len(points)))
             distance = float(np.linalg.norm(points - other, axis=1).max() * 1000.0)
             report['meshes'][name] = max(report['meshes'].get(name, 0.0), distance)
+            if name in allowed:
+                continue
             if distance >= report['worst_mm']:
                 report.update(worst_mm=distance, worst_mesh=name, worst_frame=frame)
     report['within_tolerance'] = report['worst_mm'] <= GEOMETRY_TOLERANCE_MM
     return report
+
+
+def smooth_jacket(scene, rig, passes):
+    """Settle the jacket's skin weights, and measure what that did to the garment.
+
+    The creasing is not an animation fault - every bone is where it was authored - it is the
+    skin: neighbouring vertices of the skirt are weighted to bones that swing apart when he
+    stands, so the surface pleats into a fan of hard edges across the hips. Smoothing each
+    vertex's weights towards its neighbours' is the smallest thing that addresses that, and
+    it is done here rather than by hand so the jacket in the candidate is a function of the
+    accepted file plus a number.
+
+    Returns how far every mesh moved at three frames of the clip that creases worst, so the
+    report can say what changed rather than asserting that nothing did.
+    """
+    jacket = bpy.data.objects.get(JACKET)
+    if jacket is None:
+        raise SystemExit('FAIL: no %s to fit; the file carries %s'
+                         % (JACKET, ', '.join(sorted(o.name for o in bpy.data.objects if o.type == 'MESH'))))
+    frames = sample_frames(SHIPPING['ALLIN_standup'][1])
+    assign(rig, bpy.data.actions['ALLIN_standup'])
+    before = capture_geometry(scene, rig, frames)
+
+    bpy.context.view_layer.objects.active = jacket
+    for obj in bpy.context.view_layer.objects:
+        obj.select_set(obj is jacket)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.object.vertex_group_smooth(group_select_mode='ALL', factor=JACKET_SMOOTH_FACTOR,
+                                       repeat=passes, expand=0.0)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    jacket.select_set(False)
+    bpy.context.view_layer.update()
+
+    after = capture_geometry(scene, rig, frames)
+    moved = {}
+    for frame, shapes in before.items():
+        for name, points in shapes.items():
+            distance = np.linalg.norm(points - after[frame][name], axis=1)
+            moved[name] = {
+                'max_mm': max(moved.get(name, {}).get('max_mm', 0.0), float(distance.max() * 1000.0)),
+                'rms_mm': max(moved.get(name, {}).get('rms_mm', 0.0),
+                              float(np.sqrt((distance ** 2).mean()) * 1000.0)),
+            }
+    return {'garment': JACKET, 'passes': passes, 'factor': JACKET_SMOOTH_FACTOR, 'moved': moved}
 
 
 def pose_distance(first, second, bone_names):
@@ -503,6 +581,23 @@ def main():
         action, varying = bake_clip(rig, clip, bone_names, channels)
         report['bake'][clip] = {'frames': channels.shape[0], 'curves': 137 * 9, 'curves_keyed_every_frame': varying}
 
+    # The one deliberate change to the accepted character, measured as it is made.
+    if args.smooth_jacket > 0:
+        report['wardrobe'] = smooth_jacket(scene, rig, args.smooth_jacket)
+        garment = report['wardrobe']['moved'][JACKET]
+        others = {name: entry['max_mm'] for name, entry in report['wardrobe']['moved'].items()
+                  if name != JACKET and entry['max_mm'] > GEOMETRY_TOLERANCE_MM}
+        print('WARDROBE %s smoothed %d passes: moved %.1fmm rms, %.1fmm at most'
+              % (JACKET, args.smooth_jacket, garment['rms_mm'], garment['max_mm']))
+        if others:
+            failures.append('wardrobe: smoothing the jacket moved %s'
+                            % ', '.join('%s by %.2fmm' % row for row in sorted(others.items())))
+        if garment['max_mm'] > JACKET_MOVEMENT_CEILING_MM:
+            failures.append('wardrobe: the jacket moved %.1fmm, past the %.0fmm ceiling'
+                            % (garment['max_mm'], JACKET_MOVEMENT_CEILING_MM))
+    else:
+        report['wardrobe'] = {'garment': JACKET, 'passes': 0}
+
     before = {
         'materials': material_fingerprint(),
         'uvs': uv_fingerprint(),
@@ -566,7 +661,17 @@ def main():
     floor = render_difference(accepted_renders[0], accepted_renders[1])
     measured = render_difference(accepted_render, candidate_render)
     report['render_idle_frame0'] = {'a51_against_itself': floor, 'a51_against_candidate': measured}
-    if measured['max_abs'] > floor['max_abs'] + 1.0 / 255.0 or measured['pixels_over_2_of_255'] > max(
+    if args.smooth_jacket > 0:
+        # The jacket has been deliberately refitted, so the frame is expected to differ where
+        # the garment is and nowhere else. A changed material, a lost texture or a broken
+        # material assignment repaints far more of the frame than one garment covers, which
+        # is what this is still able to catch.
+        pixels = accepted_render.size // 4
+        report['render_idle_frame0']['fraction_changed'] = measured['pixels_over_2_of_255'] / pixels
+        if report['render_idle_frame0']['fraction_changed'] > RENDER_GARMENT_FRACTION:
+            failures.append('render: %.1f%% of the frame changed, more than one garment covers'
+                            % (100.0 * report['render_idle_frame0']['fraction_changed']))
+    elif measured['max_abs'] > floor['max_abs'] + 1.0 / 255.0 or measured['pixels_over_2_of_255'] > max(
             2 * floor['pixels_over_2_of_255'], 4):
         failures.append('render: the candidate differs from A51 by more than A51 differs from itself')
 
@@ -594,7 +699,8 @@ def main():
     for clip, (_, last) in SHIPPING.items():
         poison(rig)
         assign(rig, bpy.data.actions[clip])
-        result = compare_geometry(geometry[clip], capture_geometry(scene, rig, sample_frames(last)))
+        result = compare_geometry(geometry[clip], capture_geometry(scene, rig, sample_frames(last)),
+                                  allowed=(JACKET,) if args.smooth_jacket > 0 else ())
         report['gates']['geometry'][clip] = result
         if not result['within_tolerance']:
             failures.append('geometry: %s moves a vertex %.4f mm from the accepted clip' % (clip, result['worst_mm']))
