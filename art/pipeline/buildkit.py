@@ -252,6 +252,16 @@ def make_checker_material(name, size, color_a, color_b, directory):
 
 
 def seat_positions(count, ring_x=None, ring_y=None):
+    """Seat slots around the table, in the order play passes through them.
+
+    The angle runs backwards, which is what puts the seats in clockwise order on screen.
+    Play goes from one seat number to the next, so the direction the numbers run is the
+    direction the table plays in, and it ran the other way: a hand moved anticlockwise
+    around the felt while every poker table in the world moves the other way. Mirroring
+    the ring is a change of seating, not of the game: seat n keeps its number, its chair
+    and everything the room says about it, and simply sits where seat count - n used to.
+    The web's worldSeats mirrors this, and venue.test.ts holds the two together.
+    """
     import math
     if ring_x is None:
         ring_x = SEAT_RING_X
@@ -259,6 +269,6 @@ def seat_positions(count, ring_x=None, ring_y=None):
         ring_y = SEAT_RING_Y
     positions = []
     for i in range(count):
-        angle = math.pi / 2 + 2.0 * math.pi * i / count
+        angle = math.pi / 2 - 2.0 * math.pi * i / count
         positions.append((ring_x * math.cos(angle), ring_y * math.sin(angle)))
     return positions

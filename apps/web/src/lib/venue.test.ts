@@ -195,10 +195,26 @@ describe('seat ring', () => {
     // The ring keeps nine slots however many players are sitting, because the
     // chairs are baked on it. Players take slots 1 to 8; slot 0 is the dealer's.
     seats.forEach((seat, index) => {
-      const angle = Math.PI / 2 + ((index + 1) * Math.PI * 2) / SEAT_SLOTS
+      const angle = Math.PI / 2 - ((index + 1) * Math.PI * 2) / SEAT_SLOTS
       expect(seat.x).toBeCloseTo(ring.x * Math.cos(angle), 9)
       expect(seat.z).toBeCloseTo(-ring.y * Math.sin(angle), 9)
     })
+  })
+
+  it('runs the seats clockwise, the way play passes round a table', () => {
+    // Play goes from one seat number to the next, so whichever way the numbers
+    // run is the way a hand travels, and it ran anticlockwise, which no poker
+    // table does. Measured as the turn from each seat to the next: on screen x
+    // runs right and world z runs towards the viewer, so up the screen is -z and
+    // a clockwise turn is x1*z2 - z1*x2 above zero. The previous layout gives
+    // this the opposite sign at every seat.
+    const seats = worldSeats(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'])
+    for (let index = 0; index < seats.length - 1; index += 1) {
+      const from = seats[index]
+      const to = seats[index + 1]
+      if (from === undefined || to === undefined) throw new Error('missing seat')
+      expect(from.x * to.z - from.z * to.x).toBeGreaterThan(0)
+    }
   })
 
   it('leaves the dealer their slot rather than seating somebody inside them', () => {
@@ -227,9 +243,10 @@ describe('seat ring', () => {
     const [first] = worldSeats(['a', 'b', 'c', 'd'], ring)
     if (first === undefined) throw new Error('expected a seat')
     // Slot 0 is across the table and belongs to the dealer, so the first
-    // player sits one slot round from it. What matters is that the labels agree
-    // with the chairs the pipeline baked, not which absolute point they land on.
-    const angle = Math.PI / 2 + (Math.PI * 2) / SEAT_SLOTS
+    // player sits one slot round from it, in the direction play runs. What
+    // matters is that the labels agree with the chairs the pipeline baked, not
+    // which absolute point they land on.
+    const angle = Math.PI / 2 - (Math.PI * 2) / SEAT_SLOTS
     expect(first.x).toBeCloseTo(ring.x * Math.cos(angle), 9)
     expect(first.z).toBeCloseTo(-ring.y * Math.sin(angle), 9)
   })

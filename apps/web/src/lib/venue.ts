@@ -246,7 +246,11 @@ export function worldSeats(
     // Slots 1 to 8 of a nine-slot ring. Slot 0 is the dealer's, and the ring
     // must divide by nine however many players are sitting or the chips land
     // between the chairs the venue actually baked.
-    const angle = Math.PI / 2 + ((index + 1) * Math.PI * 2) / SEAT_SLOTS
+    //
+    // The angle runs backwards for the same reason it does in the pipeline: play
+    // passes from one seat number to the next, and seats laid out the other way
+    // sent every hand anticlockwise around the felt.
+    const angle = Math.PI / 2 - ((index + 1) * Math.PI * 2) / SEAT_SLOTS
     return {
       id,
       x: ring.x * Math.cos(angle),
