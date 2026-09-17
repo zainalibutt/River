@@ -152,6 +152,15 @@ describe('seat motion', () => {
     })
   })
 
+  it('restarts the same gesture at full weight rather than blending a clip over itself', () => {
+    const first = applyCue(initialSeat(true), 'CHECK_tap', 0)
+    const again = applyCue(first, 'CHECK_tap', 0.5)
+    const drawn = pose(again, 0.5)
+    expect(drawn.body).toEqual({ clip: 'CHECK_tap', frame: 0, weight: 1 })
+    expect(drawn.release).toBeNull()
+    expect(totalWeight(again, 0.5)).toBeCloseTo(1, 9)
+  })
+
   it('moves the chair only on the tracks that carry chair motion', () => {
     expect(pose(applyCue(initialSeat(true), 'CHECK_tap', 0), 0.5).chair).toBeNull()
     expect(pose(applyCue(initialSeat(true), 'LEAVE_getup', 0), 1).chair?.clip).toBe('LEAVE_getup')

@@ -169,6 +169,12 @@ export function applyCue(state: SeatState, clip: ClipName, now: number): SeatSta
       return current
     case 'CHECK_tap':
     case 'PEEK_card':
+      // The same gesture again restarts at full weight. Blending a clip over itself needs
+      // two actions for one clip, which a mixer will not give, and dipping back through
+      // the idle to start again reads as a stumble.
+      if (current.body !== null && current.body.clip === clip) {
+        return replaceWith(current, 'gesture', clip, now, 0, false)
+      }
       if (current.phase === 'seated' || current.phase === 'gesture') {
         return replaceWith(current, 'gesture', clip, now, 0, true)
       }

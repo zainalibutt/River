@@ -13,8 +13,22 @@ import {
   useState,
 } from 'react'
 import * as THREE from 'three'
-import { type OrbitControls as OrbitControlsImpl, RectAreaLightUniformsLib } from 'three-stdlib'
-import { type AnimationCue, IDLE_CLIP, idleCueFor, missingClips } from '@/lib/animation'
+import {
+  type OrbitControls as OrbitControlsImpl,
+  RectAreaLightUniformsLib,
+  SkeletonUtils,
+} from 'three-stdlib'
+import {
+  type AnimationCue,
+  BLEND,
+  CLIP_FPS,
+  CLIPS,
+  type ClipName,
+  IDLE_CLIP,
+  idleCueFor,
+  idlePhaseFor,
+  missingClips,
+} from '@/lib/animation'
 import { freshAsset } from '@/lib/asset-url'
 import { frameMetrics, TABLE_REGIONS } from '@/lib/frame-metrics'
 import {
@@ -25,6 +39,17 @@ import {
   toSceneLights,
   worldColourOf,
 } from '@/lib/lighting'
+import { ACCENT_MATERIAL, accentFor } from '@/lib/seat-accents'
+import {
+  advance,
+  applyCue,
+  endHand,
+  initialSeat,
+  poseOf,
+  type SeatState,
+  syncOccupancy,
+} from '@/lib/seat-motion'
+import { chairBackAway } from '@/lib/seat-transition-timing'
 import {
   cameraPlacement,
   FELT_LIGHT_REACH,
@@ -33,6 +58,7 @@ import {
   seatCameraAzimuth,
   TABLE_SURFACE_HEIGHT,
   VENUE_ORDER,
+  type Venue,
   type VenueId,
   venueOf,
   verticalFov,
@@ -68,8 +94,16 @@ type SceneProps = {
   occupiedSeats?: readonly number[] | undefined
   /** What each occupied seat has in front of it, for the chip stacks. */
   seatChips?: readonly SeatChips[] | undefined
-  /** The local player's seat. The opening camera starts behind it. */
+  /** The local player's seat. The opening camera starts behind it, and he keeps the accepted look. */
   heroSeat?: number | null | undefined
+  /**
+   * Counts hands that have finished.
+   *
+   * A player who stood up for an all-in sits back down when the hand is over, and this is
+   * how the table says so. A count rather than a flag: two hands ending is two events, and
+   * a boolean that is already true says nothing the second time.
+   */
+  handSerial?: number | undefined
   /** Dev-review seat framed from inside the table for a face-side close read. */
   reviewSeat?: number | null | undefined
   /** Empty seats the local player may take; hovering one lights its chair. */
@@ -393,17 +427,390 @@ function retargetToRig(
   return { clip: cloned, matched }
 }
 
+/** One seat's instanced character: his own skeleton, mixer, actions and lapel colour. */
+interface CastSeat {
+  seat: number
+  body: THREE.Object3D
+  head: THREE.Object3D | undefined
+  mixer: THREE.AnimationMixer
+  actions: Map<ClipName, THREE.AnimationAction>
+  accentTargets: { mesh: THREE.Mesh; slot: number; original: THREE.Material }[]
+  accents: Map<string, THREE.Material>
+  chair: THREE.Object3D | undefined
+  chairBase: THREE.Vector3
+  /** Away from the table, which is the way a chair is pushed to stand up. */
+  outward: THREE.Vector3
+  /** The anchor's world scale, so a chair track authored in his units lands in metres. */
+  scale: number
+  backAway: number
+}
+
+/** Enough emission that a lapel colour reads from the gameplay camera. */
+const ACCENT_EMISSIVE = 0.35
+/**
+ * How quickly a chair catches up with its track.
+ *
+ * The tracks are continuous inside a clip, but the runtime cuts between them - a leave
+ * begins with the chair already in, a player sitting down finds it already out - and a cut
+ * of 350mm reads as a chair teleporting. Short enough to look pushed, long enough to
+ * absorb the cut.
+ */
+const CHAIR_FOLLOW_SECONDS = 0.08
+
+function seatState(states: Map<number, SeatState>, seat: number, occupied: boolean): SeatState {
+  const held = states.get(seat)
+  if (held !== undefined) return held
+  const made = initialSeat(occupied)
+  states.set(seat, made)
+  return made
+}
+
+/**
+ * The local player keeps the accepted look; every opponent gets a colour of his own, on his
+ * own copy of the material. Recolouring the shared one would recolour the whole table.
+ */
+function applyAccents(cast: readonly CastSeat[], heroSeat: number | null): void {
+  for (const entry of cast) {
+    const accent = accentFor(entry.seat, heroSeat)
+    for (const target of entry.accentTargets) {
+      let material = target.original
+      if (accent !== null) {
+        const held = entry.accents.get(accent.name)
+        if (held !== undefined) material = held
+        else {
+          const coloured = target.original.clone()
+          coloured.name = `${ACCENT_MATERIAL} ${accent.name}`
+          if (coloured instanceof THREE.MeshStandardMaterial) {
+            coloured.color = new THREE.Color(accent.hex)
+            coloured.emissive = new THREE.Color(accent.hex)
+            coloured.emissiveIntensity = ACCENT_EMISSIVE
+          }
+          entry.accents.set(accent.name, coloured)
+          material = coloured
+        }
+      }
+      if (Array.isArray(target.mesh.material)) target.mesh.material[target.slot] = material
+      else target.mesh.material = material
+    }
+  }
+  if (process.env.NODE_ENV !== 'production') {
+    // Two seats sharing one material instance is the failure this is written against: it
+    // looks right until a colour changes and eight men change with it.
+    const owner = new Map<string, number>()
+    for (const entry of cast) {
+      for (const target of entry.accentTargets) {
+        const material = Array.isArray(target.mesh.material)
+          ? target.mesh.material[target.slot]
+          : target.mesh.material
+        if (material === undefined) continue
+        const seen = owner.get(material.uuid)
+        if (seen !== undefined && seen !== entry.seat) {
+          console.warn(
+            `river: seats ${seen} and ${entry.seat} share one lapel material, so colouring one colours both`,
+          )
+        }
+        owner.set(material.uuid, entry.seat)
+      }
+    }
+  }
+}
+
+/**
+ * The characters, instanced into the venue's seat anchors.
+ *
+ * The venue used to carry nine bodies baked into its own file, with one clip set and every
+ * copy sharing bone names, which is why the old path had to retarget clips per seat by bone
+ * index. This loads the character once and clones him per anchor instead: each seat gets its
+ * own skeleton, its own mixer and its own copy of the material its lapels are coloured
+ * through, so eight players are eight bodies and not one body playing everybody's gestures.
+ *
+ * Every clip except the layered chip push is driven frame by frame from seat-motion rather
+ * than left to the mixer's clock, so what the state machine thinks a seat is doing and what
+ * is on screen cannot drift apart.
+ */
+function SilverCast({
+  venue,
+  scene,
+  cues,
+  occupiedSeats,
+  heroSeat,
+  handSerial,
+  anchors,
+}: {
+  venue: Venue
+  scene: THREE.Object3D
+  cues: readonly AnimationCue[]
+  occupiedSeats: readonly number[] | undefined
+  heroSeat: number | null
+  handSerial: number
+  anchors: RefObject<SeatAnchors | null>
+}) {
+  const cast = useGLTF(freshAsset(venue.cast ?? ''))
+  const seats = useRef<CastSeat[]>([])
+  const states = useRef<Map<number, SeatState>>(new Map())
+  const pending = useRef<{ seat: number; clip: ClipName; at: number }[]>([])
+  const clock = useRef(0)
+  const hand = useRef(handSerial)
+  // Read when the cast is built, so a new seat is coloured at once without rebuilding
+  // eight characters every time somebody sits down.
+  const hero = useRef(heroSeat)
+  hero.current = heroSeat
+
+  useLayoutEffect(() => {
+    const clipByName = new Map(cast.animations.map((clip) => [clip.name, clip]))
+    const absent = missingClips([...clipByName.keys()])
+    // One additive copy per layered clip, shared by every seat: makeClipAdditive rewrites a
+    // clip in place, and anything that replaces the idle needs the original.
+    const prepared = new Map<ClipName, THREE.AnimationClip>()
+    for (const name of CLIPS) {
+      const source = clipByName.get(name)
+      if (source === undefined) continue
+      if (BLEND[name] !== 'additive') {
+        prepared.set(name, source)
+        continue
+      }
+      const layered = source.clone()
+      THREE.AnimationUtils.makeClipAdditive(layered)
+      prepared.set(name, layered)
+    }
+
+    scene.updateMatrixWorld(true)
+    const found: THREE.Object3D[] = []
+    scene.traverse((object) => {
+      if (
+        object.userData?.riverCast === 'native_silver' &&
+        typeof object.userData?.seatIndex === 'number'
+      ) {
+        found.push(object)
+      }
+    })
+    const built: CastSeat[] = []
+    for (const anchor of found) {
+      const seat = anchor.userData.seatIndex as number
+      const body = SkeletonUtils.clone(cast.scene)
+      body.name = `silver_seat_${seat}`
+      anchor.add(body)
+      const mixer = new THREE.AnimationMixer(body)
+      const actions = new Map<ClipName, THREE.AnimationAction>()
+      for (const [name, clip] of prepared) {
+        const action = mixer.clipAction(clip)
+        action.enabled = false
+        action.setEffectiveWeight(0)
+        if (name === IDLE_CLIP) {
+          action.setLoop(THREE.LoopRepeat, Number.POSITIVE_INFINITY)
+          action.play()
+          action.time = idlePhaseFor(seat)
+          actions.set(name, action)
+          continue
+        }
+        action.setLoop(THREE.LoopOnce, 1)
+        action.clampWhenFinished = true
+        if (BLEND[name] === 'additive') action.blendMode = THREE.AdditiveAnimationBlendMode
+        action.play()
+        action.paused = true
+        actions.set(name, action)
+      }
+      let head: THREE.Object3D | undefined
+      const accentTargets: CastSeat['accentTargets'] = []
+      body.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return
+        child.receiveShadow = true
+        if (head === undefined && child instanceof THREE.SkinnedMesh) {
+          head = child.skeleton.bones.find((bone) => /^head(_\d+)?$/.test(bone.name))
+        }
+        const materials = Array.isArray(child.material) ? child.material : [child.material]
+        materials.forEach((material, slot) => {
+          if (material.name === ACCENT_MATERIAL) {
+            accentTargets.push({ mesh: child, slot, original: material })
+          }
+        })
+      })
+      const chair = scene.getObjectByName(`${venue.id}_chair_${(seat + 1) % SEAT_SLOTS}`)
+      const chairBase = chair?.position.clone() ?? new THREE.Vector3()
+      const worldScale = new THREE.Vector3()
+      anchor.getWorldScale(worldScale)
+      built.push({
+        seat,
+        body,
+        head,
+        mixer,
+        actions,
+        accentTargets,
+        accents: new Map(),
+        chair,
+        chairBase,
+        outward: new THREE.Vector3(chairBase.x, 0, chairBase.z).normalize(),
+        scale: worldScale.x,
+        backAway: 0,
+      })
+    }
+    built.sort((left, right) => left.seat - right.seat)
+    seats.current = built
+    applyAccents(built, hero.current)
+    if (process.env.NODE_ENV !== 'production') {
+      // Both of these have already shipped as silent nothings on this project: a venue with
+      // no clips, and clips bound to nothing.
+      if (absent.length > 0) console.warn(`river: the cast is missing ${absent.join(', ')}`)
+      if (built.length === 0) {
+        console.warn(`river: ${venue.name} carries no seat anchors, so nobody is seated`)
+      }
+      if (built.some((entry) => entry.accentTargets.length === 0)) {
+        console.warn(`river: no ${ACCENT_MATERIAL} to colour, so every opponent looks the same`)
+      }
+      Object.assign(window, {
+        riverCast: {
+          seats: built.map((entry) => entry.seat),
+          clips: [...prepared.keys()],
+          missing: absent,
+          chairs: built.map((entry) => entry.chair?.name ?? null),
+          accentTargets: built.map((entry) => entry.accentTargets.length),
+        },
+        // The instruments this scene is judged with. Every visual claim about the
+        // characters so far has been made against Blender or against the asset bytes, and
+        // the browser is where they actually play: riverPlay puts a clip on a seat the way
+        // a room event would, and riverSeats says what each seat is doing and where its
+        // chair is. Development only.
+        riverPlay: (seat: number, clip: ClipName) => {
+          pending.current.push({ seat, clip, at: clock.current })
+          return `${clip} queued for seat ${seat}`
+        },
+        riverSeats: () =>
+          seats.current.map((entry) => {
+            const state = states.current.get(entry.seat)
+            const pose = state === undefined ? null : poseOf(state, clock.current)
+            return {
+              seat: entry.seat,
+              phase: state?.phase ?? 'unknown',
+              visible: entry.body.visible,
+              body: pose?.body === null ? null : pose?.body,
+              overlay: pose?.overlay === null ? null : pose?.overlay,
+              idleWeight: pose?.idleWeight ?? null,
+              chairBackAway: Number(entry.backAway.toFixed(4)),
+              accent: accentFor(entry.seat, hero.current)?.name ?? 'none',
+            }
+          }),
+      })
+    }
+    return () => {
+      for (const entry of seats.current) {
+        entry.mixer.stopAllAction()
+        entry.body.removeFromParent()
+        entry.chair?.position.copy(entry.chairBase)
+        anchors.current?.heads.delete(entry.seat)
+      }
+      seats.current = []
+      states.current = new Map()
+      pending.current = []
+    }
+  }, [cast.animations, cast.scene, scene, venue.id, venue.name, anchors])
+
+  useEffect(() => {
+    applyAccents(seats.current, heroSeat)
+  }, [heroSeat])
+
+  // Cues are queued against the same clock that drives the clips, so a staggered peek
+  // lands where it was asked for rather than where a timer happened to fire.
+  useEffect(() => {
+    for (const cue of cues) {
+      if (cue.clip === IDLE_CLIP) continue
+      pending.current.push({ seat: cue.seat, clip: cue.clip, at: clock.current + cue.delaySeconds })
+    }
+  }, [cues])
+
+  useEffect(() => {
+    if (handSerial === hand.current) return
+    hand.current = handSerial
+    for (const entry of seats.current) {
+      const occupied = occupiedSeats === undefined || occupiedSeats.includes(entry.seat)
+      states.current.set(
+        entry.seat,
+        endHand(seatState(states.current, entry.seat, occupied), clock.current),
+      )
+    }
+  }, [handSerial, occupiedSeats])
+
+  useFrame((_, delta) => {
+    clock.current += delta
+    const now = clock.current
+    const due = pending.current.filter((entry) => entry.at <= now)
+    if (due.length > 0) {
+      pending.current = pending.current.filter((entry) => entry.at > now)
+      for (const entry of due) {
+        const occupied = occupiedSeats === undefined || occupiedSeats.includes(entry.seat)
+        states.current.set(
+          entry.seat,
+          applyCue(seatState(states.current, entry.seat, occupied), entry.clip, now),
+        )
+      }
+    }
+    for (const entry of seats.current) {
+      const occupied = occupiedSeats === undefined || occupiedSeats.includes(entry.seat)
+      const state = advance(
+        syncOccupancy(seatState(states.current, entry.seat, occupied), occupied, now),
+        now,
+      )
+      states.current.set(entry.seat, state)
+      const pose = poseOf(state, now)
+      entry.body.visible = pose.visible
+      for (const [name, action] of entry.actions) {
+        const weight =
+          name === IDLE_CLIP
+            ? pose.idleWeight
+            : pose.body?.clip === name
+              ? pose.body.weight
+              : pose.release?.clip === name
+                ? pose.release.weight
+                : pose.overlay?.clip === name
+                  ? pose.overlay.weight
+                  : 0
+        action.enabled = weight > 0
+        action.setEffectiveWeight(weight)
+        if (name === IDLE_CLIP) continue
+        const frame =
+          pose.body?.clip === name
+            ? pose.body.frame
+            : pose.release?.clip === name
+              ? pose.release.frame
+              : pose.overlay?.clip === name
+                ? pose.overlay.frame
+                : null
+        if (frame !== null) action.time = frame / CLIP_FPS
+      }
+      entry.mixer.update(delta)
+      const target = pose.chair === null ? 0 : chairBackAway(pose.chair.clip, pose.chair.frame)
+      entry.backAway += (target - entry.backAway) * (1 - Math.exp(-delta / CHAIR_FOLLOW_SECONDS))
+      entry.chair?.position
+        .copy(entry.chairBase)
+        .addScaledVector(entry.outward, entry.backAway * entry.scale)
+      const found = anchors.current
+      if (
+        entry.head !== undefined &&
+        found !== null &&
+        found.heads.get(entry.seat) !== entry.head
+      ) {
+        found.heads.set(entry.seat, entry.head)
+      }
+    }
+  })
+
+  return null
+}
+
 /** The plaque and the stage, as percentages of the 1920 by 1080 design box. */
 
 function VenueAsset({
   venueId,
   cues,
   occupiedSeats,
+  heroSeat,
+  handSerial,
   anchors,
 }: {
   venueId: VenueId
   cues: readonly AnimationCue[]
   occupiedSeats: readonly number[] | undefined
+  heroSeat: number | null
+  handSerial: number
   anchors: RefObject<SeatAnchors | null>
 }) {
   const venue = venueOf(venueId)
@@ -465,6 +872,9 @@ function VenueAsset({
   }, [asset.scene, venue.shadowCasters])
 
   useLayoutEffect(() => {
+    // A venue with a cast has no bodies of its own: SilverCast owns their mixers, their
+    // clips and which seats are shown.
+    if (venue.cast !== undefined) return
     mixers.current = []
     actions.current = new Map()
     const clips = asset.animations
@@ -533,18 +943,19 @@ function VenueAsset({
       for (const mixer of mixers.current) mixer.stopAllAction()
       mixers.current = []
     }
-  }, [asset.animations, asset.scene, venue.name])
+  }, [asset.animations, asset.scene, venue.name, venue.cast])
 
   useLayoutEffect(() => {
     // Hide the baked character for any seat nobody is sitting in. The chair
     // stays: an empty chair is set dressing, an empty seat with a body in it is
     // a lie about who is at the table.
+    if (venue.cast !== undefined) return
     asset.scene.traverse((object) => {
       const seat = object.userData?.seatIndex
       if (typeof seat !== 'number') return
       object.visible = occupiedSeats === undefined || occupiedSeats.includes(seat)
     })
-  }, [asset.scene, occupiedSeats])
+  }, [asset.scene, occupiedSeats, venue.cast])
 
   // The base layer, started once when the clips bind and never restarted.
   //
@@ -554,6 +965,7 @@ function VenueAsset({
   // on top, which is also why this cannot live in the cue effect: re-running that effect
   // would reset the breathing every time the table did anything.
   useEffect(() => {
+    if (venue.cast !== undefined) return
     const timers: ReturnType<typeof setTimeout>[] = []
     for (const seat of seatIndexes) {
       const cue = idleCueFor(seat)
@@ -575,12 +987,13 @@ function VenueAsset({
     return () => {
       for (const timer of timers) clearTimeout(timer)
     }
-  }, [])
+  }, [venue.cast])
 
   useEffect(() => {
     // A cue names a seat, and only that seat's action may answer it. Matching
     // on clip name alone played one shared action nine times over, which is
     // eight no-ops and one character doing everybody's gestures.
+    if (venue.cast !== undefined) return
     const timers: ReturnType<typeof setTimeout>[] = []
     const start = (cue: AnimationCue) => {
       const action = actions.current.get(seatClipKey(cue.seat, cue.clip))
@@ -603,7 +1016,7 @@ function VenueAsset({
     return () => {
       for (const timer of timers) clearTimeout(timer)
     }
-  }, [cues])
+  }, [cues, venue.cast])
 
   // Advancing the mixers is the only per-frame cost, and it is skipped entirely
   // while there is nothing to advance.
@@ -611,7 +1024,22 @@ function VenueAsset({
     for (const mixer of mixers.current) mixer.update(delta)
   })
 
-  return <primitive object={asset.scene} />
+  return (
+    <>
+      <primitive object={asset.scene} />
+      {venue.cast !== undefined ? (
+        <SilverCast
+          venue={venue}
+          scene={asset.scene}
+          cues={cues}
+          occupiedSeats={occupiedSeats}
+          heroSeat={heroSeat}
+          handSerial={handSerial}
+          anchors={anchors}
+        />
+      ) : null}
+    </>
+  )
 }
 
 /**
@@ -1116,6 +1544,7 @@ function Scene({
   occupiedSeats,
   seatChips = [],
   heroSeat,
+  handSerial = 0,
   reviewSeat,
   sittableSeats = NO_SEATS,
   onSit,
@@ -1144,7 +1573,14 @@ function Scene({
       <SunsetSky venueId={venueId} />
       <VenueLights lights={lights} ambient={ambient} />
       <Suspense fallback={null}>
-        <VenueAsset venueId={venueId} cues={cues} occupiedSeats={occupiedSeats} anchors={anchors} />
+        <VenueAsset
+          venueId={venueId}
+          cues={cues}
+          occupiedSeats={occupiedSeats}
+          heroSeat={heroSeat ?? null}
+          handSerial={handSerial}
+          anchors={anchors}
+        />
       </Suspense>
       <InstancedTablePieces seatChips={seatChips} />
       <Seats seatIds={seatIds} seatRefs={seatRefs} venueId={venueId} anchors={anchors} />
@@ -1162,6 +1598,7 @@ export function RiverScene({
   occupiedSeats,
   seatChips,
   heroSeat,
+  handSerial,
   reviewSeat,
   sittableSeats,
   onSit,
@@ -1245,6 +1682,7 @@ export function RiverScene({
         occupiedSeats={occupiedSeats}
         seatChips={seatChips}
         heroSeat={heroSeat}
+        handSerial={handSerial}
         reviewSeat={reviewSeat}
         sittableSeats={sittableSeats}
         onSit={onSit}
@@ -1253,4 +1691,8 @@ export function RiverScene({
   )
 }
 
-for (const id of VENUE_ORDER) useGLTF.preload(freshAsset(venueOf(id).asset))
+for (const id of VENUE_ORDER) {
+  const venue = venueOf(id)
+  useGLTF.preload(freshAsset(venue.asset))
+  if (venue.cast !== undefined) useGLTF.preload(freshAsset(venue.cast))
+}

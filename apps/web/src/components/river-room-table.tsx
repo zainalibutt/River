@@ -28,7 +28,7 @@ import {
 import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverLobby } from '@/components/river-lobby'
 import { RiverVenue } from '@/components/river-venue'
-import { type AnimationCue, cuesForEvents } from '@/lib/animation'
+import { type AnimationCue, cuesForEvents, endsHand } from '@/lib/animation'
 import {
   createRiverAuthClient,
   ensureRiverSession,
@@ -337,6 +337,9 @@ export function RiverRoomTable() {
     readonly { cosmeticId: string; slot: string; equipped: boolean }[]
   >([])
   const [cues, setCues] = useState<readonly AnimationCue[]>([])
+  // Anyone standing for an all-in sits back down when a hand finishes, and the scene needs
+  // to be told each time rather than once.
+  const [handsFinished, setHandsFinished] = useState(0)
   const [hands, setHands] = useState<readonly HandRecord[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [tables, setTables] = useState<readonly TableSummary[]>([])
@@ -518,11 +521,21 @@ export function RiverRoomTable() {
           setBalance(message.balance)
           setOwnedItems(message.ownedItems)
           setOwnedCosmetics(message.ownedCosmetics)
-          const nextCues = cuesForEvents(message.events, (playerId) => {
-            const seat = message.view.seats.find((entry) => entry.playerId === playerId)
-            return seat?.seat ?? -1
-          })
+          const nextCues = cuesForEvents(
+            message.events,
+            (playerId) => {
+              const seat = message.view.seats.find((entry) => entry.playerId === playerId)
+              return seat?.seat ?? -1
+            },
+            // Who looks at their cards when a hand starts: whoever was dealt any.
+            {
+              seatsInHand: message.view.seats
+                .filter((seat) => seat.hasHole)
+                .map((seat) => seat.seat),
+            },
+          )
           if (nextCues.length > 0) setCues(nextCues)
+          if (endsHand(message.events)) setHandsFinished((finished) => finished + 1)
           const settled = message.events.flatMap((event) =>
             event.kind === 'handRecorded' ? [event.record] : [],
           )
@@ -881,6 +894,7 @@ export function RiverRoomTable() {
               seatIds={sceneSeatIds}
               seatRefs={seatRefs}
               heroSeat={selfSeat?.seat ?? null}
+              handSerial={handsFinished}
               sittableSeats={
                 selfSeat !== null || entryBuyIn === null
                   ? []

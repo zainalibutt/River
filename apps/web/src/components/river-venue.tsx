@@ -23,6 +23,8 @@ type RiverVenueProps = {
   /** What each occupied seat has in front of it, for the chip stacks. */
   seatChips?: readonly SeatChips[] | undefined
   heroSeat?: number | null | undefined
+  /** How many hands have finished; a player standing for an all-in sits down on a change. */
+  handSerial?: number | undefined
   reviewSeat?: number | null | undefined
   /** Empty seats the local player may take; hovering one lights its chair. */
   sittableSeats?: readonly number[] | undefined
@@ -37,6 +39,7 @@ export function RiverVenue({
   occupiedSeats,
   seatChips,
   heroSeat,
+  handSerial,
   reviewSeat,
   sittableSeats,
   onSit,
@@ -50,6 +53,7 @@ export function RiverVenue({
       occupiedSeats={occupiedSeats}
       seatChips={seatChips}
       heroSeat={heroSeat}
+      handSerial={handSerial}
       reviewSeat={reviewSeat}
       sittableSeats={sittableSeats}
       onSit={onSit}

@@ -81,6 +81,16 @@ export interface Venue {
   name: string
   tagline: string
   asset: string
+  /**
+   * The character the browser seats here, when the venue carries seat anchors rather than
+   * bodies baked into it.
+   *
+   * Eight copies of the native Silver built into a venue file would be 537,408 triangles
+   * and 184 draw calls before any furniture, past this project's scene and download
+   * budgets both. So the venue carries eight anchors, this file is fetched once, and the
+   * scene instances it per occupied seat: one mesh and one clip set, a skeleton each.
+   */
+  cast?: string
   camera: VenueCamera
   /**
    * The seat ring, as an ellipse. The table is oval, so a circle puts the two
@@ -104,6 +114,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     name: 'The Rooftop',
     tagline: 'City lights, open air, and a skyline that watches you lose.',
     asset: '/assets/rooftop_assets.glb',
+    cast: '/assets/char_native_silver.glb',
     // Set against the reference rather than against the lookdev render - see
     // docs/design/22-shot-composition.md, which measures all three numbers off
     // a frame of the genre reference.
