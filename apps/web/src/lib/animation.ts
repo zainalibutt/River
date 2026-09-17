@@ -1,35 +1,69 @@
 import type { RoomEvent } from '@river/server'
 
 /**
- * The clips authored on the character rig, by their names in the GLB.
+ * The clips the native Silver character carries, by their names in its GLB.
  *
- * This list is the contract with the art pipeline. A clip that is not here
- * cannot be played, and a name here that the rig does not carry is a build
- * error rather than a silent no-op - see `missingClips`.
+ * This list is the contract with the art pipeline: it is the allow-list
+ * `export_silver_integration.py` ships and `check_character_glb.py` enforces.
+ * A clip that is not here cannot be played, and a name here that the rig does
+ * not carry is a build error rather than a silent no-op - see `missingClips`.
+ *
+ * Fold, win and lose gestures exist in an earlier library but are not part of
+ * this character yet, so those events play nothing rather than the nearest
+ * clip.
  */
 export const CLIPS = [
-  'IDLE_breathe',
-  'CHIP_toss',
-  'DEAL_toss',
-  'FOLD_muck',
+  'IDLE_thinking_readable',
+  'CHECK_tap',
   'PEEK_card',
-  'PRESET_reach',
-  'REACT_win',
-  'REACT_lose',
+  'CHIP_toss',
   'ALLIN_standup',
+  'SIT_enter',
+  'LEAVE_getup',
 ] as const
 
 export type ClipName = (typeof CLIPS)[number]
 
+/** The clip that runs whenever a seated player is doing nothing else. */
+export const IDLE_CLIP: ClipName = 'IDLE_thinking_readable'
+
+/** Every clip was authored and exported at this rate; frames below are its frames. */
+export const CLIP_FPS = 30
+
+/** The last frame of each clip. Every clip starts on frame 0. */
+export const CLIP_LAST_FRAME: Readonly<Record<ClipName, number>> = {
+  IDLE_thinking_readable: 120,
+  CHECK_tap: 36,
+  PEEK_card: 48,
+  CHIP_toss: 30,
+  ALLIN_standup: 90,
+  SIT_enter: 108,
+  LEAVE_getup: 132,
+}
+
 /**
- * The clip that always runs underneath the others.
+ * How a clip combines with the idle underneath it.
  *
- * Every clip used to be absolute, so a chip push overwrote the whole upper body and the
- * character stopped breathing for the length of the gesture, then snapped back. The idle
- * is the base layer and every other clip plays additively on top of it, which is why this
- * name is worth having rather than being spelled out at each use.
+ * Additive is only correct for a clip whose first frame is the pose the idle is
+ * already in, because additive playback applies the clip as a change from its
+ * own first frame. Measured on the rebaked clips, CHIP_toss starts and ends on
+ * the idle's first frame exactly. CHECK_tap and PEEK_card start and end with the
+ * left hand about 186mm from where the idle holds it, so layered they would tap
+ * and peek from the wrong place; they replace the idle for their length instead,
+ * with a short blend either side. The sit, the leave and the all-in move the
+ * whole body and are never averaged with a seated idle.
  */
-export const IDLE_CLIP: ClipName = 'IDLE_breathe'
+export type BlendMode = 'additive' | 'replace'
+
+export const BLEND: Readonly<Record<ClipName, BlendMode>> = {
+  IDLE_thinking_readable: 'replace',
+  CHECK_tap: 'replace',
+  PEEK_card: 'replace',
+  CHIP_toss: 'additive',
+  ALLIN_standup: 'replace',
+  SIT_enter: 'replace',
+  LEAVE_getup: 'replace',
+}
 
 export interface AnimationCue {
   seat: number
@@ -47,20 +81,24 @@ export interface AnimationCue {
  * blocking. So a cue is fire and forget: it carries a delay for staggering, and
  * nothing anywhere waits on one finishing. If the server settles a hand while a
  * chip toss is mid-flight, the chip toss loses.
+ *
+ * Leaving outranks everything, because a player who has gone must be seen to
+ * go; sitting down outranks every gesture for the same reason.
  */
 const PRIORITY = {
   idle: 0,
   peek: 10,
+  check: 15,
   chips: 20,
-  fold: 30,
-  react: 40,
   allIn: 50,
+  sit: 60,
+  leave: 70,
 } as const
 
 /**
  * A seat's idle offset, in seconds.
  *
- * Nine characters breathing on the same frame reads as a row of clones. The
+ * Eight characters breathing on the same frame reads as a row of clones. The
  * offset is derived from the seat rather than randomised, so a reconnecting
  * player rejoins the table they left instead of one that resynchronised.
  */
@@ -72,11 +110,26 @@ export function idlePhaseFor(seat: number): number {
 export function idleCueFor(seat: number): AnimationCue {
   return {
     seat,
-    clip: 'IDLE_breathe',
+    clip: IDLE_CLIP,
     loop: true,
     delaySeconds: idlePhaseFor(seat),
     priority: PRIORITY.idle,
   }
+}
+
+/**
+ * When a seat looks at its cards after the deal, in seconds.
+ *
+ * Everyone lifting their cards on the same frame reads as a drill. Spread over
+ * a little over a second, by seat, so it is the same for everyone watching.
+ */
+export function peekDelayFor(seat: number): number {
+  return Number((0.35 + (idlePhaseFor(seat + 11) / 4) * 1.2).toFixed(3))
+}
+
+export interface CueContext {
+  /** Seats dealt into the hand that has just started, for the peek. */
+  seatsInHand?: readonly number[]
 }
 
 /**
@@ -89,6 +142,7 @@ export function idleCueFor(seat: number): AnimationCue {
 export function cueForEvent(
   event: RoomEvent,
   seatOf: (playerId: string) => number,
+  context: CueContext = {},
 ): AnimationCue[] {
   switch (event.kind) {
     case 'acted':
@@ -101,19 +155,15 @@ export function cueForEvent(
     }
     case 'blinds':
       return event.posts.map((post) => once(post.seat, 'CHIP_toss', PRIORITY.chips))
-    case 'uncontested': {
-      const seat = seatOf(event.playerId)
-      return seat < 0 ? [] : [once(seat, 'REACT_win', PRIORITY.react)]
-    }
-    case 'showdown':
-      return event.awards.flatMap((award) => {
-        const seat = seatOf(award.playerId)
-        return seat < 0 ? [] : [once(seat, 'REACT_win', PRIORITY.react)]
-      })
-    case 'bust': {
-      const seat = seatOf(event.playerId)
-      return seat < 0 ? [] : [once(seat, 'REACT_lose', PRIORITY.react)]
-    }
+    case 'seated':
+      return [once(event.seat, 'SIT_enter', PRIORITY.sit)]
+    case 'stood':
+      return [once(event.seat, 'LEAVE_getup', PRIORITY.leave)]
+    case 'handStarted':
+      return (context.seatsInHand ?? []).map((seat) => ({
+        ...once(seat, 'PEEK_card', PRIORITY.peek),
+        delaySeconds: peekDelayFor(seat),
+      }))
     default:
       return []
   }
@@ -121,22 +171,22 @@ export function cueForEvent(
 
 function clipForAction(kind: string): ClipName | null {
   switch (kind) {
-    case 'fold':
-      return 'FOLD_muck'
+    case 'check':
+      return 'CHECK_tap'
     case 'call':
     case 'raiseTo':
       return 'CHIP_toss'
     case 'allIn':
       return 'ALLIN_standup'
     default:
-      // A check has no gesture on this rig. Nothing is the honest answer.
+      // A fold has no gesture on this character yet. Nothing is the honest answer.
       return null
   }
 }
 
 function priorityForClip(clip: ClipName): number {
   if (clip === 'ALLIN_standup') return PRIORITY.allIn
-  if (clip === 'FOLD_muck') return PRIORITY.fold
+  if (clip === 'CHECK_tap') return PRIORITY.check
   if (clip === 'PEEK_card') return PRIORITY.peek
   return PRIORITY.chips
 }
@@ -148,10 +198,10 @@ function once(seat: number, clip: ClipName, priority: number): AnimationCue {
 /**
  * One cue per seat, highest priority winning.
  *
- * A seat that goes all in and wins in the same batch should stand up, not
- * shuffle chips, and the order the server happened to emit the events in is not
- * a reason to pick differently. Ties keep the earlier cue, so the resolution is
- * stable for the same input.
+ * A seat that goes all in and gets up in the same batch should leave, not
+ * stand for the all-in, and the order the server happened to emit the events in
+ * is not a reason to pick differently. Ties keep the earlier cue, so the
+ * resolution is stable for the same input.
  */
 export function resolveCues(cues: readonly AnimationCue[]): AnimationCue[] {
   const bySeat = new Map<number, AnimationCue>()
@@ -166,16 +216,27 @@ export function resolveCues(cues: readonly AnimationCue[]): AnimationCue[] {
 export function cuesForEvents(
   events: readonly RoomEvent[],
   seatOf: (playerId: string) => number,
+  context: CueContext = {},
 ): AnimationCue[] {
-  return resolveCues(events.flatMap((event) => cueForEvent(event, seatOf)))
+  return resolveCues(events.flatMap((event) => cueForEvent(event, seatOf, context)))
 }
 
 /**
- * Clips the contract expects that a loaded rig does not carry.
+ * Whether a batch of events ends a hand.
  *
- * The venue GLBs currently export nine skins and zero animations, so this
- * returns the whole list. That is the point: a silent absence is how the last
- * five modules on this project ended up wired to nothing.
+ * A player who stood up for an all-in sits back down when the hand is over, and
+ * this is the moment. The record and the gap before the next hand both mean it,
+ * and either arriving alone is enough.
+ */
+export function endsHand(events: readonly RoomEvent[]): boolean {
+  return events.some((event) => event.kind === 'handRecorded' || event.kind === 'between')
+}
+
+/**
+ * Clips the contract expects that a loaded character does not carry.
+ *
+ * A silent absence is how the last five modules on this project ended up wired
+ * to nothing, so the scene says which are missing rather than playing fewer.
  */
 export function missingClips(available: readonly string[]): ClipName[] {
   const present = new Set(available)
