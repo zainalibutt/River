@@ -1926,7 +1926,7 @@ function ActionMenu({
 
   if (kicked)
     return (
-      <div className="ram ram-waiting">
+      <div className="ram ram-solo">
         <button type="button" onClick={onRejoin}>
           RETURN TO TABLE
         </button>
@@ -1955,7 +1955,7 @@ function ActionMenu({
   if (legal === null) {
     if (view.phase === 'open' && canDeal)
       return (
-        <div className="ram ram-waiting">
+        <div className="ram ram-solo">
           <button type="button" onClick={onDeal}>
             DEAL
           </button>

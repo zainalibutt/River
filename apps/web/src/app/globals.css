@@ -1447,7 +1447,16 @@ button.invite-chip.showing-code {
   letter-spacing: 0.12em;
 }
 
-.ram-waiting button {
+/* A single button in the ram's place - DEAL, RETURN TO TABLE - and nothing around it. These
+   used to sit inside .ram-waiting, whose own pill is a caption's background, so the button
+   drew a second, taller pill over a wider flat one: two outlines where there is one control. */
+.ram-solo {
+  display: grid;
+  place-items: center;
+}
+
+.ram-waiting button,
+.ram-solo > button {
   min-width: 200px;
   min-height: 86px;
   border: 1px solid var(--river-brass);
