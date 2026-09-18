@@ -28,7 +28,7 @@ import {
 import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverLobby } from '@/components/river-lobby'
 import { RiverVenue } from '@/components/river-venue'
-import { type AnimationCue, cuesForEvents, endsHand } from '@/lib/animation'
+import { type AnimationCue, CUE_HISTORY, cuesForEvents, endsHand, peekCue } from '@/lib/animation'
 import {
   createRiverAuthClient,
   ensureRiverSession,
@@ -77,6 +77,17 @@ import { DEFAULT_VENUE, type VenueId, venueOf, worldSeats } from '@/lib/venue'
 import { type VerifyResult, verifyHand } from '@/lib/verify'
 
 const boardSlots = ['flop-one', 'flop-two', 'flop-three', 'turn', 'river'] as const
+
+/**
+ * Bots carry an id the server gives nothing else - see botPlayerId there. The table uses it
+ * to leave a bot's looks at its cards to the server, which decides when a bot looks.
+ */
+function isBotPlayerId(playerId: string | null): boolean {
+  return playerId?.startsWith('bot:') ?? false
+}
+
+/** Mirrors the server: a second press inside most of a look is the same look. */
+const LOOK_INTERVAL_MS = 1_200
 const seatPositions = [
   { x: 57, y: 78 },
   { x: 23, y: 76 },
@@ -337,6 +348,17 @@ export function RiverRoomTable() {
     readonly { cosmeticId: string; slot: string; equipped: boolean }[]
   >([])
   const [cues, setCues] = useState<readonly AnimationCue[]>([])
+  const cueSerial = useRef(0)
+  // A running list rather than the latest batch - see AnimationCue.serial for what the
+  // latest batch used to lose.
+  const pushCues = useCallback((next: readonly AnimationCue[]) => {
+    if (next.length === 0) return
+    const stamped = next.map((cue) => {
+      cueSerial.current += 1
+      return { ...cue, serial: cueSerial.current }
+    })
+    setCues((current) => [...current, ...stamped].slice(-CUE_HISTORY))
+  }, [])
   // Anyone standing for an all-in sits back down when a hand finishes, and the scene needs
   // to be told each time rather than once.
   const [handsFinished, setHandsFinished] = useState(0)
@@ -454,6 +476,14 @@ export function RiverRoomTable() {
           }
           if (message.kind === 'social') {
             const event = message.event
+            // Somebody else looking at their cards. Your own look already played when you
+            // pressed, without waiting for the round trip.
+            if (event.kind === 'peeked' && event.playerId !== viewRef.current.selfId) {
+              const looking = viewRef.current.seats.find(
+                (entry) => entry.playerId === event.playerId,
+              )
+              if (looking !== undefined) pushCues([peekCue(looking.seat)])
+            }
             setSpeaking((current) => applySpeaking(current, event))
             setFeed((current) =>
               appendSocialEvent(current, event, {
@@ -527,14 +557,16 @@ export function RiverRoomTable() {
               const seat = message.view.seats.find((entry) => entry.playerId === playerId)
               return seat?.seat ?? -1
             },
-            // Who looks at their cards when a hand starts: whoever was dealt any.
+            // Who looks at their cards when a hand starts: every person dealt in. The bots
+            // look when the server says they do, some on the deal and some only when the
+            // action reaches them.
             {
               seatsInHand: message.view.seats
-                .filter((seat) => seat.hasHole)
+                .filter((seat) => seat.hasHole && !isBotPlayerId(seat.playerId))
                 .map((seat) => seat.seat),
             },
           )
-          if (nextCues.length > 0) setCues(nextCues)
+          pushCues(nextCues)
           if (endsHand(message.events)) setHandsFinished((finished) => finished + 1)
           const settled = message.events.flatMap((event) =>
             event.kind === 'handRecorded' ? [event.record] : [],
@@ -599,8 +631,8 @@ export function RiverRoomTable() {
     }
     // initialVenue is read once when a new table is opened. It comes from
     // useState's initialiser and never changes, but naming it keeps the rule
-    // honest rather than silencing it.
-  }, [inviteCode, roomId, initialVenue, flushSeatRequest])
+    // honest rather than silencing it. pushCues is stable for the same reason.
+  }, [inviteCode, roomId, initialVenue, flushSeatRequest, pushCues])
 
   useEffect(() => {
     const resize = () =>
@@ -624,6 +656,26 @@ export function RiverRoomTable() {
   useEffect(() => {
     if (seatRequest !== null) flushSeatRequest(view.phase)
   }, [seatRequest, view.phase, flushSeatRequest])
+
+  // Pressing your cards, or holding Space, is a look at them - on screen and at the table.
+  // It used to turn the cards over in the corner and nothing else: your character sat
+  // perfectly still while you read your hand, and nobody else saw you do it.
+  const lastLook = useRef(0)
+  useEffect(() => {
+    if (!peek) return
+    const current = viewRef.current
+    const hero = current.seats.find((seat) => seat.playerId === current.selfId)
+    if (current.phase !== 'hand' || hero === undefined || !hero.hasHole || hero.folded) return
+    const now = Date.now()
+    if (now - lastLook.current < LOOK_INTERVAL_MS) return
+    lastLook.current = now
+    pushCues([peekCue(hero.seat)])
+    try {
+      socketRef.current?.social({ kind: 'peek' })
+    } catch {
+      // Offline: the look still plays here, and there is nobody to tell.
+    }
+  }, [peek, pushCues])
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {

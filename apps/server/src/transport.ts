@@ -21,6 +21,9 @@ import {
   botsWanted,
   emptySeatsIn,
   isBotPlayer,
+  peekAfterDealMs,
+  peekDuringThinkMs,
+  situationFor,
   thinkingMs,
 } from './bot-service.js'
 import type { CosmeticOutcome, CosmeticStore, OwnedCosmetic } from './cosmetic-service.js'
@@ -75,6 +78,7 @@ export type ClientSocialCommand =
   | { kind: 'chat'; text: string }
   | { kind: 'emote'; emote: Emote }
   | { kind: 'speaking'; speaking: boolean }
+  | { kind: 'peek' }
 
 export type SocialEvent =
   | { kind: 'chat'; playerId: string; text: string; sentAtMs: number }
@@ -82,6 +86,8 @@ export type SocialEvent =
   | { kind: 'emoteInterrupted'; playerId: string }
   | { kind: 'avatarVo'; playerId: string; trigger: 'allIn' | 'win' | 'loss'; sentAtMs: number }
   | { kind: 'speaking'; playerId: string; speaking: boolean }
+  /** Somebody lifted their cards to look at them. Everyone at a real table sees that. */
+  | { kind: 'peeked'; playerId: string; sentAtMs: number }
 
 export type ClientMessage =
   | { kind: 'authenticate'; accessToken: string }
@@ -198,6 +204,21 @@ interface RoomState {
   lastSpokeAtMs: Map<number, number>
   /** Timers for lines that have been scheduled but not yet said. */
   speechTimers: Set<ReturnType<typeof setTimeout>>
+  /** Bots that have looked at their cards this hand. */
+  botLooked: Set<string>
+  /** A look at the cards scheduled for a bot and not yet taken; one per bot. */
+  peekTimers: Map<string, ReturnType<typeof setTimeout>>
+  /** When each player last looked, so pressing the cards over and over is one look. */
+  lastPeekAtMs: Map<string, number>
+  /**
+   * The decision the pending bot timer answers.
+   *
+   * Every broadcast reschedules the bot whose turn it is, including broadcasts that have
+   * nothing to do with its turn, and each reschedule used to start its think again from
+   * zero and draw a fresh decision. A think now runs to the end unless the decision in
+   * front of the bot actually changes.
+   */
+  botTurnKey: string | null
 }
 
 /** How loudly each moment deserves to be spoken about. */
@@ -291,6 +312,8 @@ export interface RoomCreationSettings {
 }
 
 const DEFAULT_BOT_THINK_CAP = 4_000
+/** A look at the cards takes 1.6 seconds; a second press inside most of that is the same look. */
+const PEEK_INTERVAL_MS = 1_200
 
 const ROOM_ID = /^[a-z0-9][a-z0-9-]{2,31}$/
 const REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/
@@ -393,6 +416,7 @@ function socialCommand(value: unknown): ClientSocialCommand | null {
   if (value.kind === 'speaking' && typeof value.speaking === 'boolean') {
     return { kind: 'speaking', speaking: value.speaking }
   }
+  if (value.kind === 'peek') return { kind: 'peek' }
   return null
 }
 
@@ -1035,6 +1059,10 @@ export class RoomHub {
     const player = connection.player
     if (player === null || connection.roomId === null) return
     const { command } = message
+    if (command.kind === 'peek') {
+      this.peek(state, player.playerId, message.requestId)
+      return
+    }
     if (
       command.kind === 'emote' &&
       state.room.viewFor(player.playerId).currentActor?.playerId === player.playerId
@@ -1296,6 +1324,10 @@ export class RoomHub {
       botCast: new Map(),
       lastSpokeAtMs: new Map(),
       speechTimers: new Set(),
+      botLooked: new Set(),
+      peekTimers: new Map(),
+      lastPeekAtMs: new Map(),
+      botTurnKey: null,
       nextHandTimer: null,
     }
     this.rooms.set(roomId, created)
@@ -1502,33 +1534,105 @@ export class RoomHub {
   /**
    * Act for a bot whose turn it is, after a pause.
    *
-   * An instant answer is the clearest tell that a table is not real. The pause
-   * always lands well inside the turn budget, so a bot can never be the reason
-   * a hand times out.
+   * An instant answer is the clearest tell that a table is not real. The bot
+   * decides when its turn begins, so the pause can fit the decision - a snap fold
+   * is quick, calling a big bet is not - and it looks at its cards somewhere in
+   * that pause when a player would. The pause always lands well inside the turn
+   * budget, so a bot can never be the reason a hand times out.
    */
   private scheduleBotTurn(state: RoomState): void {
-    this.clearBotTurn(state)
     const view = state.room.viewFor('')
     const actor = view.currentActor?.playerId
+    const key =
+      actor === undefined ? null : `${view.handNumber}:${view.street}:${actor}:${view.currentBet}`
+    if (key !== null && key === state.botTurnKey && state.botTimer !== null) return
+    this.clearBotTurn(state)
     if (actor === undefined || !isBotPlayer(actor)) return
     const personality = state.botCast.get(actor)
     if (personality === undefined) return
 
     const rng = this.botRng
-    const delay = Math.min(thinkingMs(personality, rng), this.remainingTurnMs(state) * 0.6)
-    state.botTimer = setTimeout(
-      () => {
-        void this.enqueue(state, async () => {
-          state.botTimer = null
-          const current = state.room.viewFor(actor)
-          const action = actionFor(current, actor, personality, rng)
-          if (action === null) return
-          const result = state.room.submit({ kind: 'act', playerId: actor, action })
-          if (result.ok) this.broadcast(state, null, result.events)
-        })
-      },
-      Math.max(120, delay),
+    const seen = state.room.viewFor(actor)
+    const decided = actionFor(seen, actor, personality, rng)
+    if (decided === null) return
+    const situation = situationFor(seen, actor, decided, !state.botLooked.has(actor))
+    const delay = Math.max(
+      120,
+      Math.min(thinkingMs(personality, situation, rng), this.remainingTurnMs(state) * 0.6),
     )
+    const lookAt = peekDuringThinkMs(situation, delay, rng)
+    if (lookAt !== null) this.schedulePeek(state, actor, lookAt)
+    state.botTurnKey = key
+    state.botTimer = setTimeout(() => {
+      void this.enqueue(state, async () => {
+        state.botTimer = null
+        state.botTurnKey = null
+        const current = state.room.viewFor(actor)
+        // If the table moved on during the think, decide again from what is there now.
+        const unchanged =
+          current.currentActor?.playerId === actor &&
+          current.handNumber === seen.handNumber &&
+          current.street === seen.street &&
+          current.currentBet === seen.currentBet
+        const action = unchanged ? decided : actionFor(current, actor, personality, rng)
+        if (action === null) return
+        const result = state.room.submit({ kind: 'act', playerId: actor, action })
+        if (result.ok) this.broadcast(state, null, result.events)
+      })
+    }, delay)
+  }
+
+  /**
+   * The bots' first look at a new hand.
+   *
+   * Most look soon after the deal, each on its own beat; the rest leave their
+   * cards on the felt until the action reaches them, and look then. Every
+   * client used to lift every seat's cards itself on the deal, all within a
+   * second and a half of each other.
+   */
+  private scheduleDealPeeks(state: RoomState, events: RoomEvent[]): void {
+    if (!events.some((event) => event.kind === 'handStarted')) return
+    for (const timer of state.peekTimers.values()) clearTimeout(timer)
+    state.peekTimers.clear()
+    state.botLooked.clear()
+    for (const seat of state.room.viewFor('').seats) {
+      if (seat.playerId === null || !isBotPlayer(seat.playerId) || !seat.hasHole) continue
+      const after = peekAfterDealMs(this.botRng)
+      if (after !== null) this.schedulePeek(state, seat.playerId, after)
+    }
+  }
+
+  /** One pending look per bot: a later one replaces an earlier one still waiting. */
+  private schedulePeek(state: RoomState, playerId: string, afterMs: number): void {
+    const pending = state.peekTimers.get(playerId)
+    if (pending !== undefined) clearTimeout(pending)
+    const timer = setTimeout(() => {
+      state.peekTimers.delete(playerId)
+      state.botLooked.add(playerId)
+      this.peek(state, playerId, null)
+    }, afterMs)
+    state.peekTimers.set(playerId, timer)
+  }
+
+  /**
+   * A player looking at their cards, shown to the table.
+   *
+   * Everyone sees a player lift their cards in a real room, and it is
+   * information. It rides the social wire because it is a gesture rather than a
+   * move - it changes nothing about the hand - so it is allowed on your own turn,
+   * when it matters most, and it does not spend the chat allowance. Pressing the
+   * cards over and over is one look rather than a flood: the extra presses are
+   * dropped quietly, because there is nothing for the client to say about them.
+   */
+  private peek(state: RoomState, playerId: string, requestId: string | null): void {
+    const view = state.room.viewFor(playerId)
+    const seat = view.seats.find((entry) => entry.playerId === playerId)
+    if (view.phase !== 'hand' || seat === undefined || !seat.hasHole || seat.folded) return
+    const now = state.room.config.nowMs()
+    const last = state.lastPeekAtMs.get(playerId)
+    if (last !== undefined && now - last < PEEK_INTERVAL_MS) return
+    state.lastPeekAtMs.set(playerId, now)
+    this.broadcastSocial(state, requestId, { kind: 'peeked', playerId, sentAtMs: now })
   }
 
   private remainingTurnMs(state: RoomState): number {
@@ -1540,6 +1644,7 @@ export class RoomHub {
   private clearBotTurn(state: RoomState): void {
     if (state.botTimer !== null) clearTimeout(state.botTimer)
     state.botTimer = null
+    state.botTurnKey = null
   }
 
   private clearTurnTimeout(state: RoomState): void {
@@ -1568,6 +1673,9 @@ export class RoomHub {
       this.snapshot(connection, state, connection === requester ? requestId : null, events)
     }
     this.scheduleTurnTimeout(state)
+    // Before the turn: a new deal resets who has looked, and the first actor's
+    // think needs to know whether it is also its first look.
+    this.scheduleDealPeeks(state, events)
     this.scheduleBotTurn(state)
     this.interruptEmotes(state, events)
     this.broadcastAvatarVo(state, events)

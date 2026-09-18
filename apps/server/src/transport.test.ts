@@ -138,6 +138,14 @@ async function connectAndEnter(hub: RoomHub, token: string, name: string) {
 }
 
 describe('wire protocol parsing', () => {
+  it('reads a look at the cards as a social command', () => {
+    expect(
+      parseClientMessage(
+        JSON.stringify({ kind: 'social', requestId: 'look', command: { kind: 'peek' } }),
+      ),
+    ).toEqual({ kind: 'social', requestId: 'look', command: { kind: 'peek' } })
+  })
+
   it('rejects malformed or unbounded messages', () => {
     expect(parseClientMessage('{')).toBeNull()
     expect(
@@ -307,6 +315,98 @@ describe('room hub', () => {
     expect(actorClient.peer.last('error')).toMatchObject({
       requestId: 'turn-emote',
       code: 'emote_unavailable',
+    })
+  })
+
+  describe('looking at your cards', () => {
+    async function dealtIn(hub: RoomHub) {
+      const alice = await connectAndEnter(hub, 'alice', 'Alice')
+      const bob = await connectAndEnter(hub, 'bob', 'Bob')
+      for (const [client, seat, requestId] of [
+        [alice, 0, 'alice-sit'],
+        [bob, 1, 'bob-sit'],
+      ] as const) {
+        await client.connection.receive(
+          JSON.stringify({
+            kind: 'command',
+            requestId,
+            command: { kind: 'sit', seat, buyIn: 50_000 },
+          }),
+        )
+      }
+      await alice.connection.receive(
+        JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+      )
+      return { alice, bob }
+    }
+
+    function peeksIn(peer: TestPeer, playerId: string) {
+      return peer.messages.filter(
+        (message) =>
+          message.kind === 'social' &&
+          message.event.kind === 'peeked' &&
+          message.event.playerId === playerId,
+      ).length
+    }
+
+    const peek = (requestId: string) =>
+      JSON.stringify({ kind: 'social', requestId, command: { kind: 'peek' } })
+
+    it('shows the whole table a player lifting their cards', async () => {
+      const { hub } = setup()
+      const { alice, bob } = await dealtIn(hub)
+      await alice.connection.receive(peek('look'))
+      expect(peeksIn(bob.peer, ALICE)).toBe(1)
+      expect(peeksIn(alice.peer, ALICE)).toBe(1)
+    })
+
+    it('is allowed on your own turn, which is when it matters most', async () => {
+      const { hub } = setup()
+      const { alice, bob } = await dealtIn(hub)
+      const snapshot = alice.peer.last('snapshot')
+      if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+      const actor = snapshot.view.currentActor?.playerId === ALICE ? alice : bob
+      const actorId = actor === alice ? ALICE : BOB
+      await actor.connection.receive(peek('turn-look'))
+      expect(actor.peer.last('error')).toBeUndefined()
+      expect(peeksIn(alice.peer, actorId)).toBe(1)
+    })
+
+    it('treats pressing the cards over and over as one look', async () => {
+      vi.useFakeTimers()
+      const { hub } = setup()
+      const { alice, bob } = await dealtIn(hub)
+      await alice.connection.receive(peek('one'))
+      await alice.connection.receive(peek('two'))
+      await alice.connection.receive(peek('three'))
+      expect(peeksIn(bob.peer, ALICE)).toBe(1)
+      // Dropped quietly, not refused: there is nothing for the client to say about it.
+      expect(alice.peer.last('error')).toBeUndefined()
+      await vi.advanceTimersByTimeAsync(1_300)
+      await alice.connection.receive(peek('again'))
+      expect(peeksIn(bob.peer, ALICE)).toBe(2)
+    })
+
+    it('does not spend the chat allowance', async () => {
+      const { hub } = setup(30_000, 0, undefined, { maxActions: 1, windowMs: 10_000 })
+      const { alice } = await dealtIn(hub)
+      await alice.connection.receive(peek('look'))
+      await alice.connection.receive(
+        JSON.stringify({
+          kind: 'social',
+          requestId: 'chat',
+          command: { kind: 'chat', text: 'hi' },
+        }),
+      )
+      expect(alice.peer.last('error')).toBeUndefined()
+    })
+
+    it('ignores a player with no cards to look at', async () => {
+      const { hub } = setup()
+      const alice = await connectAndEnter(hub, 'alice', 'Alice')
+      const bob = await connectAndEnter(hub, 'bob', 'Bob')
+      await alice.connection.receive(peek('nothing'))
+      expect(peeksIn(bob.peer, ALICE)).toBe(0)
     })
   })
 
@@ -1227,6 +1327,24 @@ describe('bots at the table', () => {
     for (const entry of ledger.entries) {
       expect(entry.playerId.startsWith('bot:')).toBe(false)
     }
+  })
+
+  it('has the bots look at their cards, on their own time', async () => {
+    // The client used to lift every seat's cards itself on the deal, bots included, all
+    // within a second and a half. The bots now look when the server says they do - some
+    // soon after the deal, the rest when the action reaches them - and every client sees
+    // the same looks at the same moments.
+    vi.useFakeTimers()
+    const { hub } = withBots()
+    const { peer } = await sitAndStart(hub)
+    await vi.advanceTimersByTimeAsync(8_000)
+    const looked = peer.messages.filter(
+      (message) =>
+        message.kind === 'social' &&
+        message.event.kind === 'peeked' &&
+        message.event.playerId.startsWith('bot:'),
+    )
+    expect(looked.length).toBeGreaterThan(0)
   })
 
   it('acts for a bot when the turn reaches it', async () => {

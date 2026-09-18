@@ -73,6 +73,16 @@ export interface AnimationCue {
   delaySeconds: number
   /** Higher wins when two cues land on one seat in the same frame. */
   priority: number
+  /**
+   * Where this cue sits in the table's running order, stamped when it is queued.
+   *
+   * Cues used to reach the scene as "the latest batch", a whole array replaced on every
+   * message. Two messages landing before the scene rendered - a bot's action and a look at
+   * the cards, say - left only the second batch for it to read, and the first gesture was
+   * never played. The scene now reads a running list and plays what is newer than the last
+   * cue it saw.
+   */
+  serial?: number
 }
 
 /**
@@ -193,6 +203,34 @@ function priorityForClip(clip: ClipName): number {
 
 function once(seat: number, clip: ClipName, priority: number): AnimationCue {
   return { seat, clip, loop: false, delaySeconds: 0, priority }
+}
+
+/** A seat looking at its cards now: pressed by its player, or announced by the table. */
+export function peekCue(seat: number): AnimationCue {
+  return once(seat, 'PEEK_card', PRIORITY.peek)
+}
+
+/** How many cues the running list keeps. The scene only ever reads the newest few. */
+export const CUE_HISTORY = 48
+
+/**
+ * The cues a consumer has not played yet, oldest first.
+ *
+ * A cue with no serial predates the running list and is always new, which keeps a caller
+ * that hands over a single batch working as it did.
+ */
+export function unplayedCues(
+  cues: readonly AnimationCue[],
+  lastPlayed: number,
+): { fresh: AnimationCue[]; lastPlayed: number } {
+  let newest = lastPlayed
+  const fresh: AnimationCue[] = []
+  for (const cue of cues) {
+    if (cue.serial !== undefined && cue.serial <= lastPlayed) continue
+    fresh.push(cue)
+    if (cue.serial !== undefined) newest = Math.max(newest, cue.serial)
+  }
+  return { fresh, lastPlayed: newest }
 }
 
 /**

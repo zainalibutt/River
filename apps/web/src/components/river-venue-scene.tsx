@@ -28,6 +28,7 @@ import {
   idleCueFor,
   idlePhaseFor,
   missingClips,
+  unplayedCues,
 } from '@/lib/animation'
 import { freshAsset } from '@/lib/asset-url'
 import { frameMetrics, TABLE_REGIONS } from '@/lib/frame-metrics'
@@ -761,9 +762,13 @@ function SilverCast({
   }, [heroSeat])
 
   // Cues are queued against the same clock that drives the clips, so a staggered peek
-  // lands where it was asked for rather than where a timer happened to fire.
+  // lands where it was asked for rather than where a timer happened to fire. The list is
+  // a running one, so only what arrived since the last read is queued.
+  const played = useRef(0)
   useEffect(() => {
-    for (const cue of cues) {
+    const { fresh, lastPlayed } = unplayedCues(cues, played.current)
+    played.current = lastPlayed
+    for (const cue of fresh) {
       if (cue.clip === IDLE_CLIP) continue
       pending.current.push({ seat: cue.seat, clip: cue.clip, at: clock.current + cue.delaySeconds })
     }
@@ -1087,12 +1092,23 @@ function VenueAsset({
     }
   }, [venue.cast])
 
+  // Delayed cues outlive the batch that brought them: the list is a running one now, so a
+  // later message is no reason to cancel a peek still waiting to play.
+  const legacyPlayed = useRef(0)
+  const legacyTimers = useRef(new Set<ReturnType<typeof setTimeout>>())
+  useEffect(() => {
+    const timers = legacyTimers.current
+    return () => {
+      for (const timer of timers) clearTimeout(timer)
+      timers.clear()
+    }
+  }, [])
+
   useEffect(() => {
     // A cue names a seat, and only that seat's action may answer it. Matching
     // on clip name alone played one shared action nine times over, which is
     // eight no-ops and one character doing everybody's gestures.
     if (venue.cast !== undefined) return
-    const timers: ReturnType<typeof setTimeout>[] = []
     const start = (cue: AnimationCue) => {
       const action = actions.current.get(seatClipKey(cue.seat, cue.clip))
       if (action === undefined) return
@@ -1101,18 +1117,21 @@ function VenueAsset({
       action.clampWhenFinished = !cue.loop
       action.play()
     }
-    for (const cue of cues) {
+    const { fresh, lastPlayed } = unplayedCues(cues, legacyPlayed.current)
+    legacyPlayed.current = lastPlayed
+    for (const cue of fresh) {
       // The idle is the base layer and owns its own lifetime above; a cue for it here
       // would restart the breathing mid-gesture.
       if (cue.clip === IDLE_CLIP) continue
       if (cue.delaySeconds > 0) {
-        timers.push(setTimeout(() => start(cue), cue.delaySeconds * 1000))
+        const timer = setTimeout(() => {
+          legacyTimers.current.delete(timer)
+          start(cue)
+        }, cue.delaySeconds * 1000)
+        legacyTimers.current.add(timer)
         continue
       }
       start(cue)
-    }
-    return () => {
-      for (const timer of timers) clearTimeout(timer)
     }
   }, [cues, venue.cast])
 

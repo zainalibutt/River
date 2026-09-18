@@ -1,4 +1,11 @@
-import type { BotDecisionInput, BotPersonality, BotProfile, Rng, TurnAction } from '@river/engine'
+import type {
+  BotDecisionInput,
+  BotPersonality,
+  BotProfile,
+  Rng,
+  Street,
+  TurnAction,
+} from '@river/engine'
 import { decideBotTurn, pickPersonalities } from '@river/engine'
 import type { RoomView } from './protocol.js'
 
@@ -158,17 +165,116 @@ function fallback(legal: NonNullable<RoomView['legal']>): TurnAction {
   return { kind: 'fold' }
 }
 
+/** What a bot is deciding, as far as how long it should take to decide it. */
+export interface ThinkingSituation {
+  action: TurnAction['kind']
+  street: Street
+  betToCall: number
+  pot: number
+  /** The first decision of the hand is also the first look at the cards. */
+  firstLook: boolean
+}
+
+export function situationFor(
+  view: RoomView,
+  playerId: string,
+  action: TurnAction,
+  firstLook: boolean,
+): ThinkingSituation {
+  const seat = view.seats.find((entry) => entry.playerId === playerId)
+  return {
+    action: action.kind,
+    street: view.street,
+    betToCall: Math.max(0, view.currentBet - (seat?.betStreet ?? 0)),
+    pot: view.pot,
+    firstLook,
+  }
+}
+
+/**
+ * The range each kind of decision takes, in milliseconds, before pressure.
+ *
+ * The first version of this gave every bot 0.9 to 3 seconds whatever it was deciding, which
+ * is variation without tempo: measured on a live table, five bots in a row answered 1.0 to
+ * 2.8 seconds apart, and a snap fold took exactly as long as calling a river shove. That
+ * reads as a machine with a random delay - a player called it instant - because the tell a
+ * person gives is not how long they take but how that changes with what is in front of them.
+ */
+const THINK_RANGE: Readonly<Record<TurnAction['kind'], readonly [number, number]>> = {
+  fold: [650, 1_600],
+  check: [700, 1_900],
+  call: [1_300, 3_000],
+  raiseTo: [1_900, 4_200],
+  allIn: [2_800, 6_500],
+}
+/** A decision this big is sometimes agonised over. */
+const TANK_CHANCE = 0.12
+const TANK_MS: readonly [number, number] = [2_500, 5_500]
+const THINK_FLOOR_MS = 600
+const THINK_CEILING_MS = 11_000
+
 /**
  * How long a bot appears to think.
  *
  * Instant answers are the clearest tell that a table is not real, and a
- * constant delay is the second clearest. Chattier characters take longer,
- * because they are the ones a player watches.
+ * constant delay is the second clearest. So the time follows the decision: a
+ * preflop fold with nothing invested is quick, a check is quick, calling is
+ * slower, raising slower still, and a price that is a large share of the pot
+ * slows everything down - and now and then a big one gets tanked on. The river
+ * is weighed longer than the flop, the first decision of a hand includes a look
+ * at the cards, and chattier characters take longer, because they are the ones
+ * a player watches.
  */
-export function thinkingMs(personality: BotPersonality, rng: Rng): number {
-  const base = personality.chatter === 'constant' ? 1_400 : 900
-  const spread = personality.chatter === 'silent' ? 700 : 1_600
-  return Math.round(base + rng() * spread)
+export function thinkingMs(
+  personality: BotPersonality,
+  situation: ThinkingSituation,
+  rng: Rng,
+): number {
+  const [low, high] = THINK_RANGE[situation.action]
+  let ms = low + rng() * (high - low)
+  // A fold after the flop has something in it to let go of, and is considered.
+  if (situation.action === 'fold' && situation.street !== 'preflop') ms += 900
+  const pressure = situation.pot > 0 ? Math.min(1.5, situation.betToCall / situation.pot) : 0
+  if (situation.action !== 'check') ms += pressure * 1_800
+  const big = situation.action === 'allIn' || pressure >= 0.5
+  if (big && rng() < TANK_CHANCE) ms += TANK_MS[0] + rng() * (TANK_MS[1] - TANK_MS[0])
+  if (situation.street === 'river') ms *= 1.15
+  if (situation.firstLook) ms += 500
+  if (personality.chatter === 'constant') ms *= 1.12
+  if (personality.chatter === 'silent') ms *= 0.88
+  return Math.round(Math.min(THINK_CEILING_MS, Math.max(THINK_FLOOR_MS, ms)))
+}
+
+/**
+ * Whether a bot looks at its cards as soon as they land, and after how long.
+ *
+ * Most players do; some leave them on the felt until the action reaches them.
+ * Everyone lifting their cards on the same beat reads as a drill.
+ */
+export function peekAfterDealMs(rng: Rng): number | null {
+  if (rng() >= 0.65) return null
+  return Math.round(400 + rng() * 2_200)
+}
+
+/**
+ * When, inside its think, a bot looks at its cards - or null for not at all.
+ *
+ * A bot that has not looked yet always does, early on. After that it checks
+ * again now and then, and more often facing a bet worth thinking about: players
+ * re-read their cards before paying, rarely before checking. Only inside a
+ * think long enough to finish the look before the action lands.
+ */
+export function peekDuringThinkMs(
+  situation: ThinkingSituation,
+  thinkMs: number,
+  rng: Rng,
+): number | null {
+  if (situation.firstLook) return Math.round(thinkMs * (0.12 + rng() * 0.18))
+  if (thinkMs < 2_200) return null
+  const pressure = situation.pot > 0 ? situation.betToCall / situation.pot : 0
+  const chance = situation.betToCall <= 0 ? 0.12 : pressure >= 0.5 ? 0.45 : 0.3
+  if (rng() >= chance) return null
+  return Math.round(thinkMs * (0.15 + rng() * 0.2))
 }
 
 function seedOf(roomId: string): number {

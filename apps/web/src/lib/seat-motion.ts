@@ -169,10 +169,14 @@ export function applyCue(state: SeatState, clip: ClipName, now: number): SeatSta
       return current
     case 'CHECK_tap':
     case 'PEEK_card':
-      // The same gesture again restarts at full weight. Blending a clip over itself needs
-      // two actions for one clip, which a mixer will not give, and dipping back through
-      // the idle to start again reads as a stumble.
       if (current.body !== null && current.body.clip === clip) {
+        // A look already under way is the same look. Looks now arrive from the player's
+        // own presses and from the server, and snapping a card back to the felt to lift
+        // it again on every one of them reads as a twitch.
+        if (clip === 'PEEK_card') return current
+        // The same tap again restarts at full weight. Blending a clip over itself needs
+        // two actions for one clip, which a mixer will not give, and dipping back through
+        // the idle to start again reads as a stumble.
         return replaceWith(current, 'gesture', clip, now, 0, false)
       }
       if (current.phase === 'seated' || current.phase === 'gesture') {
@@ -180,6 +184,19 @@ export function applyCue(state: SeatState, clip: ClipName, now: number): SeatSta
       }
       return current
     case 'CHIP_toss':
+      if (current.phase === 'gesture') {
+        // The action lands while he is still looking at his cards. The look gives way,
+        // blended out, and the push plays over the idle it hands back to. Dropping the
+        // push instead is how a bot that looked at its cards before betting came to put
+        // its chips in without moving.
+        return {
+          ...current,
+          phase: 'seated',
+          body: null,
+          release: releaseOf(current, now),
+          overlay: { ...span(clip, now, 0, false), fadingFrom: null },
+        }
+      }
       if (current.phase !== 'seated') return current
       return { ...current, overlay: { ...span(clip, now, 0, false), fadingFrom: null } }
     default:

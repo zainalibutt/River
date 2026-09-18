@@ -161,6 +161,28 @@ describe('seat motion', () => {
     expect(totalWeight(again, 0.5)).toBeCloseTo(1, 9)
   })
 
+  it('lets a look already under way finish rather than starting it again', () => {
+    const first = applyCue(initialSeat(true), 'PEEK_card', 0)
+    const again = applyCue(first, 'PEEK_card', 0.6)
+    expect(pose(again, 0.6).body?.frame).toBeCloseTo(0.6 * CLIP_FPS, 6)
+    // Once it has finished, another look is a new one.
+    const later = applyCue(first, 'PEEK_card', seconds(CLIP_LAST_FRAME.PEEK_card) + 1)
+    expect(pose(later, seconds(CLIP_LAST_FRAME.PEEK_card) + 1).body?.frame).toBe(0)
+  })
+
+  it('lets an action cut a look short instead of losing the action', () => {
+    const looking = applyCue(initialSeat(true), 'PEEK_card', 0)
+    const pushed = applyCue(looking, 'CHIP_toss', 0.8)
+    expect(pushed.phase).toBe('seated')
+    const drawn = pose(pushed, 0.8 + seconds(10))
+    expect(drawn.overlay).toMatchObject({ clip: 'CHIP_toss' })
+    // The look blends out rather than vanishing, and the weights still account for all of it.
+    expect(pose(pushed, 0.8 + BLEND_OUT_SECONDS / 2).release?.clip).toBe('PEEK_card')
+    for (let now = 0.8; now < 2.5; now += 0.031) {
+      expect(totalWeight(pushed, now)).toBeCloseTo(1, 9)
+    }
+  })
+
   it('moves the chair only on the tracks that carry chair motion', () => {
     expect(pose(applyCue(initialSeat(true), 'CHECK_tap', 0), 0.5).chair).toBeNull()
     expect(pose(applyCue(initialSeat(true), 'LEAVE_getup', 0), 1).chair?.clip).toBe('LEAVE_getup')
