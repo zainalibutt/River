@@ -119,11 +119,26 @@ function edgeMaterial(): THREE.Material {
   return sharedEdge
 }
 
+/**
+ * The back's tint under the Rooftop's table light.
+ *
+ * Drawn in the 2D back's own maroon and left untinted, it rendered pink: measured by a
+ * seat, 194/133/141. The light over the felt is strong enough to read a near-black navy
+ * felt, and a black card under it still renders 87/77/78 - that much is the lamp's own
+ * reflection off a flat card lying beneath it, whatever colour the card is - so no albedo
+ * reaches the 2D maroon. What a tint can do is hold the red while the green and blue fall
+ * away: at this one the same card measures 176/102/103, a card back rather than a pink
+ * slip. Matte, because card stock is.
+ */
+const BACK_TINT: readonly [number, number, number] = [0.6, 0.12, 0.16]
+
 function backMaterial(): THREE.Material {
   if (sharedBack === null) {
     const map = cardBackTexture()
-    sharedBack = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.62 })
-    if (map !== null) (sharedBack as THREE.MeshStandardMaterial).map = map
+    const material = new THREE.MeshStandardMaterial({ roughness: 0.95 })
+    material.color.setRGB(...BACK_TINT)
+    if (map !== null) material.map = map
+    sharedBack = material
   }
   return sharedBack
 }
