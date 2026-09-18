@@ -541,8 +541,10 @@ export interface HoleSeat {
   mucked: boolean
   /** The two cards face up at a showdown, or null while they are face down. */
   shown: readonly Card[] | null
-  /** Seconds after the showdown begins that this seat turns its cards over. */
+  /** Seconds after the showdown begins that this seat turns its first card over. */
   revealDelay: number
+  /** And its second: one by one, not both at once. */
+  secondRevealDelay: number
 }
 
 type CardPhase = 'holding' | 'mucking' | 'mucked' | 'showing'
@@ -553,6 +555,8 @@ interface CardState {
   phase: CardPhase
   /** When the phase began, on the scene clock; a flip may be scheduled a little ahead. */
   since: number
+  /** How long after the first card the second turns over. */
+  secondLag: number
 }
 
 /**
@@ -580,15 +584,24 @@ function nextCardState(
 ): CardState {
   let state: CardState =
     previous === undefined || previous.hand !== hand
-      ? { hand, phase: 'holding', since: now }
+      ? { hand, phase: 'holding', since: now, secondLag: 0 }
       : previous
   if (hole.shown !== null) {
-    if (state.phase !== 'showing') state = { hand, phase: 'showing', since: now + hole.revealDelay }
+    if (state.phase !== 'showing') {
+      state = {
+        hand,
+        phase: 'showing',
+        since: now + hole.revealDelay,
+        secondLag: Math.max(0, hole.secondRevealDelay - hole.revealDelay),
+      }
+    }
     return state
   }
-  if (hole.mucked && state.phase === 'holding') state = { hand, phase: 'mucking', since: now }
+  if (hole.mucked && state.phase === 'holding') {
+    state = { hand, phase: 'mucking', since: now, secondLag: 0 }
+  }
   if (state.phase === 'mucking' && now - state.since >= MUCK_SECONDS) {
-    state = { hand, phase: 'mucked', since: state.since }
+    state = { ...state, phase: 'mucked' }
   }
   return state
 }
@@ -1070,7 +1083,8 @@ function SilverCast({
         mesh.visible = false
         continue
       }
-      const turned = Math.min(1, Math.max(0, (now - cardState.since) / FLIP_SECONDS))
+      const lag = shown.index === 1 ? cardState.secondLag : 0
+      const turned = Math.min(1, Math.max(0, (now - cardState.since - lag) / FLIP_SECONDS))
       const eased = turned * turned * (3 - 2 * turned)
       const place = holeCardAt(shown.index, 0)
       cardPlace.set(place.position[0], place.position[1], place.position[2])

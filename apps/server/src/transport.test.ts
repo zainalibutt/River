@@ -1328,13 +1328,23 @@ describe('bots at the table', () => {
     expect(view().phase).toBe('between')
 
     // The countdown the room announced actually runs now. Step the clock
-    // rather than jumping it once: the countdown is 3000ms, seed finalisation
-    // now runs on every broadcast at seedCollectionMs 0, and the number of
-    // queue turns between nextHandTimer firing and startHand landing varies
-    // with it. A single 3500ms advance passed five times in six. Stepping
-    // still fails if the hand never starts - it only stops the test caring
-    // how many turns that took.
-    for (let step = 0; step < 20 && view().handNumber === 1; step += 1) {
+    // rather than jumping it once: seed finalisation runs on every broadcast at
+    // seedCollectionMs 0, and the number of queue turns between nextHandTimer
+    // firing and startHand landing varies with it. A single advance passed five
+    // times in six. Stepping still fails if the hand never starts - it only
+    // stops the test caring how many turns that took.
+    //
+    // How long to wait is the room's to say. The gap was a flat 3000ms; after a
+    // showdown it now also covers the showdown being told, one hand at a time,
+    // and this hand checks down to one.
+    const announced = peer.messages.flatMap((message) =>
+      message.kind === 'snapshot'
+        ? message.events.flatMap((event) => (event.kind === 'between' ? [event.countdownMs] : []))
+        : [],
+    )
+    const countdown = announced[announced.length - 1] ?? 3_000
+    expect(countdown).toBeGreaterThan(3_000)
+    for (let step = 0; step < (countdown + 5_000) / 500 && view().handNumber === 1; step += 1) {
       await vi.advanceTimersByTimeAsync(500)
     }
     expect(view().handNumber).toBeGreaterThan(1)

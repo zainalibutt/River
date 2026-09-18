@@ -16,6 +16,7 @@ import {
   makeDeck,
   SEATS_PER_SHAPE,
   type StakeConfig,
+  showdownPresentationMs,
 } from '@river/engine'
 import {
   type FairnessClientSeed,
@@ -178,6 +179,12 @@ export class Room implements RoomHandle {
   private pendingPlayerId: string | null = null
   private turnDeadlineMs: number | null = null
   private betweenSince = 0
+  /**
+   * How long this gap between hands lasts: the countdown, plus the time a showdown takes to
+   * tell. A flat three seconds cut every showdown off the moment it got interesting, and a
+   * six-way one before it had started.
+   */
+  private betweenMs = 0
   private revealed = false
   private readonly revealedPlayerIds = new Set<string>()
   private drawPile: DrawPile | null = null
@@ -286,7 +293,7 @@ export class Room implements RoomHandle {
       currentBet: betting === null ? 0 : betting.currentBet,
       countdownMs:
         this.phase === 'between'
-          ? Math.max(0, this.config.countdownMs - (this.now() - this.betweenSince))
+          ? Math.max(0, this.betweenMs - (this.now() - this.betweenSince))
           : 0,
       seats,
       currentActor,
@@ -1002,10 +1009,11 @@ export class Room implements RoomHandle {
     this.turnDeadlineMs = null
     this.phase = 'between'
     this.betweenSince = this.now()
+    this.betweenMs = this.config.countdownMs + showdownPresentationMs(this.revealedPlayerIds.size)
     events.push({
       kind: 'between',
       handNumber: this.handNumber,
-      countdownMs: this.config.countdownMs,
+      countdownMs: this.betweenMs,
     })
   }
 

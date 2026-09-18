@@ -7,8 +7,7 @@ import {
   DEFAULT_STAKE,
   type HandRecord,
   itemCatalogue,
-  type ShowdownReel,
-  showdownReel,
+  SHOWDOWN_TENSION_MS,
   type TableSummary,
   type TurnAction,
 } from '@river/engine'
@@ -63,6 +62,7 @@ import {
   type OwnedEntry,
   shopRows,
 } from '@/lib/shop'
+import { cardsTurned, type ShowdownPlan, showdownPlanFor } from '@/lib/showdown-plan'
 import {
   appendSocialEvent,
   applySpeaking,
@@ -332,8 +332,9 @@ export function RiverRoomTable() {
   const [seatActions, setSeatActions] = useState<ReadonlyMap<string, SeatActionFlag>>(
     () => new Map(),
   )
-  const [reel, setReel] = useState<ShowdownReel | null>(null)
-  const [reelAtMs, setReelAtMs] = useState(0)
+  // The showdown being told, one hand at a time, and how far into it the table is.
+  const [showdown, setShowdown] = useState<ShowdownPlan | null>(null)
+  const [showdownAtMs, setShowdownAtMs] = useState(0)
   // Seats whose player is holding their cards up - yours, and everybody else's.
   const [heldPeeks, setHeldPeeks] = useState<readonly number[]>([])
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
@@ -371,8 +372,6 @@ export function RiverRoomTable() {
     hand: 0,
     seats: new Set(),
   })
-  // When each seat turns its cards over at a showdown, from the reel's reveal beats.
-  const [revealDelays, setRevealDelays] = useState<ReadonlyMap<number, number>>(() => new Map())
   const cueSerial = useRef(0)
   // A running list rather than the latest batch - see AnimationCue.serial for what the
   // latest batch used to lose.
@@ -569,7 +568,21 @@ export function RiverRoomTable() {
             chipSerial.current,
           )
           chipView.current = message.view
-          setChipMoments((current) => [...current, moment].slice(-CHIP_HISTORY))
+          // A showdown is told one hand at a time, and the pot waits for the last of them.
+          const plan = showdownPlanFor(
+            message.view,
+            message.events,
+            foldedThisHand.current.hand === message.view.handNumber
+              ? foldedThisHand.current.seats
+              : new Set(),
+          )
+          const timed =
+            plan === null ? moment : { ...moment, awardDelaySeconds: plan.show.awardAtMs / 1000 }
+          setChipMoments((current) => [...current, timed].slice(-CHIP_HISTORY))
+          if (plan !== null) {
+            setShowdown(plan)
+            setShowdownAtMs(0)
+          }
           if (message.events.some((event) => event.kind === 'handStarted')) setHeldPeeks([])
           if (foldedThisHand.current.hand !== message.view.handNumber) {
             foldedThisHand.current = { hand: message.view.handNumber, seats: new Set() }
@@ -640,25 +653,7 @@ export function RiverRoomTable() {
           if (settled.length > 0) {
             // Newest first, so the panel reads the way a player thinks about
             // the night: the hand that just happened is the one at the top.
-            const newest = settled[settled.length - 1]
             setHands((previous) => [...settled.reverse(), ...previous].slice(0, 24))
-            // A hand used to end by simply being over. The reel is the beats of
-            // a showdown - who shows, what they had, who takes it - and it has
-            // been sitting in the engine with nothing calling it.
-            if (newest !== undefined) {
-              const built = showdownReel({ record: newest })
-              setReel(built.beats.length > 0 ? built : null)
-              setReelAtMs(0)
-              // The cards on the felt turn over on the reel's beat, seat by seat, rather
-              // than every hand at once.
-              setRevealDelays(
-                new Map(
-                  built.beats.flatMap((beat) =>
-                    beat.kind === 'reveal' ? [[beat.seat, beat.atMs / 1000] as const] : [],
-                  ),
-                ),
-              )
-            }
           }
           const flash = repFlashFor(message.events, message.view.selfId)
           if (flash !== null) setRepFlash(flash)
@@ -827,33 +822,21 @@ export function RiverRoomTable() {
   }, [command, view.legal])
 
   useEffect(() => {
-    if (reel === null) return
-    // Walk the beats on their own timings. The engine produced a plan; this is
-    // the only place that turns it into elapsed time, so nothing in the engine
-    // ever had to read a clock.
+    if (showdown === null) return
+    // The engine produced the schedule; this is the only place that turns it into elapsed
+    // time, so nothing in the engine ever had to read a clock.
     const started = Date.now()
     const tick = window.setInterval(() => {
       const elapsed = Date.now() - started
-      if (elapsed >= reel.totalMs) {
-        setReel(null)
-        setReelAtMs(0)
+      if (elapsed >= showdown.show.totalMs) {
+        setShowdown(null)
+        setShowdownAtMs(0)
         return
       }
-      setReelAtMs(elapsed)
-    }, 80)
+      setShowdownAtMs(elapsed)
+    }, 50)
     return () => window.clearInterval(tick)
-  }, [reel])
-
-  const showdownBeat = useMemo(() => {
-    if (reel === null) return null
-    // The last beat whose moment has arrived and whose hold has not expired.
-    for (let index = reel.beats.length - 1; index >= 0; index -= 1) {
-      const beat = reel.beats[index]
-      if (beat === undefined) continue
-      if (reelAtMs >= beat.atMs && reelAtMs < beat.atMs + beat.holdMs) return beat
-    }
-    return null
-  }, [reel, reelAtMs])
+  }, [showdown])
 
   const seats = useMemo(() => orderedSeats(view), [view])
 
@@ -890,11 +873,18 @@ export function RiverRoomTable() {
   const holeSeats = useMemo((): readonly HoleSeat[] => {
     const folded = foldedThisHand.current
     const out = (seat: number) => folded.hand === view.handNumber && folded.seats.has(seat)
+    const stepFor = (seat: number) => showdown?.show.steps.find((step) => step.seat === seat)
     return view.seats.flatMap((seat) => {
       if (!seat.hasHole) return []
       if (view.phase === 'hand') {
         return [
-          { seat: seat.seat, mucked: seat.folded || out(seat.seat), shown: null, revealDelay: 0 },
+          {
+            seat: seat.seat,
+            mucked: seat.folded || out(seat.seat),
+            shown: null,
+            revealDelay: 0,
+            secondRevealDelay: 0,
+          },
         ]
       }
       const shown = view.revealed && !out(seat.seat) && seat.hole !== null ? seat.hole : null
@@ -903,11 +893,12 @@ export function RiverRoomTable() {
           seat: seat.seat,
           mucked: shown === null,
           shown,
-          revealDelay: revealDelays.get(seat.seat) ?? 0,
+          revealDelay: (stepFor(seat.seat)?.revealAtMs ?? 0) / 1000,
+          secondRevealDelay: (stepFor(seat.seat)?.secondCardAtMs ?? 0) / 1000,
         },
       ]
     })
-  }, [view, revealDelays])
+  }, [view, showdown])
 
   const selfSeat = view.seats.find((seat) => seat.playerId === view.selfId) ?? null
   const seatedCount = view.seats.filter((seat) => seat.playerId !== null && seat.stack > 0).length
@@ -1451,41 +1442,8 @@ export function RiverRoomTable() {
                 CHAT
               </button>
             </div>
-            {showdownBeat === null ? null : (
-              <div className="showdown-card" role="status" aria-live="polite">
-                {showdownBeat.kind === 'name' ? (
-                  <>
-                    <span className="showdown-who">
-                      {view.seats.find((entry) => entry.seat === showdownBeat.seat)?.name ??
-                        `Seat ${showdownBeat.seat + 1}`}
-                    </span>
-                    <strong className="showdown-hand">{showdownBeat.hand}</strong>
-                    {(() => {
-                      const shown = holeSeats.find(
-                        (hole) => hole.seat === showdownBeat.seat && hole.shown !== null,
-                      )?.shown
-                      return shown === undefined || shown === null ? null : (
-                        <span className="showdown-cards">
-                          {shown.map((card) => (
-                            <PlayingCard key={`${card.rank}${card.suit}`} card={card} />
-                          ))}
-                        </span>
-                      )
-                    })()}
-                  </>
-                ) : null}
-                {showdownBeat.kind === 'award' ? (
-                  <>
-                    <span className="showdown-who">
-                      {view.seats.find((entry) => entry.seat === showdownBeat.seat)?.name ??
-                        `Seat ${showdownBeat.seat + 1}`}
-                    </span>
-                    <strong className="showdown-win">
-                      WINS {formatAmount(showdownBeat.amount, true)}
-                    </strong>
-                  </>
-                ) : null}
-              </div>
+            {showdown === null ? null : (
+              <ShowdownStage plan={showdown} atMs={showdownAtMs} seats={view.seats} />
             )}
             <TableCluster view={view} peek={peek} onPeek={setPeek} />
             {/* `populated` is what paints the glass, so it has to follow the
@@ -1519,10 +1477,14 @@ export function RiverRoomTable() {
                   actionFlag={
                     seat.playerId === null ? null : (seatActions.get(seat.playerId) ?? null)
                   }
-                  shownCards={
-                    holeSeats.find((hole) => hole.seat === seat.seat && hole.shown !== null)
-                      ?.shown ?? null
-                  }
+                  shownCards={(() => {
+                    const shown =
+                      holeSeats.find((hole) => hole.seat === seat.seat && hole.shown !== null)
+                        ?.shown ?? null
+                    if (shown === null || showdown === null) return shown
+                    const turned = cardsTurned(showdown, seat.seat, showdownAtMs)
+                    return turned === 0 ? null : shown.slice(0, turned)
+                  })()}
                   buyIn={entryBuyIn}
                   onSit={() => {
                     if (entryBuyIn !== null)
@@ -1945,6 +1907,94 @@ function RoomSeat({
         {note === null ? null : <span className="seat-plate-note">{note}</span>}
       </div>
     </article>
+  )
+}
+
+/**
+ * The showdown, told one hand at a time.
+ *
+ * It used to be a caption: a name and a hand flashed up while the pot had already moved.
+ * Now the table goes quiet and the word goes up over the pot; each hand is turned over in
+ * the order a dealer calls for them, one card and then the other, and named; before the
+ * last hand - the one that decides it - the table holds its breath; and only then does the
+ * pot go to the winner. The schedule is the engine's, so the server holds the next deal
+ * for exactly as long as this takes.
+ */
+function ShowdownStage({
+  plan,
+  atMs,
+  seats,
+}: {
+  plan: ShowdownPlan
+  atMs: number
+  seats: readonly RoomSeatView[]
+}) {
+  const nameOf = (seat: number) =>
+    seats.find((entry) => entry.seat === seat)?.name ?? `Seat ${seat + 1}`
+  const first = plan.show.steps[0]
+  const deciding = plan.show.steps.find((step) => step.deciding)
+  const tension =
+    deciding !== undefined &&
+    atMs < deciding.revealAtMs &&
+    atMs >= deciding.revealAtMs - SHOWDOWN_TENSION_MS
+  const awarding = atMs >= plan.show.awardAtMs
+  let current: (typeof plan.show.steps)[number] | undefined
+  for (const step of plan.show.steps) if (atMs >= step.revealAtMs) current = step
+  let body: React.ReactNode = null
+  if (first === undefined || atMs < first.revealAtMs) {
+    body = (
+      <>
+        <span className="showdown-kicker">SHOWDOWN</span>
+        <strong className="showdown-win">{formatAmount(plan.pot, true)}</strong>
+      </>
+    )
+  } else if (awarding) {
+    body = plan.awards.map((award) => (
+      <span className="showdown-award" key={award.seat}>
+        <span className="showdown-who">{nameOf(award.seat)}</span>
+        <strong className="showdown-win">WINS {formatAmount(award.amount, true)}</strong>
+      </span>
+    ))
+  } else if (tension && deciding !== undefined) {
+    body = (
+      <>
+        <span className="showdown-who">{nameOf(deciding.seat)}</span>
+        <span className="showdown-cards">
+          <CardBack key="first" />
+          <CardBack key="second" />
+        </span>
+      </>
+    )
+  } else if (current !== undefined) {
+    const step = current
+    const cards = plan.cards.get(step.seat) ?? []
+    body = (
+      <>
+        <span className="showdown-who">{nameOf(step.seat)}</span>
+        <span className="showdown-cards">
+          {cards.map((card, index) =>
+            atMs >= (index === 0 ? step.revealAtMs : step.secondCardAtMs) ? (
+              <PlayingCard key={`face-${card.rank}${card.suit}`} card={card} />
+            ) : (
+              <CardBack key={`back-${card.rank}${card.suit}`} />
+            ),
+          )}
+        </span>
+        {atMs >= step.nameAtMs ? (
+          <strong className="showdown-hand">{plan.names.get(step.seat)}</strong>
+        ) : null}
+      </>
+    )
+  }
+  return (
+    <div
+      className={`showdown-stage${tension ? ' tension' : ''}${awarding ? ' awarding' : ''}`}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="showdown-vignette" aria-hidden="true" />
+      <div className="showdown-card">{body}</div>
+    </div>
   )
 }
 

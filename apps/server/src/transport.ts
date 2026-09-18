@@ -1735,7 +1735,8 @@ export class RoomHub {
     const between = events.find((event) => event.kind === 'between')
     if (between === undefined) return
     this.clearNextHand(state)
-    const delay = state.room.config.countdownMs
+    // The room says how long this gap is: longer after a showdown, which takes its time.
+    const delay = between.countdownMs
     state.nextHandTimer = setTimeout(() => {
       void this.enqueue(state, async () => {
         state.nextHandTimer = null

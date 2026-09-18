@@ -2978,24 +2978,134 @@ button.verify-pill.verify-mismatch {
 /* The showdown, as a moment rather than a state change.
 
    A hand used to end by simply being over: the pot moved and the next one
-   started. The reference cuts away to the winner and names the hand, and this
-   is the readable half of that - who took it and with what.
+   started. Now the table goes quiet, the hands are turned over one at a time in
+   the order a dealer calls for them, the room darkens before the one that
+   decides it, and the pot goes only once that one is face up.
 
    Transient by definition, so it is allowed to sit over the felt in a way no
-   persistent element is. It clears itself when the reel runs out. */
+   persistent element is. It clears itself when the schedule runs out. */
+.showdown-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 23;
+  pointer-events: none;
+}
+
+/* The quiet: the edges of the room fall away toward the middle of the table. */
+.showdown-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 42%, transparent 38%, rgb(0 0 0 / 52%) 100%);
+  animation: showdown-hush 900ms var(--ease-out) both;
+}
+
+/* Before the deciding hand the room closes in further. */
+.showdown-vignette::after {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 42%, transparent 22%, rgb(0 0 0 / 50%) 100%);
+  content: "";
+  opacity: 0;
+  transition: opacity 600ms var(--ease-out);
+}
+
+.showdown-stage.tension .showdown-vignette::after {
+  opacity: 1;
+}
+
 .showdown-card {
   position: absolute;
   top: 300px;
   left: 50%;
-  z-index: 24;
   display: grid;
   gap: 2px;
+  min-width: 220px;
   padding: 14px 28px;
   border: 1px solid rgb(232 169 60 / 45%);
   border-radius: 14px;
   background: rgb(10 13 12 / 88%);
   text-align: center;
   transform: translateX(-50%);
+  transition:
+    border-color 300ms var(--ease-out),
+    box-shadow 300ms var(--ease-out);
+}
+
+/* The held breath: the card pulses while the last hand waits to be turned. The
+   pulse is on `scale`, which composes with the centring transform instead of
+   replacing it. */
+.showdown-stage.tension .showdown-card {
+  border-color: var(--river-amber-bright);
+  animation: showdown-pulse 520ms ease-in-out infinite alternate;
+}
+
+.showdown-stage.awarding .showdown-card {
+  border-color: var(--river-amber-bright);
+  box-shadow: 0 0 42px rgb(232 169 60 / 40%);
+  animation: showdown-award 640ms var(--ease-out) both;
+}
+
+.showdown-kicker {
+  color: var(--river-amber-bright);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  animation: showdown-kicker 900ms var(--ease-out) both;
+}
+
+.showdown-award {
+  display: grid;
+  gap: 2px;
+}
+
+@keyframes showdown-hush {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes showdown-kicker {
+  from {
+    letter-spacing: 1.1em;
+    opacity: 0;
+  }
+}
+
+@keyframes showdown-pulse {
+  from {
+    box-shadow: 0 0 0 rgb(232 169 60 / 0%);
+    scale: 1;
+  }
+  to {
+    box-shadow: 0 0 34px rgb(232 169 60 / 42%);
+    scale: 1.035;
+  }
+}
+
+@keyframes showdown-award {
+  from {
+    scale: 1.12;
+  }
+}
+
+@keyframes showdown-flip {
+  from {
+    opacity: 0.4;
+    rotate: y 90deg;
+  }
+}
+
+@keyframes showdown-shiver {
+  to {
+    translate: 0 -3px;
+  }
+}
+
+@keyframes showdown-name {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
 }
 
 .showdown-who {
@@ -3008,6 +3118,7 @@ button.verify-pill.verify-mismatch {
 
 .showdown-hand {
   color: var(--river-cream);
+  animation: showdown-name 420ms var(--ease-out) both;
   font-size: 26px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -3028,12 +3139,42 @@ button.verify-pill.verify-mismatch {
   justify-content: center;
   gap: 8px;
   margin-top: 8px;
+  perspective: 600px;
 }
 
+/* A card is turned over, not swapped: it swings in from edge-on. */
 .showdown-cards .playing-card {
   width: 58px;
   height: 81px;
   border-radius: 7px;
+  animation: showdown-flip 380ms var(--ease-out) both;
+}
+
+.showdown-cards .card-back {
+  width: 58px;
+  height: 81px;
+  border-radius: 7px;
+  font-size: 22px;
+}
+
+.showdown-stage.tension .showdown-cards .card-back {
+  animation: showdown-shiver 160ms ease-in-out infinite alternate;
+}
+
+.showdown-stage.tension .showdown-cards .card-back:last-child {
+  animation-delay: 80ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .showdown-vignette,
+  .showdown-kicker,
+  .showdown-hand,
+  .showdown-cards .playing-card,
+  .showdown-stage.tension .showdown-card,
+  .showdown-stage.awarding .showdown-card,
+  .showdown-stage.tension .showdown-cards .card-back {
+    animation: none;
+  }
 }
 
 .showdown-cards .playing-card > span:first-child {

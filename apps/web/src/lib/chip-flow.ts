@@ -58,6 +58,12 @@ export interface ChipMoment {
   awards: readonly { seat: number; amount: number }[]
   /** What the view says is on each bet line and in the middle once all of that has happened. */
   truth: { bets: readonly { seat: number; amount: number }[]; pot: number }
+  /**
+   * How long after this message the pot may go to the winner. A showdown is told one hand
+   * at a time, and the pot leaving the middle before the winning hand is turned over would
+   * give the ending away.
+   */
+  awardDelaySeconds?: number
 }
 
 /**
@@ -232,7 +238,10 @@ export function applyMoment(flow: ChipFlow, moment: ChipMoment, now: number): Ch
       swept = Math.max(swept, startAt + SWEEP_SECONDS)
     }
   }
-  const awardAt = swept + (moment.awards.length > 0 && swept > now ? AWARD_PAUSE_SECONDS : 0)
+  const awardAt = Math.max(
+    swept + (moment.awards.length > 0 && swept > now ? AWARD_PAUSE_SECONDS : 0),
+    now + (moment.awardDelaySeconds ?? 0),
+  )
   for (const award of moment.awards) {
     flights.push({
       from: { kind: 'pot', seat: null },
