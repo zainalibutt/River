@@ -30,6 +30,7 @@ import {
   CLIP_FPS,
   CLIPS,
   type ClipName,
+  FOLD_RELEASE_FRAME,
   IDLE_CLIP,
   idleCueFor,
   idlePhaseFor,
@@ -43,7 +44,6 @@ import {
   betsAt,
   type ChipFlow,
   type ChipMoment,
-  COMMIT_PUSH_SECONDS,
   emptyChipFlow,
   flightProgress,
   flightsAt,
@@ -556,8 +556,8 @@ interface CardState {
  * shrink away on arrival rather than piling up, because nobody reads a muck.
  */
 const MUCK_SPOT = new THREE.Vector3(0.22, TABLE_SURFACE_HEIGHT + 0.002, -0.44)
-/** The cards ride the push for as long as the authored stack moves, then slide off. */
-const MUCK_PUSH_SECONDS = COMMIT_PUSH_SECONDS
+/** The cards ride the folding hand until it lets go of them, then slide off. */
+const MUCK_PUSH_SECONDS = FOLD_RELEASE_FRAME / CLIP_FPS
 const MUCK_SLIDE_SECONDS = 0.4
 const MUCK_SECONDS = MUCK_PUSH_SECONDS + MUCK_SLIDE_SECONDS
 /** A card turning over: quick, and lifted a finger's width off the felt on the way. */
@@ -1020,9 +1020,9 @@ function SilverCast({
           place.quaternion[3],
         )
         if (cardState.phase === 'mucking') {
-          // Folded. The hand pushes them forward - the fold plays the push - and they ride
-          // it on the frames the stack was authored to move on, then slide off to the muck
-          // and are gone.
+          // Folded. The fold pushes them forward on the chip push's own path, and they ride
+          // it on the frames the stack was authored to move on until the hand lets go; then
+          // they slide off to the muck and are gone.
           const elapsed = now - cardState.since
           pushedOffset(elapsed, cardPush)
           cardPlace.add(cardPush)

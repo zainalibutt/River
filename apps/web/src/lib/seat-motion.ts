@@ -184,6 +184,7 @@ export function applyCue(state: SeatState, clip: ClipName, now: number): SeatSta
       }
       return current
     case 'CHIP_toss':
+    case 'FOLD_muck':
       if (current.phase === 'gesture') {
         // The action lands while he is still looking at his cards. The look gives way,
         // blended out, and the push plays over the idle it hands back to. Dropping the

@@ -25,7 +25,7 @@ function acted(playerId: string, kind: string, to = 0): RoomEvent {
 }
 
 describe('the clip contract', () => {
-  it('is exactly the seven clips the Silver export ships, each with a last frame', () => {
+  it('is exactly the eight clips the Silver export ships, each with a last frame', () => {
     expect([...CLIPS]).toEqual([
       'IDLE_thinking_readable',
       'CHECK_tap',
@@ -34,12 +34,13 @@ describe('the clip contract', () => {
       'ALLIN_standup',
       'SIT_enter',
       'LEAVE_getup',
+      'FOLD_muck',
     ])
     for (const clip of CLIPS) expect(CLIP_LAST_FRAME[clip]).toBeGreaterThan(0)
   })
 
-  it('layers only the chip push, the one clip that starts where the idle already is', () => {
-    expect(CLIPS.filter((clip) => BLEND[clip] === 'additive')).toEqual(['CHIP_toss'])
+  it('layers only the push and the fold, the clips that start where the idle already is', () => {
+    expect(CLIPS.filter((clip) => BLEND[clip] === 'additive')).toEqual(['CHIP_toss', 'FOLD_muck'])
   })
 })
 
@@ -51,12 +52,8 @@ describe('cueForEvent', () => {
     expect(cueForEvent(acted('bob', 'allIn'), seatOf)[0]?.clip).toBe('ALLIN_standup')
   })
 
-  it('folds with the push, which is what slides the cards to the muck', () => {
-    // There is no fold clip on this character. A gesture that moves nothing reads as a
-    // tell that means nothing, which is why a fold played nothing while the cards stayed
-    // put. The scene now sends the cards away under the hand, and the push is the motion
-    // that does it.
-    expect(cueForEvent(acted('alice', 'fold'), seatOf)[0]?.clip).toBe('CHIP_toss')
+  it('folds with the fold, not the push that stood in for it', () => {
+    expect(cueForEvent(acted('alice', 'fold'), seatOf)[0]?.clip).toBe('FOLD_muck')
   })
 
   it('treats an away or timed-out action the same as a played one', () => {

@@ -157,12 +157,8 @@ function truthOf(view: RoomView): ChipMoment['truth'] {
   return { bets, pot: Math.max(0, view.pot - onLines) }
 }
 
-/**
- * The last frame a commit's chips move on, plus one: when they are down on the line. The
- * push also carries a folded hand's cards, so the scene reads the same number.
- */
-export const COMMIT_PUSH_SECONDS = trackSeconds(CHIP_PUSH_TRACK)
-const PUSH_SECONDS = COMMIT_PUSH_SECONDS
+/** The last frame a commit's chips move on, plus one: when they are down on the line. */
+const PUSH_SECONDS = trackSeconds(CHIP_PUSH_TRACK)
 const SHOVE_SECONDS = trackSeconds(ALL_IN_SHOVE_TRACK)
 /** A beat after the last chip lands before the dealer sweeps, and the sweep itself. */
 const SWEEP_PAUSE_SECONDS = 0.15

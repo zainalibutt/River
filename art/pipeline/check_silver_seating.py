@@ -46,8 +46,9 @@ CLIPS = {
     'ALLIN_standup': 90,
     'SIT_enter': 108,
     'LEAVE_getup': 132,
+    'FOLD_muck': 35,
 }
-SEATED_CLIPS = ('IDLE_thinking_readable', 'CHECK_tap', 'PEEK_card', 'CHIP_toss')
+SEATED_CLIPS = ('IDLE_thinking_readable', 'CHECK_tap', 'PEEK_card', 'CHIP_toss', 'FOLD_muck')
 CHAIR_CLIPS = ('ALLIN_standup', 'SIT_enter', 'LEAVE_getup')
 STEP = 6
 FPS = 30

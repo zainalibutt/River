@@ -1,6 +1,6 @@
 """Export the Silver integration candidate as the character GLB the Rooftop build imports.
 
-Only the seven clips in SHIPPING leave this file. The candidate also carries the sparse A51
+Only the clips in SHIPPING leave this file. The candidate also carries the sparse A51
 originals, A53's authored originals, the proof chips, cards and chairs and their actions,
 three cameras, three lights and the A21 stage; none of that is selected, and
 check_character_glb reads the written file afterwards to prove none of it leaked.
@@ -53,6 +53,8 @@ SHIPPING = {
     'ALLIN_standup': 90,
     'SIT_enter': 108,
     'LEAVE_getup': 132,
+    # Authored in the candidate build on the accepted push - see fold_clip.py.
+    'FOLD_muck': 35,
 }
 FPS = 30
 MESH_COUNT = 20

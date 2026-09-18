@@ -41,6 +41,9 @@ import time
 import bpy
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fold_clip import FOLD_CLIP, FOLD_LAST_FRAME, LAYERS, author_fold  # noqa: E402
+
 RIG = 'river_native_silver_body.rig'
 A51_SHA256 = 'c5c76f04e72ad65a5c092f9147deff4174b70a3bfc3f0d57d1f9a3396160330d'
 A53_SHA256 = 'c8ea021a89f2b6709db08d2f5915380f58b5f694a5f725e7ec3eb4a2cae71971'
@@ -235,9 +238,11 @@ def worst(values, bone_names):
     return {'value': float(values[frame, bone]), 'frame': int(frame), 'bone': bone_names[bone]}
 
 
-def compare_pose(reference, candidate, bone_names):
+def compare_pose(reference, candidate, bone_names, only=None):
     report = {}
     for label, index in (('basis', 2), ('posed', 3)):
+        if only is not None and label != only:
+            continue
         rotation, translation, scale = matrix_differences(reference[index], candidate[index])
         report[label] = {
             'rotation_deg': worst(rotation, bone_names),
@@ -248,7 +253,7 @@ def compare_pose(reference, candidate, bone_names):
         report[label]['rotation_deg']['value'] <= ROTATION_TOLERANCE_DEG
         and report[label]['translation_mm']['value'] <= TRANSLATION_TOLERANCE_MM
         and report[label]['scale']['value'] <= SCALE_TOLERANCE
-        for label in ('basis', 'posed')
+        for label in report
     )
     return report
 
@@ -602,6 +607,20 @@ def main():
         action, varying = bake_clip(rig, clip, bone_names, channels)
         report['bake'][clip] = {'frames': channels.shape[0], 'curves': 137 * 9, 'curves_keyed_every_frame': varying}
 
+    # The fold is not in either accepted file: it is authored here, on the accepted push, and
+    # keyed the same way - every bone, every frame - so it borrows nothing either. A51 does
+    # carry an action under the same name, from the generic library that came before this
+    # character: four bones, six keys, on the right hand that holds his chin in the idle, and
+    # never accepted. It is set aside under its source's name, as the rebaked clips' sources
+    # are, so the one that ships is the one authored here.
+    placeholder = bpy.data.actions.get(FOLD_CLIP)
+    if placeholder is not None:
+        placeholder.name = 'SOURCE A51 %s unaccepted placeholder' % FOLD_CLIP
+    fold_channels, report['fold'] = author_fold(
+        references['CHIP_toss'][1], references['CHIP_toss'][3], bone_names)
+    _, varying = bake_clip(rig, FOLD_CLIP, bone_names, fold_channels)
+    report['fold']['curves_keyed_every_frame'] = varying
+
     # The one deliberate change to the accepted character, measured as it is made.
     if args.smooth_jacket > 0:
         report['wardrobe'] = smooth_jacket(scene, rig, args.smooth_jacket)
@@ -727,6 +746,53 @@ def main():
         if not result['within_tolerance']:
             failures.append('geometry: %s moves a vertex %.4f mm from the accepted clip' % (clip, result['worst_mm']))
 
+    # The fold has no accepted clip to be compared with, so it is held to what it claims: it
+    # is the push until the authored layers begin, it starts and ends on the push's own
+    # first and last frames (the idle's), and the flick never drives a fingertip into the
+    # felt further than the push itself does.
+    skin_meshes(rig, False)
+    poison(rig)
+    _, _, _, fold_posed = capture_pose(scene, rig, FOLD_CLIP, FOLD_LAST_FRAME)
+    push_posed = references['CHIP_toss'][3]
+    first_authored = min(keys[1][0] for _, _, keys in LAYERS)
+    untouched = compare_pose(
+        (None, None, references['CHIP_toss'][2][:first_authored], push_posed[:first_authored]),
+        (None, None, None, fold_posed[:first_authored]),
+        bone_names,
+        only='posed',
+    )
+    fold_gate = {
+        'push_frames_untouched_until': first_authored,
+        'untouched': untouched,
+        'start_vs_push_start': pose_distance(fold_posed[0], push_posed[0], bone_names),
+        'end_vs_push_end': pose_distance(fold_posed[FOLD_LAST_FRAME], push_posed[30], bone_names),
+    }
+    fingertips = ['finger%d-3.L' % digit for digit in range(1, 6)]
+
+    def lowest_fingertip(action_name, last):
+        assign(rig, bpy.data.actions[action_name])
+        lowest = None
+        for frame in range(last + 1):
+            set_frame(scene, frame)
+            for tip in fingertips:
+                height = (rig.matrix_world @ rig.pose.bones[tip].tail).z
+                lowest = height if lowest is None else min(lowest, height)
+        return lowest
+
+    fold_gate['lowest_fingertip_fold_m'] = round(lowest_fingertip(FOLD_CLIP, FOLD_LAST_FRAME), 4)
+    fold_gate['lowest_fingertip_push_m'] = round(lowest_fingertip('CHIP_toss', 30), 4)
+    report['gates']['fold'] = fold_gate
+    if not untouched['within_tolerance']:
+        failures.append('fold: frames before the authored layers are not the accepted push')
+    for key in ('start_vs_push_start', 'end_vs_push_end'):
+        if (fold_gate[key]['rotation_deg']['value'] > ROTATION_TOLERANCE_DEG
+                or fold_gate[key]['translation_mm']['value'] > TRANSLATION_TOLERANCE_MM):
+            failures.append('fold: %s is %.4f deg / %.4f mm out' % (
+                key, fold_gate[key]['rotation_deg']['value'], fold_gate[key]['translation_mm']['value']))
+    if fold_gate['lowest_fingertip_fold_m'] < fold_gate['lowest_fingertip_push_m'] - 0.002:
+        failures.append('fold: a fingertip goes %.1fmm lower than the push ever takes it' % (
+            1000 * (fold_gate['lowest_fingertip_push_m'] - fold_gate['lowest_fingertip_fold_m'])))
+
     # 6. Facts the runtime needs, measured rather than assumed.
     posed = {clip: references[clip][3] for clip in SHIPPING}
     idle = posed['IDLE_thinking_readable']
@@ -773,6 +839,13 @@ def main():
         print('GATE %-24s rot %.2e deg  trans %.2e mm  geometry %.2e mm'
               % (clip, pose_gate['rotation_deg']['value'], pose_gate['translation_mm']['value'],
                  report['gates']['geometry'][clip]['worst_mm']))
+    fold_gate = report['gates']['fold']
+    print('FOLD %s authored on the push, untouched to frame %d: start %.2e deg, end %.2e deg, '
+          'lowest fingertip %.4f m against the push\'s %.4f m'
+          % (FOLD_CLIP, fold_gate['push_frames_untouched_until'],
+             fold_gate['start_vs_push_start']['rotation_deg']['value'],
+             fold_gate['end_vs_push_end']['rotation_deg']['value'],
+             fold_gate['lowest_fingertip_fold_m'], fold_gate['lowest_fingertip_push_m']))
     print('CONTROL sparse idle with poisoned stored pose: rot %.1f deg, trans %.1f mm'
           % (control['posed']['rotation_deg']['value'], control['posed']['translation_mm']['value']))
     print('TEXTURES merged %d, packed bytes %d -> %d, candidate %d bytes'

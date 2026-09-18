@@ -8,9 +8,9 @@ import type { RoomEvent } from '@river/server'
  * A clip that is not here cannot be played, and a name here that the rig does
  * not carry is a build error rather than a silent no-op - see `missingClips`.
  *
- * Fold, win and lose gestures exist in an earlier library but are not part of
- * this character yet, so those events play nothing rather than the nearest
- * clip.
+ * The fold is authored for this character in the pipeline. Win and lose
+ * gestures exist in an earlier library but are not part of it yet, so those
+ * events play nothing rather than the nearest clip.
  */
 export const CLIPS = [
   'IDLE_thinking_readable',
@@ -20,6 +20,7 @@ export const CLIPS = [
   'ALLIN_standup',
   'SIT_enter',
   'LEAVE_getup',
+  'FOLD_muck',
 ] as const
 
 export type ClipName = (typeof CLIPS)[number]
@@ -39,7 +40,14 @@ export const CLIP_LAST_FRAME: Readonly<Record<ClipName, number>> = {
   ALLIN_standup: 90,
   SIT_enter: 108,
   LEAVE_getup: 132,
+  FOLD_muck: 35,
 }
+
+/**
+ * The frame the folding hand lets go of the cards; the scene sends them to the muck from
+ * here. The fold is authored in the pipeline on the accepted push - see fold_clip.py.
+ */
+export const FOLD_RELEASE_FRAME = 16
 
 /**
  * How a clip combines with the idle underneath it.
@@ -63,6 +71,9 @@ export const BLEND: Readonly<Record<ClipName, BlendMode>> = {
   ALLIN_standup: 'replace',
   SIT_enter: 'replace',
   LEAVE_getup: 'replace',
+  // Authored to start and end on the push's own first frame, which is the idle's, so it
+  // layers over the idle exactly as the push does.
+  FOLD_muck: 'additive',
 }
 
 export interface AnimationCue {
@@ -99,6 +110,7 @@ const PRIORITY = {
   idle: 0,
   peek: 10,
   check: 15,
+  fold: 18,
   chips: 20,
   allIn: 50,
   sit: 60,
@@ -189,13 +201,9 @@ function clipForAction(kind: string): ClipName | null {
     case 'allIn':
       return 'ALLIN_standup'
     case 'fold':
-      // There is no fold clip on this character, and for as long as the cards stayed where
-      // they were no clip was the honest answer: a gesture that moves nothing reads as a
-      // tell that means nothing. The cards now leave. A fold is the push - a player sliding
-      // his cards forward to the muck is the push with cards under the hand instead of
-      // chips - and the scene sends the cards off with it. A clip authored for the fold
-      // replaces this rather than sitting beside it.
-      return 'CHIP_toss'
+      // The fold is its own clip: the push slides the cards out from under his hand, the
+      // hand lets go, and he watches them go and looks away.
+      return 'FOLD_muck'
     default:
       return null
   }
@@ -205,6 +213,7 @@ function priorityForClip(clip: ClipName): number {
   if (clip === 'ALLIN_standup') return PRIORITY.allIn
   if (clip === 'CHECK_tap') return PRIORITY.check
   if (clip === 'PEEK_card') return PRIORITY.peek
+  if (clip === 'FOLD_muck') return PRIORITY.fold
   return PRIORITY.chips
 }
 
