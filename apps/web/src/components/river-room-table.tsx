@@ -88,6 +88,10 @@ function isBotPlayerId(playerId: string | null): boolean {
 
 /** Mirrors the server: a second press inside most of a look is the same look. */
 const LOOK_INTERVAL_MS = 1_200
+
+/** How soon a dropped table tries again, and the longest it waits between tries. */
+const RECONNECT_FIRST_MS = 900
+const RECONNECT_CEILING_MS = 10_000
 const seatPositions = [
   { x: 57, y: 78 },
   { x: 23, y: 76 },
@@ -441,6 +445,16 @@ export function RiverRoomTable() {
     let disposed = false
     let unsubscribeMessage: (() => void) | null = null
     let unsubscribeState: (() => void) | null = null
+    // One retry pending at a time, backing off while the server stays away. A lost socket
+    // and a failed attempt can both ask for one, and two would open two sockets.
+    let retryMs = RECONNECT_FIRST_MS
+    const reconnect = (afterMs: number) => {
+      if (reconnectRef.current !== null) window.clearTimeout(reconnectRef.current)
+      reconnectRef.current = window.setTimeout(() => {
+        reconnectRef.current = null
+        void connect()
+      }, afterMs)
+    }
     const connect = async (): Promise<void> => {
       setConnection((previous) => (previous === 'connected' ? 'reconnecting' : 'connecting'))
       try {
@@ -600,6 +614,7 @@ export function RiverRoomTable() {
         })
         unsubscribeState = socket.subscribeState((state: RiverSocketState) => {
           if (state === 'connected') {
+            retryMs = RECONNECT_FIRST_MS
             setConnection('connected')
             setNotice(null)
             return
@@ -608,15 +623,21 @@ export function RiverRoomTable() {
             return
           setConnection('reconnecting')
           setNotice('Reconnecting…')
-          reconnectRef.current = window.setTimeout(() => void connect(), 900)
+          reconnect(RECONNECT_FIRST_MS)
         })
         await socket.connect(session.access_token)
         if (disposed) return
         socket.enter(roomId, nameRef.current, inviteCode, initialVenue)
       } catch {
-        if (!disposed) {
+        if (!disposed && kickRef.current?.reason !== 'duplicate-session') {
           setConnection('offline')
           setNotice('River is reconnecting. Your table remains visible.')
+          // A failure before there is a socket to lose - fetching the auth config or the
+          // session, which is what fails while the server restarts - used to end here, for
+          // good: only a socket's close retried, and there was no socket. The notice said
+          // reconnecting and nothing ever did.
+          retryMs = Math.min(RECONNECT_CEILING_MS, retryMs * 2)
+          reconnect(retryMs)
         }
       }
     }
