@@ -401,6 +401,29 @@ describe('room hub', () => {
       expect(alice.peer.last('error')).toBeUndefined()
     })
 
+    it('holds a look open and lets it go, and never throttles the letting go', async () => {
+      const { hub } = setup()
+      const { alice, bob } = await dealtIn(hub)
+      await alice.connection.receive(
+        JSON.stringify({
+          kind: 'social',
+          requestId: 'hold',
+          command: { kind: 'peek', holding: true },
+        }),
+      )
+      await alice.connection.receive(
+        JSON.stringify({
+          kind: 'social',
+          requestId: 'let',
+          command: { kind: 'peek', holding: false },
+        }),
+      )
+      const looks = bob.peer.messages.flatMap((message) =>
+        message.kind === 'social' && message.event.kind === 'peeked' ? [message.event] : [],
+      )
+      expect(looks.map((event) => event.holding)).toEqual([true, false])
+    })
+
     it('ignores a player with no cards to look at', async () => {
       const { hub } = setup()
       const alice = await connectAndEnter(hub, 'alice', 'Alice')

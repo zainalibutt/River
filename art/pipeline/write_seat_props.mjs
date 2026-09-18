@@ -124,6 +124,22 @@ export const HOLE_CARD_PEEK: readonly (readonly number[])[] = [
 ${tracks.join('\n')}
 ]
 
+/**
+ * The frame a held look stops on: the first where both cards are within a millimetre of
+ * the top of the lift. Read off the authored track rather than picked, so it moves with it.
+ */
+export function peekHoldFrame(): number {
+  const heights = HOLE_CARD_PEEK.map((track) =>
+    Array.from({ length: track.length / 7 }, (_, frame) => track[frame * 7 + 1] ?? 0),
+  )
+  const tops = heights.map((column) => Math.max(...column))
+  const frames = heights[0]?.length ?? 0
+  for (let frame = 0; frame < frames; frame += 1) {
+    if (heights.every((column, card) => (column[frame] ?? 0) >= (tops[card] ?? 0) - 0.001)) return frame
+  }
+  return Math.floor(frames / 2)
+}
+
 export const PEEK_LAST_FRAME = ${lastFrame}
 
 /**

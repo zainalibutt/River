@@ -6,8 +6,10 @@ import {
   BLEND_IN_SECONDS,
   BLEND_OUT_SECONDS,
   endHand,
+  holdPeek,
   initialSeat,
   LEAVE_FROM_STANDING_FRAME,
+  PEEK_HOLD_LIMIT_SECONDS,
   poseOf,
   RETURN_FROM_FRAME,
   type SeatState,
@@ -181,6 +183,24 @@ describe('seat motion', () => {
     for (let now = 0.8; now < 2.5; now += 0.031) {
       expect(totalWeight(pushed, now)).toBeCloseTo(1, 9)
     }
+  })
+
+  it('holds a look open while the cards are held, and finishes it when they are let go', () => {
+    const looking = applyCue(initialSeat(true), 'PEEK_card', 0)
+    const held = holdPeek(looking, true, 22, 0.1)
+    // Long past the clip's own length, still up.
+    expect(pose(held, 5).body?.frame).toBe(22)
+    expect(advance(held, 5).phase).toBe('gesture')
+    const released = holdPeek(advance(held, 5), false, 22, 5)
+    expect(pose(released, 5).body?.frame).toBe(22)
+    const rest = (CLIP_LAST_FRAME.PEEK_card - 22) / CLIP_FPS
+    expect(advance(released, 5 + rest + 0.01).phase).toBe('seated')
+  })
+
+  it('lets a held look go on its own if the release never comes', () => {
+    const held = holdPeek(applyCue(initialSeat(true), 'PEEK_card', 0), true, 22, 0.1)
+    const later = advance(held, 0.1 + PEEK_HOLD_LIMIT_SECONDS + 0.01)
+    expect(later.body?.holdAt).toBeUndefined()
   })
 
   it('moves the chair only on the tracks that carry chair motion', () => {

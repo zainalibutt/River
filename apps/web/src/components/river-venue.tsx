@@ -26,6 +26,8 @@ type RiverVenueProps = {
   holeSeats?: readonly HoleSeat[] | undefined
   /** The deal those cards belong to. */
   handNumber?: number | undefined
+  /** Seats holding their cards up. */
+  heldPeeks?: readonly number[] | undefined
   /** Chips on the move, one running entry per message. */
   chipMoments?: readonly ChipMoment[] | undefined
   /** The community cards dealt so far. */
@@ -49,6 +51,7 @@ export function RiverVenue({
   occupiedSeats,
   holeSeats,
   handNumber,
+  heldPeeks,
   chipMoments,
   board,
   seatChips,
@@ -67,6 +70,7 @@ export function RiverVenue({
       occupiedSeats={occupiedSeats}
       holeSeats={holeSeats}
       handNumber={handNumber}
+      heldPeeks={heldPeeks}
       chipMoments={chipMoments}
       board={board}
       seatChips={seatChips}

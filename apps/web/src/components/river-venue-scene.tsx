@@ -66,6 +66,7 @@ import {
   advance,
   applyCue,
   endHand,
+  holdPeek,
   initialSeat,
   poseOf,
   type SeatState,
@@ -76,6 +77,7 @@ import {
   CHIP_STACK_PLACE,
   HOLE_CARD_SIZE,
   holeCardAt,
+  peekHoldFrame,
   travelProgress,
 } from '@/lib/seat-props'
 import { chairBackAway } from '@/lib/seat-transition-timing'
@@ -131,6 +133,8 @@ type SceneProps = {
   holeSeats?: readonly HoleSeat[] | undefined
   /** The deal the cards belong to, so a new hand starts every seat holding again. */
   handNumber?: number | undefined
+  /** Seats whose player is holding their cards up: the look stays open until they let go. */
+  heldPeeks?: readonly number[] | undefined
   /** Chips on the move, one running entry per message - see chip-flow. */
   chipMoments?: readonly ChipMoment[] | undefined
   /** The community cards dealt so far, face up in the middle. */
@@ -558,6 +562,8 @@ interface CardState {
 const MUCK_SPOT = new THREE.Vector3(0.22, TABLE_SURFACE_HEIGHT + 0.002, -0.44)
 /** The cards ride the folding hand until it lets go of them, then slide off. */
 const MUCK_PUSH_SECONDS = FOLD_RELEASE_FRAME / CLIP_FPS
+/** A held look stops with the cards at the top of the lift. */
+const PEEK_HOLD_FRAME = peekHoldFrame()
 const MUCK_SLIDE_SECONDS = 0.4
 const MUCK_SECONDS = MUCK_PUSH_SECONDS + MUCK_SLIDE_SECONDS
 /** A card turning over: quick, and lifted a finger's width off the felt on the way. */
@@ -674,6 +680,7 @@ function SilverCast({
   occupiedSeats,
   holeSeats,
   handNumber,
+  heldPeeks,
   heroSeat,
   handSerial,
   anchors,
@@ -685,11 +692,14 @@ function SilverCast({
   occupiedSeats: readonly number[] | undefined
   holeSeats: readonly HoleSeat[] | undefined
   handNumber: number
+  heldPeeks: readonly number[] | undefined
   heroSeat: number | null
   handSerial: number
   anchors: RefObject<SeatAnchors | null>
   onPlaced: (places: readonly CastPlace[]) => void
 }) {
+  const held = useRef(heldPeeks)
+  held.current = heldPeeks
   const cast = useGLTF(freshAsset(venue.cast ?? ''))
   const seats = useRef<CastSeat[]>([])
   const cards = useRef<THREE.InstancedMesh>(null)
@@ -944,7 +954,12 @@ function SilverCast({
     for (const entry of seats.current) {
       const occupied = occupiedSeats === undefined || occupiedSeats.includes(entry.seat)
       const state = advance(
-        syncOccupancy(seatState(states.current, entry.seat, occupied), occupied, now),
+        holdPeek(
+          syncOccupancy(seatState(states.current, entry.seat, occupied), occupied, now),
+          held.current?.includes(entry.seat) === true,
+          PEEK_HOLD_FRAME,
+          now,
+        ),
         now,
       )
       states.current.set(entry.seat, state)
@@ -1117,6 +1132,7 @@ function VenueAsset({
   occupiedSeats,
   holeSeats,
   handNumber,
+  heldPeeks,
   heroSeat,
   handSerial,
   anchors,
@@ -1127,6 +1143,7 @@ function VenueAsset({
   occupiedSeats: readonly number[] | undefined
   holeSeats: readonly HoleSeat[] | undefined
   handNumber: number
+  heldPeeks: readonly number[] | undefined
   heroSeat: number | null
   handSerial: number
   anchors: RefObject<SeatAnchors | null>
@@ -1368,6 +1385,7 @@ function VenueAsset({
           occupiedSeats={occupiedSeats}
           holeSeats={holeSeats}
           handNumber={handNumber}
+          heldPeeks={heldPeeks}
           heroSeat={heroSeat}
           handSerial={handSerial}
           anchors={anchors}
@@ -2097,6 +2115,7 @@ function Scene({
   occupiedSeats,
   holeSeats,
   handNumber = 0,
+  heldPeeks,
   chipMoments = NO_MOMENTS,
   board = NO_CARDS,
   seatChips = [],
@@ -2140,6 +2159,7 @@ function Scene({
           occupiedSeats={occupiedSeats}
           holeSeats={holeSeats}
           handNumber={handNumber}
+          heldPeeks={heldPeeks}
           heroSeat={heroSeat ?? null}
           handSerial={handSerial}
           anchors={anchors}
@@ -2167,6 +2187,7 @@ export function RiverScene({
   occupiedSeats,
   holeSeats,
   handNumber,
+  heldPeeks,
   chipMoments,
   board,
   seatChips,
@@ -2255,6 +2276,7 @@ export function RiverScene({
         occupiedSeats={occupiedSeats}
         holeSeats={holeSeats}
         handNumber={handNumber}
+        heldPeeks={heldPeeks}
         chipMoments={chipMoments}
         board={board}
         seatChips={seatChips}

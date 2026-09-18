@@ -37,6 +37,10 @@ export interface ClipSpan {
   toFrame: number
   /** Whether this clip ramps in over the pose before it, or starts at full weight. */
   blendIn: boolean
+  /** A look held open: the clip stops at this frame until the player lets go. */
+  holdAt?: number
+  /** When the hold began, so a hold nobody ends cannot freeze a seat for good. */
+  heldSince?: number
 }
 
 export interface Release {
@@ -103,11 +107,42 @@ function span(clip: ClipName, now: number, fromFrame: number, blendIn: boolean):
 }
 
 export function frameOf(clip: ClipSpan, now: number): number {
-  return Math.min(clip.toFrame, clip.fromFrame + Math.max(0, now - clip.startedAt) * CLIP_FPS)
+  const played = clip.fromFrame + Math.max(0, now - clip.startedAt) * CLIP_FPS
+  return Math.min(clip.holdAt ?? clip.toFrame, clip.toFrame, played)
 }
 
 function finished(clip: ClipSpan, now: number): boolean {
+  if (clip.holdAt !== undefined) return false
   return clip.fromFrame + (now - clip.startedAt) * CLIP_FPS >= clip.toFrame
+}
+
+/** A look is never held longer than this: a release lost on the wire must not freeze him. */
+export const PEEK_HOLD_LIMIT_SECONDS = 10
+
+/**
+ * Hold a look open for as long as the player holds their cards, or let it go.
+ *
+ * A look used to be a fixed 1.6 seconds whatever the player did: press and hold your cards
+ * and your character looked, put them down and went back to the idle while you were still
+ * reading. Held, the look stops with the cards up at `holdFrame` and finishes from there
+ * when the player lets go - or on its own, after PEEK_HOLD_LIMIT_SECONDS.
+ */
+export function holdPeek(
+  state: SeatState,
+  holding: boolean,
+  holdFrame: number,
+  now: number,
+): SeatState {
+  const body = state.body
+  if (body === null || body.clip !== 'PEEK_card') return state
+  if (holding) {
+    if (body.holdAt !== undefined) return state
+    return { ...state, body: { ...body, holdAt: holdFrame, heldSince: now } }
+  }
+  if (body.holdAt === undefined) return state
+  const frame = frameOf(body, now)
+  const { holdAt: _held, heldSince: _since, ...rest } = body
+  return { ...state, body: { ...rest, startedAt: now, fromFrame: frame } }
 }
 
 function ramp(elapsed: number, seconds: number): number {
@@ -233,6 +268,13 @@ export function syncOccupancy(state: SeatState, occupied: boolean, now: number):
 /** Move the seat on to whatever follows a clip that has finished. */
 export function advance(state: SeatState, now: number): SeatState {
   let next = state
+  if (
+    next.body?.holdAt !== undefined &&
+    next.body.heldSince !== undefined &&
+    now - next.body.heldSince >= PEEK_HOLD_LIMIT_SECONDS
+  ) {
+    next = holdPeek(next, false, next.body.holdAt, now)
+  }
   if (next.overlay !== null) {
     const fadedOut =
       next.overlay.fadingFrom !== null && now - next.overlay.fadingFrom >= BLEND_IN_SECONDS

@@ -334,6 +334,8 @@ export function RiverRoomTable() {
   )
   const [reel, setReel] = useState<ShowdownReel | null>(null)
   const [reelAtMs, setReelAtMs] = useState(0)
+  // Seats whose player is holding their cards up - yours, and everybody else's.
+  const [heldPeeks, setHeldPeeks] = useState<readonly number[]>([])
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
   const [raiseTo, setRaiseTo] = useState(0)
   const [stageScale, setStageScale] = useState(2 / 3)
@@ -518,7 +520,17 @@ export function RiverRoomTable() {
               const looking = viewRef.current.seats.find(
                 (entry) => entry.playerId === event.playerId,
               )
-              if (looking !== undefined) pushCues([peekCue(looking.seat)])
+              if (looking !== undefined) {
+                if (event.holding !== false) pushCues([peekCue(looking.seat)])
+                if (event.holding === true) {
+                  setHeldPeeks((held) =>
+                    held.includes(looking.seat) ? held : [...held, looking.seat],
+                  )
+                }
+                if (event.holding === false) {
+                  setHeldPeeks((held) => held.filter((seat) => seat !== looking.seat))
+                }
+              }
             }
             setSpeaking((current) => applySpeaking(current, event))
             setFeed((current) =>
@@ -558,6 +570,7 @@ export function RiverRoomTable() {
           )
           chipView.current = message.view
           setChipMoments((current) => [...current, moment].slice(-CHIP_HISTORY))
+          if (message.events.some((event) => event.kind === 'handStarted')) setHeldPeeks([])
           if (foldedThisHand.current.hand !== message.view.handNumber) {
             foldedThisHand.current = { hand: message.view.handNumber, seats: new Set() }
           }
@@ -730,17 +743,30 @@ export function RiverRoomTable() {
   // It used to turn the cards over in the corner and nothing else: your character sat
   // perfectly still while you read your hand, and nobody else saw you do it.
   const lastLook = useRef(0)
+  const heroHolding = useRef(false)
   useEffect(() => {
-    if (!peek) return
     const current = viewRef.current
     const hero = current.seats.find((seat) => seat.playerId === current.selfId)
+    if (!peek) {
+      if (!heroHolding.current) return
+      heroHolding.current = false
+      if (hero !== undefined) setHeldPeeks((held) => held.filter((seat) => seat !== hero.seat))
+      try {
+        socketRef.current?.social({ kind: 'peek', holding: false })
+      } catch {
+        // Offline: there is nobody to tell.
+      }
+      return
+    }
     if (current.phase !== 'hand' || hero === undefined || !hero.hasHole || hero.folded) return
     const now = Date.now()
     if (now - lastLook.current < LOOK_INTERVAL_MS) return
     lastLook.current = now
+    heroHolding.current = true
     pushCues([peekCue(hero.seat)])
+    setHeldPeeks((held) => (held.includes(hero.seat) ? held : [...held, hero.seat]))
     try {
-      socketRef.current?.social({ kind: 'peek' })
+      socketRef.current?.social({ kind: 'peek', holding: true })
     } catch {
       // Offline: the look still plays here, and there is nobody to tell.
     }
@@ -1039,6 +1065,7 @@ export function RiverRoomTable() {
                 .map((seat) => seat.seat)}
               holeSeats={holeSeats}
               handNumber={view.handNumber}
+              heldPeeks={heldPeeks}
               chipMoments={chipMoments}
               board={view.board}
               seatChips={seatChips}

@@ -78,7 +78,8 @@ export type ClientSocialCommand =
   | { kind: 'chat'; text: string }
   | { kind: 'emote'; emote: Emote }
   | { kind: 'speaking'; speaking: boolean }
-  | { kind: 'peek' }
+  /** A look at the cards; `holding` starts or ends one held open for as long as the press. */
+  | { kind: 'peek'; holding?: boolean }
 
 export type SocialEvent =
   | { kind: 'chat'; playerId: string; text: string; sentAtMs: number }
@@ -87,7 +88,7 @@ export type SocialEvent =
   | { kind: 'avatarVo'; playerId: string; trigger: 'allIn' | 'win' | 'loss'; sentAtMs: number }
   | { kind: 'speaking'; playerId: string; speaking: boolean }
   /** Somebody lifted their cards to look at them. Everyone at a real table sees that. */
-  | { kind: 'peeked'; playerId: string; sentAtMs: number }
+  | { kind: 'peeked'; playerId: string; sentAtMs: number; holding?: boolean }
 
 export type ClientMessage =
   | { kind: 'authenticate'; accessToken: string }
@@ -416,7 +417,11 @@ function socialCommand(value: unknown): ClientSocialCommand | null {
   if (value.kind === 'speaking' && typeof value.speaking === 'boolean') {
     return { kind: 'speaking', speaking: value.speaking }
   }
-  if (value.kind === 'peek') return { kind: 'peek' }
+  if (value.kind === 'peek') {
+    return typeof value.holding === 'boolean'
+      ? { kind: 'peek', holding: value.holding }
+      : { kind: 'peek' }
+  }
   return null
 }
 
@@ -1060,7 +1065,7 @@ export class RoomHub {
     if (player === null || connection.roomId === null) return
     const { command } = message
     if (command.kind === 'peek') {
-      this.peek(state, player.playerId, message.requestId)
+      this.peek(state, player.playerId, message.requestId, command.holding)
       return
     }
     if (
@@ -1624,15 +1629,32 @@ export class RoomHub {
    * cards over and over is one look rather than a flood: the extra presses are
    * dropped quietly, because there is nothing for the client to say about them.
    */
-  private peek(state: RoomState, playerId: string, requestId: string | null): void {
+  private peek(
+    state: RoomState,
+    playerId: string,
+    requestId: string | null,
+    holding?: boolean,
+  ): void {
     const view = state.room.viewFor(playerId)
     const seat = view.seats.find((entry) => entry.playerId === playerId)
-    if (view.phase !== 'hand' || seat === undefined || !seat.hasHole || seat.folded) return
     const now = state.room.config.nowMs()
+    // Letting go always gets through: a release swallowed by the throttle would leave the
+    // table watching a player hold their cards up long after they put them down.
+    if (holding === false) {
+      if (seat === undefined) return
+      this.broadcastSocial(state, requestId, { kind: 'peeked', playerId, sentAtMs: now, holding })
+      return
+    }
+    if (view.phase !== 'hand' || seat === undefined || !seat.hasHole || seat.folded) return
     const last = state.lastPeekAtMs.get(playerId)
     if (last !== undefined && now - last < PEEK_INTERVAL_MS) return
     state.lastPeekAtMs.set(playerId, now)
-    this.broadcastSocial(state, requestId, { kind: 'peeked', playerId, sentAtMs: now })
+    this.broadcastSocial(state, requestId, {
+      kind: 'peeked',
+      playerId,
+      sentAtMs: now,
+      ...(holding === undefined ? {} : { holding }),
+    })
   }
 
   private remainingTurnMs(state: RoomState): number {
