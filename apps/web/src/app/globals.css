@@ -3021,6 +3021,35 @@ button.verify-pill.verify-mismatch {
   font-weight: 700;
 }
 
+/* The hand itself, under its name. A showdown that says "two pair" without the
+   two cards is asking the table to take its word for it. */
+.showdown-cards {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.showdown-cards .playing-card {
+  width: 58px;
+  height: 81px;
+  border-radius: 7px;
+}
+
+.showdown-cards .playing-card > span:first-child {
+  top: 5px;
+  left: 6px;
+  font-size: 19px;
+}
+
+.showdown-cards .playing-card > b {
+  font-size: 30px;
+}
+
+.showdown-cards .playing-card .card-corner {
+  display: none;
+}
+
 /*
  * The corner rows.
  *
@@ -3166,6 +3195,37 @@ button.verify-pill.verify-mismatch {
 }
 .action-pin.all-in {
   color: var(--river-amber-bright);
+}
+
+/* A shown hand, held up over its player: two cards on a brass-edged plaque in
+   place of the round pin, with the same tail so it reads as theirs. */
+.shown-hand {
+  width: auto;
+  height: auto;
+  padding: 5px;
+  border-radius: 9px;
+  grid-auto-flow: column;
+  gap: 4px;
+}
+
+.shown-hand .playing-card {
+  width: 38px;
+  height: 53px;
+  border-radius: 5px;
+}
+
+.shown-hand .playing-card > span:first-child {
+  top: 3px;
+  left: 4px;
+  font-size: 14px;
+}
+
+.shown-hand .playing-card > b {
+  font-size: 20px;
+}
+
+.shown-hand .playing-card .card-corner {
+  display: none;
 }
 
 .action-pin-amount {

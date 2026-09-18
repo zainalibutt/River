@@ -88,6 +88,25 @@ def main():
         allin.append({'action': name, 'rest': [round(v, 5) for v in location],
                       'pushed': [round(v, 5) for v in pushed]})
 
+    # Where the stack is on every frame of the push and the shove, not only where it starts
+    # and ends: the chips a player bets travel with his hand, and his hand is not moving for
+    # the whole clip. The bottom chip of each stack stands for the stack; they are keyed
+    # together.
+    def travel(name, last):
+        rows = []
+        for frame in range(last + 1):
+            location, _ = sample(bpy.data.actions[name], frame)
+            rows.append([round(value, 5) for value in location])
+        return rows
+
+    push_track = travel(CHIP_ACTIONS[0], CHIP_LAST_FRAME)
+    shove_track = travel(ALLIN_ACTIONS[0], ALLIN_LAST_FRAME)
+    for name, track in ((CHIP_ACTIONS[0], push_track), (ALLIN_ACTIONS[0], shove_track)):
+        moving = [frame for frame in range(1, len(track)) if track[frame] != track[frame - 1]]
+        if not moving:
+            raise SystemExit('FAIL: %s never moves the stack' % name)
+        print('TRAVEL %s moves from frame %d to %d' % (name, moving[0] - 1, moving[-1]))
+
     # The props are the size a real one is, and the browser must draw them at that size or
     # the hand closes on the wrong place. Measured rather than restated.
     sizes = []
@@ -112,6 +131,8 @@ def main():
         'holeCards': cards,
         'chipStack': chips,
         'allInChips': allin,
+        'chipPushTrack': push_track,
+        'allInShoveTrack': shove_track,
     }
     out = os.path.abspath(args.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)

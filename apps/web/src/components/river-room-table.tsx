@@ -28,6 +28,7 @@ import {
 import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverLobby } from '@/components/river-lobby'
 import { RiverVenue } from '@/components/river-venue'
+import type { HoleSeat } from '@/components/river-venue-scene'
 import { type AnimationCue, CUE_HISTORY, cuesForEvents, endsHand, peekCue } from '@/lib/animation'
 import {
   createRiverAuthClient,
@@ -37,6 +38,7 @@ import {
 } from '@/lib/auth'
 import { sizingPresets } from '@/lib/betting'
 import { affordableBuyIn } from '@/lib/buy-in'
+import { type ChipMoment, chipMomentFor } from '@/lib/chip-flow'
 import { readoutFor } from '@/lib/hand-readout'
 import { formatAmount } from '@/lib/presentation'
 import {
@@ -88,6 +90,9 @@ function isBotPlayerId(playerId: string | null): boolean {
 
 /** Mirrors the server: a second press inside most of a look is the same look. */
 const LOOK_INTERVAL_MS = 1_200
+
+/** How many chip moments the running list keeps. The scene only reads the newest few. */
+const CHIP_HISTORY = 16
 
 /** How soon a dropped table tries again, and the longest it waits between tries. */
 const RECONNECT_FIRST_MS = 900
@@ -352,6 +357,20 @@ export function RiverRoomTable() {
     readonly { cosmeticId: string; slot: string; equipped: boolean }[]
   >([])
   const [cues, setCues] = useState<readonly AnimationCue[]>([])
+  // Chips on the move, worked out from each message against the one before it. The view the
+  // last moment was measured from is kept here rather than read from state, because two
+  // messages can arrive before a render and the second must be measured from the first.
+  const [chipMoments, setChipMoments] = useState<readonly ChipMoment[]>([])
+  const chipView = useRef<RoomView | null>(null)
+  const chipSerial = useRef(0)
+  // Who folded this hand. The view forgets the moment the hand is over - every seat reads
+  // as not folded between hands - and a folded hand must not turn face up at the showdown.
+  const foldedThisHand = useRef<{ hand: number; seats: Set<number> }>({
+    hand: 0,
+    seats: new Set(),
+  })
+  // When each seat turns its cards over at a showdown, from the reel's reveal beats.
+  const [revealDelays, setRevealDelays] = useState<ReadonlyMap<number, number>>(() => new Map())
   const cueSerial = useRef(0)
   // A running list rather than the latest batch - see AnimationCue.serial for what the
   // latest batch used to lose.
@@ -466,6 +485,9 @@ export function RiverRoomTable() {
         if (disposed) return
         const socket = new RiverSocket({ url: defaultRiverSocketUrl(window.location) })
         socketRef.current = socket
+        // Whatever moved while the socket was down moved without us; the first view after a
+        // reconnect says where things are and moves nothing.
+        chipView.current = null
         unsubscribeMessage = socket.subscribe((message: ServerMessage) => {
           if (message.kind === 'error') {
             const refused = seatRequestRef.current
@@ -527,6 +549,23 @@ export function RiverRoomTable() {
             return
           }
           if (message.kind !== 'snapshot') return
+          chipSerial.current += 1
+          const moment = chipMomentFor(
+            chipView.current,
+            message.view,
+            message.events,
+            chipSerial.current,
+          )
+          chipView.current = message.view
+          setChipMoments((current) => [...current, moment].slice(-CHIP_HISTORY))
+          if (foldedThisHand.current.hand !== message.view.handNumber) {
+            foldedThisHand.current = { hand: message.view.handNumber, seats: new Set() }
+          }
+          if (message.view.phase === 'hand') {
+            for (const seat of message.view.seats) {
+              if (seat.folded) foldedThisHand.current.seats.add(seat.seat)
+            }
+          }
           setView(message.view)
           const answered = seatRequestRef.current
           if (
@@ -597,6 +636,15 @@ export function RiverRoomTable() {
               const built = showdownReel({ record: newest })
               setReel(built.beats.length > 0 ? built : null)
               setReelAtMs(0)
+              // The cards on the felt turn over on the reel's beat, seat by seat, rather
+              // than every hand at once.
+              setRevealDelays(
+                new Map(
+                  built.beats.flatMap((beat) =>
+                    beat.kind === 'reveal' ? [[beat.seat, beat.atMs / 1000] as const] : [],
+                  ),
+                ),
+              )
             }
           }
           const flash = repFlashFor(message.events, message.view.selfId)
@@ -804,18 +852,36 @@ export function RiverRoomTable() {
     const ring = worldSeats(sceneSeatIds, venueOf(venueId).seatRing)
     return view.seats.flatMap((seat) => {
       const place = ring[seat.seat]
-      if (seat.playerId === null || seat.stack <= 0 || place === undefined) return []
+      if (seat.playerId === null || place === undefined) return []
       return [{ seat: seat.seat, amount: seat.stack, x: place.x, z: place.z }]
     })
   }, [view.seats, sceneSeatIds, venueId])
 
-  // Who is holding cards, for the two the scene draws in front of each of them. The view
-  // says whether a seat has a hole card, never what it is - the server does not send another
-  // player's cards - which is all a face-down pair needs.
-  const cardSeats = useMemo(
-    () => view.seats.filter((seat) => seat.hasHole).map((seat) => seat.seat),
-    [view.seats],
-  )
+  // What each seat's two cards are doing. The view says whether a seat has cards, never
+  // what they are - the server does not send another player's cards - until a showdown,
+  // when it sends the hands that went to one. During a hand a folded seat's cards go to the
+  // muck; at the end of one, the shown hands turn over and every other hand is mucked.
+  const holeSeats = useMemo((): readonly HoleSeat[] => {
+    const folded = foldedThisHand.current
+    const out = (seat: number) => folded.hand === view.handNumber && folded.seats.has(seat)
+    return view.seats.flatMap((seat) => {
+      if (!seat.hasHole) return []
+      if (view.phase === 'hand') {
+        return [
+          { seat: seat.seat, mucked: seat.folded || out(seat.seat), shown: null, revealDelay: 0 },
+        ]
+      }
+      const shown = view.revealed && !out(seat.seat) && seat.hole !== null ? seat.hole : null
+      return [
+        {
+          seat: seat.seat,
+          mucked: shown === null,
+          shown,
+          revealDelay: revealDelays.get(seat.seat) ?? 0,
+        },
+      ]
+    })
+  }, [view, revealDelays])
 
   const selfSeat = view.seats.find((seat) => seat.playerId === view.selfId) ?? null
   const seatedCount = view.seats.filter((seat) => seat.playerId !== null && seat.stack > 0).length
@@ -971,7 +1037,10 @@ export function RiverRoomTable() {
               occupiedSeats={seats
                 .filter((seat) => seat.playerId !== null)
                 .map((seat) => seat.seat)}
-              cardSeats={cardSeats}
+              holeSeats={holeSeats}
+              handNumber={view.handNumber}
+              chipMoments={chipMoments}
+              board={view.board}
               seatChips={seatChips}
               seatIds={sceneSeatIds}
               seatRefs={seatRefs}
@@ -1364,6 +1433,18 @@ export function RiverRoomTable() {
                         `Seat ${showdownBeat.seat + 1}`}
                     </span>
                     <strong className="showdown-hand">{showdownBeat.hand}</strong>
+                    {(() => {
+                      const shown = holeSeats.find(
+                        (hole) => hole.seat === showdownBeat.seat && hole.shown !== null,
+                      )?.shown
+                      return shown === undefined || shown === null ? null : (
+                        <span className="showdown-cards">
+                          {shown.map((card) => (
+                            <PlayingCard key={`${card.rank}${card.suit}`} card={card} />
+                          ))}
+                        </span>
+                      )
+                    })()}
                   </>
                 ) : null}
                 {showdownBeat.kind === 'award' ? (
@@ -1410,6 +1491,10 @@ export function RiverRoomTable() {
                   turnKey={`${view.handNumber}:${view.street}:${view.currentActor?.playerId ?? ''}:${view.turnDeadlineMs ?? ''}`}
                   actionFlag={
                     seat.playerId === null ? null : (seatActions.get(seat.playerId) ?? null)
+                  }
+                  shownCards={
+                    holeSeats.find((hole) => hole.seat === seat.seat && hole.shown !== null)
+                      ?.shown ?? null
                   }
                   buyIn={entryBuyIn}
                   onSit={() => {
@@ -1728,6 +1813,7 @@ function RoomSeat({
   timerTotal,
   turnKey,
   actionFlag,
+  shownCards,
   buyIn,
   onSit,
   onSelect,
@@ -1743,6 +1829,8 @@ function RoomSeat({
   /** Changes once per turn, so the watch restarts only when a new turn does. */
   turnKey: string
   actionFlag: SeatActionFlag | null
+  /** The hand this player showed at a showdown, face up over their head. */
+  shownCards: readonly Card[] | null
   buyIn: number | null
   onSit: () => void
   onSelect: () => void
@@ -1779,7 +1867,11 @@ function RoomSeat({
   // shows none of them: the action menu is yours, and a pin over your own head
   // would sit on top of it.
   let marker: React.ReactNode = null
-  if (!local && active && timer !== null) {
+  if (!local && shownCards !== null) {
+    // A showdown. The cards on the felt are a few dozen pixels from the gameplay camera and
+    // a flat card is fewer, so the hand a player shows is also held up where it can be read.
+    marker = <ShownHand cards={shownCards} />
+  } else if (!local && active && timer !== null) {
     marker = <TurnWatch key={turnKey} remainingMs={timer} budgetMs={timerTotal} />
   } else if (!local && actionFlag !== null) {
     marker = <ActionPin flag={actionFlag} amount={seat.betStreet} />
@@ -1826,6 +1918,20 @@ function RoomSeat({
         {note === null ? null : <span className="seat-plate-note">{note}</span>}
       </div>
     </article>
+  )
+}
+
+function ShownHand({ cards }: { cards: readonly Card[] }) {
+  return (
+    <div
+      className="seat-pin shown-hand"
+      role="img"
+      aria-label={`Showed ${cards.map((card) => `${card.rank}${card.suit}`).join(' ')}`}
+    >
+      {cards.map((card) => (
+        <PlayingCard key={`${card.rank}${card.suit}`} card={card} />
+      ))}
+    </div>
   )
 }
 

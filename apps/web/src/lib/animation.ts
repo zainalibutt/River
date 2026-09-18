@@ -188,8 +188,15 @@ function clipForAction(kind: string): ClipName | null {
       return 'CHIP_toss'
     case 'allIn':
       return 'ALLIN_standup'
+    case 'fold':
+      // There is no fold clip on this character, and for as long as the cards stayed where
+      // they were no clip was the honest answer: a gesture that moves nothing reads as a
+      // tell that means nothing. The cards now leave. A fold is the push - a player sliding
+      // his cards forward to the muck is the push with cards under the hand instead of
+      // chips - and the scene sends the cards off with it. A clip authored for the fold
+      // replaces this rather than sitting beside it.
+      return 'CHIP_toss'
     default:
-      // A fold has no gesture on this character yet. Nothing is the honest answer.
       return null
   }
 }

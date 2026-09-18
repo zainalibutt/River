@@ -111,9 +111,8 @@ export const PEEK_LAST_FRAME = 48
 /**
  * Where a player's own stack sits, and where the chip push sends it.
  *
- * The push is not wired to the stack yet - the browser draws a player's whole stack, and a
- * bet is part of it - but the rest place is what puts the chips under the hand that pushes
- * them.
+ * The rest place is what puts the chips under the hand that pushes them. A bet leaves from
+ * here and travels with the hand - see CHIP_PUSH_TRACK.
  */
 export const CHIP_STACK_PLACE = {
   rest: [0.035, 0.79517, 0.5] as const,
@@ -124,6 +123,77 @@ export const CHIP_STACK_PLACE = {
 export const ALL_IN_STACK_PLACE = {
   rest: [0, 0.79517, 0.5] as const,
   pushed: [0, 0.79517, 0.63] as const,
+}
+
+/**
+ * Where the stack is on every frame of the chip push, three numbers a frame.
+ *
+ * The hand is not moving for the whole clip - it reaches, pushes and comes back - so chips
+ * that slid for the length of it would slide on their own. They move on the frames the
+ * stack was authored to move on.
+ */
+export const CHIP_PUSH_TRACK: readonly number[] = [
+  0.035, 0.79517, 0.5, 0.035, 0.79517, 0.5, 0.035, 0.79517, 0.5, 0.035, 0.79517, 0.5, 0.035,
+  0.79517, 0.5, 0.035, 0.79517, 0.5, 0.03377, 0.79517, 0.5035, 0.03046, 0.79517, 0.51287, 0.02567,
+  0.79517, 0.52644, 0.01999, 0.79517, 0.54254, 0.01401, 0.79517, 0.55947, 0.00833, 0.79517, 0.57556,
+  0.00354, 0.79517, 0.58913, 0.00023, 0.79517, 0.5985, -0.001, 0.79517, 0.602, -0.001, 0.79517,
+  0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517,
+  0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517,
+  0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517,
+  0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517, 0.602, -0.001, 0.79517, 0.602,
+]
+
+/** The same for the all-in shove, whose stack moves late in a clip that is mostly standing up. */
+export const ALL_IN_SHOVE_TRACK: readonly number[] = [
+  0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517,
+  0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0,
+  0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5, 0, 0.79517, 0.5,
+  0, 0.79517, 0.50559, 0, 0.79517, 0.52031, 0, 0.79517, 0.54113, 0, 0.79517, 0.565, 0, 0.79517,
+  0.58887, 0, 0.79517, 0.60969, 0, 0.79517, 0.62441, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517,
+  0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0,
+  0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517,
+  0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0,
+  0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517,
+  0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0,
+  0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517,
+  0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0,
+  0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517,
+  0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0,
+  0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517,
+  0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0,
+  0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63, 0, 0.79517, 0.63,
+]
+
+/**
+ * How far along its travel a track is at a frame, from 0 before it moves to 1 once it has.
+ *
+ * Measured along the track's own length, so a chip bet that goes further than the authored
+ * stack did still leaves and lands on the hand's beat.
+ */
+export function travelProgress(track: readonly number[], frame: number): number {
+  const frames = track.length / 3 - 1
+  if (frames < 1) return 1
+  const clamped = Math.min(frames, Math.max(0, frame))
+  const at = (index: number): [number, number, number] => [
+    track[index * 3] ?? 0,
+    track[index * 3 + 1] ?? 0,
+    track[index * 3 + 2] ?? 0,
+  ]
+  const [x0, , z0] = at(0)
+  const [x1, , z1] = at(frames)
+  const whole = Math.hypot(x1 - x0, z1 - z0)
+  if (whole === 0) return 1
+  const first = Math.floor(clamped)
+  const second = Math.min(frames, first + 1)
+  const mix = clamped - first
+  const [xa, , za] = at(first)
+  const [xb, , zb] = at(second)
+  const x = xa * (1 - mix) + xb * mix
+  const z = za * (1 - mix) + zb * mix
+  // Projected on to the line from start to end, so a track that wobbles sideways still
+  // reads as a fraction of the distance covered.
+  const along = ((x - x0) * (x1 - x0) + (z - z0) * (z1 - z0)) / (whole * whole)
+  return Math.min(1, Math.max(0, along))
 }
 
 /** Where a hole card is at a frame of the peek, interpolated between samples. */

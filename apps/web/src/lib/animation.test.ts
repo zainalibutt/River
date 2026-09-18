@@ -51,10 +51,12 @@ describe('cueForEvent', () => {
     expect(cueForEvent(acted('bob', 'allIn'), seatOf)[0]?.clip).toBe('ALLIN_standup')
   })
 
-  it('plays nothing for a fold rather than reaching for the nearest clip', () => {
-    // This character has no fold gesture yet. A wrong one reads as a tell that
-    // means nothing, which is worse than a player sitting still.
-    expect(cueForEvent(acted('alice', 'fold'), seatOf)).toEqual([])
+  it('folds with the push, which is what slides the cards to the muck', () => {
+    // There is no fold clip on this character. A gesture that moves nothing reads as a
+    // tell that means nothing, which is why a fold played nothing while the cards stayed
+    // put. The scene now sends the cards away under the hand, and the push is the motion
+    // that does it.
+    expect(cueForEvent(acted('alice', 'fold'), seatOf)[0]?.clip).toBe('CHIP_toss')
   })
 
   it('treats an away or timed-out action the same as a played one', () => {
