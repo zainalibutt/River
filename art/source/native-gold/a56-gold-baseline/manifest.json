@@ -1,0 +1,41 @@
+{
+  "status": "accepted",
+  "acceptedBy": "Zain",
+  "acceptedOn": "2026-09-18",
+  "master": "art/source/native-gold/a56-gold-baseline/a56-gold-master.blend",
+  "masterSha256": "82235cc5d770dea1becdb27b012b5b3dc9ae6280d30be5c618510fdfe1d510e7",
+  "sourceSha256": "590f4214d12fcf1e219f33af29536fb013cc16b80a77297bdfa2ed5fa2bd71c3",
+  "bones": 137,
+  "clips": {
+    "idle": {
+      "action": "IDLE_thinking_readable",
+      "range": [0, 120],
+      "status": "accepted pose, held still"
+    },
+    "check": {
+      "action": "CHECK_tap",
+      "range": [0, 36],
+      "status": "provisional",
+      "amendment": "left upper arm turned 7.8 degrees by Zain"
+    }
+  },
+  "textures": {
+    "packed": true,
+    "licence": "CC0 (MakeHuman)",
+    "images": [
+      "brown_eye.png",
+      "DressClothUV.png",
+      "eyebrow007.png",
+      "eyelashes02.png",
+      "ponytail01_diffuse.png",
+      "young_darkskinned_female_diffuse.png"
+    ]
+  },
+  "verification": {
+    "actionsIdentical": true,
+    "restRigIdentical": true,
+    "meshesIdentical": true,
+    "noLocalPaths": true,
+    "reopenedFromDisk": true
+  }
+}
