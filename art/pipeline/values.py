@@ -104,8 +104,15 @@ ROOFTOP = {
     'foliage': '223328',
     'fire': 'FF7A3C',
     'water': '2A4A6A',
-    'skyline': '30384A',
-    'mountain': '141A26',
+    # The city is painted rather than lit - see skyline.py. The haze is the colour the
+    # browser's sky dome has just above the horizon, so the far towers sink into the same
+    # air the sky is made of; the ridge is the hills' own colour before any haze.
+    'skyline_haze': '4A2428',
+    'skyline_ridge': '22162A',
+    'skyline_emission': 1.0,
+    'skyline_beacon': 'FF3B2F',
+    # Past about two the tone curve bleaches a red light towards salmon.
+    'skyline_beacon_strength': 1.8,
 }
 
 BASEMENT = {

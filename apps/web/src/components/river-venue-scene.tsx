@@ -38,6 +38,7 @@ import {
   unplayedCues,
 } from '@/lib/animation'
 import { freshAsset } from '@/lib/asset-url'
+import { BEACON_MESH, beaconLevel } from '@/lib/beacons'
 import { cardBackMaterials, cardKey, cardMaterialsFor } from '@/lib/card-faces'
 import {
   applyMoment,
@@ -1391,6 +1392,7 @@ function VenueAsset({
   return (
     <>
       <primitive object={asset.scene} />
+      <SkylineBeacons scene={asset.scene} />
       {venue.cast !== undefined ? (
         <SilverCast
           venue={venue}
@@ -1408,6 +1410,42 @@ function VenueAsset({
       ) : null}
     </>
   )
+}
+
+/**
+ * Flash the skyline's warning lights - see lib/beacons.ts.
+ *
+ * The lights are found once, by the name the pipeline gives their mesh, and each keeps the
+ * strength it was exported with as its peak, which is restored when the venue goes. A venue
+ * without a skyline finds nothing and costs nothing per frame.
+ */
+function SkylineBeacons({ scene }: { scene: THREE.Object3D }) {
+  const lights = useMemo(() => {
+    const found: { material: THREE.MeshStandardMaterial; peak: number }[] = []
+    scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh) || !BEACON_MESH.test(object.name)) return
+      const { material } = object
+      if (material instanceof THREE.MeshStandardMaterial) {
+        found.push({ material, peak: material.emissiveIntensity })
+      }
+    })
+    return found
+  }, [scene])
+
+  useEffect(
+    () => () => {
+      for (const light of lights) light.material.emissiveIntensity = light.peak
+    },
+    [lights],
+  )
+
+  useFrame(({ clock }) => {
+    if (lights.length === 0) return
+    const level = beaconLevel(clock.elapsedTime)
+    for (const light of lights) light.material.emissiveIntensity = light.peak * level
+  })
+
+  return null
 }
 
 /**

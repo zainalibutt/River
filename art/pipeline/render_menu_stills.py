@@ -103,6 +103,27 @@ def hide_people(venue_id):
     return hidden
 
 
+def is_instancing_source(name):
+    """The browser's rule, from river-venue-scene.tsx: these nodes only carry geometry for
+    the chips and cards it instances itself."""
+    return name == 'board_card_pool' or ('chip' in name and 'pool' in name)
+
+
+def hide_instancing_sources():
+    """Hide what the browser hides. Blender imports an instanced node as an empty with one
+    mesh per instance, so the rule has to reach the children: missed, they are five card
+    backs lying on the floor beside the table's base."""
+    hidden = 0
+    for obj in bpy.data.objects:
+        node = obj
+        while node is not None and not is_instancing_source(node.name):
+            node = node.parent
+        if node is not None:
+            obj.hide_render = True
+            hidden += 1
+    print('MENU hid %d instancing objects' % hidden)
+
+
 def look_at(obj, target):
     obj.rotation_euler = (Vector(target) - obj.location).to_track_quat('-Z', 'Y').to_euler()
 
@@ -114,6 +135,7 @@ def render_venue(venue_id):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=asset)
     hide_people(venue_id)
+    hide_instancing_sources()
 
     scene = bpy.context.scene
     scene.render.engine = 'BLENDER_EEVEE'
@@ -134,6 +156,9 @@ def render_venue(venue_id):
     data = bpy.data.cameras.new('menu_camera')
     data.sensor_fit = 'HORIZONTAL'
     data.angle = math.radians(62.0)
+    # The city starts 260m out and Blender's cameras stop at 100m. The browser draws to a
+    # kilometre, so the still does too.
+    data.clip_end = 1000.0
     camera = bpy.data.objects.new('menu_camera', data)
     scene.collection.objects.link(camera)
     scene.camera = camera

@@ -15,6 +15,7 @@ from mathutils.bvhtree import BVHTree
 
 import check_assets as checker
 import felt
+import skyline
 from buildkit import (
     add_emissive_material,
     add_material,
@@ -32,10 +33,9 @@ from buildkit import (
 from build_characters import FACE_RECIPE_CELLS, HAIR_STYLES, OUTFIT_RECIPE_CELLS, build_animations
 from geo import (
     concat,
-    mountain_range,
     fire_bowl,
     palm,
-    skyline_towers,
+    parapet_lit_band,
     translate_geo,
     transform_geo,
     balustrade,
@@ -577,6 +577,53 @@ def map_felt_uvs(mesh):
     for loop in mesh.loops:
         x, y, _ = mesh.vertices[loop.vertex_index].co
         layer.data[loop.index].uv = ((x / FELT_RX + 1.0) / 2.0, (y / FELT_RY + 1.0) / 2.0)
+
+
+def skyline_material(venue):
+    """The city's one texture, worn as emission - see skyline.py.
+
+    Emission rather than a lit surface, because nothing in the rig reaches two hundred
+    metres: under ambient alone every tower is the same flat navy, which is what the old
+    skyline was. The walls, windows, crowns and haze are painted into the atlas, so what it
+    holds is what the browser shows, through the same tone curve as the sky dome behind it.
+    The PNG is written by skyline.py and read back here, and a round trip that changed a
+    single texel fails the build.
+    """
+    pixels = skyline.atlas(venue['skyline_haze'], venue['skyline_ridge'])
+    name = venue['id'] + '_skyline_atlas'
+    os.makedirs(TEX_DIR, exist_ok=True)
+    path = os.path.join(TEX_DIR, name + '.png')
+    with open(path, 'wb') as handle:
+        handle.write(skyline.png_bytes(pixels))
+    image = bpy.data.images.load(path)
+    image.name = name
+    read_back = np.empty(image.size[0] * image.size[1] * 4, dtype=np.float32)
+    image.pixels.foreach_get(read_back)
+    expected = np.round(pixels * 255.0) / 255.0
+    drift = float(np.abs(read_back.reshape(-1, 4)[:, :3] - expected.reshape(-1, 3)).max())
+    if drift > 0.5 / 255.0:
+        raise SystemExit('FAIL: the skyline atlas came back %.4f off after saving' % drift)
+
+    material = bpy.data.materials.new(venue['id'] + '_skyline')
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    texture = nodes.new('ShaderNodeTexImage')
+    texture.image = image
+    bsdf = next(n for n in nodes if n.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs['Base Color'].default_value = (0.0, 0.0, 0.0, 1.0)
+    bsdf.inputs['Roughness'].default_value = 1.0
+    material.node_tree.links.new(texture.outputs['Color'], bsdf.inputs['Emission Color'])
+    bsdf.inputs['Emission Strength'].default_value = venue['skyline_emission']
+    print('SKYLINE atlas %dx%d, %.0fKB' % (image.size[0], image.size[1], os.path.getsize(path) / 1024.0))
+    return material
+
+
+def set_corner_uvs(mesh, uvs):
+    """One UV per face corner, in the order the faces were given."""
+    if len(uvs) != len(mesh.loops):
+        raise SystemExit('FAIL: %s has %d UVs for %d corners' % (mesh.name, len(uvs), len(mesh.loops)))
+    layer = mesh.uv_layers.new(name='UVMap')
+    layer.data.foreach_set('uv', np.asarray(uvs, dtype=np.float32).ravel())
 
 
 def build_dealer_station(venue, wood_mat):
@@ -1782,10 +1829,9 @@ def build_rooftop(venue):
     PARAPET_TOP = 1.12
     LIT_EDGE_HEIGHT = 0.05
     lit_mat = add_emissive_material('rooftop_lit_edge', venue['parapet_lit'], 0.35)
-    lit = build_mesh_from_geo('rooftop_lit_edge', parapet_ring())
+    lit = build_mesh_from_geo('rooftop_lit_edge', parapet_lit_band(PARAPET_TOP, LIT_EDGE_HEIGHT))
     lit.materials.append(lit_mat)
-    lit_object = object_at('rooftop_lit_edge', lit, (0.0, 0.0, PARAPET_TOP - LIT_EDGE_HEIGHT))
-    lit_object.scale = (1.001, 1.001, LIT_EDGE_HEIGHT / PARAPET_TOP)
+    object_at('rooftop_lit_edge', lit, (0.0, 0.0, 0.0))
     planter_mat = add_material('rooftop_planter', venue['planter'])
     # Outside the orbit, not on it.
     #
@@ -1825,22 +1871,18 @@ def build_rooftop(venue):
     strand.materials.append(lit_mat)
     object_at('rooftop_string_lights', strand, (0.0, 0.0, 0.0))
     # The skyline is the venue's identity - a rooftop without a city is a patio.
-    # Built as merged meshes: 27 towers and their windows cost two draw calls
-    # rather than fifty-four, which matters against a budget of 120.
-    skyline_mat = add_material('rooftop_skyline', venue['skyline'])
-    mountains = build_mesh_from_geo('rooftop_mountains', mountain_range())
-    mountains.materials.append(skyline_mat)
-    object_at('rooftop_mountains', mountains, (0.0, 0.0, 0.0))
-
-    tower_geo, window_geo = skyline_towers()
-    towers = build_mesh_from_geo('rooftop_skyline', tower_geo)
-    towers.materials.append(skyline_mat)
+    # Every tower, its windows and the ridges of hills behind them are one mesh on
+    # one texture, and the warning lights on the masts are a second so the browser
+    # can flash them apart from the city - see apps/web/src/lib/beacons.ts.
+    city, beacons = skyline.city()
+    towers = build_mesh_from_geo('rooftop_skyline', (city.verts, city.faces))
+    set_corner_uvs(towers, city.uvs)
+    towers.materials.append(skyline_material(venue))
     object_at('rooftop_skyline', towers, (0.0, 0.0, 0.0))
-
-    # Windows reuse the parapet emissive rather than adding a material.
-    windows = build_mesh_from_geo('rooftop_skyline_windows', window_geo)
-    windows.materials.append(lit_mat)
-    object_at('rooftop_skyline_windows', windows, (0.0, 0.0, 0.0))
+    beacon_mat = add_emissive_material('rooftop_beacon', venue['skyline_beacon'], venue['skyline_beacon_strength'])
+    beacon_mesh = build_mesh_from_geo('rooftop_skyline_beacons', (beacons.verts, beacons.faces))
+    beacon_mesh.materials.append(beacon_mat)
+    object_at('rooftop_skyline_beacons', beacon_mesh, (0.0, 0.0, 0.0))
 
     foliage_mat = add_material('rooftop_foliage', venue['foliage'])
     # A palm is taller than the people under it.

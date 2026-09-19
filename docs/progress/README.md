@@ -137,10 +137,11 @@ hand. The narrative is in `PROGRESS.md`.
 | `45-silver-a38b-rail-rest.png` | A38b at frame 0, the last lane candidate: a centred hand-over-hand rest. Not accepted; the true side shows the forearms rising toward the hands. | Astra proof pass A38b, 12 Sep | No |
 | `46-silver-a38b-hand-edited.png` | A38b worked by hand - bones posed directly, edges smoothed, a corrective shape key at the right armpit - at frame 0 from the front, both three-quarters, both sides and the rear. Work in progress. | Hand-worked `.blend`, rendered 13 Sep | No |
 
-## 50 — the Rooftop table, dressed
+## 50-51 — the Rooftop table, and the city around it
 
 From 19 September. The narrative is in `PROGRESS.md`.
 
 | Capture | What it shows | Source | Regenerable from the repository |
 |---|---|---|---|
 | `50-rooftop-table-dressed.png` | The Rooftop table under the venue's own light rig. Top, before and after its dressing pass from a player's seat: the wrong frame is kept because it decided the pass, a table that read as a dark hole. Below, after: the printed felt from above, and the dealer's rack, shoe and discards. | `art/pipeline/render_venue_review.py` on the published GLB before and after, 19 Sep | Yes |
+| `51-rooftop-skyline.png` | The skyline before and after it was rebuilt, under the browser's own sky dome: from the play camera, then looking out east from the table. Before, towers twenty to forty-five metres out that filled the strip above the parapet; after, the city at real distances with its tops, crowns, masts and haze inside the strip. | `art/pipeline/render_venue_review.py --views skyline` on the published GLB before and after, 19 Sep | Yes |

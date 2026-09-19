@@ -263,8 +263,66 @@ pixels, which is too few to judge a print by.
 - From a player's seat the board boxes and the pot ring disappear; only the
   wordmark and the pinstripe carry. The ink was drawn quiet on purpose and may
   need lifting once it is judged in the browser at play distance.
-- The skyline behind the table is still flat blocks under a grid of lit
-  windows. It is the next pass.
+
+## The city around the table
+
+The skyline is the other half of the frame, and it had been built for the wrong
+camera. A seated player sees the city through a strip of sky about ten degrees
+deep: the parapet cuts the view three degrees under the horizon and the play
+camera's frame ends six degrees above it. The old towers stood twenty to
+forty-five metres out and rose past fifty degrees, so the strip held the blank
+middles of a ring of boxes and a scatter of window bars, and never a rooftop.
+Claude rebuilt it the same day as the table, for the strip.
+
+![The play camera and the view east from the table, before and after](progress/51-rooftop-skyline.png)
+
+**Towers where real ones would stand.** `art/pipeline/skyline.py` places three
+rings of towers from 260 to 820 metres out at real sizes, and sets each top by
+the elevation it reaches from the table rather than by a height. Most tops sit
+low in the strip so the dusk glow shows above them; one landmark in each of
+three clusters leaves the default frame and comes back into it when the orbit
+flattens; ridges of hills close part of the horizon. The crowns vary -
+setbacks, penthouses, lit bands in four colours, pyramids, spires, and masts
+with aircraft warning lights, which the browser flashes thirty times a minute.
+
+**Windows painted, not modelled.** Every facade samples one 2048-pixel atlas in
+world units - four texels a metre, a storey every fifteen - so a window is the
+same size on every building, and each tower shifts its floors by a phase of
+its own so neighbours never share a floor line. The atlas holds four facade
+styles at three depths of haze, thicker toward the ground, which is what
+separates the rings. The city is emission rather than a lit surface, because
+no lamp in the rig reaches two hundred metres; all of it is one mesh and one
+draw call on a 160 KB PNG the pipeline writes itself. The Rooftop is 18,230
+triangles, 25 materials, 40 draw calls and 933 KB after it - fewer triangles
+than before, because the old skyline modelled every lit window as a box.
+
+**Judged against the browser's sky.** The sky dome is a shader in the scene
+component, not part of the venue, so `render_venue_review.py` reads the dome's
+colours and bands out of that component and draws the same sky behind the city,
+at the play camera's field of view. Both frames above come from that script,
+run on the table pass's file and on this one.
+
+Two instruments were measuring the wrong thing, and the new city exposed both:
+
+- The parapet's lit edge was the parapet ring squashed to five centimetres by
+  its node's scale. The palette gate reads meshes rather than the scene, and
+  while the old window boxes shared the edge's material their distance pulled
+  it out of the room. Without them the gate counted a lit wall the size of the
+  parapet and failed the room. The band is built at its own height now and
+  draws pixel for pixel as it did.
+- The front-door menu still rendered with Blender's default hundred-metre
+  camera, which would have cut the whole city out of it, and hid the chip and
+  card pools by name without reaching the meshes Blender imports each instance
+  as - five card backs have lain on the floor in every still. Both are fixed and
+  the still is regenerated from the current venue.
+
+**Open, and visible in these frames.**
+
+- Every face of a tower is the same brightness, because the city is painted
+  rather than lit. Its form comes from the window grid alone, and nothing
+  catches the glow on the side that faces it.
+- At play distance the lit crown bands read as flat colour; their fins only
+  show close up.
 
 ## Earlier open items, now historical
 

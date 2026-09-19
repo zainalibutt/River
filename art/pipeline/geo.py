@@ -479,6 +479,22 @@ def parapet_ring():
     return concat(parts)
 
 
+def parapet_lit_band(top, height, grow=1.001):
+    """The strip of light along the parapet's top edge, built at its own height.
+
+    It was the parapet ring itself, squashed to five centimetres by its node's scale. That
+    draws the same, but anything reading the mesh rather than the scene measures a 1.1m
+    wall: the palette gate did, and found a lit wall the size of the parapet beside it.
+    """
+    squash = height / top
+    shoulder = top - height + 1.1 * squash
+    parts = [
+        cylinder(3.9 * grow, shoulder, top - height, 40, closed_bottom=False, closed_top=False),
+        cylinder(4.1 * grow, top, shoulder, 40, closed_bottom=False, closed_top=False),
+    ]
+    return concat(parts)
+
+
 def string_light_run(count=48, radius=3.82):
     """A ring of bulbs around the terrace edge.
 
@@ -685,8 +701,9 @@ def standing_patron():
 def _lcg(seed):
     """Deterministic pseudo-random source.
 
-    The pipeline must produce the same skyline on every run, so the scatter
-    below is seeded rather than drawn from `random`.
+    The pipeline must produce the same venue on every run, so every scatter -
+    the palms here, the city in skyline.py - is seeded rather than drawn from
+    `random`.
     """
     state = seed & 0xFFFFFFFF
 
@@ -696,91 +713,6 @@ def _lcg(seed):
         return state / float(0x7FFFFFFF)
 
     return next_float
-
-
-def skyline_towers(count=27, inner_radius=20.8, outer_radius=45.4, seed=20260824):
-    """A ring of towers seen over the parapet, plus their lit windows.
-
-    Returns (mass, windows) as two merged geometries so the whole skyline costs
-    two draw calls rather than fifty-four. Bases sit below the parapet line so
-    only the upper storeys read, which is what makes them look distant.
-    """
-    rand = _lcg(seed)
-    mass = []
-    windows = []
-    for index in range(count):
-        angle = 2.0 * math.pi * index / count + rand() * 0.06
-        radius = inner_radius + (outer_radius - inner_radius) * rand()
-        base_z = -5.9 + 3.9 * rand()
-        width = 2.4 + 5.2 * rand()
-        depth = 2.4 + 4.4 * rand()
-        height = 7.0 + 21.0 * rand()
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        rotation = angle - math.pi * 0.5
-        mass.append(transform_geo(
-            box((-width * 0.5, -depth * 0.5, base_z), (width, depth, height)),
-            x,
-            y,
-            0.0,
-            rotation,
-        ))
-
-        # A stepped setback on the taller towers reads as a skyline rather than
-        # a row of slabs.
-        if height > 18.0:
-            inset = width * 0.22
-            mass.append(transform_geo(
-                box(
-                    (-width * 0.5 + inset, -depth * 0.5 + inset, base_z + height),
-                    (width - inset * 2.0, depth - inset * 2.0, 2.0 + 4.0 * rand()),
-                ),
-                x,
-                y,
-                0.0,
-                rotation,
-            ))
-
-        rows = int(5 + 10 * rand())
-        columns = max(2, min(5, int(width / 1.25)))
-        window_width = min(0.42, width * 0.56 / columns)
-        column_gap = width * 0.56 / columns
-        for row in range(rows):
-            wz = base_z + height * (0.25 + 0.68 * (row / max(rows - 1, 1)))
-            for column in range(columns):
-                # Dark rooms break the facade into a believable night grid;
-                # one wide strip per floor read as a stack of floating bars.
-                if rand() < 0.30:
-                    continue
-                wx = -width * 0.28 + column_gap * (column + 0.5) - window_width * 0.5
-                windows.append(transform_geo(
-                    box((wx, -depth * 0.5 - 0.06, wz), (window_width, 0.06, 0.20)),
-                    x,
-                    y,
-                    0.0,
-                    rotation,
-                ))
-    return concat(mass), concat(windows)
-
-
-def mountain_range(count=9, inner_radius=88.0, outer_radius=142.0, seed=770511):
-    """Low-poly peaks on the far horizon.
-
-    Deliberately coarse - they sit past 88m and exist to close the horizon, not
-    to be looked at.
-    """
-    rand = _lcg(seed)
-    peaks = []
-    for index in range(count):
-        angle = 2.0 * math.pi * index / count + rand() * 0.18
-        radius = inner_radius + (outer_radius - inner_radius) * rand()
-        height = 16.0 + 26.0 * rand()
-        spread = 22.0 + 26.0 * rand()
-        peak = cone(spread, spread * 0.06, height, -8.0, 7)
-        peaks.append(
-            translate_geo(peak, radius * math.cos(angle), radius * math.sin(angle), 0.0)
-        )
-    return concat(peaks)
 
 
 def palm(height=3.0, fronds=7, seed=41):
