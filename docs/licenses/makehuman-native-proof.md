@@ -17,3 +17,20 @@ toigo_halter_dress_midi garment. Faceunits01 supplies the bounded blink, smile
 and frustration shape-key source. Before a generated character is shipped,
 the selected sources must remain reproducible from these recorded packs and
 the web export must pass the project's asset budgets.
+
+## Gold's looks
+
+`art/pipeline/gold_looks.json` builds Gold's default look and the presets the
+bots draw from out of these assets, each read from the installed MakeHuman
+asset folder and each declaring CC0 in its own file header:
+
+- Face: MakeHuman's bundled face targets and Faceunits01's blink, smile and
+  squint units, as shape-key values on her own body.
+- Eyes, brows and lashes: the system pack's high-poly eyes, eyebrow002 and
+  eyelashes02.
+- Hair: the system pack's ponytail01, long01, braid01, short02 and afro01.
+- Dresses: toigo_halter_dress_midi, toigo_keyhole_neck_dress and
+  toigo_shift_dress, author MRT.
+- Shoes: the system pack's shoes03.
+- Skin: the system pack's young_african_female texture, lightened by the build
+  rather than replaced.
