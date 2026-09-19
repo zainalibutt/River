@@ -9,10 +9,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bmesh
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 from mathutils.bvhtree import BVHTree
 
 import check_assets as checker
+import felt
 from buildkit import (
     add_emissive_material,
     add_material,
@@ -39,6 +41,7 @@ from geo import (
     balustrade,
     bar_back,
     card_body,
+    card_shoe,
     box,
     checkerboard_plane,
     bar_bottle,
@@ -50,6 +53,8 @@ from geo import (
     chip_face,
     chip_rim,
     crate_stack,
+    dealer_rack,
+    discard_holder,
     felt_oval,
     felt_inlay_oval,
     machine_unit,
@@ -522,12 +527,119 @@ def add_board_cards(card_mesh, count=5):
     return instances
 
 
+FELT_PRINT_WIDTH = 2048
+
+
+def printed_felt_material(venue):
+    """The Rooftop felt with its layout printed on it - see felt.py.
+
+    Saved as a JPEG, not a PNG like the build's other textures: the cloth's grain is noise,
+    and noise that costs a few hundred kilobytes as a JPEG is several megabytes as a PNG.
+    The saved file is read back and compared with what was drawn, because an image save
+    that runs through the scene's view transform returns different colours with no error.
+    """
+    pixels = felt.render_felt(FELT_PRINT_WIDTH, FELT_RX, FELT_RY, venue['felt'], venue['felt_ink'],
+                              venue['felt_pattern'])
+    height, width, _ = pixels.shape
+    name = venue['id'] + '_felt_print'
+    image = bpy.data.images.new(name, width=width, height=height, alpha=False)
+    rgba = np.concatenate([pixels, np.ones((height, width, 1), dtype=np.float32)], axis=2)
+    image.pixels.foreach_set(rgba.astype(np.float32).ravel())
+    os.makedirs(TEX_DIR, exist_ok=True)
+    path = os.path.join(TEX_DIR, name + '.jpg')
+    image.file_format = 'JPEG'
+    image.filepath_raw = path
+    image.save(filepath=path, quality=90)
+    bpy.data.images.remove(image)
+    saved = bpy.data.images.load(path)
+    saved.name = name
+    read_back = np.empty(width * height * 4, dtype=np.float32)
+    saved.pixels.foreach_get(read_back)
+    drift = abs(float(read_back.reshape(-1, 4)[:, :3].mean()) - float(pixels.mean()))
+    if drift > 0.004:
+        raise SystemExit('FAIL: the printed felt came back %.4f off in mean colour after saving' % drift)
+
+    material = bpy.data.materials.new(venue['id'] + '_felt')
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    texture = nodes.new('ShaderNodeTexImage')
+    texture.image = saved
+    bsdf = next(n for n in nodes if n.type == 'BSDF_PRINCIPLED')
+    material.node_tree.links.new(texture.outputs['Color'], bsdf.inputs['Base Color'])
+    bsdf.inputs['Roughness'].default_value = 0.92
+    print('FELT printed %dx%d, %.0fKB, mean drift %.4f' % (width, height, os.path.getsize(path) / 1024.0, drift))
+    return material
+
+
+def map_felt_uvs(mesh):
+    """Lay the felt image flat across the oval: one texel per ~1.2mm, the long axis along x."""
+    layer = mesh.uv_layers.new(name='UVMap')
+    for loop in mesh.loops:
+        x, y, _ = mesh.vertices[loop.vertex_index].co
+        layer.data[loop.index].uv = ((x / FELT_RX + 1.0) / 2.0, (y / FELT_RY + 1.0) / 2.0)
+
+
+def build_dealer_station(venue, wood_mat):
+    """The dealer's side of the table: a chip rack against the rail, the shoe to one side and
+    the discards to the other.
+
+    Chair 0 is the dealer's, at +Y, and nothing else lives between the betting line and the
+    rail there: the pot is stacked at 0.26m and the runtime's flights start from it. Every
+    piece is drawn in a material the scene already has - the table's wood, the chips' own
+    rims, the card back - so the station costs draw calls and no materials.
+    """
+    tray, columns = dealer_rack()
+    shoe = card_shoe()
+    holder, cards = discard_holder()
+    wood_geo = concat([
+        translate_geo(tray, 0.0, 0.605, 0.0),
+        transform_geo(shoe, 0.31, 0.575, 0.0, math.radians(-12.0)),
+        transform_geo(holder, -0.31, 0.585, 0.0, math.radians(12.0)),
+    ])
+    wood = build_mesh_from_geo('river_%s_dealer_station' % venue['id'], wood_geo)
+    wood.materials.append(wood_mat)
+    object_at('river_%s_dealer_station' % venue['id'], wood)
+
+    # Sorted high to low, as a rack is: the big chips furthest from the dealer's right hand.
+    order = ['chip_25k', 'chip_5k', 'chip_5k', 'chip_1k', 'chip_1k', 'chip_500', 'chip_500', 'chip_100']
+    denominations = sorted(set(order), key=order.index)
+    geometry = {denom: [] for denom in denominations}
+    for denom, column in zip(order, columns):
+        geometry[denom].append(translate_geo(column, 0.0, 0.605, 0.0))
+    parts = [concat(geometry[denom]) for denom in denominations]
+    rack = build_mesh_from_geo('river_%s_dealer_rack' % venue['id'], concat(parts))
+    first = 0
+    for slot, (denom, part) in enumerate(zip(denominations, parts)):
+        material = bpy.data.materials.get(denom + '_rim')
+        if material is None:
+            raise SystemExit('FAIL: the rack needs the %s rim material, which is not in the scene' % denom)
+        rack.materials.append(material)
+        for polygon in rack.polygons[first:first + len(part[1])]:
+            polygon.material_index = slot
+        first += len(part[1])
+    object_at('river_%s_dealer_rack' % venue['id'], rack)
+
+    back = bpy.data.materials.get('river_card_back')
+    if back is None:
+        raise SystemExit('FAIL: the discards need the card back material, which is not in the scene')
+    mucked = build_mesh_from_geo('river_%s_dealer_discards' % venue['id'],
+                                 transform_geo(cards, -0.31, 0.585, 0.0, math.radians(12.0)))
+    mucked.materials.append(back)
+    object_at('river_%s_dealer_discards' % venue['id'], mucked)
+
+
 def build_table(venue, rail_mat, wood_mat):
-    felt_mat, _ramp = colorramp_material(venue['id'] + '_felt', [(0.0, venue['felt']), (1.0, venue['felt'])])
-    tune_surface(felt_mat, 0.92)
-    tune_surface(rail_mat, 0.72)
+    printed = 'felt_ink' in venue
+    if printed:
+        felt_mat = printed_felt_material(venue)
+    else:
+        felt_mat, _ramp = colorramp_material(venue['id'] + '_felt', [(0.0, venue['felt']), (1.0, venue['felt'])])
+        tune_surface(felt_mat, 0.92)
+    tune_surface(rail_mat, venue.get('rail_roughness', 0.72))
     tune_surface(wood_mat, 0.38)
     felt = build_mesh_from_geo('river_' + venue['id'] + '_felt', felt_oval())
+    if printed:
+        map_felt_uvs(felt)
     felt.materials.append(felt_mat)
     object_at('river_' + venue['id'] + '_table_felt', felt, (0.0, 0.0, 0.0))
     if venue['id'] == 'rooftop':
@@ -535,12 +647,19 @@ def build_table(venue, rail_mat, wood_mat):
         inlay = build_mesh_from_geo('river_rooftop_felt_inlay', felt_inlay_oval())
         inlay.materials.append(inlay_mat)
         object_at('river_rooftop_table_felt_inlay', inlay, (0.0, 0.0, 0.0))
-    rail = build_mesh_from_geo('river_' + venue['id'] + '_rail', rail_ring_oval())
+    # The rail's cross-section turns through more than 35 degrees between its rings, so the
+    # default smoothing split it into hard bands that read as a black hoop. Smoothing across
+    # them rounds the padding in the light without moving a vertex - and the seats are placed
+    # by measuring this geometry, so moving a vertex is exactly what must not happen here.
+    rail = build_mesh_from_geo('river_' + venue['id'] + '_rail', rail_ring_oval(),
+                               smooth_angle=85.0 if venue['id'] == 'rooftop' else 35.0)
     rail.materials.append(rail_mat)
     object_at('river_' + venue['id'] + '_table_rail', rail, (0.0, 0.0, 0.0))
     pedestal = build_mesh_from_geo('river_' + venue['id'] + '_wood', wood_pedestal())
     pedestal.materials.append(wood_mat)
     object_at('river_' + venue['id'] + '_table_base', pedestal, (0.0, 0.0, 0.0))
+    if venue['id'] == 'rooftop':
+        build_dealer_station(venue, wood_mat)
 
 
 def build_chairs(venue, chair_fn, chair_mat, count=9):

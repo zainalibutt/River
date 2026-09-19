@@ -173,11 +173,11 @@ def build_mesh(name, geo, material):
     return mesh
 
 
-def build_mesh_from_geo(name, geo):
+def build_mesh_from_geo(name, geo, smooth_angle=35.0):
     verts, faces = geo
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
-    smooth_mesh_by_angle(mesh)
+    smooth_mesh_by_angle(mesh, smooth_angle)
     return mesh
 
 

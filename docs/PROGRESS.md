@@ -222,6 +222,50 @@ and specular highlights on both deltoids.
 A third character, Bronze, has been started and will continue. There is no
 capture of it yet.
 
+## The table, dressed
+
+On 19 September, with Codex carrying Gold's animation, Claude took the venue:
+the table first, then the skyline, the terrace and the lighting. The table is in
+frame for the whole of a game and it read as a dark hole in the middle of the
+room - a flat navy oval with one gold line, a rail that rendered as hard black
+bands, and nothing on the dealer's side. It now has a printed felt, a rounded
+rail and a dealer's station, and nothing a character sits against has moved.
+
+![The Rooftop table before and after: from a player's seat, then the printed felt from above and the dealer's side](progress/50-rooftop-table-dressed.png)
+
+**The felt is printed**, the way a card room prints its layout: boxes where the
+browser deals the board, a ring where it stacks the pot, a pinstripe inside the
+rail, and the game's name in gold across the felt from the dealer.
+`art/pipeline/felt.py` draws it from signed distance fields - the lettering too,
+stroke by stroke, so the repository carries no font - and produces the same
+image on every build. It ships as a 2048-pixel JPEG of about 110 KB, because
+the cloth's grain is noise and noise costs 1.6 MB as a PNG. The build reads the
+saved file back and fails if it has drifted from what was drawn.
+
+**The rail is rounded.** Its cross-section turns through more than the 35
+degrees the build smooths across, so its shading broke into a band at every
+ring of the mesh. Smoothing across those rings changes normals and nothing
+else, which is the point: Silver's seats are placed by measuring the rail, and
+every seat anchor and chair in the new file is identical to the old one's.
+
+**The dealer has a station**: a chip rack against the rail, sorted high to low,
+with the shoe and the discard holder either side, drawn in materials the scene
+already had. The Rooftop is 21,158 triangles, 24 materials, 41 draw calls and
+582 KB with all of it.
+
+These frames come from `art/pipeline/render_venue_review.py`, which renders the
+exported GLB - the file the browser loads, not the scene that made it - under
+the venue's own lighting sidecar. A gameplay frame shows the felt at a few dozen
+pixels, which is too few to judge a print by.
+
+**Open, and visible in these frames.**
+
+- From a player's seat the board boxes and the pot ring disappear; only the
+  wordmark and the pinstripe carry. The ink was drawn quiet on purpose and may
+  need lifting once it is judged in the browser at play distance.
+- The skyline behind the table is still flat blocks under a grid of lit
+  windows. It is the next pass.
+
 ## Earlier open items, now historical
 
 The old list below described the placeholder era. Characters no longer lack

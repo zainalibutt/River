@@ -136,3 +136,11 @@ hand. The narrative is in `PROGRESS.md`.
 | `44-amber-seated-proof.png` | Amber seated at the rail from the front and both three-quarters, built by DeepSeek. An isolated proof, not in the venue. | `art/pipeline/build_native_amber.py`, 12 Sep | Yes |
 | `45-silver-a38b-rail-rest.png` | A38b at frame 0, the last lane candidate: a centred hand-over-hand rest. Not accepted; the true side shows the forearms rising toward the hands. | Astra proof pass A38b, 12 Sep | No |
 | `46-silver-a38b-hand-edited.png` | A38b worked by hand - bones posed directly, edges smoothed, a corrective shape key at the right armpit - at frame 0 from the front, both three-quarters, both sides and the rear. Work in progress. | Hand-worked `.blend`, rendered 13 Sep | No |
+
+## 50 — the Rooftop table, dressed
+
+From 19 September. The narrative is in `PROGRESS.md`.
+
+| Capture | What it shows | Source | Regenerable from the repository |
+|---|---|---|---|
+| `50-rooftop-table-dressed.png` | The Rooftop table under the venue's own light rig. Top, before and after its dressing pass from a player's seat: the wrong frame is kept because it decided the pass, a table that read as a dark hole. Below, after: the printed felt from above, and the dealer's rack, shoe and discards. | `art/pipeline/render_venue_review.py` on the published GLB before and after, 19 Sep | Yes |

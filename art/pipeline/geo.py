@@ -264,6 +264,59 @@ def rail_ring_oval():
     ], TABLE_SEG, close_profile=True)
 
 
+def _chips_on_edge(centre_x, length, base_z):
+    """A column of chips stood on edge in a rack groove: a cylinder along y."""
+    verts, faces = cylinder(CHIP_D / 2.0, length / 2.0, -length / 2.0, 12)
+    # Swapping y and z turns the column onto its side and mirrors it, so the winding is
+    # reversed with it to keep the faces pointing out.
+    verts = [(x + centre_x, z, y + base_z + CHIP_D / 2.0) for (x, y, z) in verts]
+    faces = [(a, c, b) for (a, b, c) in faces]
+    return verts, faces
+
+
+def dealer_rack(slots=8, chip_run=0.1):
+    """The dealer's chip rack: a low tray against the rail with a column of chips on edge
+    in each groove. Returns the tray and one column per slot, centred on the origin at felt
+    height, long side along x."""
+    pitch = CHIP_D + 0.006
+    width = slots * pitch + 0.024
+    depth = chip_run + 0.022
+    height = 0.024
+    tray = box((-width / 2.0, -depth / 2.0, TABLE_TOP), (width, depth, height))
+    columns = []
+    for slot in range(slots):
+        centre_x = -width / 2.0 + 0.012 + pitch * (slot + 0.5)
+        columns.append(_chips_on_edge(centre_x, chip_run, TABLE_TOP + height - CHIP_D * 0.55))
+    return tray, columns
+
+
+def card_shoe():
+    """A shoe: a block whose top slopes down towards the table, where the next card waits."""
+    width, depth, back, front = 0.095, 0.17, 0.085, 0.042
+    z = TABLE_TOP
+    verts = [
+        (-width / 2, -depth / 2, z), (width / 2, -depth / 2, z), (width / 2, depth / 2, z), (-width / 2, depth / 2, z),
+        (-width / 2, -depth / 2, z + front), (width / 2, -depth / 2, z + front),
+        (width / 2, depth / 2, z + back), (-width / 2, depth / 2, z + back),
+    ]
+    faces = [
+        (0, 2, 1), (0, 3, 2),
+        (4, 5, 6), (4, 6, 7),
+        (0, 1, 5), (0, 5, 4),
+        (1, 2, 6), (1, 6, 5),
+        (2, 3, 7), (2, 7, 6),
+        (3, 0, 4), (3, 4, 7),
+    ]
+    return verts, faces
+
+
+def discard_holder():
+    """A shallow holder beside the dealer with the mucked cards in it, face down."""
+    tray = box((-0.045, -0.06, TABLE_TOP), (0.09, 0.12, 0.018))
+    cards = box((-CARD_W / 2, -CARD_H / 2, TABLE_TOP + 0.018), (CARD_W, CARD_H, 0.014))
+    return tray, cards
+
+
 def chip_face():
     return polygon_disc(ring(CHIP_D / 2.0, CHIP_D / 2.0, CHIP_THICK / 2.0, CHIP_SEG))
 

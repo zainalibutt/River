@@ -80,7 +80,12 @@ ROOFTOP = {
     'id': 'rooftop',
     'felt': '0A121E',
     'felt_pattern': 'D9B45B',
+    # The felt's printed marks - the board boxes and the pot ring - in an ink a few shades
+    # off the cloth, the way a card room prints its layout: read, not shouted.
+    'felt_ink': '5E7BA3',
     'rail': '12161C',
+    # Padded leather has a satin sheen along its crown; 0.72 read as a matte rubber hoop.
+    'rail_roughness': 0.52,
     'wood': '21150E',
     'chair': '17181B',
     'chrome': 'B9BEC4',
