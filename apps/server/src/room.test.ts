@@ -56,11 +56,15 @@ function simpleAction(view: RoomView): TurnAction | null {
   return null
 }
 
-function playToPhase(room: RoomHandle, expected: 'hand' | 'between'): RoomEvent[] {
+function playToPhase(
+  room: RoomHandle,
+  expected: 'hand' | 'between',
+  viewerId = 'alice',
+): RoomEvent[] {
   const seen: RoomEvent[] = []
   let guard = 0
-  while (room.viewFor('alice').phase !== expected && guard++ < 80) {
-    const actor = room.viewFor('alice').currentActor
+  while (room.viewFor(viewerId).phase !== expected && guard++ < 80) {
+    const actor = room.viewFor(viewerId).currentActor
     if (actor === null) break
     const action = simpleAction(room.viewFor(actor.playerId))
     if (action === null) break
@@ -179,6 +183,24 @@ describe('room lifecycle', () => {
 })
 
 describe('room hand play', () => {
+  it('seats and deals to all nine player chairs without exposing another hand', () => {
+    const room = makeRoom('nine-seated')
+    for (let seat = 0; seat < 9; seat += 1) {
+      const playerId = `player-${seat}`
+      expect(room.submit({ kind: 'join', playerId, name: playerId }).ok).toBe(true)
+      expect(room.submit({ kind: 'sit', playerId, seat, buyIn: TEST_STACK }).ok).toBe(true)
+    }
+    expect(room.viewFor('player-0').seats).toHaveLength(9)
+    expect(room.submit({ kind: 'join', playerId: 'tenth', name: 'Tenth' }).ok).toBe(false)
+    expect(room.submit({ kind: 'startHand' }).ok).toBe(true)
+    const ninth = room.viewFor('player-8')
+    expect(ninth.seats[8]?.hole).toHaveLength(2)
+    expect(ninth.seats.slice(0, 8).every((seat) => seat.hole === null)).toBe(true)
+    expect(room.viewFor('player-0').seats[8]?.hole).toBeNull()
+    playToPhase(room, 'between', 'player-0')
+    expect(room.totalChips()).toBe(9 * TEST_STACK)
+  })
+
   it('deals deterministically with correct blind seats and hidden holes', () => {
     const room = makeRoom('deterministic', deckOf(DECK_11))
     seatThree(room)

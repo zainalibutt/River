@@ -12,6 +12,18 @@ export interface HandAction {
   seat: number
   street: Street
   action: TurnAction
+  amountCommitted?: number
+  potBefore?: number
+  streetBetAfter?: number
+}
+
+export function isAggressiveHandAction(entry: HandAction, highestStreetBetBefore: number): boolean {
+  return (
+    entry.action.kind === 'raiseTo' ||
+    (entry.action.kind === 'allIn' &&
+      entry.streetBetAfter !== undefined &&
+      entry.streetBetAfter > highestStreetBetBefore)
+  )
 }
 
 export interface HandSeatResult {

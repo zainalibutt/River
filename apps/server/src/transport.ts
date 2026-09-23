@@ -1,21 +1,35 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import {
+  type BotOpponentSummaryV1,
   type BotPersonality,
+  type BotPolicy,
+  type BotTablePreset,
+  type BotTiltState,
+  DEFAULT_OPPONENT_MODEL_TUNING,
+  isBotTablePreset,
   nextUtterance,
+  type OpponentModelStateV1,
+  opponentEvidenceFromHand,
   SEATS_PER_SHAPE,
   type SpeechCandidate,
   scheduleTableSpeech,
+  summariseOpponentModel,
   type TableSummary,
   type TurnAction,
   tableStatus,
+  updateOpponentModel,
   VOICE_PACK,
   type VoiceEvent,
 } from '@river/engine'
 import type { AdminAction, AdminOutcome, BanList } from './admin.js'
 import { applyAdminAction, MemoryBanList } from './admin.js'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
+import type { ActionShadowPort, PreparedActionShadow } from './bot-learning-shadow.js'
+import type { BotOpponentObservation, BotOpponentStore } from './bot-opponent-store.js'
 import {
   actionFor,
+  type BotDecisionTraceSink,
+  type BotTiltSource,
   botPlayerId,
   botsForTable,
   botsWanted,
@@ -106,6 +120,8 @@ export type ClientMessage =
       maxSeats?: number
       stakeId?: string
       turnTimerPreset?: TurnTimerPreset
+      botSeats?: number
+      botPreset?: BotTablePreset
     }
   | { kind: 'command'; requestId: string; command: ClientRoomCommand }
   | { kind: 'social'; requestId: string; command: ClientSocialCommand }
@@ -140,6 +156,7 @@ export type ServerMessage =
        * can see concludes there is nobody to play against.
        */
       botSeats: number
+      botPreset: BotTablePreset
     }
   | { kind: 'social'; roomId: string; requestId: string | null; event: SocialEvent }
   | { kind: 'tables'; requestId: string; tables: TableSummary[] }
@@ -173,6 +190,7 @@ const RELEASE_RETRY_MS = 1_000
 const RELEASE_RETRY_MAX_MS = 30_000
 /** Attempts to return a stack before it is left to the error log. */
 const PAY_OUT_ATTEMPTS = 12
+const OPPONENT_WRITE_RETRY_MS = [250, 1_000] as const
 
 function retryDelay(attempt: number): number {
   return Math.min(RELEASE_RETRY_MS * 2 ** attempt, RELEASE_RETRY_MAX_MS)
@@ -201,6 +219,16 @@ interface RoomState {
   botTimer: ReturnType<typeof setTimeout> | null
   /** Which character is in which bot seat, so a table keeps its cast. */
   botCast: Map<string, BotPersonality>
+  /** Bot setup belongs to the room that was created, not every room in the process. */
+  botSeats: number
+  botPreset: BotTablePreset
+  /** Each named bot owns a separate read of each human opponent. */
+  botMemories: Map<string, Map<string, OpponentModelStateV1>>
+  persistentPlayers: Map<string, boolean>
+  /** Successful loads are remembered; a room's newer local evidence takes precedence. */
+  loadedOpponentPairs: Set<string>
+  /** Settled hands already applied to session-only bot memory. */
+  observedHandKeys: Set<string>
   /** When each bot last spoke, so the table is not a crowd all shouting. */
   lastSpokeAtMs: Map<number, number>
   /** Timers for lines that have been scheduled but not yet said. */
@@ -288,6 +316,15 @@ export interface RoomHubOptions {
   onError?: HubErrorReporter
   /** Injectable so a test can make a bot's choices repeatable. */
   botRng?: () => number
+  /** The selected in-process policy. Defaults to the deterministic rule policy. */
+  botPolicy?: BotPolicy
+  /** Injected temporary bot state. Production defaults to zero tilt. */
+  botTilt?: BotTiltSource
+  /** Server-only decision telemetry. It is never sent on the room protocol. */
+  botTrace?: BotDecisionTraceSink
+  botOpponentStore?: BotOpponentStore
+  /** Opt-in, server-only human-action forecast. Never selects a game action. */
+  actionShadow?: ActionShadowPort
   /**
    * How many seats bots may fill. Zero, the default, means a table is people
    * only - seating characters changes who acts and when, so it is opted into
@@ -310,6 +347,8 @@ export interface RoomCreationSettings {
   maxSeats?: TableSettings['maxSeats']
   stakeId?: TableSettings['stakeId']
   turnTimerPreset?: TableSettings['turnTimerPreset']
+  botSeats?: number
+  botPreset?: BotTablePreset
 }
 
 const DEFAULT_BOT_THINK_CAP = 4_000
@@ -441,11 +480,25 @@ function roomCreationSettings(value: Record<string, unknown>): RoomCreationSetti
   if (turnTimerPreset !== undefined && !isTurnTimerPreset(turnTimerPreset)) return null
   const venueId = value.venueId
   if (venueId !== undefined && !isVenueId(venueId)) return null
+  const botSeats = value.botSeats
+  if (
+    botSeats !== undefined &&
+    (typeof botSeats !== 'number' ||
+      !Number.isSafeInteger(botSeats) ||
+      botSeats < 0 ||
+      botSeats > 7)
+  ) {
+    return null
+  }
+  const botPreset = value.botPreset
+  if (botPreset !== undefined && !isBotTablePreset(botPreset)) return null
   return {
     ...(maxSeats === undefined ? {} : { maxSeats }),
     ...(stakeId === undefined ? {} : { stakeId }),
     ...(turnTimerPreset === undefined ? {} : { turnTimerPreset }),
     ...(venueId === undefined ? {} : { venueId }),
+    ...(botSeats === undefined ? {} : { botSeats }),
+    ...(botPreset === undefined ? {} : { botPreset }),
   }
 }
 
@@ -534,6 +587,12 @@ export class RoomHub {
    */
   private readonly botRng: () => number
   private readonly botSeats: number
+  private readonly botPolicy: BotPolicy | undefined
+  private readonly botTilt: BotTiltSource
+  private readonly botTrace: BotDecisionTraceSink | undefined
+  private readonly botOpponentStore: BotOpponentStore | undefined
+  private readonly actionShadow: ActionShadowPort | undefined
+  private readonly pendingOpponentWrites = new Map<string, Promise<void>>()
 
   constructor(options: RoomHubOptions) {
     this.verifyToken = options.verifyToken
@@ -542,6 +601,11 @@ export class RoomHub {
     this.onError = options.onError ?? ((): void => {})
     this.botRng = options.botRng ?? Math.random
     this.botSeats = Math.max(0, options.botSeats ?? 0)
+    this.botPolicy = options.botPolicy
+    this.botTilt = options.botTilt ?? (() => ({ factor: 0 }) satisfies BotTiltState)
+    this.botTrace = options.botTrace
+    this.botOpponentStore = options.botOpponentStore
+    this.actionShadow = options.actionShadow
     this.economy = options.economy ?? null
     this.tableItems = options.tableItems
     this.cosmetics = options.cosmetics
@@ -769,6 +833,7 @@ export class RoomHub {
         connection.identityUpgraded = false
       }
       connection.roomId = message.roomId
+      room.persistentPlayers.set(player.playerId, !player.anonymous)
       room.connections.add(connection)
       const reconnectTimer = room.reconnectTimers.get(player.playerId)
       if (reconnectTimer !== undefined) {
@@ -989,6 +1054,19 @@ export class RoomHub {
       return
     }
     const serverCommand = this.withPlayer(command, player.playerId)
+    let shadowPrepared: PreparedActionShadow | null = null
+    if (command.kind === 'act' && this.actionShadow !== undefined) {
+      try {
+        shadowPrepared = this.actionShadow.prepare(
+          connection.roomId,
+          player.playerId,
+          state.room.viewFor(player.playerId),
+          state.room.currentActions(),
+        )
+      } catch (error) {
+        this.onError('action shadow prepare failed', error)
+      }
+    }
     let result: RoomResult
     if (command.kind === 'sit' || command.kind === 'rebuy') {
       result = await this.debitThenApply(connection, state, requestId, serverCommand, command)
@@ -1001,7 +1079,10 @@ export class RoomHub {
       // Fill the table on the way into a hand, not when a seat is taken.
       // Seating bots as people arrive races them for seats, and a person who
       // clicked an empty chair a moment ago finds a bot in it.
-      if (command.kind === 'startHand') this.seatBots(state)
+      if (command.kind === 'startHand') {
+        this.seatBots(state)
+        await this.loadBotMemories(state)
+      }
       if (
         command.kind === 'startHand' &&
         state.room.viewFor(player.playerId).handNumber === 0 &&
@@ -1033,6 +1114,23 @@ export class RoomHub {
       this.send(connection, message)
       return
     }
+    if (
+      shadowPrepared !== null &&
+      command.kind === 'act' &&
+      result.events.some((event) => event.kind === 'acted' && event.playerId === player.playerId)
+    ) {
+      try {
+        this.actionShadow?.accepted(shadowPrepared, command.action)
+      } catch (error) {
+        this.onError('action shadow update failed', error)
+      }
+    }
+    if (command.kind === 'stand' || command.kind === 'leave') {
+      this.forgetShadowActor(connection.roomId, player.playerId)
+    }
+    if (command.kind === 'kick') {
+      this.forgetShadowActor(connection.roomId, command.targetPlayerId)
+    }
     this.broadcast(state, requestId, result.events, connection)
     const reply: ServerMessage = {
       kind: 'snapshot',
@@ -1042,7 +1140,8 @@ export class RoomHub {
       balance: connection.balance,
       ownedItems: connection.ownedItems.map((entry) => ({ ...entry })),
       ownedCosmetics: connection.ownedCosmetics.map((entry) => ({ ...entry })),
-      botSeats: this.botSeats,
+      botSeats: state.botSeats,
+      botPreset: state.botPreset,
       events: result.events,
     }
     this.completed.set(cacheKey, reply)
@@ -1327,6 +1426,12 @@ export class RoomHub {
       activeEmotes: new Set(),
       botTimer: null,
       botCast: new Map(),
+      botSeats: Math.max(0, Math.min(7, settings?.botSeats ?? this.botSeats)),
+      botPreset: settings?.botPreset ?? 'random',
+      botMemories: new Map(),
+      persistentPlayers: new Map(),
+      loadedOpponentPairs: new Set(),
+      observedHandKeys: new Set(),
       lastSpokeAtMs: new Map(),
       speechTimers: new Set(),
       botLooked: new Set(),
@@ -1358,6 +1463,7 @@ export class RoomHub {
    * longer shutdown.
    */
   async settleAllTables(): Promise<void> {
+    await Promise.all(this.pendingOpponentWrites.values())
     for (const state of this.rooms.values()) {
       const view = state.room.viewFor('')
       for (const seat of view.seats) {
@@ -1378,6 +1484,7 @@ export class RoomHub {
         }
       }
     }
+    await Promise.all(this.pendingOpponentWrites.values())
   }
 
   /**
@@ -1427,7 +1534,10 @@ export class RoomHub {
     const result = state.room.submit({ kind: 'expireReconnect', playerId })
     if (!result.ok) {
       // Without a seat nothing is at stake: the player is already gone, or back.
-      if (seat === undefined) return true
+      if (seat === undefined) {
+        this.forgetShadowActor(state.room.id, playerId)
+        return true
+      }
       const rejected = result.events.find((event) => event.kind === 'rejected')
       this.onError(
         'releaseExpiredSeat: the room kept an expired seat',
@@ -1435,6 +1545,7 @@ export class RoomHub {
       )
       return false
     }
+    this.forgetShadowActor(state.room.id, playerId)
     this.broadcast(state, null, result.events)
     if (seat !== undefined && seat.stack > 0) {
       await this.payOut({
@@ -1445,6 +1556,14 @@ export class RoomHub {
       })
     }
     return true
+  }
+
+  private forgetShadowActor(roomId: string, playerId: string): void {
+    try {
+      this.actionShadow?.forgetActor(roomId, playerId)
+    } catch (error) {
+      this.onError('action shadow forget failed', error)
+    }
   }
 
   /**
@@ -1514,14 +1633,14 @@ export class RoomHub {
    * They keep the cast the room seed chose, so leaving and coming back finds
    * the same opponents rather than a new table of strangers.
    */
-  private seatBots(state: RoomState, target = this.botSeats): void {
+  private seatBots(state: RoomState, target = state.botSeats): void {
     if (target <= 0) return
     const view = state.room.viewFor('')
     const wanted = botsWanted(view, target)
     if (wanted <= 0) return
     const seats = emptySeatsIn(view)
     const taken = new Set(state.botCast.keys())
-    const cast = botsForTable(state.room.id, target + taken.size).filter(
+    const cast = botsForTable(state.room.id, target + taken.size, state.botPreset).filter(
       (personality) => !taken.has(botPlayerId(personality.id)),
     )
     const buyIn = state.room.config.stake.defaultBuyIn
@@ -1557,8 +1676,19 @@ export class RoomHub {
     if (personality === undefined) return
 
     const rng = this.botRng
+    const decisionKey = `${view.handNumber}:${view.street}:${actor}:${view.currentBet}`
     const seen = state.room.viewFor(actor)
-    const decided = actionFor(seen, actor, personality, rng)
+    const tilt = this.botTilt({ roomId: state.room.id, playerId: actor, personality })
+    const actionOptions = {
+      ...(this.botPolicy === undefined ? {} : { policy: this.botPolicy }),
+      tilt,
+      ...(this.botTrace === undefined ? {} : { trace: this.botTrace }),
+      roomId: state.room.id,
+      decisionKey,
+      publicActions: state.room.currentActions(),
+      opponentSummaries: this.opponentSummariesFor(state, actor),
+    }
+    const decided = actionFor(seen, actor, personality, rng, actionOptions)
     if (decided === null) return
     const situation = situationFor(seen, actor, decided, !state.botLooked.has(actor))
     const delay = Math.max(
@@ -1579,7 +1709,14 @@ export class RoomHub {
           current.handNumber === seen.handNumber &&
           current.street === seen.street &&
           current.currentBet === seen.currentBet
-        const action = unchanged ? decided : actionFor(current, actor, personality, rng)
+        const action = unchanged
+          ? decided
+          : actionFor(current, actor, personality, rng, {
+              ...actionOptions,
+              decisionKey: `${current.handNumber}:${current.street}:${actor}:${current.currentBet}`,
+              publicActions: state.room.currentActions(),
+              opponentSummaries: this.opponentSummariesFor(state, actor),
+            })
         if (action === null) return
         const result = state.room.submit({ kind: 'act', playerId: actor, action })
         if (result.ok) this.broadcast(state, null, result.events)
@@ -1691,6 +1828,7 @@ export class RoomHub {
     events: RoomEvent[],
     requester?: ConnectionState,
   ): void {
+    this.recordOpponentMemories(state, events)
     for (const connection of state.connections) {
       this.snapshot(connection, state, connection === requester ? requestId : null, events)
     }
@@ -1708,6 +1846,116 @@ export class RoomHub {
       this.scheduleSeedFinalization(state)
     }
     this.keepDealing(state, events)
+  }
+
+  private recordOpponentMemories(state: RoomState, events: readonly RoomEvent[]): void {
+    for (const event of events) {
+      if (event.kind !== 'handRecorded') continue
+      const key = `${state.room.id}:${event.record.handNumber}:${event.record.commit}`
+      if (state.observedHandKeys.has(key)) continue
+      state.observedHandKeys.add(key)
+      const observedAtMs = state.room.config.nowMs()
+      for (const [botId, personality] of state.botCast) {
+        const memory = state.botMemories.get(botId) ?? new Map<string, OpponentModelStateV1>()
+        state.botMemories.set(botId, memory)
+        for (const seat of event.record.seats) {
+          if (isBotPlayer(seat.playerId)) continue
+          const evidence = opponentEvidenceFromHand(
+            event.record,
+            seat.playerId,
+            DEFAULT_OPPONENT_MODEL_TUNING,
+          )
+          if (evidence === null) continue
+          memory.set(
+            seat.playerId,
+            updateOpponentModel(
+              memory.get(seat.playerId) ?? null,
+              evidence,
+              observedAtMs,
+              DEFAULT_OPPONENT_MODEL_TUNING,
+            ),
+          )
+          if (state.persistentPlayers.get(seat.playerId) === true) {
+            this.persistOpponentObservation({
+              botId: personality.id,
+              playerId: seat.playerId,
+              handKey: key,
+              observedAtMs,
+              evidence,
+            })
+          }
+        }
+      }
+    }
+  }
+
+  private persistOpponentObservation(observation: BotOpponentObservation): void {
+    const store = this.botOpponentStore
+    if (store === undefined) return
+    const prior = this.pendingOpponentWrites.get(observation.playerId) ?? Promise.resolve()
+    const next = prior.then(async () => {
+      for (let attempt = 0; attempt <= OPPONENT_WRITE_RETRY_MS.length; attempt += 1) {
+        try {
+          await store.append(observation)
+          return
+        } catch (error) {
+          const delay = OPPONENT_WRITE_RETRY_MS[attempt]
+          if (delay === undefined) {
+            this.onError('bot opponent memory: save failed', error)
+            return
+          }
+          await new Promise<void>((resolve) => setTimeout(resolve, delay))
+        }
+      }
+    })
+    this.pendingOpponentWrites.set(observation.playerId, next)
+    void next.then(() => {
+      if (this.pendingOpponentWrites.get(observation.playerId) === next) {
+        this.pendingOpponentWrites.delete(observation.playerId)
+      }
+    })
+  }
+
+  private async loadBotMemories(state: RoomState): Promise<void> {
+    const store = this.botOpponentStore
+    if (store === undefined || state.botCast.size === 0) return
+    const loads: Promise<void>[] = []
+    for (const seat of state.room.viewFor('').seats) {
+      const playerId = seat.playerId
+      if (playerId === null || state.persistentPlayers.get(playerId) !== true) continue
+      for (const [botId, personality] of state.botCast) {
+        const pair = `${botId}:${playerId}`
+        if (state.loadedOpponentPairs.has(pair)) continue
+        if (state.botMemories.get(botId)?.has(playerId)) continue
+        loads.push(
+          (async () => {
+            try {
+              await this.pendingOpponentWrites.get(playerId)
+              const model = await store.load(personality.id, playerId)
+              if (model !== null) {
+                const memory =
+                  state.botMemories.get(botId) ?? new Map<string, OpponentModelStateV1>()
+                memory.set(playerId, model)
+                state.botMemories.set(botId, memory)
+              }
+              state.loadedOpponentPairs.add(pair)
+            } catch (error) {
+              this.onError('bot opponent memory: load failed', error)
+            }
+          })(),
+        )
+      }
+    }
+    await Promise.all(loads)
+  }
+
+  private opponentSummariesFor(state: RoomState, botId: string): readonly BotOpponentSummaryV1[] {
+    const memory = state.botMemories.get(botId)
+    if (memory === undefined) return []
+    return [...memory].map(([playerId, model]) => ({
+      playerId,
+      ...summariseOpponentModel(model, DEFAULT_OPPONENT_MODEL_TUNING),
+    }))
   }
 
   /**
@@ -1741,6 +1989,7 @@ export class RoomHub {
       void this.enqueue(state, async () => {
         state.nextHandTimer = null
         this.seatBots(state)
+        await this.loadBotMemories(state)
         const result = state.room.submit({ kind: 'startHand' })
         if (result.ok) this.broadcast(state, null, result.events)
       })
@@ -1930,7 +2179,8 @@ export class RoomHub {
       balance: connection.balance,
       ownedItems: connection.ownedItems.map((entry) => ({ ...entry })),
       ownedCosmetics: connection.ownedCosmetics.map((entry) => ({ ...entry })),
-      botSeats: this.botSeats,
+      botSeats: state.botSeats,
+      botPreset: state.botPreset,
       events,
     })
   }

@@ -21,11 +21,8 @@ export function huSeats(botSkill: BotSkill): SessionSeatDef[] {
 /**
  * A full table.
  *
- * Eight, not nine. The venue lays nine places around the felt and its dealer
- * stands in the first, so a ninth player was seated at the dealer's exact
- * coordinate. Named for what it is rather than for how many it holds, so the
- * next change to the seat count does not leave a function called fullSeats
- * returning some other number.
+ * The nine player seats of the default 2D table. The older 3D venue has only
+ * eight player chairs and a separate dealer position.
  */
 export function fullSeats(botSkill: BotSkill): SessionSeatDef[] {
   const base = label(botSkill)
@@ -38,6 +35,7 @@ export function fullSeats(botSkill: BotSkill): SessionSeatDef[] {
     { id: 'p6', name: `${base} 5`, botSkill },
     { id: 'p7', name: `${base} 6`, botSkill },
     { id: 'p8', name: `${base} 7`, botSkill },
+    { id: 'p9', name: `${base} 8`, botSkill },
   ]
 }
 

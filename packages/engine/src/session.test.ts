@@ -228,7 +228,7 @@ describe('solo session', () => {
       rngSeed: 'nine-seat',
     })
     session.start()
-    expect(session.view().seats).toHaveLength(8)
+    expect(session.view().seats).toHaveLength(9)
     expect(
       session
         .view()
@@ -302,7 +302,7 @@ describe('solo session', () => {
           })),
           rngSeed: 'too-many',
         }),
-    ).toThrow(/at most 8/)
+    ).toThrow(/at most 9/)
   })
 
   it('returns view snapshots that cannot mutate session cards', () => {

@@ -1,6 +1,19 @@
-import type { EconomyConfig } from '@river/engine'
+import {
+  type BotObservationV1,
+  type BotPolicy,
+  DEFAULT_OPPONENT_MODEL_TUNING,
+  type EconomyConfig,
+  type OpponentModelStateV1,
+  updateOpponentModel,
+} from '@river/engine'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AuthenticatedPlayer } from './auth.js'
+import { LEARNING_FEATURES_V2 } from './bot-learning-data-v2.js'
+import { ACTION_LABELS, type ActionModelV1 } from './bot-learning-model.js'
+import type { ActionShadowPort, PreparedActionShadow } from './bot-learning-shadow.js'
+import { OnlineActionShadow } from './bot-learning-shadow.js'
+import type { BotOpponentObservation, BotOpponentStore } from './bot-opponent-store.js'
+import type { BotDecisionTrace } from './bot-service.js'
 import type { LedgerRow, SupabaseEconomy } from './economy-service.js'
 import type { Ledger, LedgerEntry } from './ledger.js'
 import { defaultRoomConfig, Room, stakeForId, turnBudgetsForPreset } from './room.js'
@@ -67,6 +80,11 @@ function setup(
   economy?: SupabaseEconomy,
   botSeats = 0,
   ledger = new MemoryLedger(),
+  botPolicy?: BotPolicy,
+  botTrace?: (trace: BotDecisionTrace) => void,
+  botOpponentStore?: BotOpponentStore,
+  onError?: (context: string, error: unknown) => void,
+  actionShadow?: ActionShadowPort,
 ) {
   const players: Record<string, AuthenticatedPlayer> = {
     alice: { playerId: ALICE, anonymous: true, admin: false },
@@ -79,6 +97,11 @@ function setup(
     botSeats,
     // Fixed so a bot's choices are the same on every run.
     botRng: () => 0.42,
+    ...(botPolicy === undefined ? {} : { botPolicy }),
+    ...(botTrace === undefined ? {} : { botTrace }),
+    ...(botOpponentStore === undefined ? {} : { botOpponentStore }),
+    ...(onError === undefined ? {} : { onError }),
+    ...(actionShadow === undefined ? {} : { actionShadow }),
     ...(economy === undefined ? {} : { economy }),
     verifyToken: async (token) => {
       const player = players[token]
@@ -209,12 +232,21 @@ describe('wire protocol parsing', () => {
       maxSeats: 6,
       stakeId: '250-500',
       turnTimerPreset: 'standard',
+      botSeats: 7,
+      botPreset: 'mixed',
     }
     expect(parseClientMessage(JSON.stringify(enter))).toMatchObject(enter)
+    expect(parseClientMessage(JSON.stringify({ ...enter, maxSeats: 9 }))).toMatchObject({
+      ...enter,
+      maxSeats: 9,
+    })
     for (const invalid of [
       { ...enter, maxSeats: 5 },
       { ...enter, stakeId: '1000-2000' },
       { ...enter, turnTimerPreset: 'instant' },
+      { ...enter, botSeats: 8 },
+      { ...enter, botSeats: -1 },
+      { ...enter, botPreset: 'expert' },
     ]) {
       expect(parseClientMessage(JSON.stringify(invalid))).toBeNull()
     }
@@ -222,6 +254,172 @@ describe('wire protocol parsing', () => {
 })
 
 describe('room hub', () => {
+  it('runs a real forecast after an accepted table action without publishing its private snapshot', async () => {
+    const frozen: ActionModelV1 = {
+      version: 1,
+      featureSchemaVersion: 2,
+      featureNames: LEARNING_FEATURES_V2,
+      labels: ACTION_LABELS,
+      weights: ACTION_LABELS.map(() => Array(LEARNING_FEATURES_V2.length + 1).fill(0) as number[]),
+      trainedExamples: 100,
+      epochs: 1,
+      temperature: 1,
+    }
+    const shadow = new OnlineActionShadow(frozen, frozen)
+    const capture = vi.spyOn(shadow, 'prepare')
+    const { hub } = setup(
+      30_000,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      shadow,
+    )
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    for (const [client, seat, requestId] of [
+      [alice, 0, 'alice-sit'],
+      [bob, 1, 'bob-sit'],
+    ] as const) {
+      await client.connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId,
+          command: { kind: 'sit', seat, buyIn: 50_000 },
+        }),
+      )
+    }
+    await alice.connection.receive(
+      JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+    )
+    const snapshot = alice.peer.last('snapshot')
+    if (snapshot?.kind !== 'snapshot') throw new Error('expected dealt snapshot')
+    const actor = snapshot.view.currentActor?.playerId === ALICE ? alice : bob
+    const actorSnapshot = actor.peer.last('snapshot')
+    if (actorSnapshot?.kind !== 'snapshot') throw new Error('expected actor snapshot')
+    const legalAction = actorSnapshot.view.legal?.check ? 'check' : 'call'
+    await actor.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'real-shadow',
+        command: { kind: 'act', action: { kind: legalAction } },
+      }),
+    )
+    await shadow.flush()
+    expect(shadow.stats()).toMatchObject({ forecasts: 1, failed: 0, pending: 0 })
+    expect(shadow.stats().captureP95Ms).not.toBeNull()
+    const privateSnapshot = capture.mock.results[0]?.value as
+      | PreparedActionShadow
+      | null
+      | undefined
+    expect(privateSnapshot?.features).toHaveLength(LEARNING_FEATURES_V2.length)
+    expect(JSON.stringify(privateSnapshot)).not.toContain('hole')
+    expect(JSON.stringify([...alice.peer.messages, ...bob.peer.messages])).not.toContain('actorKey')
+  })
+
+  it('feeds only accepted human actions to an opt-in shadow, once per request, without leaking it', async () => {
+    const prepared: PreparedActionShadow = {
+      actorKey: 'private-shadow-key',
+      features: [0],
+      legalLabels: ['fold', 'check', 'call', 'raise'],
+      facingBet: false,
+      actor: { betStreet: 0, stack: 1 },
+      currentBet: 0,
+    }
+    const shadow: ActionShadowPort = {
+      prepare: vi.fn(() => prepared),
+      accepted: vi.fn(),
+      forgetActor: vi.fn(),
+    }
+    const shadowErrors: string[] = []
+    const { hub } = setup(
+      30_000,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (context) => shadowErrors.push(context),
+      shadow,
+    )
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    for (const [client, seat, requestId] of [
+      [alice, 0, 'alice-sit'],
+      [bob, 1, 'bob-sit'],
+    ] as const) {
+      await client.connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId,
+          command: { kind: 'sit', seat, buyIn: 50_000 },
+        }),
+      )
+    }
+    await alice.connection.receive(
+      JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+    )
+    const snapshot = alice.peer.last('snapshot')
+    if (snapshot?.kind !== 'snapshot') throw new Error('expected dealt snapshot')
+    const actor = snapshot.view.currentActor?.playerId === ALICE ? alice : bob
+    const actorSnapshot = actor.peer.last('snapshot')
+    if (actorSnapshot?.kind !== 'snapshot') throw new Error('expected actor snapshot')
+    const legalAction = actorSnapshot.view.legal?.check ? 'check' : 'call'
+    const actionRequest = JSON.stringify({
+      kind: 'command',
+      requestId: 'shadow-action',
+      command: { kind: 'act', action: { kind: legalAction } },
+    })
+    await actor.connection.receive(actionRequest)
+    expect(shadow.accepted).toHaveBeenCalledTimes(1)
+    expect(shadow.accepted).toHaveBeenCalledWith(prepared, { kind: legalAction })
+    await actor.connection.receive(actionRequest)
+    expect(shadow.prepare).toHaveBeenCalledTimes(1)
+    expect(shadow.accepted).toHaveBeenCalledTimes(1)
+    await actor.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'not-your-turn',
+        command: { kind: 'act', action: { kind: 'fold' } },
+      }),
+    )
+    expect(actor.peer.last('error')).toMatchObject({
+      requestId: 'not-your-turn',
+      code: 'command_rejected',
+    })
+    expect(shadow.accepted).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify([...alice.peer.messages, ...bob.peer.messages])).not.toContain(
+      'private-shadow-key',
+    )
+    shadow.prepare = () => {
+      throw new Error('synthetic capture failure')
+    }
+    const nextSnapshot = bob.peer.last('snapshot')
+    if (nextSnapshot?.kind !== 'snapshot') throw new Error('expected next snapshot')
+    const nextActor = nextSnapshot.view.currentActor?.playerId === ALICE ? alice : bob
+    await nextActor.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'capture-failure',
+        command: { kind: 'act', action: { kind: 'fold' } },
+      }),
+    )
+    expect(nextActor.peer.messages).toContainEqual(
+      expect.objectContaining({ kind: 'snapshot', requestId: 'capture-failure' }),
+    )
+    expect(shadowErrors).toContain('action shadow prepare failed')
+  })
+
   it('relays social systems without sending a poker snapshot', async () => {
     const { hub } = setup()
     const alice = await connectAndEnter(hub, 'alice', 'Alice')
@@ -956,6 +1154,13 @@ describe('which room a table is in', () => {
     return snapshot?.kind === 'snapshot' ? snapshot.view.tableSettings : undefined
   }
 
+  function botSettingsOfLast(peer: TestPeer) {
+    const snapshot = peer.last('snapshot')
+    return snapshot?.kind === 'snapshot'
+      ? { botSeats: snapshot.botSeats, botPreset: snapshot.botPreset }
+      : undefined
+  }
+
   it('opens a new table in the venue the link asked for', async () => {
     const { hub } = setup()
     expect(venueOfLast(await enterWith(hub, 'alice', 'river-suite', 'suite'))).toBe('suite')
@@ -988,20 +1193,26 @@ describe('which room a table is in', () => {
       maxSeats: 6,
       stakeId: '250-500',
       turnTimerPreset: 'standard',
+      botSeats: 7,
+      botPreset: 'tough',
     })
     expect(settingsOfLast(creator)).toEqual({
       maxSeats: 6,
       stakeId: '250-500',
       turnTimerPreset: 'standard',
     })
+    expect(botSettingsOfLast(creator)).toEqual({ botSeats: 7, botPreset: 'tough' })
 
     const joiner = await enterWith(hub, 'bob', 'river-settings', 'basement', {
       maxSeats: 2,
       stakeId: '250-500',
       turnTimerPreset: 'standard',
+      botSeats: 0,
+      botPreset: 'casual',
     })
     expect(venueOfLast(joiner)).toBe('suite')
     expect(settingsOfLast(joiner)).toEqual(settingsOfLast(creator))
+    expect(botSettingsOfLast(joiner)).toEqual(botSettingsOfLast(creator))
   })
 })
 
@@ -1138,8 +1349,8 @@ describe('the developer account', () => {
 describe('bots at the table', () => {
   const withBots = () => setup(30_000, 0, undefined, undefined, undefined, 5)
 
-  async function sitAndStart(hub: RoomHub) {
-    const { peer, connection } = await connectAndEnter(hub, 'alice', 'Alice')
+  async function sitAndStart(hub: RoomHub, token = 'alice') {
+    const { peer, connection } = await connectAndEnter(hub, token, 'Alice')
     await connection.receive(
       JSON.stringify({
         kind: 'command',
@@ -1389,5 +1600,320 @@ describe('bots at the table', () => {
     // A bot that never acts is a table that never moves - the person would sit
     // watching the clock run down on somebody else's turn.
     expect(peer.messages.length).toBeGreaterThan(before)
+  })
+
+  it('routes a live bot turn through an injected policy and server-only trace', async () => {
+    vi.useFakeTimers()
+    let calls = 0
+    const traces: BotDecisionTrace[] = []
+    const policy: BotPolicy = {
+      id: 'trace-test',
+      version: 1,
+      decide(context) {
+        calls += 1
+        return {
+          policyId: this.id,
+          policyVersion: this.version,
+          observationVersion: context.observation.version,
+          decision: { kind: 'fold' },
+          fallbackReason: null,
+        }
+      },
+    }
+    const { hub } = setup(
+      30_000,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      5,
+      undefined,
+      policy,
+      (trace) => traces.push(trace),
+    )
+    const { peer } = await sitAndStart(hub)
+    await vi.advanceTimersByTimeAsync(8_000)
+    expect(calls).toBeGreaterThan(0)
+    expect(traces[0]).toMatchObject({
+      policyId: 'trace-test',
+      policyVersion: 1,
+      observationVersion: 1,
+      fallbackReason: null,
+    })
+    expect(JSON.stringify(peer.messages)).not.toContain('trace-test')
+  })
+
+  it('gives each bot its own exact-once session read of a human after a settled hand', async () => {
+    vi.useFakeTimers()
+    const observations: BotObservationV1[] = []
+    const policy: BotPolicy = {
+      id: 'memory-observer',
+      version: 1,
+      decide(context) {
+        observations.push(context.observation)
+        const legal = context.observation.legal
+        return {
+          policyId: this.id,
+          policyVersion: this.version,
+          observationVersion: 1,
+          decision: legal.check
+            ? { kind: 'check' }
+            : legal.call.enabled
+              ? { kind: 'call' }
+              : { kind: 'fold' },
+          fallbackReason: null,
+        }
+      },
+    }
+    const { hub } = setup(30_000, 0, undefined, undefined, undefined, 1, undefined, policy)
+    const { peer, connection } = await sitAndStart(hub)
+    const view = () => {
+      const snapshot = peer.last('snapshot')
+      if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+      return snapshot.view
+    }
+
+    for (let step = 0; step < 400 && view().phase === 'hand'; step += 1) {
+      const current = view()
+      if (current.currentActor?.playerId === ALICE && current.legal !== null) {
+        const kind = current.legal.check.enabled ? 'check' : 'call'
+        await connection.receive(
+          JSON.stringify({
+            kind: 'command',
+            requestId: `memory-first-${step}`,
+            command: { kind: 'act', action: { kind } },
+          }),
+        )
+      } else {
+        await vi.advanceTimersByTimeAsync(2_000)
+      }
+    }
+    expect(view().phase).toBe('between')
+
+    let remembered: BotObservationV1 | undefined
+    for (let step = 0; step < 500 && remembered === undefined; step += 1) {
+      const current = view()
+      if (
+        current.phase === 'hand' &&
+        current.currentActor?.playerId === ALICE &&
+        current.legal !== null
+      ) {
+        const kind = current.legal.check.enabled ? 'check' : 'call'
+        await connection.receive(
+          JSON.stringify({
+            kind: 'command',
+            requestId: `memory-second-${step}`,
+            command: { kind: 'act', action: { kind } },
+          }),
+        )
+      } else {
+        await vi.advanceTimersByTimeAsync(1_000)
+      }
+      remembered = observations.find(
+        (observation) =>
+          observation.handNumber === 2 &&
+          observation.opponents.some(
+            (opponent) => opponent.playerId === ALICE && opponent.sampleCount > 0,
+          ),
+      )
+    }
+    const aliceRead = remembered?.opponents.find((opponent) => opponent.playerId === ALICE)
+    expect(aliceRead?.sampleCount).toBeCloseTo(1, 6)
+    expect(aliceRead?.confidence).toBeGreaterThan(0)
+    expect(JSON.stringify(peer.messages)).not.toContain('aggressionFrequency')
+    expect(JSON.stringify(peer.messages)).not.toContain('memory-observer')
+  })
+
+  it('restores a signed-in human read for the same named bot in a new hub', async () => {
+    vi.useFakeTimers()
+    const rows = new Map<string, BotOpponentObservation>()
+    let appendCalls = 0
+    const store: BotOpponentStore = {
+      async append(observation) {
+        appendCalls += 1
+        rows.set(`${observation.botId}:${observation.playerId}:${observation.handKey}`, observation)
+        if (appendCalls === 1) throw new Error('reply lost after commit')
+      },
+      async load(botId, playerId) {
+        let model: OpponentModelStateV1 | null = null
+        for (const row of rows.values()) {
+          if (row.botId === botId && row.playerId === playerId) {
+            model = updateOpponentModel(
+              model,
+              row.evidence,
+              row.observedAtMs,
+              DEFAULT_OPPONENT_MODEL_TUNING,
+            )
+          }
+        }
+        return model
+      },
+    }
+    const observations: BotObservationV1[] = []
+    const policy: BotPolicy = {
+      id: 'persisted-read-test',
+      version: 1,
+      decide(context) {
+        observations.push(context.observation)
+        const legal = context.observation.legal
+        return {
+          policyId: this.id,
+          policyVersion: this.version,
+          observationVersion: 1,
+          decision: legal.check
+            ? { kind: 'check' }
+            : legal.call.enabled
+              ? { kind: 'call' }
+              : { kind: 'fold' },
+          fallbackReason: null,
+        }
+      },
+    }
+    const firstHub = setup(
+      30_000,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      1,
+      undefined,
+      policy,
+      undefined,
+      store,
+    ).hub
+    const first = await sitAndStart(firstHub, 'aliceSaved')
+    const view = (peer: TestPeer) => {
+      const snapshot = peer.last('snapshot')
+      if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+      return snapshot.view
+    }
+    for (let step = 0; step < 400 && view(first.peer).phase === 'hand'; step += 1) {
+      const current = view(first.peer)
+      if (current.currentActor?.playerId === ALICE && current.legal !== null) {
+        await first.connection.receive(
+          JSON.stringify({
+            kind: 'command',
+            requestId: `persist-first-${step}`,
+            command: {
+              kind: 'act',
+              action: { kind: current.legal.check.enabled ? 'check' : 'call' },
+            },
+          }),
+        )
+      } else {
+        await vi.advanceTimersByTimeAsync(2_000)
+      }
+    }
+    expect(view(first.peer).phase).toBe('between')
+    await vi.advanceTimersByTimeAsync(250)
+    expect(rows.size).toBe(1)
+    expect(appendCalls).toBe(2)
+    vi.clearAllTimers()
+
+    observations.length = 0
+    const secondHub = setup(
+      30_000,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      1,
+      undefined,
+      policy,
+      undefined,
+      store,
+    ).hub
+    const second = await sitAndStart(secondHub, 'aliceSaved')
+    for (let step = 0; step < 30 && observations.length === 0; step += 1) {
+      const current = view(second.peer)
+      if (current.currentActor?.playerId === ALICE && current.legal !== null) {
+        await second.connection.receive(
+          JSON.stringify({
+            kind: 'command',
+            requestId: `persist-second-${step}`,
+            command: {
+              kind: 'act',
+              action: { kind: current.legal.check.enabled ? 'check' : 'call' },
+            },
+          }),
+        )
+      } else {
+        await vi.advanceTimersByTimeAsync(2_000)
+      }
+    }
+    expect(
+      observations[0]?.opponents.find((opponent) => opponent.playerId === ALICE)?.sampleCount,
+    ).toBeCloseTo(1, 6)
+    expect(JSON.stringify(second.peer.messages)).not.toContain('aggressionFrequency')
+  })
+
+  it('does not load anonymous history and keeps dealing after a storage failure', async () => {
+    vi.useFakeTimers()
+    const store: BotOpponentStore = {
+      append: vi.fn(async () => undefined),
+      load: vi.fn(async () => {
+        throw new Error('storage unavailable')
+      }),
+    }
+    const onError = vi.fn()
+    const anonymousHub = setup(
+      30_000,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      store,
+      onError,
+    ).hub
+    const anonymous = await sitAndStart(anonymousHub)
+    expect(anonymous.peer.last('snapshot')?.kind).toBe('snapshot')
+    expect(store.load).not.toHaveBeenCalled()
+    const anonymousView = () => {
+      const snapshot = anonymous.peer.last('snapshot')
+      if (snapshot?.kind !== 'snapshot') throw new Error('expected a snapshot')
+      return snapshot.view
+    }
+    for (let step = 0; step < 400 && anonymousView().phase === 'hand'; step += 1) {
+      const current = anonymousView()
+      if (current.currentActor?.playerId === ALICE && current.legal !== null) {
+        await anonymous.connection.receive(
+          JSON.stringify({
+            kind: 'command',
+            requestId: `anonymous-${step}`,
+            command: {
+              kind: 'act',
+              action: { kind: current.legal.check.enabled ? 'check' : 'call' },
+            },
+          }),
+        )
+      } else {
+        await vi.advanceTimersByTimeAsync(2_000)
+      }
+    }
+    expect(anonymousView().phase).toBe('between')
+    expect(store.append).not.toHaveBeenCalled()
+    vi.clearAllTimers()
+
+    const signedHub = setup(
+      30_000,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      store,
+      onError,
+    ).hub
+    const signed = await sitAndStart(signedHub, 'aliceSaved')
+    expect(signed.peer.last('snapshot')?.kind).toBe('snapshot')
+    expect(store.load).toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith('bot opponent memory: load failed', expect.any(Error))
   })
 })

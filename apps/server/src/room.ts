@@ -1,5 +1,13 @@
 import { randomBytes } from 'node:crypto'
-import type { Card, HandRecord, LegalActions, SidePot, Street, TurnAction } from '@river/engine'
+import type {
+  Card,
+  HandAction,
+  HandRecord,
+  LegalActions,
+  SidePot,
+  Street,
+  TurnAction,
+} from '@river/engine'
 import {
   BettingError,
   BettingHand,
@@ -239,6 +247,10 @@ export class Room implements RoomHandle {
    */
   recentHands(count?: number): readonly HandRecord[] {
     return count === undefined ? this.recorder.recent() : this.recorder.recent(count)
+  }
+
+  currentActions(): readonly HandAction[] | null {
+    return this.recorder.currentActions()
   }
 
   viewFor(playerId: string): RoomView {
@@ -751,6 +763,11 @@ export class Room implements RoomHandle {
       return false
     }
     const street = betting.street
+    const actor = betting.players.find((player) => player.id === playerId)
+    if (actor === undefined) return false
+    const stackBefore = actor.stack
+    const streetBetBefore = actor.betThisStreet
+    const potBefore = betting.pot()
     try {
       switch (action.kind) {
         case 'fold':
@@ -777,7 +794,12 @@ export class Room implements RoomHandle {
       throw error
     }
     this.syncStacks(betting)
-    this.recorder.record(this.seatOfPlayer(playerId), street, action)
+    const amountCommitted = stackBefore - actor.stack
+    this.recorder.record(this.seatOfPlayer(playerId), street, action, {
+      amountCommitted,
+      potBefore,
+      streetBetAfter: streetBetBefore + amountCommitted,
+    })
     events.push({ kind: eventKind, playerId, action })
     this.advanceBoard(betting.street, events)
     return true

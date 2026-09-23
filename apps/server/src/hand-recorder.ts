@@ -55,9 +55,18 @@ export class HandRecorder {
   }
 
   /** Ignored when no hand is open, so a stray action can never invent one. */
-  record(seat: number, street: Street, action: TurnAction): void {
+  record(
+    seat: number,
+    street: Street,
+    action: TurnAction,
+    facts: Pick<HandAction, 'amountCommitted' | 'potBefore' | 'streetBetAfter'> = {},
+  ): void {
     if (this.open === null) return
-    this.open.actions.push({ seat, street, action })
+    this.open.actions.push({ seat, street, action: { ...action }, ...facts })
+  }
+
+  currentActions(): readonly HandAction[] | null {
+    return this.open?.actions.map((entry) => ({ ...entry, action: { ...entry.action } })) ?? null
   }
 
   finish(closing: HandClosing): HandRecord | null {
@@ -70,7 +79,7 @@ export class HandRecorder {
       startedAtMs: open.opening.startedAtMs,
       stake: { ...open.opening.stake },
       seats: open.opening.seats.map((seat) => ({ ...seat })),
-      actions: open.actions,
+      actions: open.actions.map((entry) => ({ ...entry, action: { ...entry.action } })),
       board: [...closing.board],
       potSize: closing.potSize,
       results: open.opening.seats.map((seat) => ({

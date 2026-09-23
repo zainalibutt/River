@@ -142,6 +142,39 @@ describe('HandRecorder', () => {
     ])
   })
 
+  it('isolates the open action snapshot and starts each hand with an empty sequence', () => {
+    const recorder = new HandRecorder()
+    expect(recorder.currentActions()).toBeNull()
+    recorder.begin(OPENING)
+    expect(recorder.currentActions()).toEqual([])
+    const action = { kind: 'raiseTo' as const, to: 1_200 }
+    recorder.record(0, 'flop', action, {
+      amountCommitted: 1_200,
+      potBefore: 2_000,
+      streetBetAfter: 1_200,
+    })
+    action.to = 9_000
+    const snapshot = recorder.currentActions()
+    const first = snapshot?.[0]
+    if (first === undefined || first.action.kind !== 'raiseTo') throw new Error('missing action')
+    first.action.to = 9_000
+    first.amountCommitted = 9_000
+    expect(recorder.currentActions()).toEqual([
+      {
+        seat: 0,
+        street: 'flop',
+        action: { kind: 'raiseTo', to: 1_200 },
+        amountCommitted: 1_200,
+        potBefore: 2_000,
+        streetBetAfter: 1_200,
+      },
+    ])
+    expect(recorder.finish(closing())?.actions[0]?.amountCommitted).toBe(1_200)
+    expect(recorder.currentActions()).toBeNull()
+    recorder.begin({ ...OPENING, handNumber: 8 })
+    expect(recorder.currentActions()).toEqual([])
+  })
+
   it('ignores an action when no hand is open', () => {
     const recorder = new HandRecorder()
     recorder.record(0, 'preflop', { kind: 'fold' })
@@ -193,6 +226,72 @@ describe('HandRecorder', () => {
 })
 
 describe('a room recording the hand it just played', () => {
+  it('records an accepted call from authoritative chips and ignores a rejected action', () => {
+    const room = makeRoom('live-actions')
+    seat(room, ['alice', 'bob'])
+    room.submit({ kind: 'startHand' })
+    const actorId = room.viewFor('alice').currentActor?.playerId
+    if (actorId === undefined) throw new Error('no actor')
+    const before = room.viewFor(actorId)
+    const actor = before.seats.find((entry) => entry.playerId === actorId)
+    const callAmount = before.legal?.call.amount
+    if (actor === undefined || callAmount === undefined) throw new Error('no legal call')
+    expect(room.currentActions()).toEqual([])
+    expect(
+      room.submit({ kind: 'act', playerId: actorId, action: { kind: 'raiseTo', to: 1 } }).ok,
+    ).toBe(false)
+    expect(room.currentActions()).toEqual([])
+    expect(room.submit({ kind: 'act', playerId: actorId, action: { kind: 'call' } }).ok).toBe(true)
+    expect(room.currentActions()?.[0]).toEqual({
+      seat: actor.seat,
+      street: 'preflop',
+      action: { kind: 'call' },
+      amountCommitted: callAmount,
+      potBefore: before.pot,
+      streetBetAfter: actor.betStreet + callAmount,
+    })
+    playOneHand(room)
+    expect(room.currentActions()).toBeNull()
+    room.submit({ kind: 'startHand' })
+    expect(room.currentActions()).toEqual([])
+  })
+
+  it('captures raise and all-in amounts before the next street can reset bets', () => {
+    const room = makeRoom('sized-actions')
+    seat(room, ['alice', 'bob', 'cara'])
+    room.submit({ kind: 'startHand' })
+    const firstId = room.viewFor('alice').currentActor?.playerId
+    if (firstId === undefined) throw new Error('no first actor')
+    const firstView = room.viewFor(firstId)
+    const firstSeat = firstView.seats.find((entry) => entry.playerId === firstId)
+    const raiseTo = firstView.legal?.raiseTo.min
+    if (firstSeat === undefined || raiseTo === undefined) throw new Error('no legal raise')
+    expect(
+      room.submit({ kind: 'act', playerId: firstId, action: { kind: 'raiseTo', to: raiseTo } }).ok,
+    ).toBe(true)
+    expect(room.currentActions()?.[0]).toMatchObject({
+      action: { kind: 'raiseTo', to: raiseTo },
+      amountCommitted: raiseTo - firstSeat.betStreet,
+      potBefore: firstView.pot,
+      streetBetAfter: raiseTo,
+    })
+
+    const secondId = room.viewFor('alice').currentActor?.playerId
+    if (secondId === undefined) throw new Error('no second actor')
+    const secondView = room.viewFor(secondId)
+    const secondSeat = secondView.seats.find((entry) => entry.playerId === secondId)
+    if (secondSeat === undefined) throw new Error('no second seat')
+    expect(room.submit({ kind: 'act', playerId: secondId, action: { kind: 'allIn' } }).ok).toBe(
+      true,
+    )
+    expect(room.currentActions()?.[1]).toMatchObject({
+      action: { kind: 'allIn' },
+      amountCommitted: secondSeat.stack,
+      potBefore: secondView.pot,
+      streetBetAfter: secondSeat.betStreet + secondSeat.stack,
+    })
+    expect(JSON.stringify(room.currentActions())).not.toContain('hole')
+  })
   it('emits exactly one record per settled hand', () => {
     const room = makeRoom('one-record')
     seat(room, ['alice', 'bob'])

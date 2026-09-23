@@ -1,4 +1,4 @@
-import type { BotPersonality } from '@river/engine'
+import type { BotPersonality, BotPolicy } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
   actionFor,
@@ -10,6 +10,7 @@ import {
   emptySeatsIn,
   humansIn,
   isBotPlayer,
+  observationFor,
   peekAfterDealMs,
   peekDuringThinkMs,
   profileFor,
@@ -109,6 +110,14 @@ describe('bot identity', () => {
   it('asks for no characters when none are wanted', () => {
     expect(botsForTable('river-one', 0)).toEqual([])
     expect(botsForTable('river-one', -3)).toEqual([])
+  })
+
+  it('keeps player-facing strength presets inside their skill bounds', () => {
+    expect(botsForTable('river-one', 7, 'casual').every((bot) => bot.skill !== 'og')).toBe(true)
+    expect(botsForTable('river-one', 7, 'tough').every((bot) => bot.skill !== 'rookie')).toBe(true)
+    expect(new Set(botsForTable('river-one', 7, 'mixed').map((bot) => bot.skill))).toEqual(
+      new Set(['rookie', 'novice', 'og']),
+    )
   })
 })
 
@@ -220,6 +229,245 @@ describe('acting', () => {
   it('builds the amount owed from the street bet, not the hand bet', () => {
     const input = decisionInputFor(acting({ betStreet: 200 }), botPlayerId('loose'))
     expect(input?.betToCall).toBe(300)
+  })
+
+  it('builds a private observation with only the actor hole cards', () => {
+    const privateView = acting()
+    privateView.seats[0] = seat({
+      seat: 0,
+      playerId: 'alice',
+      stack: 20_000,
+      hole: [
+        { rank: 'K', suit: 's' },
+        { rank: 'K', suit: 'h' },
+      ],
+    })
+    const observation = observationFor(
+      privateView,
+      botPlayerId('loose'),
+      { factor: 4 },
+      'river-one',
+    )
+    expect(observation?.actor.hole).toEqual([
+      { rank: 'A', suit: 's' },
+      { rank: 'A', suit: 'h' },
+    ])
+    expect(observation?.seats[0]).not.toHaveProperty('hole')
+    expect(observation?.opponents).toEqual([
+      {
+        version: 1,
+        playerId: 'alice',
+        sampleCount: 0,
+        confidence: 0,
+        vpip: 0,
+        pfr: 0,
+        aggressionFrequency: 0,
+        showdownFrequency: 0,
+        averageAggressivePotRatio: 0,
+      },
+    ])
+    expect(observation?.tilt.factor).toBe(1)
+    expect(observation?.actor.hole[0]).not.toBe(privateView.seats[1]?.hole?.[0])
+  })
+
+  it('copies current public actions into the policy observation without sharing mutable history', () => {
+    const history = [
+      {
+        seat: 0,
+        street: 'preflop' as const,
+        action: { kind: 'raiseTo' as const, to: 1_500 },
+        amountCommitted: 1_500,
+        potBefore: 750,
+        streetBetAfter: 1_500,
+      },
+    ]
+    const observation = observationFor(
+      acting(),
+      botPlayerId('loose'),
+      undefined,
+      'river-one',
+      history,
+    )
+    if (observation === null) throw new Error('missing observation')
+    const seen = observation?.actions?.[0]
+    if (seen === undefined || seen.action.kind !== 'raiseTo') throw new Error('missing action')
+    expect(seen).toEqual(history[0])
+    seen.action.to = 9_000
+    seen.amountCommitted = 9_000
+    expect(history[0]?.action.to).toBe(1_500)
+    expect(history[0]?.amountCommitted).toBe(1_500)
+    expect(JSON.stringify(observation.actions)).not.toContain('hole')
+    expect(observationFor(acting(), botPlayerId('loose'))).not.toHaveProperty('actions')
+  })
+
+  it('passes only supplied summaries for visible opponents into a bot observation', () => {
+    const summaries = [
+      {
+        version: 1 as const,
+        playerId: 'alice',
+        sampleCount: 12,
+        confidence: 0.45,
+        vpip: 0.52,
+        pfr: 0.28,
+        aggressionFrequency: 0.71,
+        showdownFrequency: 0.12,
+        averageAggressivePotRatio: 0.9,
+      },
+      {
+        version: 1 as const,
+        playerId: 'not-seated',
+        sampleCount: 99,
+        confidence: 0.99,
+        vpip: 1,
+        pfr: 1,
+        aggressionFrequency: 1,
+        showdownFrequency: 1,
+        averageAggressivePotRatio: 4,
+      },
+    ]
+    const observation = observationFor(
+      acting(),
+      botPlayerId('loose'),
+      undefined,
+      'river-one',
+      undefined,
+      summaries,
+    )
+    expect(observation?.opponents).toEqual([
+      {
+        version: 1,
+        playerId: 'alice',
+        sampleCount: 12,
+        confidence: 0.45,
+        vpip: 0.52,
+        pfr: 0.28,
+        aggressionFrequency: 0.71,
+        showdownFrequency: 0.12,
+        averageAggressivePotRatio: 0.9,
+      },
+    ])
+    const supplied = observation?.opponents[0]
+    if (supplied === undefined) throw new Error('missing opponent summary')
+    Object.assign(supplied, { vpip: 0 })
+    expect(summaries[0]?.vpip).toBe(0.52)
+  })
+
+  it('blends injected tilt before a policy receives the profile', () => {
+    const aggressions: number[] = []
+    const policy: BotPolicy = {
+      id: 'profile-recorder',
+      version: 1,
+      decide(context) {
+        aggressions.push(context.profile.aggression)
+        return {
+          policyId: this.id,
+          policyVersion: this.version,
+          observationVersion: 1,
+          decision: { kind: 'fold' },
+          fallbackReason: null,
+        }
+      },
+    }
+    actionFor(acting(), botPlayerId('loose'), LOOSE, () => 0.5, {
+      policy,
+      tilt: { factor: 1, cause: 'test' },
+    })
+    actionFor(acting(), botPlayerId('loose'), LOOSE, () => 0.5, { policy })
+    expect(aggressions[0]).toBeGreaterThan(aggressions[1] ?? 1)
+    expect(aggressions[1]).toBe(profileFor(LOOSE).aggression)
+  })
+
+  it('falls back once and traces an invalid policy envelope without leaking cards', () => {
+    const traces: { fallbackReason: string | null; policyId: string; finalAction: string }[] = []
+    const invalid: BotPolicy = {
+      id: 'invalid',
+      version: 1,
+      decide: () => ({
+        policyId: 'wrong-policy',
+        policyVersion: 1,
+        observationVersion: 1,
+        decision: { kind: 'check' },
+        fallbackReason: null,
+      }),
+    }
+    const action = actionFor(acting(), botPlayerId('loose'), LOOSE, () => 0.5, {
+      policy: invalid,
+      roomId: 'river-one',
+      decisionKey: 'decision-one',
+      trace: (trace) =>
+        traces.push({
+          fallbackReason: trace.fallbackReason,
+          policyId: trace.policyId,
+          finalAction: trace.finalAction.kind,
+        }),
+    })
+    expect(action).not.toBeNull()
+    expect(traces).toEqual([
+      {
+        fallbackReason: 'invalid_envelope',
+        policyId: 'deterministic-rule',
+        finalAction: expect.any(String),
+      },
+    ])
+  })
+
+  it('rejects a fractional raise from a policy and falls back to the rule policy', () => {
+    const traces: { fallbackReason: string | null }[] = []
+    const fractional: BotPolicy = {
+      id: 'fractional',
+      version: 1,
+      decide: () => ({
+        policyId: 'fractional',
+        policyVersion: 1,
+        observationVersion: 1,
+        decision: { kind: 'raiseTo', to: 1_500.5 },
+        fallbackReason: null,
+      }),
+    }
+    const action = actionFor(acting(), botPlayerId('loose'), LOOSE, () => 0.5, {
+      policy: fractional,
+      trace: (trace) => traces.push({ fallbackReason: trace.fallbackReason }),
+    })
+    expect(action).not.toBeNull()
+    expect(traces).toEqual([{ fallbackReason: 'invalid_envelope' }])
+  })
+
+  it('uses the deterministic rule when an injected policy throws', () => {
+    const traces: { policyId: string; fallbackReason: string | null }[] = []
+    const throwing: BotPolicy = {
+      id: 'throwing',
+      version: 1,
+      decide() {
+        throw new Error('model unavailable')
+      },
+    }
+    const action = actionFor(acting(), botPlayerId('loose'), LOOSE, () => 0.5, {
+      policy: throwing,
+      trace: (trace) =>
+        traces.push({ policyId: trace.policyId, fallbackReason: trace.fallbackReason }),
+    })
+    expect(action).not.toBeNull()
+    expect(traces).toEqual([{ policyId: 'deterministic-rule', fallbackReason: 'policy_error' }])
+  })
+
+  it('caps a policy raise against the original room stack after observation mutation', () => {
+    const corrupting: BotPolicy = {
+      id: 'corrupting',
+      version: 1,
+      decide(context) {
+        ;(context.observation.actor as { stack: number }).stack = 1_000_000
+        return {
+          policyId: this.id,
+          policyVersion: this.version,
+          observationVersion: 1,
+          decision: { kind: 'raiseTo', to: 900_000 },
+          fallbackReason: null,
+        }
+      },
+    }
+    expect(
+      actionFor(acting(), botPlayerId('loose'), LOOSE, () => 0.5, { policy: corrupting }),
+    ).toEqual({ kind: 'raiseTo', to: 20_000 })
   })
 
   it('always returns an action the table would accept', () => {

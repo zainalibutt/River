@@ -1,5 +1,8 @@
 import type { BotSkill } from './bots.js'
 
+export const BOT_TABLE_PRESETS = ['casual', 'mixed', 'tough', 'random'] as const
+export type BotTablePreset = (typeof BOT_TABLE_PRESETS)[number]
+
 export interface BotPersonality {
   id: string
   name: string
@@ -152,17 +155,55 @@ export function personalitiesFor(skill: BotSkill): readonly BotPersonality[] {
   return POOL.filter((personality) => personality.skill === skill)
 }
 
+export function isBotTablePreset(value: unknown): value is BotTablePreset {
+  return typeof value === 'string' && BOT_TABLE_PRESETS.includes(value as BotTablePreset)
+}
+
 export function pickPersonalities(seed: number, count: number): readonly BotPersonality[] {
+  return pickFromPool(seed, count, POOL)
+}
+
+export function pickPersonalitiesForPreset(
+  seed: number,
+  count: number,
+  preset: BotTablePreset,
+): readonly BotPersonality[] {
+  if (preset === 'random') return pickPersonalities(seed, count)
+  const skills: readonly BotSkill[] =
+    preset === 'casual'
+      ? ['rookie', 'novice']
+      : preset === 'tough'
+        ? ['og', 'novice']
+        : ['rookie', 'novice', 'og']
+  const selected: BotPersonality[] = []
+  const used = new Set<string>()
+  for (let index = 0; index < count; index += 1) {
+    const skill = skills[index % skills.length]
+    if (skill === undefined) break
+    const candidates = pickFromPool(seed + index * 101, POOL.length, personalitiesFor(skill))
+    const next = candidates.find((candidate) => !used.has(candidate.id))
+    if (next === undefined) break
+    used.add(next.id)
+    selected.push(next)
+  }
+  return selected
+}
+
+function pickFromPool(
+  seed: number,
+  count: number,
+  pool: readonly BotPersonality[],
+): readonly BotPersonality[] {
   if (count <= 0) return []
   const used = new Set<number>()
   const selected: BotPersonality[] = []
   let position = 0
-  while (selected.length < count && used.size < POOL.length) {
-    const index = hashMix(seed, position) % POOL.length
+  while (selected.length < count && used.size < pool.length) {
+    const index = hashMix(seed, position) % pool.length
     position += 1
     if (used.has(index)) continue
     used.add(index)
-    const personality = POOL[index]
+    const personality = pool[index]
     if (personality !== undefined) selected.push(personality)
   }
   return selected

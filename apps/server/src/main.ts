@@ -5,6 +5,7 @@ import type { Duplex } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { config as loadEnv } from 'dotenv'
 import { createSupabaseTokenVerifier } from './auth.js'
+import { SupabaseBotOpponentStore } from './bot-opponent-store.js'
 import { readServerConfig } from './config.js'
 import { SupabaseCosmeticStore } from './cosmetic-store.js'
 import { createSupabaseEconomy } from './economy-service.js'
@@ -55,6 +56,15 @@ async function start(): Promise<void> {
     // A person who opens River alone should find a table with people at it.
     // Enough to feel busy, with a seat kept free for whoever arrives next.
     botSeats: 5,
+    ...(process.env.BOT_OPPONENT_PERSISTENCE === 'true'
+      ? {
+          botOpponentStore: new SupabaseBotOpponentStore({
+            supabaseUrl: config.supabaseUrl,
+            serviceRoleKey: config.serviceRoleKey,
+            timeoutMs: 750,
+          }),
+        }
+      : {}),
     verifyToken: createSupabaseTokenVerifier({ supabaseUrl: config.supabaseUrl }),
     onError: (context, error) => {
       process.stderr.write(`river: ${context}: ${errorText(error)}

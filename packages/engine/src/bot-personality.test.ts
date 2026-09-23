@@ -2,7 +2,14 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { BotPersonality } from './bot-personality.js'
-import { blend, personalitiesFor, personalityPool, pickPersonalities } from './bot-personality.js'
+import {
+  blend,
+  isBotTablePreset,
+  personalitiesFor,
+  personalityPool,
+  pickPersonalities,
+  pickPersonalitiesForPreset,
+} from './bot-personality.js'
 import type { BotSkill } from './bots.js'
 
 const POOL = personalityPool()
@@ -92,6 +99,37 @@ describe('pickPersonalities', () => {
 
   it('returns nothing for a non-positive count', () => {
     expect(pickPersonalities(0, 0)).toEqual([])
+  })
+})
+
+describe('table presets', () => {
+  it('recognises only the public preset names', () => {
+    for (const preset of ['casual', 'mixed', 'tough', 'random']) {
+      expect(isBotTablePreset(preset)).toBe(true)
+    }
+    expect(isBotTablePreset('expert')).toBe(false)
+    expect(isBotTablePreset(3)).toBe(false)
+  })
+
+  it('builds seven unique characters with the promised skill bounds', () => {
+    const casual = pickPersonalitiesForPreset(17, 7, 'casual')
+    const mixed = pickPersonalitiesForPreset(17, 7, 'mixed')
+    const tough = pickPersonalitiesForPreset(17, 7, 'tough')
+    expect(casual).toHaveLength(7)
+    expect(mixed).toHaveLength(7)
+    expect(tough).toHaveLength(7)
+    expect(casual.every((bot) => bot.skill !== 'og')).toBe(true)
+    expect(tough.every((bot) => bot.skill !== 'rookie')).toBe(true)
+    expect(new Set(mixed.map((bot) => bot.skill))).toEqual(new Set(['rookie', 'novice', 'og']))
+    for (const cast of [casual, mixed, tough]) {
+      expect(new Set(cast.map((bot) => bot.id)).size).toBe(cast.length)
+    }
+  })
+
+  it('keeps a preset cast deterministic for a room seed', () => {
+    expect(pickPersonalitiesForPreset(91, 7, 'tough')).toEqual(
+      pickPersonalitiesForPreset(91, 7, 'tough'),
+    )
   })
 })
 
