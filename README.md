@@ -25,6 +25,7 @@ The development record is a deliverable here, not a by-product.
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) - decisions that shaped River and the reasoning that produced them, including the ones that were reversed.
 - [`docs/PROGRESS.md`](docs/PROGRESS.md) and [`docs/progress/`](docs/progress/) - what shipped, with renders at every meaningful art change.
 - [`docs/design/`](docs/design/) - 22 design contracts. Each names the commit it was written against.
+- [`docs/BOTS.md`](docs/BOTS.md) - how the poker bots were built and measured, including what was tried and dropped.
 - [`docs/EFFORT.md`](docs/EFFORT.md) - what it cost, measured rather than estimated.
 - [`PUBLISHING.md`](PUBLISHING.md) - what may go into a public repository, and what enforces it.
 
