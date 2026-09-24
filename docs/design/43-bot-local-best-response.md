@@ -37,9 +37,20 @@ Paired on the same deals, v6 gives the probe 78.8 (35.7 to 121.8) more than v5 d
 
 Folding every hand loses 75 big blinds per 100, so both are more exploitable than that. Against v5 the probe moved all in on the flop almost every time, expecting close to the whole of v5's range to fold, and it was right. v6 bets far more often (the probe faced a v6 bet or raise about 1,100 times, against about 30 for v5), so its pots are bigger, but it still folds too often to large bets: the probe expected it to fold 71% of the time to a pot-sized flop bet and 87% to a flop shove. A pot-sized bet only has to work half the time, so at those frequencies every hand the probe held could bet profitably.
 
+## Under the standard heads-up order
+
+The results above were taken while River's engine had the big blind act first before the flop heads-up; `776fd91` gave that turn to the button, as standard rules do. Measured again the same way on fresh `lbr-std-*` seeds, all-in valued:
+
+| Focal policy | Probe wins |
+| --- | ---: |
+| always fold | +75.0, no spread |
+| v5 | +101.0 (+85.0 to +117.1) |
+| v6 (live) | +215.9 (+165.3 to +266.6) |
+
+v6 gives the probe 114.9 (67.7 to 162.2) more than v5 on the same deals, and the leak is the same one: an expected 71% of folds to a pot-sized flop bet and 87% to a flop shove. v6 still beats v5 on every heads-up held-out table under the standard order, on fresh `hu-std-*` seeds with 200 sessions each: pooled +96.7 (+88.5 to +104.8), the smallest margin +30.6 (+15.4 to +45.8) against the ordinary cast.
+
 ## Limits
 
 - A lower bound only. The probe bets one size and an all-in, never raises before the flop, samples 220 holdings and values everything as if play went check-and-call afterwards; a full best response would win more.
 - Heads-up only, at River's stack mix of 40 to 400 big blinds, so the numbers are not comparable with published figures at 200 big blinds.
-- Measured under River's heads-up betting order at the time, where the big blind acted first before the flop; that order is being corrected to the standard one, after which these numbers are measured again.
 - Doc 41's learned model is not measured and is shelved: it was built on v5, and at about 25 ms a decision the probe's questions put it near 39 seconds a hand.
