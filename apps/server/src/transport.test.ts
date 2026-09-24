@@ -303,7 +303,7 @@ describe('room hub', () => {
     const actor = snapshot.view.currentActor?.playerId === ALICE ? alice : bob
     const actorSnapshot = actor.peer.last('snapshot')
     if (actorSnapshot?.kind !== 'snapshot') throw new Error('expected actor snapshot')
-    const legalAction = actorSnapshot.view.legal?.check ? 'check' : 'call'
+    const legalAction = actorSnapshot.view.legal?.check.enabled ? 'check' : 'call'
     await actor.connection.receive(
       JSON.stringify({
         kind: 'command',
@@ -374,7 +374,7 @@ describe('room hub', () => {
     const actor = snapshot.view.currentActor?.playerId === ALICE ? alice : bob
     const actorSnapshot = actor.peer.last('snapshot')
     if (actorSnapshot?.kind !== 'snapshot') throw new Error('expected actor snapshot')
-    const legalAction = actorSnapshot.view.legal?.check ? 'check' : 'call'
+    const legalAction = actorSnapshot.view.legal?.check.enabled ? 'check' : 'call'
     const actionRequest = JSON.stringify({
       kind: 'command',
       requestId: 'shadow-action',
@@ -682,10 +682,23 @@ describe('room hub', () => {
     await alice.connection.receive(
       JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
     )
+    // The button completes the small blind in time; the big blind's option runs out.
+    const dealt = alice.peer.last('snapshot')
+    if (dealt?.kind !== 'snapshot') throw new Error('expected dealt snapshot')
+    const button = dealt.view.currentActor?.playerId === ALICE ? alice : bob
+    await button.connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'complete',
+        command: { kind: 'act', action: { kind: 'call' } },
+      }),
+    )
     await vi.advanceTimersByTimeAsync(20)
     expect(alice.peer.last('snapshot')).toMatchObject({
       view: { phase: 'hand', turnDeadlineMs: expect.any(Number) },
-      events: expect.arrayContaining([expect.objectContaining({ kind: 'timedOut' })]),
+      events: expect.arrayContaining([
+        expect.objectContaining({ kind: 'timedOut', action: { kind: 'check' } }),
+      ]),
     })
   })
 

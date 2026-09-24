@@ -38,6 +38,7 @@ The hardware spike (Packet 5A) is **deferred, not cancelled**. It runs the momen
 
 - Variant: Texas Hold'em only, deep. 2 hole cards + 5 community, best 5-card hand wins.
 - Format: **cash tables**. Standard buy-in, leave/cash out anytime, rebuy on bust while seated.
+- Betting order is standard. With two players dealt in, the button posts the small blind, acts first before the flop and last after it, and the big blind keeps its option after a limp.
 - Table size: **9-max** default (heads-up and 6-max supported). Nine seats are for players, human or bot; the dealer is not a player seat. The 2D table supports all nine now. The existing 3D venues have only eight player chairs plus a dealer position, so nine-player tables remain 2D until those assets and their seat anchors are expanded. Seat-fill/deal moments are animated.
 - Speed knobs (config-driven, tunable without redeploy): **per-street action budgets — 15s preflop, 20s flop, 20s turn, 25s river** (matching the reference's published windows), auto check-fold on timeout, configurable auto-muck, 3s next-deal countdown, instant rebuy button.
 - **Two pacing modes:** *cinematic* (full authored cadence) and *fast* (all animations retained, dead air removed). Fast never removes an animation, only the gaps between them.

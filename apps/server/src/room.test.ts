@@ -318,36 +318,23 @@ describe('server-authoritative turn timers', () => {
       turnDeadlineMs: 25_000,
       turnBudgetMs: 15_000,
     })
-    const firstActor = room.viewFor('alice').currentActor
-    if (firstActor === null) throw new Error('missing first actor')
-    const firstLegal = room.viewFor(firstActor.playerId).legal
-    if (firstLegal === null) throw new Error('missing first legal actions')
-    if (!firstLegal.check.enabled) {
-      const called = room.submit({
-        kind: 'act',
-        playerId: firstActor.playerId,
-        action: { kind: 'call' },
-      })
-      expect(called.ok).toBe(true)
-    }
-    const checkingActor = room.viewFor('alice').currentActor
-    if (checkingActor === null) throw new Error('missing checking actor')
-    expect(room.viewFor(checkingActor.playerId).legal?.check.enabled).toBe(true)
+    // Heads-up the button acts first before the flop and completes in time.
+    const button = room.viewFor('alice').currentActor
+    if (button === null) throw new Error('missing first actor')
+    expect(room.viewFor(button.playerId).legal?.check.enabled).toBe(false)
+    const called = room.submit({ kind: 'act', playerId: button.playerId, action: { kind: 'call' } })
+    expect(called.ok).toBe(true)
+    // The big blind's option runs out, so it checks and the flop begins.
+    const bigBlind = room.viewFor('alice').currentActor
+    if (bigBlind === null) throw new Error('missing checking actor')
+    expect(room.viewFor(bigBlind.playerId).legal?.check.enabled).toBe(true)
     now = 25_000
     const checked = room.submit({ kind: 'timeoutTurn' })
     expect(checked.events).toContainEqual({
       kind: 'timedOut',
-      playerId: checkingActor.playerId,
+      playerId: bigBlind.playerId,
       action: { kind: 'check' },
     })
-    const closingActor = room.viewFor('alice').currentActor
-    if (closingActor === null) throw new Error('missing preflop closing actor')
-    const closing = room.submit({
-      kind: 'act',
-      playerId: closingActor.playerId,
-      action: { kind: 'call' },
-    })
-    expect(closing.ok).toBe(true)
     expect(room.viewFor('alice')).toMatchObject({
       street: 'flop',
       turnDeadlineMs: 45_000,
@@ -369,17 +356,13 @@ describe('server-authoritative turn timers', () => {
     now = 25_000
     const overdueActor = foldRoom.viewFor('alice').currentActor
     if (overdueActor === null) throw new Error('missing overdue actor')
+    // The button faces the rest of the big blind, so a late action becomes a fold.
     const lateAction = foldRoom.submit({
       kind: 'act',
       playerId: overdueActor.playerId,
-      action: { kind: 'check' },
+      action: { kind: 'call' },
     })
     expect(lateAction.events).toContainEqual(
-      expect.objectContaining({ kind: 'timedOut', action: { kind: 'check' } }),
-    )
-    now = 40_000
-    const folded = foldRoom.submit({ kind: 'timeoutTurn' })
-    expect(folded.events).toContainEqual(
       expect.objectContaining({ kind: 'timedOut', action: { kind: 'fold' } }),
     )
     expect(foldRoom.viewFor('alice').turnDeadlineMs).toBeNull()

@@ -246,10 +246,10 @@ export class BettingHand {
 
   private firstToActIndex(): number {
     if (this.street === 'preflop') {
-      const count = this.players.length
-      const bigIndex =
-        count === 2 ? this.after(this.dealerIndex) : this.after(this.after(this.dealerIndex))
-      return count === 2 ? bigIndex : this.after(bigIndex)
+      // Heads-up the button is the small blind and acts first before the flop;
+      // the big blind still gets its option, as a seat that has not acted.
+      if (this.players.length === 2) return this.dealerIndex
+      return this.after(this.after(this.after(this.dealerIndex)))
     }
     return this.after(this.dealerIndex)
   }
