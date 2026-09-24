@@ -316,7 +316,11 @@ export function actionFor(
   return action
 }
 
-function decideWithFallback(policy: BotPolicy, context: BotPolicyContextV1): BotDecisionEnvelope {
+/** A policy's envelope, or the deterministic fallback when it throws or returns a malformed one. */
+export function decideWithFallback(
+  policy: BotPolicy,
+  context: BotPolicyContextV1,
+): BotDecisionEnvelope {
   try {
     const envelope = policy.decide(context)
     if (isValidEnvelope(envelope, policy, context.observation.version)) return envelope

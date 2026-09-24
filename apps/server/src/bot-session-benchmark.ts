@@ -18,6 +18,7 @@ import {
   summariseOpponentModel,
   updateOpponentModel,
 } from '@river/engine'
+import { allInEquityChips } from './bot-allin-equity.js'
 import { actionFor, type BotActionOptions, botPlayerId, observationFor } from './bot-service.js'
 import type { RoomView } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
@@ -73,6 +74,11 @@ export interface SessionRunOptions {
   readonly chainLength?: number
   /** Called before every focal decision with what the focal seat may legally see. */
   readonly onFocalDecision?: (point: FocalDecisionPoint) => void
+  /**
+   * Also report each focal hand valued at the focal seat's showdown share when
+   * the betting closed before the river with two seats left, as `adjustedChips`.
+   */
+  readonly allInAdjustment?: boolean
 }
 
 /**
@@ -113,6 +119,8 @@ export interface SessionHandResult {
   readonly position: PositionClass
   readonly depth: DepthClass
   readonly handClass: HandClass
+  /** `focalChips`, with an all-in before the river valued at its showdown share. */
+  readonly adjustedChips?: number
 }
 
 export interface OpponentEvidenceYield {
@@ -209,12 +217,12 @@ export function runSessions(options: SessionRunOptions): SessionRunResult {
         accumulateYield(yields.get(opponentId), settled.hand, opponentId)
       }
       plugin?.observe(settled.hand, opponentIds)
-      entrantMemories.forEach((entrantMemory, index) =>
+      entrantMemories.forEach((entrantMemory, index) => {
         entrantMemory?.observe(
           settled.hand,
           ids.filter((_, other) => other !== index),
-        ),
-      )
+        )
+      })
     }
     evidence.push(...yields.values())
   }
@@ -244,6 +252,7 @@ function playHand(
     ids,
   )
 
+  let beforeLast: RoomView | undefined
   for (let step = 0; step < MAX_ACTIONS_PER_HAND; step += 1) {
     const publicView = room.viewFor('')
     if (publicView.phase === 'between') {
@@ -254,20 +263,34 @@ function playHand(
       const focalFinal = publicView.seats.find((seat) => seat.seat === focalChair)
       if (focalFinal === undefined) throw new Error('session focal seat missing')
       const othersDepth = Math.max(...buyIns.slice(1))
+      const focalChips = focalFinal.stack - (buyIns[0] as number)
+      const shown = shownHoles(publicView)
       return {
         result: {
           session,
           encounter,
           hand,
           commit: commit.commit,
-          focalChips: focalFinal.stack - (buyIns[0] as number),
+          focalChips,
           position: positionClass((focalChair - dealerChair + seatCount) % seatCount, seatCount),
           depth: depthClass(Math.min(buyIns[0] as number, othersDepth) / DEFAULT_STAKE.bigBlind),
           handClass: handClassOf(focalHole),
+          ...(options.allInAdjustment === true
+            ? {
+                adjustedChips: adjustedFocalChips(
+                  beforeLast,
+                  record,
+                  shown,
+                  ids[0] as string,
+                  focalChips,
+                  `${key}:all-in`,
+                ),
+              }
+            : {}),
         },
         hand: {
           record,
-          shown: shownHoles(publicView),
+          shown,
           atMs: startMs + hand * SESSION_HAND_INTERVAL_MS,
         },
       }
@@ -297,6 +320,7 @@ function playHand(
         })
       }
     }
+    beforeLast = publicView
     actOnce(room, ids, entrants, actionRngs, options.focalPolicy, focalOptions, entrantOptions)
   }
   throw new Error('session hand exceeded action limit')
@@ -541,4 +565,29 @@ function validate(options: SessionRunOptions): void {
     const ids = entrantsFor(options, session).map((entrant) => entrant.personality.id)
     if (new Set(ids).size !== ids.length) throw new Error('session personality ids must be unique')
   }
+}
+
+/**
+ * The focal seat's chips for a settled hand, with an all-in before the river
+ * valued at its showdown share. `before` is the table just before the last
+ * action, which is when the board and each seat's stake were fixed.
+ */
+function adjustedFocalChips(
+  before: RoomView | undefined,
+  record: HandRecord,
+  shown: ReadonlyMap<string, readonly Card[]>,
+  focalId: string,
+  focalChips: number,
+  seed: string,
+): number {
+  const last = record.actions[record.actions.length - 1]
+  if (before === undefined || last === undefined) return focalChips
+  const seats = before.seats
+    .filter((seat): seat is typeof seat & { playerId: string } => seat.playerId !== null)
+    .map((seat) => ({
+      playerId: seat.playerId,
+      contributed: seat.betHand + (seat.seat === last.seat ? (last.amountCommitted ?? 0) : 0),
+      contending: !seat.folded && !(seat.seat === last.seat && last.action.kind === 'fold'),
+    }))
+  return allInEquityChips(seats, shown, before.board, focalId, focalChips, seed) ?? focalChips
 }

@@ -50,7 +50,7 @@ The gates for the held-out test were written into the roadmap before one run on 
 
 The pooled gate and the no-clear-loss gate passed. Four tables had positive estimates but lower bounds below −2, so each got the declared follow-up of 400 fresh sessions on `b5-confirm-extra-*` seeds, all four passing: heads-up value +23.4 (+12.7 to +34.2) over 40,000 hands, nine-seat camouflaged +30.8 (+13.8 to +47.8), nine-seat reverse-sizing +16.5 (+0.4 to +32.5) and nine-seat ordinary +12.6 (+5.1 to +20.1), 24,000 hands each. They are second looks at single tables and are reported as that.
 
-By its own gates the model is eligible for Zain's decision on live use. It is not wired in.
+By its own gates the model was eligible for Zain's decision on live use. On 24 September it was shelved instead: it improves on version 5, which version 6 (doc 42) has since replaced as the live OG, so it stays here as a record and is not wired in. A future learned policy builds on the live strategy.
 
 ## What it learned, and what that means
 
