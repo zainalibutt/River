@@ -31,6 +31,8 @@ export interface SlumbotState {
   readonly clientPos: 0 | 1
   readonly hole: readonly Card[]
   readonly board: readonly Card[]
+  /** Slumbot's cards, known only once the hand is over; used to replay it for analysis. */
+  readonly theirHole?: readonly Card[]
 }
 
 export interface SlumbotMove {
@@ -73,13 +75,16 @@ export function slumbotRoom(
   state: SlumbotState,
   ids: { readonly ours: string; readonly theirs: string },
 ): Room {
-  const known = new Set([...state.hole, ...state.board].map(cardKey))
+  const known = new Set([...state.hole, ...state.board, ...(state.theirHole ?? [])].map(cardKey))
   const fillers = makeDeck().filter((card) => !known.has(cardKey(card)))
-  const theirs = fillers.slice(0, 2)
+  const theirs = state.theirHole ?? fillers.slice(0, 2)
   const onButton = state.clientPos === 1
   const buttonHole = onButton ? state.hole : theirs
   const bigBlindHole = onButton ? theirs : state.hole
-  const board = [...state.board, ...fillers.slice(2)].slice(0, 5)
+  const board = [...state.board, ...fillers.slice(state.theirHole === undefined ? 2 : 0)].slice(
+    0,
+    5,
+  )
   const deck = [buttonHole[0], bigBlindHole[0], buttonHole[1], bigBlindHole[1], ...board] as Card[]
   const room = new Room(
     'slumbot',
