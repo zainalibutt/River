@@ -1,6 +1,6 @@
 import type { BotPolicy } from '@river/engine'
 import { opponentReadPolicy, opponentStatsPlugin, type ReadRule } from './bot-opponent-reads.js'
-import { pokerGuardPolicy } from './bot-poker-guard.js'
+import { v5GuardPolicy as pokerGuardPolicy } from './bot-poker-guard.js'
 import { runSessions } from './bot-session-benchmark.js'
 import {
   campaignSize,

@@ -308,23 +308,31 @@ export function rulePolicy(id: string, version: number, strategy: RuleStrategyOp
 }
 
 /**
- * The live OG strategy since version 5: no pure bluff-raise and the ranked
- * preflop score. Both were adopted from paired whole-session evaluation on
- * fresh held-out seeds (docs/design/39); checked-to bluffs and raises with
- * equity were measured and not adopted.
+ * The OG strategy of version 5: no pure bluff-raise and the ranked preflop
+ * score (docs/design/39). Kept so its records stay reproducible.
  */
-export const LIVE_RULE_STRATEGY: RuleStrategyOptions = {
+export const V5_RULE_STRATEGY: RuleStrategyOptions = {
   preflopRanking: true,
   bluffRaises: 'never',
   checkedBluffs: false,
   equityCore: false,
 }
 
+/**
+ * The live OG strategy since version 6: version 5 plus the equity core after
+ * the flop, adopted from paired whole-session evaluation on fresh held-out
+ * seeds (docs/design/42).
+ */
+export const LIVE_RULE_STRATEGY: RuleStrategyOptions = { ...V5_RULE_STRATEGY, equityCore: true }
+
 export const deterministicRulePolicy: BotPolicy = rulePolicy(
   'deterministic-rule',
-  5,
+  6,
   LIVE_RULE_STRATEGY,
 )
+
+/** Version 5, kept so its records stay reproducible. */
+export const v5RulePolicy: BotPolicy = rulePolicy('deterministic-rule', 5, V5_RULE_STRATEGY)
 
 /** Version 4, kept so earlier records stay reproducible. */
 export const legacyRulePolicy: BotPolicy = rulePolicy('deterministic-rule', 4, LEGACY_RULE_STRATEGY)

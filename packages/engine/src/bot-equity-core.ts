@@ -16,12 +16,14 @@ import { mulberry32, type Rng, seedFromString } from './rng.js'
  * bluff rate is set so that bluffs are roughly the share that makes a call
  * break even against a three-quarter-pot bet (bluffs about 43% as common as
  * value bets); the solver in a later packet replaces this approximation.
+ * Against several opponents a fair pot share is smaller, so the value
+ * thresholds scale by the square root of two over the hands in the pot,
+ * which leaves heads-up play unchanged.
  */
 export const EQUITY_CORE_TUNING = {
   equityTrials: 120,
   realisation: { inPosition: 0.95, outOfPosition: 0.85 },
   drawImpliedOdds: 0.04,
-  multiwayStep: 0.06,
   valueBet: { flop: 0.58, turn: 0.6, river: 0.62 },
   valueRaise: { flop: 0.72, turn: 0.75, river: 0.8 },
   betPot: { flop: 0.5, turn: 0.66, river: 0.75 },
@@ -79,19 +81,19 @@ export function equityCoreDecision(
   )
   const holding = holdingOf(actor.hole, board)
   const tuning = EQUITY_CORE_TUNING
-  const multiway = (others.length - 1) * tuning.multiwayStep
   const realised =
     street === 'river'
       ? equity
       : equity * (inPosition ? tuning.realisation.inPosition : tuning.realisation.outOfPosition) +
         (holding === 'draw' ? tuning.drawImpliedOdds : 0)
   const tilt = bluffMultiplier(profile)
+  const crowd = Math.sqrt(2 / (others.length + 1))
   const headsUp = others.length === 1
   const size = tuning.betPot[street as Postflop]
 
   if (amountToCall > 0) {
     const price = amountToCall / Math.max(1, pot + amountToCall)
-    if (realised >= tuning.valueRaise[street as Postflop] + multiway) {
+    if (realised >= tuning.valueRaise[street as Postflop] * crowd) {
       return (
         raise(observation, observation.currentBet + (pot + amountToCall) * size) ??
         call(observation)
@@ -101,6 +103,7 @@ export function equityCoreDecision(
       headsUp &&
       holding === 'draw' &&
       street !== 'river' &&
+      realised >= price - tuning.nearIndifferent &&
       rng() < tuning.semiBluff * tilt * 0.5
     ) {
       return (
@@ -120,7 +123,7 @@ export function equityCoreDecision(
     return legal.fold ? { kind: 'fold' } : call(observation)
   }
 
-  if (realised >= tuning.valueBet[street as Postflop] + multiway) {
+  if (realised >= tuning.valueBet[street as Postflop] * crowd) {
     return raise(observation, pot * size) ?? { kind: 'check' }
   }
   if (headsUp) {

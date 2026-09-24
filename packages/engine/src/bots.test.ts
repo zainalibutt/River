@@ -7,6 +7,7 @@ import {
   LEGACY_RULE_STRATEGY,
   rulePolicy,
   summarisePublicActions,
+  v5RulePolicy,
 } from './bots.js'
 import { parseCard } from './cards.js'
 import { BOT_PROFILES } from './config.js'
@@ -109,7 +110,7 @@ describe('bot decisions', () => {
     })
     expect(envelope).toMatchObject({
       policyId: 'deterministic-rule',
-      policyVersion: 5,
+      policyVersion: 6,
       observationVersion: 1,
       fallbackReason: null,
     })
@@ -316,7 +317,7 @@ describe('bot decisions', () => {
       Array.from(
         { length: 200 },
         (_, seed) =>
-          deterministicRulePolicy.decide({
+          v5RulePolicy.decide({
             observation,
             profile: BOT_PROFILES.og,
             personality: {
@@ -371,7 +372,7 @@ describe('bot decisions', () => {
       Array.from(
         { length: 200 },
         (_, seed) =>
-          deterministicRulePolicy.decide({
+          v5RulePolicy.decide({
             observation: {
               ...riverObservation(actions),
               seats: [
@@ -534,6 +535,7 @@ describe('checked-to bluffs for a heads-up OG', () => {
     expect(headsUp).toBeLessThan(140)
     expect(bets(checked, observation('river', 2), 'og')).toBe(0)
     expect(bets(checked, observation('river', 1), 'rookie')).toBe(0)
-    expect(bets(deterministicRulePolicy, observation('river', 1), 'og')).toBe(0)
+    expect(bets(v5RulePolicy, observation('river', 1), 'og')).toBe(0)
+    expect(bets(deterministicRulePolicy, observation('river', 1), 'og')).toBeGreaterThan(100)
   })
 })

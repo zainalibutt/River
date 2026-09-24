@@ -7,6 +7,7 @@ import {
   evaluateBest,
   HandCategory,
   legacyRulePolicy,
+  v5RulePolicy,
 } from '@river/engine'
 
 export const BOT_POKER_GUARD_TUNING = {
@@ -28,7 +29,10 @@ export function guardedPolicy(base: BotPolicy, id: string, version: number): Bot
   }
 }
 
-export const pokerGuardPolicy: BotPolicy = guardedPolicy(deterministicRulePolicy, 'poker-guard', 2)
+export const pokerGuardPolicy: BotPolicy = guardedPolicy(deterministicRulePolicy, 'poker-guard', 3)
+
+/** The live policy of version 5, kept so its records stay reproducible. */
+export const v5GuardPolicy: BotPolicy = guardedPolicy(v5RulePolicy, 'poker-guard', 2)
 
 /** The live policy before version 5, kept so earlier records stay reproducible. */
 export const legacyGuardPolicy: BotPolicy = guardedPolicy(legacyRulePolicy, 'poker-guard', 1)

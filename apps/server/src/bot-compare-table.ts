@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
-import { type BotPolicy, LIVE_RULE_STRATEGY, rulePolicy } from '@river/engine'
-import { guardedPolicy, legacyGuardPolicy, pokerGuardPolicy } from './bot-poker-guard.js'
+import type { BotPolicy } from '@river/engine'
+import { legacyGuardPolicy, pokerGuardPolicy, v5GuardPolicy } from './bot-poker-guard.js'
 import { runSessions } from './bot-session-benchmark.js'
 import {
   campaignSize,
@@ -14,12 +14,8 @@ import { clusteredEstimate, pairRuns } from './bot-session-evaluation.js'
 /** Named focal policies that comparisons can refer to from the command line. */
 export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
   v4: legacyGuardPolicy,
-  v5: pokerGuardPolicy,
-  v6: guardedPolicy(
-    rulePolicy('b6-equity-core-rule', 1, { ...LIVE_RULE_STRATEGY, equityCore: true }),
-    'b6-equity-core',
-    1,
-  ),
+  v5: v5GuardPolicy,
+  v6: pokerGuardPolicy,
 }
 
 // Usage: tsx bot-compare-table.ts <table> <seed prefix> <sessions> <baseline> <candidate> <out.json>

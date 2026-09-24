@@ -9,9 +9,10 @@ import {
   parseCard,
   SEATS_PER_SHAPE,
   type TurnAction,
+  v5RulePolicy,
 } from '@river/engine'
 import { describe, expect, it } from 'vitest'
-import { pokerGuardPolicy } from './bot-poker-guard.js'
+import { pokerGuardPolicy, v5GuardPolicy } from './bot-poker-guard.js'
 import { pokerStrongCandidatePolicy } from './bot-poker-strong.js'
 import { actionFor, botPlayerId } from './bot-service.js'
 import type { RoomSeatView, RoomView } from './protocol.js'
@@ -263,7 +264,8 @@ describe('bot poker scenario corpus', () => {
     if (cheap === undefined || expensive === undefined)
       throw new Error('missing turn draw scenario')
     for (let seed = 0; seed < 64; seed += 1) {
-      expect(decide(cheap, 'og', seed).kind).toBe('call')
+      expect(decide(cheap, 'og', seed, undefined, v5GuardPolicy).kind).toBe('call')
+      expect(decide(cheap, 'og', seed).kind).not.toBe('fold')
       expect(decide(expensive, 'og', seed).kind).toBe('fold')
     }
   })
@@ -273,11 +275,15 @@ describe('bot poker scenario corpus', () => {
     const paired = scenarios.find((entry) => entry.id === 'paired_board_turn_flush_draw')
     if (clean === undefined || paired === undefined) throw new Error('missing paired draw scenario')
     const calls = (scenario: PokerScenario) =>
-      Array.from({ length: 64 }, (_, seed) => decide(scenario, 'og', seed)).filter(
-        (action) => action.kind === 'call',
-      ).length
+      Array.from({ length: 64 }, (_, seed) =>
+        decide(scenario, 'og', seed, undefined, v5GuardPolicy),
+      ).filter((action) => action.kind === 'call').length
     expect(calls(clean)).toBe(64)
     expect(calls(paired)).toBeLessThan(calls(clean))
+    const liveCalls = Array.from({ length: 64 }, (_, seed) => decide(clean, 'og', seed)).filter(
+      (action) => action.kind === 'call' || action.kind === 'raiseTo',
+    ).length
+    expect(liveCalls).toBe(64)
   })
 
   it('continues with the same marginal suited hand more often on the button', () => {
@@ -321,9 +327,9 @@ describe('bot poker scenario corpus', () => {
       },
     ]
     const folds = (actions?: readonly HandAction[]) =>
-      Array.from({ length: 200 }, (_, seed) => decide(marginal, 'og', seed, actions)).filter(
-        (action) => action.kind === 'fold',
-      ).length
+      Array.from({ length: 200 }, (_, seed) =>
+        decide(marginal, 'og', seed, actions, v5GuardPolicy),
+      ).filter((action) => action.kind === 'fold').length
     expect(folds(pressure)).toBeGreaterThan(folds())
 
     const strong = { ...marginal, hole: ['Ac', 'Ad'] as const }
@@ -343,9 +349,9 @@ describe('bot poker scenario corpus', () => {
       minRaiseTo: 1_332,
       dealerSeat: 7,
     }
-    expect(decide(straightDraw, 'og', 1, undefined, deterministicRulePolicy).kind).toBe('fold')
-    expect(decide(straightDraw, 'og', 1, undefined, pokerGuardPolicy).kind).toBe('call')
-    expect(decide(straightDraw, 'og', 1).kind).toBe('call')
+    expect(decide(straightDraw, 'og', 1, undefined, v5RulePolicy).kind).toBe('fold')
+    expect(decide(straightDraw, 'og', 1, undefined, v5GuardPolicy).kind).toBe('call')
+    expect(decide(straightDraw, 'og', 1).kind).not.toBe('fold')
     expect(decide(straightDraw, 'rookie', 1, undefined, pokerGuardPolicy)).toEqual(
       decide(straightDraw, 'rookie', 1),
     )
@@ -362,9 +368,9 @@ describe('bot poker scenario corpus', () => {
       minRaiseTo: 1_332,
       dealerSeat: 7,
     }
-    expect(decide(twoPairDraw, 'og', 1, undefined, deterministicRulePolicy).kind).toBe('fold')
-    expect(decide(twoPairDraw, 'og', 1, undefined, pokerGuardPolicy).kind).toBe('call')
-    expect(decide(twoPairDraw, 'og', 1).kind).toBe('call')
+    expect(decide(twoPairDraw, 'og', 1, undefined, v5RulePolicy).kind).toBe('fold')
+    expect(decide(twoPairDraw, 'og', 1, undefined, v5GuardPolicy).kind).toBe('call')
+    expect(decide(twoPairDraw, 'og', 1).kind).not.toBe('fold')
   })
 
   it('treats premium broadways as playable and small pairs as speculative preflop', () => {

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
-import { pokerGuardPolicy } from './bot-poker-guard.js'
+import { v5GuardPolicy as pokerGuardPolicy } from './bot-poker-guard.js'
 import type { Situation } from './bot-rollout.js'
 import { runSessions } from './bot-session-benchmark.js'
 import {
