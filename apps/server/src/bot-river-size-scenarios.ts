@@ -3,6 +3,7 @@ import {
   evaluateBest,
   type HandCategory,
   mulberry32,
+  PUBLIC_BET_SIZE_TUNING,
   seedFromString,
 } from '@river/engine'
 import { type RiverBetBucket, riverBetBucket } from './bot-river-bet-model.js'
@@ -22,8 +23,8 @@ export const RIVER_SIZE_TUNING = {
   smallPotRatio: 0.35,
   mediumPotRatio: 0.75,
   largePotRatio: 1.25,
-  smallUpperRatio: 0.5,
-  mediumUpperRatio: 1,
+  smallUpperRatio: PUBLIC_BET_SIZE_TUNING.smallUpperRatio,
+  mediumUpperRatio: PUBLIC_BET_SIZE_TUNING.mediumUpperRatio,
   typicalMade: [0.1, 0.5, 0.4],
   typicalBluff: [0.15, 0.8, 0.05],
   loosePair: [0.7, 0.25, 0.05],
@@ -39,7 +40,10 @@ export interface SizedRiverTrainingExample {
   readonly size: RiverBetSize | null
 }
 
-function sizeProbabilities(style: RiverBettorStyle, bucket: RiverBetBucket): readonly number[] {
+export function sizeProbabilities(
+  style: RiverBettorStyle,
+  bucket: RiverBetBucket,
+): readonly number[] {
   if (style === 'size-camouflaged') return RIVER_SIZE_TUNING.camouflagedSizes
   if (style === 'reverse-sizing') {
     return bucket === 'highCard' ? RIVER_SIZE_TUNING.reverseBluff : RIVER_SIZE_TUNING.reverseMade
