@@ -1,6 +1,6 @@
 import { type Card, cardKey, makeDeck, rankValue } from './cards.js'
 import { SEATS_PER_SHAPE } from './config.js'
-import { compareRanks, evaluateBest } from './evaluator.js'
+import { handScore } from './fast-evaluator.js'
 import { mulberry32, seedFromString } from './rng.js'
 
 export const BOT_EQUITY_TUNING = {
@@ -45,14 +45,14 @@ export function exactHeadsUpRiverEquity(
   }
   const known = new Set(knownCards.map(cardKey))
   const available = makeDeck().filter((card) => !known.has(cardKey(card)))
-  const hero = evaluateBest(knownCards)
+  const hero = handScore(knownCards)
   const ranges = ['random', 'loose', 'tight', 'premium'] as const
   const totals = { random: 0, loose: 0, tight: 0, premium: 0 }
   const counts = { random: 0, loose: 0, tight: 0, premium: 0 }
   for (let first = 0; first < available.length - 1; first += 1) {
     for (let second = first + 1; second < available.length; second += 1) {
       const otherHole = [available[first] as Card, available[second] as Card] as const
-      const comparison = compareRanks(hero, evaluateBest([...otherHole, ...board]))
+      const comparison = hero - handScore([...otherHole, ...board])
       const share = comparison > 0 ? 1 : comparison === 0 ? 0.5 : 0
       for (const range of ranges) {
         if (!handIsInPreflopRange(otherHole, range)) continue
@@ -177,16 +177,12 @@ export function estimateShowdownEquity(options: ShowdownEquityOptions): PreflopE
       deck[swap] = card as Card
     }
     const board = [...knownBoard, ...deck.slice(opponents * 2, cardsNeeded)]
-    const hero = evaluateBest([...hole, ...board])
+    const hero = handScore([...hole, ...board])
     let stronger = false
     let winners = 1
     for (let opponent = 0; opponent < opponents; opponent += 1) {
-      const other = evaluateBest([
-        deck[opponent * 2] as Card,
-        deck[opponent * 2 + 1] as Card,
-        ...board,
-      ])
-      const comparison = compareRanks(other, hero)
+      const comparison =
+        handScore([deck[opponent * 2] as Card, deck[opponent * 2 + 1] as Card, ...board]) - hero
       if (comparison > 0) {
         stronger = true
         break

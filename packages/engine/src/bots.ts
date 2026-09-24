@@ -1,5 +1,6 @@
 import type { Street } from './betting.js'
 import { boardTexture } from './board-texture.js'
+import { equityCoreDecision } from './bot-equity-core.js'
 import { hasDraw, holdingOf } from './bot-holding.js'
 import type { BotPersonality } from './bot-personality.js'
 import { BOT_PREFLOP_SCORE_TUNING, preflopHandStrengthV2 } from './bot-preflop.js'
@@ -47,7 +48,9 @@ export const BOT_STRATEGY_TUNING = {
  * paired hand before it, and `never` spends none of it on raises.
  * `preflopRanking` uses the ranked preflop score (docs/design/32) instead of
  * the pair-bonus score. `checkedBluffs` lets a heads-up OG bet air or a draw on
- * the turn or river when it would check.
+ * the turn or river when it would check. `equityCore` replaces the OG's
+ * postflop play with equity against the opponents' public ranges and balanced
+ * bluffing (bot-equity-core.ts).
  */
 export type BluffRaises = 'any-hand' | 'with-equity' | 'never'
 
@@ -55,12 +58,14 @@ export interface RuleStrategyOptions {
   readonly preflopRanking: boolean
   readonly bluffRaises: BluffRaises
   readonly checkedBluffs: boolean
+  readonly equityCore: boolean
 }
 
 export const LEGACY_RULE_STRATEGY: RuleStrategyOptions = {
   preflopRanking: false,
   bluffRaises: 'any-hand',
   checkedBluffs: false,
+  equityCore: false,
 }
 
 export interface PublicActionSummary {
@@ -312,6 +317,7 @@ export const LIVE_RULE_STRATEGY: RuleStrategyOptions = {
   preflopRanking: true,
   bluffRaises: 'never',
   checkedBluffs: false,
+  equityCore: false,
 }
 
 export const deterministicRulePolicy: BotPolicy = rulePolicy(
@@ -333,6 +339,10 @@ function decideObservedTurn(
   strategy: RuleStrategyOptions,
 ): BotDecision {
   const og = context.profile.skill === 'og'
+  if (strategy.equityCore && og) {
+    const postflop = equityCoreDecision(context.observation, context.profile, context.rng)
+    if (postflop !== null) return postflop
+  }
   const usePreflopV2 = strategy.preflopRanking && og
   const input = decisionInputFromObservation(context.observation)
   const pricedDraw = pricedFlushDrawDecision(context.observation, input, context.profile.skill)
