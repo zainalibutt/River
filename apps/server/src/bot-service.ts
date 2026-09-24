@@ -3,6 +3,7 @@ import type {
   BotDecisionEnvelope,
   BotDecisionInput,
   BotObservationV1,
+  BotOpponentStatsV2,
   BotOpponentSummaryV1,
   BotPersonality,
   BotPolicy,
@@ -129,6 +130,7 @@ export function observationFor(
   roomId = 'local',
   publicActions?: readonly HandAction[] | null,
   opponentSummaries?: readonly BotOpponentSummaryV1[],
+  opponentStats?: readonly BotOpponentStatsV2[],
 ): BotObservationV1 | null {
   if (view.currentActor?.playerId !== playerId) return null
   const seat = view.seats.find((entry) => entry.playerId === playerId)
@@ -206,6 +208,13 @@ export function observationFor(
           }
         )
       }),
+    ...(opponentStats === undefined
+      ? {}
+      : {
+          opponentStats: opponentStats
+            .filter((stats) => allowedOpponentIds.has(stats.playerId))
+            .map((stats) => structuredClone(stats)),
+        }),
     ...(publicActions === undefined || publicActions === null
       ? {}
       : { actions: publicActions.map((entry) => ({ ...entry, action: { ...entry.action } })) }),
@@ -246,6 +255,7 @@ export interface BotActionOptions {
   readonly decisionKey?: string
   readonly publicActions?: readonly HandAction[] | null
   readonly opponentSummaries?: readonly BotOpponentSummaryV1[]
+  readonly opponentStats?: readonly BotOpponentStatsV2[]
 }
 
 /**
@@ -271,6 +281,7 @@ export function actionFor(
     options.roomId,
     options.publicActions,
     options.opponentSummaries,
+    options.opponentStats,
   )
   const legal = view.legal
   const actorSeat = view.seats.find((entry) => entry.playerId === playerId)

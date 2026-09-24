@@ -1,5 +1,6 @@
 import type { BotProfile, BotSkill } from './bots.js'
 import type { OpponentModelTuning } from './opponent-model.js'
+import type { OpponentStatsTuning } from './opponent-stats.js'
 
 export interface StakeConfig {
   id: string
@@ -44,6 +45,31 @@ export const DEFAULT_OPPONENT_MODEL_TUNING: OpponentModelTuning = {
   priorShowdown: 0.28,
   priorAggressivePotRatio: 0.65,
   maxAggressivePotRatio: 4,
+}
+
+/**
+ * Population priors for the pooled public statistics.
+ *
+ * River has no human population yet, and its own rule bots are not a stand-in:
+ * measured over 40 sessions of the ordinary tables they bet 1.9% of postflop
+ * spots when checked to and raise 22-29% of the bets they face. These are
+ * neutral assumptions, worth `priorStrength` opportunities each, to be replaced
+ * by anonymous population statistics once people have played. VPIP and PFR
+ * match the session model above.
+ */
+export const DEFAULT_OPPONENT_STATS_TUNING: OpponentStatsTuning = {
+  halfLifeMs: DEFAULT_OPPONENT_MODEL_TUNING.halfLifeMs,
+  priorStrength: 10,
+  intervalZ: 1.645,
+  priors: {
+    vpip: DEFAULT_OPPONENT_MODEL_TUNING.priorVpip,
+    pfr: DEFAULT_OPPONENT_MODEL_TUNING.priorPfr,
+    foldToPreflopRaise: 0.5,
+    foldToBet: 0.4,
+    raiseVsBet: 0.1,
+    betWhenCheckedTo: 0.35,
+    riverBetWhenCheckedTo: 0.3,
+  },
 }
 
 export const BOT_PROFILES: Record<BotSkill, BotProfile> = {

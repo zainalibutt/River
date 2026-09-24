@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { parseCard } from './cards.js'
 import { HandCategory } from './evaluator.js'
 import type { HandAction, HandRecord } from './hand-history.js'
-import { publicBetSize, publicEvidenceFromHand } from './opponent-stats.js'
+import {
+  publicBetSize,
+  publicEvidenceFromHand,
+  rateEstimate,
+  summariseOpponentStats,
+  updateOpponentStats,
+} from './opponent-stats.js'
 
 const board = ['Ah', 'Kd', '7c', '7s', '2h'].map(parseCard)
 
@@ -117,5 +123,54 @@ describe('public opponent evidence', () => {
       publicBetSize(1_000, 1_000),
       publicBetSize(1_001, 1_000),
     ]).toEqual(['small', 'medium', 'large'])
+  })
+})
+
+describe('pooled opponent statistics', () => {
+  const tuning = {
+    halfLifeMs: 1_000,
+    priorStrength: 10,
+    intervalZ: 1.645,
+    priors: {
+      vpip: 0.3,
+      pfr: 0.18,
+      foldToPreflopRaise: 0.5,
+      foldToBet: 0.4,
+      raiseVsBet: 0.1,
+      betWhenCheckedTo: 0.35,
+      riverBetWhenCheckedTo: 0.3,
+    },
+  }
+
+  it('starts every rate at its prior and narrows it only with that rate’s own opportunities', () => {
+    const empty = rateEstimate(0, 0, 0.4, tuning)
+    expect(empty.mean).toBeCloseTo(0.4, 10)
+    const two = rateEstimate(2, 2, 0.4, tuning)
+    const forty = rateEstimate(40, 40, 0.4, tuning)
+    expect(two.mean).toBeCloseTo(0.5, 10)
+    expect(two.high - two.low).toBeGreaterThan(forty.high - forty.low)
+    expect(forty.low).toBeGreaterThan(two.low)
+    expect(forty.high).toBeLessThanOrEqual(1)
+  })
+
+  it('pools the postflop streets and keeps the river bet rate apart', () => {
+    const ann = publicEvidenceFromHand(hand, 'ann', [parseCard('As'), parseCard('Ad')])
+    if (ann === null) throw new Error('evidence missing')
+    const state = updateOpponentStats(null, ann, 0, tuning)
+    expect([state.facedBet, state.checkedTo, state.betWhenCheckedTo]).toEqual([1, 3, 1])
+    expect([state.riverCheckedTo, state.riverBetWhenCheckedTo]).toEqual([1, 1])
+    expect(state.shownRiverAggression).toEqual({ air: 0, pair: 0, made: 1 })
+    const summary = summariseOpponentStats(state, tuning)
+    expect(summary.betWhenCheckedTo.opportunities).toBe(3)
+    expect(summary.foldToBet.mean).toBeCloseTo(4 / 11, 10)
+  })
+
+  it('halves old evidence after one half-life before adding the new hand', () => {
+    const bea = publicEvidenceFromHand(hand, 'bea')
+    if (bea === null) throw new Error('evidence missing')
+    const first = updateOpponentStats(null, bea, 0, tuning)
+    const later = updateOpponentStats(first, bea, 1_000, tuning)
+    expect(later.hands).toBeCloseTo(1.5, 10)
+    expect(later.facedBet).toBeCloseTo(first.facedBet * 1.5, 10)
   })
 })

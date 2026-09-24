@@ -7,6 +7,7 @@ import { rankValue } from './cards.js'
 import { evaluateBest } from './evaluator.js'
 import { type HandAction, isAggressiveHandAction } from './hand-history.js'
 import type { OpponentModelSummaryV1 } from './opponent-model.js'
+import type { OpponentStatsSummaryV2 } from './opponent-stats.js'
 import type { Rng } from './rng.js'
 
 export type BotSkill = 'rookie' | 'novice' | 'og'
@@ -83,6 +84,10 @@ export interface BotOpponentSummaryV1 extends OpponentModelSummaryV1 {
   readonly playerId: string
 }
 
+export interface BotOpponentStatsV2 extends OpponentStatsSummaryV2 {
+  readonly playerId: string
+}
+
 export interface BotLegalActionsV1 {
   readonly fold: boolean
   readonly check: boolean
@@ -112,6 +117,7 @@ export interface BotObservationV1 {
   readonly legal: BotLegalActionsV1
   readonly seats: readonly BotSeatObservationV1[]
   readonly opponents: readonly BotOpponentSummaryV1[]
+  readonly opponentStats?: readonly BotOpponentStatsV2[]
   readonly actions?: readonly HandAction[]
   readonly tilt: BotTiltState
 }

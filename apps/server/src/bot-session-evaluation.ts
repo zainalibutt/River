@@ -50,8 +50,20 @@ export function runPairedSessions(options: PairedSessionOptions): PairedSessionR
     ...(candidatePlugin === undefined ? {} : { plugin: candidatePlugin }),
     ...(onCandidateHand === undefined ? {} : { onFocalHand: onCandidateHand }),
   })
-  const pairs = baselineRun.hands.map((hand, index) => {
-    const other = candidateRun.hands[index]
+  return {
+    sessions: options.sessions,
+    pairs: pairRuns(baselineRun.hands, candidateRun.hands),
+    evidence: baselineRun.evidence,
+  }
+}
+
+export function pairRuns(
+  baseline: readonly SessionHandResult[],
+  candidate: readonly SessionHandResult[],
+): SessionPair[] {
+  if (baseline.length !== candidate.length) throw new Error('paired runs differ in length')
+  return baseline.map((hand, index) => {
+    const other = candidate[index]
     if (
       other === undefined ||
       other.commit !== hand.commit ||
@@ -68,7 +80,6 @@ export function runPairedSessions(options: PairedSessionOptions): PairedSessionR
       deltaChips: other.focalChips - hand.focalChips,
     }
   })
-  return { sessions: options.sessions, pairs, evidence: baselineRun.evidence }
 }
 
 export interface ClusteredEstimate {
