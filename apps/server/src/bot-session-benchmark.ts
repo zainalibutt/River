@@ -1,10 +1,12 @@
 import {
+  type BotObservationV1,
   type BotOpponentSummaryV1,
   type BotPersonality,
   type BotPolicy,
   type Card,
   DEFAULT_OPPONENT_MODEL_TUNING,
   DEFAULT_STAKE,
+  type HandAction,
   type HandRecord,
   mulberry32,
   type OpponentModelStateV1,
@@ -16,7 +18,7 @@ import {
   summariseOpponentModel,
   updateOpponentModel,
 } from '@river/engine'
-import { actionFor, type BotActionOptions, botPlayerId } from './bot-service.js'
+import { actionFor, type BotActionOptions, botPlayerId, observationFor } from './bot-service.js'
 import type { RoomView } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
 
@@ -61,6 +63,32 @@ export interface SessionRunOptions {
   readonly focalPersonalities?: readonly BotPersonality[]
   readonly plugin?: () => FocalMemoryPlugin
   readonly onFocalHand?: (session: number, hand: number) => void
+  /**
+   * Consecutive sessions that share one focal character and its memory, as a
+   * regular opponent would meet the same bot on different days. One means a
+   * table of strangers every session.
+   */
+  readonly chainLength?: number
+  /** Called before every focal decision with what the focal seat may legally see. */
+  readonly onFocalDecision?: (point: FocalDecisionPoint) => void
+}
+
+/**
+ * Everything needed to rebuild a hand up to one focal decision.
+ *
+ * The deck, stacks and chairs come from the seed, so replaying `prefix` into a
+ * reopened hand reproduces the exact state; `observation` is the focal seat's
+ * legal view at that moment and `focalOptions` its memory then.
+ */
+export interface FocalDecisionPoint {
+  readonly seed: string
+  readonly session: number
+  readonly hand: number
+  readonly startMs: number
+  readonly entrants: readonly SessionEntrant[]
+  readonly prefix: readonly HandAction[]
+  readonly observation: BotObservationV1
+  readonly focalOptions: Partial<BotActionOptions>
 }
 
 export type PositionClass = 'button' | 'big-blind' | 'early' | 'middle' | 'late' | 'blinds'
@@ -75,6 +103,8 @@ export type HandClass =
 
 export interface SessionHandResult {
   readonly session: number
+  /** Which meeting this is within a chain of sessions, from zero. */
+  readonly encounter: number
   readonly hand: number
   readonly commit: string
   readonly focalChips: number
@@ -117,22 +147,32 @@ export const SESSION_STACK_DEPTHS: readonly {
 ]
 export const SESSION_DEPTH_LIMITS = { shortMaximum: 60, standardMaximum: 160 } as const
 export const SESSION_HAND_INTERVAL_MS = 60_000
+export const SESSION_CHAIN_GAP_MS = 24 * 60 * 60 * 1_000
+const CHAIN_SPACING_MS = 1_000_000_000
 const MAX_ACTIONS_PER_HAND = 1_000
 
 export function runSessions(options: SessionRunOptions): SessionRunResult {
   validate(options)
   const hands: SessionHandResult[] = []
   const evidence: OpponentEvidenceYield[] = []
+  const chainLength = options.chainLength ?? 1
+  let memory = new Map<string, OpponentModelStateV1>()
+  let plugin: FocalMemoryPlugin | undefined
   for (let session = 0; session < options.sessions; session += 1) {
-    const entrants = entrantsFor(options, session)
+    const chain = Math.floor(session / chainLength)
+    const encounter = session % chainLength
+    if (encounter === 0) {
+      memory = new Map<string, OpponentModelStateV1>()
+      plugin = options.plugin?.()
+    }
+    const startMs = chain * CHAIN_SPACING_MS + encounter * SESSION_CHAIN_GAP_MS
+    const entrants = entrantsFor(options, chain)
     const ids = entrants.map((entrant) => botPlayerId(entrant.personality.id))
     const opponentIds = ids.slice(1)
-    const memory = new Map<string, OpponentModelStateV1>()
-    const plugin = options.plugin?.()
     const yields = new Map(opponentIds.map((id) => [id, emptyYield(session, id)]))
     for (let hand = 0; hand < options.handsPerSession; hand += 1) {
       options.onFocalHand?.(session, hand)
-      const settled = playHand(options, session, hand, entrants, ids, {
+      const settled = playHand(options, { session, encounter, startMs }, hand, entrants, ids, {
         opponentSummaries: summaries(memory),
         ...(plugin?.actionOptions() ?? {}),
       })
@@ -165,18 +205,106 @@ export function runSessions(options: SessionRunOptions): SessionRunResult {
 
 function playHand(
   options: SessionRunOptions,
-  session: number,
+  { session, encounter, startMs }: { session: number; encounter: number; startMs: number },
   hand: number,
   entrants: readonly SessionEntrant[],
   ids: readonly string[],
   focalOptions: Partial<BotActionOptions>,
 ): { result: SessionHandResult; hand: SettledSessionHand } {
   const key = `${options.seed}:${session}:${hand}`
-  const deckRng = mulberry32(seedFromString(`${key}:deck`))
-  const stackRng = mulberry32(seedFromString(`${key}:stacks`))
   const actionRngs = entrants.map((_, entrant) =>
     mulberry32(seedFromString(`${key}:action:${entrant}`)),
   )
+  const seatCount = entrants.length
+  const { room, chairOf, buyIns, initialChips, commit, dealerChair, focalHole } = openSessionHand(
+    options.seed,
+    session,
+    hand,
+    startMs,
+    entrants,
+    ids,
+  )
+
+  for (let step = 0; step < MAX_ACTIONS_PER_HAND; step += 1) {
+    const publicView = room.viewFor('')
+    if (publicView.phase === 'between') {
+      if (room.totalChips() !== initialChips) throw new Error('session chip conservation failed')
+      const record = room.recentHands(1)[0]
+      if (record === undefined) throw new Error('session hand record missing')
+      const focalChair = chairOf[0] as number
+      const focalFinal = publicView.seats.find((seat) => seat.seat === focalChair)
+      if (focalFinal === undefined) throw new Error('session focal seat missing')
+      const othersDepth = Math.max(...buyIns.slice(1))
+      return {
+        result: {
+          session,
+          encounter,
+          hand,
+          commit: commit.commit,
+          focalChips: focalFinal.stack - (buyIns[0] as number),
+          position: positionClass((focalChair - dealerChair + seatCount) % seatCount, seatCount),
+          depth: depthClass(Math.min(buyIns[0] as number, othersDepth) / DEFAULT_STAKE.bigBlind),
+          handClass: handClassOf(focalHole),
+        },
+        hand: {
+          record,
+          shown: shownHoles(publicView),
+          atMs: startMs + hand * SESSION_HAND_INTERVAL_MS,
+        },
+      }
+    }
+    const actorId = publicView.currentActor?.playerId
+    if (options.onFocalDecision !== undefined && actorId !== undefined && actorId === ids[0]) {
+      const prefix = room.currentActions() ?? []
+      const observation = observationFor(
+        room.viewFor(actorId),
+        actorId,
+        undefined,
+        room.id,
+        prefix,
+        focalOptions.opponentSummaries,
+        focalOptions.opponentStats,
+      )
+      if (observation !== null) {
+        options.onFocalDecision({
+          seed: options.seed,
+          session,
+          hand,
+          startMs,
+          entrants,
+          prefix: prefix.map((entry) => ({ ...entry, action: { ...entry.action } })),
+          observation,
+          focalOptions,
+        })
+      }
+    }
+    actOnce(room, ids, entrants, actionRngs, options.focalPolicy, focalOptions)
+  }
+  throw new Error('session hand exceeded action limit')
+}
+
+export interface OpenedSessionHand {
+  readonly room: Room
+  readonly chairOf: readonly number[]
+  readonly buyIns: readonly number[]
+  readonly initialChips: number
+  readonly commit: { readonly commit: string }
+  readonly dealerChair: number
+  readonly focalHole: readonly Card[]
+}
+
+/** Seat a session hand exactly as the seed dictates and deal it. */
+export function openSessionHand(
+  seed: string,
+  session: number,
+  hand: number,
+  startMs: number,
+  entrants: readonly SessionEntrant[],
+  ids: readonly string[],
+): OpenedSessionHand {
+  const key = `${seed}:${session}:${hand}`
+  const deckRng = mulberry32(seedFromString(`${key}:deck`))
+  const stackRng = mulberry32(seedFromString(`${key}:stacks`))
   const seatCount = entrants.length
   const depths = SESSION_STACK_DEPTHS.map((depth) => depth.bigBlinds)
   const stake = {
@@ -191,7 +319,7 @@ function playHand(
       inviteCode: 'RIVER2',
       maxSeats: seatCount,
       seedCollectionMs: 0,
-      nowMs: () => session * 1_000_000_000 + hand * SESSION_HAND_INTERVAL_MS,
+      nowMs: () => startMs + hand * SESSION_HAND_INTERVAL_MS,
       randomBytes: (size: number) =>
         Uint8Array.from({ length: size }, () => Math.floor(deckRng() * 256)),
       stake,
@@ -224,51 +352,33 @@ function playHand(
   if (focalHole?.length !== 2 || dealerChair === undefined) {
     throw new Error('session hand opening missing')
   }
+  return { room, chairOf, buyIns, initialChips, commit, dealerChair, focalHole }
+}
 
-  for (let step = 0; step < MAX_ACTIONS_PER_HAND; step += 1) {
-    const publicView = room.viewFor('')
-    if (publicView.phase === 'between') {
-      if (room.totalChips() !== initialChips) throw new Error('session chip conservation failed')
-      const record = room.recentHands(1)[0]
-      if (record === undefined) throw new Error('session hand record missing')
-      const focalChair = chairOf[0] as number
-      const focalFinal = publicView.seats.find((seat) => seat.seat === focalChair)
-      if (focalFinal === undefined) throw new Error('session focal seat missing')
-      const othersDepth = Math.max(...buyIns.slice(1))
-      return {
-        result: {
-          session,
-          hand,
-          commit: commit.commit,
-          focalChips: focalFinal.stack - (buyIns[0] as number),
-          position: positionClass((focalChair - dealerChair + seatCount) % seatCount, seatCount),
-          depth: depthClass(Math.min(buyIns[0] as number, othersDepth) / DEFAULT_STAKE.bigBlind),
-          handClass: handClassOf(focalHole),
-        },
-        hand: {
-          record,
-          shown: shownHoles(publicView),
-          atMs: session * 1_000_000_000 + hand * SESSION_HAND_INTERVAL_MS,
-        },
-      }
-    }
-    const actorId = publicView.currentActor?.playerId
-    if (actorId === undefined) throw new Error('session hand has no actor')
-    const entrant = ids.indexOf(actorId)
-    const entry = entrants[entrant]
-    const rng = actionRngs[entrant]
-    if (entry === undefined || rng === undefined) throw new Error('session actor missing')
-    const policy = entrant === 0 ? options.focalPolicy : entry.policy
-    const action = actionFor(room.viewFor(actorId), actorId, entry.personality, rng, {
-      ...(policy === undefined ? {} : { policy }),
-      roomId: room.id,
-      publicActions: room.currentActions(),
-      ...(entrant === 0 ? focalOptions : {}),
-    })
-    if (action === null) throw new Error('session policy returned no legal action')
-    requireAccepted(room.submit({ kind: 'act', playerId: actorId, action }))
-  }
-  throw new Error('session hand exceeded action limit')
+/** One accepted action by whoever is to act; the focal seat uses its own policy and memory. */
+export function actOnce(
+  room: Room,
+  ids: readonly string[],
+  entrants: readonly SessionEntrant[],
+  rngs: readonly (() => number)[],
+  focalPolicy: BotPolicy,
+  focalOptions: Partial<BotActionOptions>,
+): void {
+  const actorId = room.viewFor('').currentActor?.playerId
+  if (actorId === undefined) throw new Error('session hand has no actor')
+  const entrant = ids.indexOf(actorId)
+  const entry = entrants[entrant]
+  const rng = rngs[entrant]
+  if (entry === undefined || rng === undefined) throw new Error('session actor missing')
+  const policy = entrant === 0 ? focalPolicy : entry.policy
+  const action = actionFor(room.viewFor(actorId), actorId, entry.personality, rng, {
+    ...(policy === undefined ? {} : { policy }),
+    roomId: room.id,
+    publicActions: room.currentActions(),
+    ...(entrant === 0 ? focalOptions : {}),
+  })
+  if (action === null) throw new Error('session policy returned no legal action')
+  requireAccepted(room.submit({ kind: 'act', playerId: actorId, action }))
 }
 
 export function positionClass(offsetFromDealer: number, seatCount: number): PositionClass {
@@ -301,10 +411,10 @@ export function handClassOf(hole: readonly Card[]): HandClass {
   return low >= 10 ? 'offsuit-broadway' : 'weak'
 }
 
-function entrantsFor(options: SessionRunOptions, session: number): readonly SessionEntrant[] {
+function entrantsFor(options: SessionRunOptions, chain: number): readonly SessionEntrant[] {
   const rotation = options.focalPersonalities
   if (rotation === undefined || rotation.length === 0) return options.table.entrants
-  const personality = rotation[session % rotation.length] as BotPersonality
+  const personality = rotation[chain % rotation.length] as BotPersonality
   return [{ personality }, ...options.table.entrants.slice(1)]
 }
 
@@ -396,6 +506,14 @@ function validate(options: SessionRunOptions): void {
   }
   if (!Number.isSafeInteger(options.handsPerSession) || options.handsPerSession <= 0) {
     throw new Error('hands per session must be a positive safe integer')
+  }
+  const chainLength = options.chainLength ?? 1
+  if (
+    !Number.isSafeInteger(chainLength) ||
+    chainLength < 1 ||
+    options.sessions % chainLength !== 0
+  ) {
+    throw new Error('sessions must divide into whole chains')
   }
   const seats = options.table.entrants.length
   if (seats < 2 || seats > 9) throw new Error('session tables need two to nine seats')

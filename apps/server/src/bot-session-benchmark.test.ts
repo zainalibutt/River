@@ -177,6 +177,56 @@ describe('session benchmark', () => {
     }
   })
 
+  it('keeps one focal memory through a chain of sessions and starts afresh at the next chain', () => {
+    const plugins: number[] = []
+    const focalIds: string[] = []
+    const result = runSessions({
+      seed: 'session-chain',
+      sessions: 4,
+      handsPerSession: 5,
+      chainLength: 2,
+      table: headsUp,
+      focalPolicy: pokerGuardPolicy,
+      focalPersonalities: [person(9), person(10)],
+      plugin: () => {
+        const seen = { hands: 0 }
+        plugins.push(0)
+        return {
+          observe(hand) {
+            seen.hands += 1
+            plugins[plugins.length - 1] = seen.hands
+            focalIds.push(
+              hand.record.seats
+                .map((seat) => seat.playerId)
+                .sort()
+                .join(','),
+            )
+          },
+          actionOptions: () => ({}),
+        }
+      },
+    })
+    expect(plugins).toEqual([10, 10])
+    expect(result.hands.map((hand) => hand.encounter)).toEqual([
+      ...Array(5).fill(0),
+      ...Array(5).fill(1),
+      ...Array(5).fill(0),
+      ...Array(5).fill(1),
+    ])
+    expect(new Set(focalIds.slice(0, 10)).size).toBe(1)
+    expect(focalIds[0]).not.toBe(focalIds[10])
+    expect(() =>
+      runSessions({
+        seed: 'x',
+        sessions: 3,
+        handsPerSession: 1,
+        chainLength: 2,
+        table: headsUp,
+        focalPolicy: pokerGuardPolicy,
+      }),
+    ).toThrow('whole chains')
+  })
+
   it('counts each opponent’s public opportunities per session', () => {
     const result = runSessions({
       seed: 'session-yield',
