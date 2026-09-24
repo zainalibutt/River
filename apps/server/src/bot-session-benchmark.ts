@@ -25,6 +25,8 @@ import { defaultRoomConfig, Room } from './room.js'
 export interface SessionEntrant {
   readonly personality: BotPersonality
   readonly policy?: BotPolicy
+  /** Public-only memory this seat keeps of the others, as the focal seat's plugin does. */
+  readonly memory?: () => FocalMemoryPlugin
 }
 
 export interface SessionTableSpec {
@@ -158,6 +160,7 @@ export function runSessions(options: SessionRunOptions): SessionRunResult {
   const chainLength = options.chainLength ?? 1
   let memory = new Map<string, OpponentModelStateV1>()
   let plugin: FocalMemoryPlugin | undefined
+  let entrantMemories: (FocalMemoryPlugin | undefined)[] = []
   for (let session = 0; session < options.sessions; session += 1) {
     const chain = Math.floor(session / chainLength)
     const encounter = session % chainLength
@@ -169,13 +172,22 @@ export function runSessions(options: SessionRunOptions): SessionRunResult {
     const entrants = entrantsFor(options, chain)
     const ids = entrants.map((entrant) => botPlayerId(entrant.personality.id))
     const opponentIds = ids.slice(1)
+    if (encounter === 0) entrantMemories = entrants.map((entrant) => entrant.memory?.())
     const yields = new Map(opponentIds.map((id) => [id, emptyYield(session, id)]))
     for (let hand = 0; hand < options.handsPerSession; hand += 1) {
       options.onFocalHand?.(session, hand)
-      const settled = playHand(options, { session, encounter, startMs }, hand, entrants, ids, {
-        opponentSummaries: summaries(memory),
-        ...(plugin?.actionOptions() ?? {}),
-      })
+      const settled = playHand(
+        options,
+        { session, encounter, startMs },
+        hand,
+        entrants,
+        ids,
+        {
+          opponentSummaries: summaries(memory),
+          ...(plugin?.actionOptions() ?? {}),
+        },
+        entrantMemories.map((entrantMemory) => entrantMemory?.actionOptions() ?? {}),
+      )
       hands.push(settled.result)
       for (const opponentId of opponentIds) {
         const v1 = opponentEvidenceFromHand(
@@ -197,6 +209,12 @@ export function runSessions(options: SessionRunOptions): SessionRunResult {
         accumulateYield(yields.get(opponentId), settled.hand, opponentId)
       }
       plugin?.observe(settled.hand, opponentIds)
+      entrantMemories.forEach((entrantMemory, index) =>
+        entrantMemory?.observe(
+          settled.hand,
+          ids.filter((_, other) => other !== index),
+        ),
+      )
     }
     evidence.push(...yields.values())
   }
@@ -210,6 +228,7 @@ function playHand(
   entrants: readonly SessionEntrant[],
   ids: readonly string[],
   focalOptions: Partial<BotActionOptions>,
+  entrantOptions: readonly Partial<BotActionOptions>[] = [],
 ): { result: SessionHandResult; hand: SettledSessionHand } {
   const key = `${options.seed}:${session}:${hand}`
   const actionRngs = entrants.map((_, entrant) =>
@@ -278,7 +297,7 @@ function playHand(
         })
       }
     }
-    actOnce(room, ids, entrants, actionRngs, options.focalPolicy, focalOptions)
+    actOnce(room, ids, entrants, actionRngs, options.focalPolicy, focalOptions, entrantOptions)
   }
   throw new Error('session hand exceeded action limit')
 }
@@ -363,6 +382,7 @@ export function actOnce(
   rngs: readonly (() => number)[],
   focalPolicy: BotPolicy,
   focalOptions: Partial<BotActionOptions>,
+  entrantOptions: readonly Partial<BotActionOptions>[] = [],
 ): void {
   const actorId = room.viewFor('').currentActor?.playerId
   if (actorId === undefined) throw new Error('session hand has no actor')
@@ -375,7 +395,7 @@ export function actOnce(
     ...(policy === undefined ? {} : { policy }),
     roomId: room.id,
     publicActions: room.currentActions(),
-    ...(entrant === 0 ? focalOptions : {}),
+    ...(entrant === 0 ? focalOptions : (entrantOptions[entrant] ?? {})),
   })
   if (action === null) throw new Error('session policy returned no legal action')
   requireAccepted(room.submit({ kind: 'act', playerId: actorId, action }))

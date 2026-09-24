@@ -1,5 +1,6 @@
 import { type BotPolicy, parseCard, personalityPool } from '@river/engine'
 import { describe, expect, it } from 'vitest'
+import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import {
   depthClass,
@@ -267,5 +268,51 @@ describe('clustered estimate', () => {
     expect(studentT975(30)).toBe(2.042)
     expect(studentT975(31)).toBeCloseTo(2.0395, 3)
     expect(studentT975(120)).toBeCloseTo(1.9799, 3)
+  })
+})
+
+describe('memory for seats other than the focal one', () => {
+  it('lets an opponent read the focal seat’s public statistics, never its own', () => {
+    const seen: { hand: number; ids: string[] }[] = []
+    let hand = 0
+    const probe: BotPolicy = {
+      id: 'memory-probe',
+      version: 1,
+      decide(context) {
+        seen.push({
+          hand,
+          ids: (context.observation.opponentStats ?? []).map((entry) => entry.playerId),
+        })
+        return {
+          ...pokerGuardPolicy.decide(context),
+          policyId: this.id,
+          policyVersion: this.version,
+        }
+      },
+    }
+    runSessions({
+      seed: 'entrant-memory',
+      sessions: 2,
+      handsPerSession: 8,
+      table: {
+        name: 'heads-up-probe',
+        style: 'probe',
+        entrants: [
+          { personality: person(10) },
+          { personality: person(0), policy: probe, memory: opponentStatsPlugin() },
+        ],
+      },
+      focalPolicy: pokerGuardPolicy,
+      onFocalHand: (_, next) => {
+        hand = next
+      },
+    })
+    expect(seen.filter((entry) => entry.hand === 0).every((entry) => entry.ids.length === 0)).toBe(
+      true,
+    )
+    expect(
+      seen.filter((entry) => entry.hand > 0).some((entry) => entry.ids.includes('bot:kazimir')),
+    ).toBe(true)
+    expect(seen.every((entry) => !entry.ids.includes('bot:albie'))).toBe(true)
   })
 })
