@@ -4,6 +4,8 @@ import {
   BOT_STRATEGY_TUNING,
   decideBotTurn,
   deterministicRulePolicy,
+  LEGACY_RULE_STRATEGY,
+  rulePolicy,
   summarisePublicActions,
 } from './bots.js'
 import { parseCard } from './cards.js'
@@ -107,7 +109,7 @@ describe('bot decisions', () => {
     })
     expect(envelope).toMatchObject({
       policyId: 'deterministic-rule',
-      policyVersion: 4,
+      policyVersion: 5,
       observationVersion: 1,
       fallbackReason: null,
     })
@@ -417,5 +419,121 @@ describe('bot decisions', () => {
     expect(calls([{ ...looseOpponent, confidence: 0.1 }])).toBe(calls([]))
     expect(decisions([looseOpponent], 'novice')).toEqual(decisions([], 'novice'))
     expect(BOT_STRATEGY_TUNING.opponentRead.maxCallFloorAdjustment).toBeLessThanOrEqual(0.05)
+  })
+})
+
+describe('skilled bluffing for an OG', () => {
+  const facingOnFlop = (hole: string, board: string): BotDecisionInput => ({
+    street: 'flop',
+    hole: hole.split(' ').map(parseCard),
+    board: board.split(' ').map(parseCard),
+    betToCall: 2_000,
+    pot: 6_000,
+    minRaiseTo: 4_000,
+    currentBet: 2_000,
+    stack: 60_000,
+    betThisStreet: 0,
+  })
+  const og = { ...BOT_PROFILES.og, bluffRate: 0.4 }
+  const raises = (input: BotDecisionInput, mode: 'any-hand' | 'with-equity' | 'never') => {
+    let count = 0
+    for (let seed = 0; seed < 400; seed += 1) {
+      const decision = decideBotTurn(input, og, mulberry32(seed), undefined, mode)
+      if (decision.kind === 'raiseTo' || decision.kind === 'allIn') count += 1
+    }
+    return count
+  }
+
+  it('keeps the legacy any-hand raise unless another mode is chosen', () => {
+    const air = facingOnFlop('Qs 3c', 'Kh 9d 5c')
+    expect(raises(air, 'any-hand')).toBeGreaterThan(100)
+    expect(raises(air, 'with-equity')).toBe(0)
+    expect(raises(air, 'never')).toBe(0)
+  })
+
+  it('raises a draw at the bluff rate only with equity, sized as a real raise', () => {
+    const draw = facingOnFlop('Ah 4h', 'Kh 9h 2c')
+    expect(raises(draw, 'with-equity')).toBeGreaterThan(100)
+    expect(raises(draw, 'never')).toBe(0)
+    const decision = decideBotTurn(draw, og, mulberry32(3), undefined, 'with-equity')
+    if (decision.kind === 'raiseTo') expect(decision.to).toBeGreaterThan(draw.minRaiseTo + 100)
+  })
+})
+
+describe('checked-to bluffs for a heads-up OG', () => {
+  const observation = (street: 'turn' | 'river', others: number): BotObservationV1 => ({
+    version: 1,
+    roomId: 'table-two',
+    handNumber: 4,
+    actor: {
+      playerId: 'bot:kazimir',
+      seat: 0,
+      hole: [parseCard('Qs'), parseCard('Jc')],
+      stack: 50_000,
+      betHand: 3_000,
+      betStreet: 0,
+    },
+    street,
+    board: (street === 'turn' ? 'Kh 9d 5c 2s' : 'Kh 9d 5c 2s 3h').split(' ').map(parseCard),
+    dealerSeat: 1,
+    pot: 6_000,
+    currentBet: 0,
+    amountToCall: 0,
+    legal: {
+      fold: false,
+      check: true,
+      call: { enabled: false, amount: 0 },
+      raiseTo: { enabled: true, min: 500, max: 50_000 },
+      allIn: { enabled: true, amount: 50_000 },
+    },
+    seats: Array.from({ length: others + 1 }, (_, seat) => ({
+      seat,
+      playerId: seat === 0 ? 'bot:kazimir' : `bot:other-${seat}`,
+      stack: 50_000,
+      betHand: 3_000,
+      betStreet: 0,
+      folded: false,
+      allIn: false,
+      away: false,
+    })),
+    opponents: [],
+    tilt: { factor: 0 },
+  })
+  const bets = (
+    policy: ReturnType<typeof rulePolicy>,
+    spot: BotObservationV1,
+    skill: 'og' | 'rookie',
+  ) => {
+    let count = 0
+    for (let seed = 0; seed < 400; seed += 1) {
+      const decision = policy.decide({
+        observation: spot,
+        profile: { ...BOT_PROFILES[skill], bluffRate: 0.4 },
+        personality: {
+          id: 'kazimir',
+          name: 'Kazimir',
+          skill,
+          aggression: 0.5,
+          tightness: 0.3,
+          bluffRate: 0.4,
+          tiltResistance: 0.7,
+          chatter: 'silent',
+        },
+        tilt: { factor: 0 },
+        rng: mulberry32(seed),
+      }).decision
+      if (decision.kind === 'raiseTo') count += 1
+    }
+    return count
+  }
+  const checked = rulePolicy('checked-test', 1, { ...LEGACY_RULE_STRATEGY, checkedBluffs: true })
+
+  it('bets air on the river heads-up at a share of the bluff rate, never multiway or for a rookie', () => {
+    const headsUp = bets(checked, observation('river', 1), 'og')
+    expect(headsUp).toBeGreaterThan(40)
+    expect(headsUp).toBeLessThan(140)
+    expect(bets(checked, observation('river', 2), 'og')).toBe(0)
+    expect(bets(checked, observation('river', 1), 'rookie')).toBe(0)
+    expect(bets(deterministicRulePolicy, observation('river', 1), 'og')).toBe(0)
   })
 })

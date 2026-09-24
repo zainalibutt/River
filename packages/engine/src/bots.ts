@@ -1,5 +1,6 @@
 import type { Street } from './betting.js'
 import { boardTexture } from './board-texture.js'
+import { hasDraw, holdingOf } from './bot-holding.js'
 import type { BotPersonality } from './bot-personality.js'
 import { BOT_PREFLOP_SCORE_TUNING, preflopHandStrengthV2 } from './bot-preflop.js'
 import type { Card } from './cards.js'
@@ -33,7 +34,34 @@ export const BOT_STRATEGY_TUNING = {
     tightAggression: 0.3,
     highShowdown: 0.4,
   },
+  checkedBluff: { share: 0.5, potRatio: 0.66 },
 } as const
+
+/**
+ * Which parts of the OG's strategy are switched on. Rookie and novice ignore
+ * all of them.
+ *
+ * `bluffRaises` decides what a personality's bluff rate does when facing a bet:
+ * `any-hand` raises the minimum plus 100 chips with any two cards, `with-equity`
+ * raises properly only with a draw after the flop or a suited, connected or
+ * paired hand before it, and `never` spends none of it on raises.
+ * `preflopRanking` uses the ranked preflop score (docs/design/32) instead of
+ * the pair-bonus score. `checkedBluffs` lets a heads-up OG bet air or a draw on
+ * the turn or river when it would check.
+ */
+export type BluffRaises = 'any-hand' | 'with-equity' | 'never'
+
+export interface RuleStrategyOptions {
+  readonly preflopRanking: boolean
+  readonly bluffRaises: BluffRaises
+  readonly checkedBluffs: boolean
+}
+
+export const LEGACY_RULE_STRATEGY: RuleStrategyOptions = {
+  preflopRanking: false,
+  bluffRaises: 'any-hand',
+  checkedBluffs: false,
+}
 
 export interface PublicActionSummary {
   readonly lastAggressorSeat: number | null
@@ -210,6 +238,7 @@ export function decideBotTurn(
   profile: BotProfile,
   rng: Rng,
   preflopStrength?: number,
+  bluffRaises: BluffRaises = 'any-hand',
 ): BotDecision {
   const baseStrength =
     input.street === 'preflop'
@@ -221,9 +250,14 @@ export function decideBotTurn(
   const roll = rng()
 
   if (facing && profile.bluffRate > 0 && roll < profile.bluffRate) {
-    const to = Math.min(input.minRaiseTo + 100, input.stack + input.betThisStreet)
-    if (to >= input.stack + input.betThisStreet) return { kind: 'allIn' }
-    return { kind: 'raiseTo', to }
+    if (bluffRaises === 'any-hand') {
+      const to = Math.min(input.minRaiseTo + 100, input.stack + input.betThisStreet)
+      if (to >= input.stack + input.betThisStreet) return { kind: 'allIn' }
+      return { kind: 'raiseTo', to }
+    }
+    if (bluffRaises === 'with-equity' && bluffHasEquity(input)) {
+      return aggressiveDecision(input, profile)
+    }
   }
 
   if (facing) {
@@ -252,35 +286,54 @@ export function decideBotTurn(
   return { kind: 'check' }
 }
 
-export const deterministicRulePolicy: BotPolicy = {
-  id: 'deterministic-rule',
-  version: 4,
-  decide(context) {
-    return {
-      policyId: this.id,
-      policyVersion: this.version,
-      observationVersion: context.observation.version,
-      decision: decideObservedTurn(context),
-      fallbackReason: null,
-    }
-  },
+export function rulePolicy(id: string, version: number, strategy: RuleStrategyOptions): BotPolicy {
+  return {
+    id,
+    version,
+    decide(context) {
+      return {
+        policyId: id,
+        policyVersion: version,
+        observationVersion: context.observation.version,
+        decision: decideObservedTurn(context, strategy),
+        fallbackReason: null,
+      }
+    },
+  }
 }
 
-export const strongPreflopRulePolicy: BotPolicy = {
-  id: 'strong-preflop-candidate',
-  version: 1,
-  decide(context) {
-    return {
-      policyId: this.id,
-      policyVersion: this.version,
-      observationVersion: context.observation.version,
-      decision: decideObservedTurn(context, true),
-      fallbackReason: null,
-    }
-  },
+/**
+ * The live OG strategy since version 5: no pure bluff-raise and the ranked
+ * preflop score. Both were adopted from paired whole-session evaluation on
+ * fresh held-out seeds (docs/design/39); checked-to bluffs and raises with
+ * equity were measured and not adopted.
+ */
+export const LIVE_RULE_STRATEGY: RuleStrategyOptions = {
+  preflopRanking: true,
+  bluffRaises: 'never',
+  checkedBluffs: false,
 }
 
-function decideObservedTurn(context: BotPolicyContextV1, usePreflopV2 = false): BotDecision {
+export const deterministicRulePolicy: BotPolicy = rulePolicy(
+  'deterministic-rule',
+  5,
+  LIVE_RULE_STRATEGY,
+)
+
+/** Version 4, kept so earlier records stay reproducible. */
+export const legacyRulePolicy: BotPolicy = rulePolicy('deterministic-rule', 4, LEGACY_RULE_STRATEGY)
+
+export const strongPreflopRulePolicy: BotPolicy = rulePolicy('strong-preflop-candidate', 1, {
+  ...LEGACY_RULE_STRATEGY,
+  preflopRanking: true,
+})
+
+function decideObservedTurn(
+  context: BotPolicyContextV1,
+  strategy: RuleStrategyOptions,
+): BotDecision {
+  const og = context.profile.skill === 'og'
+  const usePreflopV2 = strategy.preflopRanking && og
   const input = decisionInputFromObservation(context.observation)
   const pricedDraw = pricedFlushDrawDecision(context.observation, input, context.profile.skill)
   if (pricedDraw !== null) return pricedDraw
@@ -303,7 +356,13 @@ function decideObservedTurn(context: BotPolicyContextV1, usePreflopV2 = false): 
             BOT_PREFLOP_SCORE_TUNING.maximumCandidateBluffRate,
           ),
         }
-  const decision = decideBotTurn(input, boundedProfile, context.rng, preflopStrength)
+  const decision = decideBotTurn(
+    input,
+    boundedProfile,
+    context.rng,
+    preflopStrength,
+    og ? strategy.bluffRaises : 'any-hand',
+  )
   if (
     preflopStrength !== undefined &&
     decision.kind === 'allIn' &&
@@ -320,7 +379,49 @@ function decideObservedTurn(context: BotPolicyContextV1, usePreflopV2 = false): 
   ) {
     return aggressiveDecision(input, boundedProfile)
   }
+  if (strategy.checkedBluffs && og) {
+    return checkedBluff(context.observation, boundedProfile, decision, context.rng) ?? decision
+  }
   return decision
+}
+
+function checkedBluff(
+  observation: BotObservationV1,
+  profile: BotProfile,
+  decision: BotDecision,
+  rng: Rng,
+): BotDecision | null {
+  const { street, legal, amountToCall, pot, actor } = observation
+  if (
+    decision.kind !== 'check' ||
+    (street !== 'turn' && street !== 'river') ||
+    amountToCall !== 0 ||
+    !legal.raiseTo.enabled
+  ) {
+    return null
+  }
+  const others = observation.seats.filter(
+    (seat) => seat.playerId !== null && seat.playerId !== actor.playerId && !seat.folded,
+  )
+  if (others.length !== 1) return null
+  const holding = holdingOf(actor.hole, observation.board)
+  if (holding !== 'air' && holding !== 'draw') return null
+  if (rng() >= profile.bluffRate * BOT_STRATEGY_TUNING.checkedBluff.share) return null
+  return {
+    kind: 'raiseTo',
+    to: Math.min(
+      legal.raiseTo.max,
+      Math.max(legal.raiseTo.min, Math.round(pot * BOT_STRATEGY_TUNING.checkedBluff.potRatio)),
+    ),
+  }
+}
+
+function bluffHasEquity(input: BotDecisionInput): boolean {
+  if (input.street !== 'preflop') return hasDraw(input.hole, input.board)
+  const [first, second] = input.hole
+  if (first === undefined || second === undefined) return false
+  const gap = Math.abs(rankValue(first.rank) - rankValue(second.rank))
+  return first.suit === second.suit || gap <= 1
 }
 
 function profileForOpponentRead(profile: BotProfile, observation: BotObservationV1): BotProfile {

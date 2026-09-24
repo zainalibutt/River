@@ -3,11 +3,8 @@ import {
   type BotObservationV1,
   type BotOpponentStatsV2,
   type BotPolicy,
-  boardTexture,
-  type Card,
   DEFAULT_OPPONENT_STATS_TUNING,
-  evaluateBest,
-  HandCategory,
+  holdingOf,
   type OpponentStatsStateV2,
   type OpponentStatsTuning,
   publicEvidenceFromHand,
@@ -15,7 +12,7 @@ import {
   summariseOpponentStats,
   updateOpponentStats,
 } from '@river/engine'
-import { pokerGuardPolicy } from './bot-poker-guard.js'
+import { legacyGuardPolicy } from './bot-poker-guard.js'
 import type { FocalMemoryPlugin } from './bot-session-benchmark.js'
 
 /**
@@ -39,7 +36,6 @@ export const OPPONENT_READ_TUNING = {
 } as const
 
 export type ReadRule = 'bluff-catch' | 'fold-equity-bluff' | 'station-value'
-export type Holding = 'air' | 'draw' | 'pair' | 'strong'
 
 /**
  * The live policy without the OG's any-hand raise when facing a bet.
@@ -54,7 +50,7 @@ export const leakFreeControlPolicy: BotPolicy = {
   decide(context) {
     const profile =
       context.profile.skill === 'og' ? { ...context.profile, bluffRate: 0 } : context.profile
-    const envelope = pokerGuardPolicy.decide({ ...context, profile })
+    const envelope = legacyGuardPolicy.decide({ ...context, profile })
     return { ...envelope, policyId: this.id, policyVersion: this.version }
   },
 }
@@ -129,30 +125,6 @@ export function readDecision(
   return null
 }
 
-/**
- * What the actor holds beyond what the board already gives everybody.
- *
- * A pair on the board is nobody's pair, so it counts as air here; two pair
- * made from one board pair counts as a pair.
- */
-export function holdingOf(hole: readonly Card[], board: readonly Card[]): Holding {
-  const category = evaluateBest([...hole, ...board]).category
-  const boardCategory = board.length === 5 ? evaluateBest(board).category : boardOnly(board)
-  if (category > boardCategory) {
-    const onePairFromBoard =
-      category === HandCategory.TWO_PAIR && boardCategory === HandCategory.PAIR
-    return category >= HandCategory.TWO_PAIR && !onePairFromBoard ? 'strong' : 'pair'
-  }
-  if (board.length < 5) {
-    for (const card of hole) {
-      if ([...hole, ...board].filter((visible) => visible.suit === card.suit).length === 4) {
-        return 'draw'
-      }
-    }
-  }
-  return 'air'
-}
-
 export function opponentStatsPlugin(
   tuning: OpponentStatsTuning = DEFAULT_OPPONENT_STATS_TUNING,
 ): () => FocalMemoryPlugin {
@@ -203,14 +175,4 @@ function bet(observation: BotObservationV1, potRatio: number): BotDecision {
     kind: 'raiseTo',
     to: Math.min(raiseTo.max, Math.max(raiseTo.min, Math.round(observation.pot * potRatio))),
   }
-}
-
-function boardOnly(board: readonly Card[]): HandCategory {
-  const pattern = boardTexture(board).rankPattern
-  if (pattern === 'one-pair') return HandCategory.PAIR
-  if (pattern === 'two-pair') return HandCategory.TWO_PAIR
-  if (pattern === 'trips') return HandCategory.THREE_OF_A_KIND
-  if (pattern === 'full-house') return HandCategory.FULL_HOUSE
-  if (pattern === 'quads') return HandCategory.FOUR_OF_A_KIND
-  return HandCategory.HIGH_CARD
 }

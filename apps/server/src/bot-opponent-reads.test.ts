@@ -10,13 +10,12 @@ import {
 } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
-  holdingOf,
   leakFreeControlPolicy,
   opponentReadPolicy,
   opponentStatsPlugin,
   readDecision,
 } from './bot-opponent-reads.js'
-import { pokerGuardPolicy } from './bot-poker-guard.js'
+import { legacyGuardPolicy, pokerGuardPolicy } from './bot-poker-guard.js'
 import { observationFor, profileFor } from './bot-service.js'
 import { runSessions } from './bot-session-benchmark.js'
 import { focalRotation, ordinaryTables } from './bot-session-campaign.js'
@@ -111,16 +110,6 @@ function spot(options: {
 const board = 'Kh 9d 5c 2s 3h'
 
 describe('what a read may change', () => {
-  it('counts only what the actor adds to the board', () => {
-    expect(holdingOf(cards('Qs Jc'), cards(board))).toBe('air')
-    expect(holdingOf(cards('Ks 7c'), cards(board))).toBe('pair')
-    expect(holdingOf(cards('Ks 9c'), cards(board))).toBe('strong')
-    expect(holdingOf(cards('Qs Jc'), cards('7h 7d 5c 2s 3h'))).toBe('air')
-    expect(holdingOf(cards('Qs Qc'), cards('7h 7d 5c 2s 3h'))).toBe('pair')
-    expect(holdingOf(cards('7s Qc'), cards('7h 7d 5c 2s 3h'))).toBe('strong')
-    expect(holdingOf(cards('Ah 4h'), cards('Kh 9h 2c'))).toBe('draw')
-  })
-
   it('calls a bet with a pair only once an opponent is established as betting most spots', () => {
     const aggressive = [stats('bot:other-0', { betWhenCheckedTo: [38, 40] })]
     const facing = { hole: 'Ks 7c', board, facing: 3_000 }
@@ -187,10 +176,11 @@ describe('what a read may change', () => {
 })
 
 describe('leak-free control', () => {
-  it('never raises air into a bet for an OG, where the live policy sometimes does', () => {
+  it('never raises air into a bet for an OG, where the version 4 policy sometimes did', () => {
     const og = personalityPool()[11]
     if (og === undefined) throw new Error('cast missing')
     const observation = spot({ hole: 'Qs Jc', board, facing: 3_000 })
+    let legacy = 0
     let live = 0
     let control = 0
     for (let seed = 0; seed < 300; seed += 1) {
@@ -201,7 +191,12 @@ describe('leak-free control', () => {
         tilt: observation.tilt,
         rng: mulberry32(seed),
       }
-      if (pokerGuardPolicy.decide(context).decision.kind === 'raiseTo') live += 1
+      if (legacyGuardPolicy.decide(context).decision.kind === 'raiseTo') legacy += 1
+      if (
+        pokerGuardPolicy.decide({ ...context, rng: mulberry32(seed) }).decision.kind === 'raiseTo'
+      ) {
+        live += 1
+      }
       if (
         leakFreeControlPolicy.decide({ ...context, rng: mulberry32(seed) }).decision.kind ===
         'raiseTo'
@@ -209,8 +204,9 @@ describe('leak-free control', () => {
         control += 1
       }
     }
-    expect(live).toBeGreaterThan(0)
+    expect(legacy).toBeGreaterThan(0)
     expect(control).toBe(0)
+    expect(live).toBe(0)
   })
 })
 

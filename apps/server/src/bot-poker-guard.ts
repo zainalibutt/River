@@ -6,29 +6,32 @@ import {
   deterministicRulePolicy,
   evaluateBest,
   HandCategory,
+  legacyRulePolicy,
 } from '@river/engine'
 
 export const BOT_POKER_GUARD_TUNING = {
   madeDrawMaximumCallShare: 0.4,
 } as const
 
-export const pokerGuardPolicy: BotPolicy = {
-  id: 'poker-guard',
-  version: 1,
-  decide(context) {
-    const baseline = deterministicRulePolicy.decide(context)
-    const decision =
-      context.profile.skill === 'og'
-        ? pokerGuardDecision(context.observation, baseline.decision)
-        : baseline.decision
-    return {
-      ...baseline,
-      policyId: this.id,
-      policyVersion: this.version,
-      decision,
-    }
-  },
+export function guardedPolicy(base: BotPolicy, id: string, version: number): BotPolicy {
+  return {
+    id,
+    version,
+    decide(context) {
+      const baseline = base.decide(context)
+      const decision =
+        context.profile.skill === 'og'
+          ? pokerGuardDecision(context.observation, baseline.decision)
+          : baseline.decision
+      return { ...baseline, policyId: id, policyVersion: version, decision }
+    },
+  }
 }
+
+export const pokerGuardPolicy: BotPolicy = guardedPolicy(deterministicRulePolicy, 'poker-guard', 2)
+
+/** The live policy before version 5, kept so earlier records stay reproducible. */
+export const legacyGuardPolicy: BotPolicy = guardedPolicy(legacyRulePolicy, 'poker-guard', 1)
 
 export function pokerGuardDecision(
   observation: BotObservationV1,

@@ -1,6 +1,6 @@
 import { personalityPool } from '@river/engine'
 import { runBotBenchmark } from './bot-benchmark.js'
-import { pokerGuardPolicy } from './bot-poker-guard.js'
+import { legacyGuardPolicy as pokerGuardPolicy } from './bot-poker-guard.js'
 import { pokerStrongCandidatePolicy } from './bot-poker-strong.js'
 import { botPlayerId } from './bot-service.js'
 

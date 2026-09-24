@@ -1,5 +1,5 @@
 import type { BotPolicy } from '@river/engine'
-import { pokerGuardPolicy } from './bot-poker-guard.js'
+import { legacyGuardPolicy as pokerGuardPolicy } from './bot-poker-guard.js'
 import { handClassOf, runSessions } from './bot-session-benchmark.js'
 import {
   campaignSize,

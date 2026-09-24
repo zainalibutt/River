@@ -4,6 +4,7 @@ import {
   type BotSkill,
   deterministicRulePolicy,
   type HandAction,
+  legacyRulePolicy,
   mulberry32,
   parseCard,
   SEATS_PER_SHAPE,
@@ -373,11 +374,11 @@ describe('bot poker scenario corpus', () => {
       Array.from({ length: 200 }, (_, seed) =>
         decide({ ...base, hole }, 'og', seed, undefined, policy),
       )
-    const oldAceKing = actions(['As', 'Ks'], deterministicRulePolicy)
+    const oldAceKing = actions(['As', 'Ks'], legacyRulePolicy)
     const newAceKing = actions(['As', 'Ks'], pokerStrongCandidatePolicy)
     expect(oldAceKing.filter((action) => action.kind === 'fold').length).toBeGreaterThan(150)
     expect(newAceKing.filter((action) => action.kind === 'raiseTo').length).toBeGreaterThan(150)
-    const oldDeuces = actions(['2s', '2h'], deterministicRulePolicy)
+    const oldDeuces = actions(['2s', '2h'], legacyRulePolicy)
     const newDeuces = actions(['2s', '2h'], pokerStrongCandidatePolicy)
     expect(oldDeuces.filter((action) => action.kind === 'raiseTo').length).toBeGreaterThan(80)
     expect(newDeuces.filter((action) => action.kind === 'fold').length).toBeGreaterThan(150)
@@ -385,6 +386,10 @@ describe('bot poker scenario corpus', () => {
       actions(['7s', '2h'], pokerStrongCandidatePolicy).filter((action) => action.kind === 'fold')
         .length,
     ).toBeGreaterThan(170)
+    const liveAceKing = actions(['As', 'Ks'], pokerGuardPolicy)
+    const liveDeuces = actions(['2s', '2h'], pokerGuardPolicy)
+    expect(liveAceKing.filter((action) => action.kind === 'raiseTo').length).toBeGreaterThan(150)
+    expect(liveDeuces.filter((action) => action.kind === 'fold').length).toBeGreaterThan(150)
   })
 
   it('keeps premium preflop aggression bounded with a deep stack', () => {
