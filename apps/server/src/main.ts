@@ -21,6 +21,7 @@ interface NextApplication {
 }
 
 const require = createRequire(import.meta.url)
+const OPPONENT_CONSOLIDATION_LAG_MS = 60 * 60 * 1000
 const next = require('next') as (options: {
   dev: boolean
   dir: string
@@ -52,11 +53,12 @@ async function start(): Promise<void> {
     supabaseUrl: config.supabaseUrl,
     serviceRoleKey: config.serviceRoleKey,
   })
+  const rememberOpponents = process.env.BOT_OPPONENT_PERSISTENCE === 'true'
   const hub = new RoomHub({
     // A person who opens River alone should find a table with people at it.
     // Enough to feel busy, with a seat kept free for whoever arrives next.
     botSeats: 5,
-    ...(process.env.BOT_OPPONENT_PERSISTENCE === 'true'
+    ...(rememberOpponents
       ? {
           botOpponentStore: new SupabaseBotOpponentStore({
             supabaseUrl: config.supabaseUrl,
@@ -115,6 +117,35 @@ async function start(): Promise<void> {
   process.once('SIGINT', shutdown)
   process.once('SIGTERM', shutdown)
   server.listen(config.port, config.hostname)
+  if (rememberOpponents) {
+    scheduleOpponentConsolidation(
+      new SupabaseBotOpponentStore({
+        supabaseUrl: config.supabaseUrl,
+        serviceRoleKey: config.serviceRoleKey,
+        timeoutMs: 20_000,
+      }),
+    )
+  }
+}
+
+/**
+ * Folds bots' older evidence about each player into one checkpoint shortly
+ * after start-up and then once a day, so memory stays small however often a
+ * bot meets the same person. The last hour is left alone for live tables.
+ */
+function scheduleOpponentConsolidation(store: SupabaseBotOpponentStore): void {
+  const run = () => {
+    store
+      .consolidate(Date.now() - OPPONENT_CONSOLIDATION_LAG_MS)
+      .then(({ pairs, folded }) => {
+        if (folded > 0) console.log(`bot memory: folded ${folded} hands for ${pairs} pairs`)
+      })
+      .catch((error: unknown) => {
+        console.error('bot memory: consolidation failed', error)
+      })
+  }
+  setTimeout(run, 60_000).unref()
+  setInterval(run, 24 * 60 * 60 * 1000).unref()
 }
 
 await start()
