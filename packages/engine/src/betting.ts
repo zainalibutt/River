@@ -44,6 +44,8 @@ export class BettingHand {
   private betLevel = 0
   private minRaiseSize: number
   private lastToAct = -1
+  /** Players who have acted since the last full bet or raise, and so may call or fold but not raise. */
+  private readonly raiseClosed = new Set<string>()
 
   constructor(options: BettingOptions) {
     if (options.seats.length < 2) {
@@ -97,6 +99,15 @@ export class BettingHand {
 
   minRaiseTo(): number {
     return this.betLevel + this.minRaiseSize
+  }
+
+  /**
+   * Whether a player may still raise. An all-in for less than a full raise
+   * does not reopen the raising for anyone who has already acted since the
+   * last full bet or raise; they may only call it or fold.
+   */
+  canRaise(id: string): boolean {
+    return !this.raiseClosed.has(id)
   }
 
   sidePots(): SidePot[] {
@@ -159,6 +170,10 @@ export class BettingHand {
       if (to <= this.betLevel) {
         throw new BettingError('raise must exceed the current bet')
       }
+      if (!this.canRaise(id)) {
+        throw new BettingError('betting is not reopened for this player')
+      }
+      this.raiseClosed.clear()
       this.minRaiseSize = to - this.betLevel
       this.betLevel = to
       this.obligation = to
@@ -170,14 +185,21 @@ export class BettingHand {
   allIn(id: string): void {
     this.act(id, (p) => {
       const previousLevel = this.betLevel
+      if (p.betThisStreet + p.stack > previousLevel && !this.canRaise(id)) {
+        throw new BettingError('betting is not reopened for this player')
+      }
       this.commit(p, p.stack)
       const total = p.betThisStreet
       if (total >= previousLevel + this.minRaiseSize) {
         this.minRaiseSize = total - previousLevel
         this.obligation = total
         this.betLevel = total
+        this.raiseClosed.clear()
       } else if (total > this.betLevel) {
+        // Short of a full raise: everyone must still match it, but raising
+        // is not reopened for those who have already acted.
         this.betLevel = total
+        this.obligation = total
       }
       p.acted = true
     })
@@ -190,6 +212,7 @@ export class BettingHand {
     const index = this.players.findIndex((p) => p.id === id)
     const player = at(this.players, index)
     apply(player)
+    this.raiseClosed.add(id)
     this.lastToAct = index
     this.afterAction()
   }
@@ -234,6 +257,7 @@ export class BettingHand {
     this.betLevel = 0
     this.minRaiseSize = this.bigBlind
     this.lastToAct = -1
+    this.raiseClosed.clear()
   }
 
   private postBlinds(): void {

@@ -523,14 +523,15 @@ export class SoloSession {
     const seat = this.findSeat(seatId)
     const cost = betting.betToCall(seatId)
     const raise = betting.minRaiseTo()
+    const open = betting.canRaise(seatId)
     const committed = betting.valueOf(seatId)
     const maxTo = seat.stack + committed
     return {
       fold: { enabled: true, amount: 0 },
       check: { enabled: cost === 0, amount: 0 },
       call: { enabled: cost > 0 && seat.stack > 0, amount: Math.min(cost, seat.stack) },
-      raiseTo: { enabled: maxTo >= raise, min: raise },
-      allIn: { enabled: seat.stack > 0, amount: maxTo },
+      raiseTo: { enabled: open && maxTo >= raise, min: raise },
+      allIn: { enabled: seat.stack > 0 && (open || seat.stack <= cost), amount: maxTo },
     }
   }
 

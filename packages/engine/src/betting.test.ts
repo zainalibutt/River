@@ -124,18 +124,48 @@ describe('betting all-in and side pots', () => {
     expect(betting.street).toBe('river')
   })
 
-  it('does not reopen betting after an incomplete all-in raise', () => {
+  it('makes an all-in for less than a full raise be called, without reopening raising', () => {
     const betting = hand([1000, 1000, 150], 2, ['a', 'b', 'c'])
     betting.call('c')
     betting.raiseTo('a', 100)
     betting.call('b')
     betting.allIn('c')
-    expect(betting.street).toBe('flop')
+    expect(betting.street).toBe('preflop')
     expect(betting.toActId).toBe('a')
-    expect(betting.sidePots()).toEqual([
-      { amount: 300, eligibleIds: ['a', 'b', 'c'] },
-      { amount: 50, eligibleIds: ['c'] },
-    ])
+    expect(betting.betToCall('a')).toBe(50)
+    expect(betting.canRaise('a')).toBe(false)
+    expect(() => betting.raiseTo('a', 400)).toThrow(BettingError)
+    expect(() => betting.allIn('a')).toThrow(BettingError)
+    betting.call('a')
+    betting.call('b')
+    expect(betting.street).toBe('flop')
+    expect(betting.sidePots()).toEqual([{ amount: 450, eligibleIds: ['a', 'b', 'c'] }])
+  })
+
+  it('lets a player who has not acted raise over a short all-in', () => {
+    const betting = hand([1000, 130, 1000], 0, ['a', 'b', 'c'])
+    betting.raiseTo('a', 100)
+    betting.allIn('b')
+    expect(betting.toActId).toBe('c')
+    expect(betting.canRaise('c')).toBe(true)
+    betting.raiseTo('c', 300)
+    expect(betting.toActId).toBe('a')
+    expect(betting.canRaise('a')).toBe(true)
+  })
+
+  it('makes the last raiser answer a short all-in heads-up', () => {
+    const betting = hand([4000, 4000], 0, ['a', 'b'])
+    betting.raiseTo('a', 73)
+    betting.raiseTo('b', 300)
+    betting.raiseTo('a', 937)
+    betting.raiseTo('b', 2700)
+    betting.allIn('a')
+    expect(betting.finished).toBe(false)
+    expect(betting.toActId).toBe('b')
+    expect(betting.betToCall('b')).toBe(1300)
+    expect(betting.canRaise('b')).toBe(false)
+    betting.call('b')
+    expect(betting.finished).toBe(true)
   })
 
   it('builds classic side pots across three players', () => {
