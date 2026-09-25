@@ -155,10 +155,13 @@ export function slumbotIncrement(
       return 'k'
     case 'call':
       return 'c'
+    // A raise or all-in that only reaches the current bet is a call to Slumbot.
     case 'raiseTo':
-      return `b${action.to}`
-    case 'allIn':
-      return `b${seat.stack + seat.betStreet}`
+      return action.to > view.currentBet ? `b${action.to}` : 'c'
+    case 'allIn': {
+      const total = seat.stack + seat.betStreet
+      return total > view.currentBet ? `b${total}` : 'c'
+    }
   }
 }
 

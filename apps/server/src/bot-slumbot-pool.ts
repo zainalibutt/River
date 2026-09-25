@@ -32,6 +32,7 @@ const ids = { ours: botPlayerId('river'), theirs: botPlayerId('slumbot') }
 const stack = SLUMBOT_STAKE.defaultBuyIn
 const cardsBefore = [0, 3, 4, 5]
 let disagreements = 0
+let unreplayable = 0
 let allIns = 0
 
 /** Chips won, with an all-in before the river valued at our showdown share. */
@@ -63,20 +64,24 @@ function allInValue(hand: LoggedHand, index: number): number {
 const raw: { session: number; value: number }[] = []
 const valued: { session: number; value: number }[] = []
 hands.forEach((hand, index) => {
-  const room = slumbotRoom(
-    {
-      action: hand.action,
-      clientPos: hand.clientPos,
-      hole: hand.hole.map(parseCard),
-      board: hand.board.map(parseCard),
-      ...(hand.slumbotHole === null ? {} : { theirHole: hand.slumbotHole.map(parseCard) }),
-    },
-    ids,
-  )
-  const view = room.viewFor('')
-  const ours = view.seats.find((seat) => seat.playerId === ids.ours)
-  if (view.phase !== 'between' || ours === undefined || ours.stack - stack !== hand.winnings) {
-    disagreements += 1
+  try {
+    const room = slumbotRoom(
+      {
+        action: hand.action,
+        clientPos: hand.clientPos,
+        hole: hand.hole.map(parseCard),
+        board: hand.board.map(parseCard),
+        ...(hand.slumbotHole === null ? {} : { theirHole: hand.slumbotHole.map(parseCard) }),
+      },
+      ids,
+    )
+    const view = room.viewFor('')
+    const ours = view.seats.find((seat) => seat.playerId === ids.ours)
+    if (view.phase !== 'between' || ours === undefined || ours.stack - stack !== hand.winnings) {
+      disagreements += 1
+    }
+  } catch {
+    unreplayable += 1
   }
   raw.push({ session: index, value: hand.winnings })
   valued.push({ session: index, value: allInValue(hand, index) })
@@ -93,7 +98,7 @@ const onButton = (rows: { session: number; value: number }[], position: 0 | 1) =
   reindex(rows.filter((_, index) => hands[index]?.clientPos === position))
 
 process.stdout.write(
-  `${hands.length} hands against Slumbot; River disagreed with Slumbot's payout on ${disagreements}\n`,
+  `${hands.length} hands against Slumbot; River disagreed with Slumbot's payout on ${disagreements} and could not replay ${unreplayable}\n`,
 )
 process.stdout.write(`raw: ${describe(raw)}\n`)
 process.stdout.write(`all-in valued (${allIns} all-ins before the river): ${describe(valued)}\n`)

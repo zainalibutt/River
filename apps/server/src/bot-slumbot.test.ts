@@ -80,4 +80,22 @@ describe('our reply', () => {
     expect(slumbotIncrement(free, alwaysCallPolicy, og, rng)).toBe('k')
     expect(slumbotIncrement(facing, pokerGuardPolicy, og, rng)).toMatch(/^(k|c|f|b\d+)$/)
   })
+
+  it('sends an all-in that only matches the bet as a call', () => {
+    const shover = {
+      ...alwaysCallPolicy,
+      id: 'always-all-in',
+      decide(context: Parameters<typeof alwaysCallPolicy.decide>[0]) {
+        return {
+          ...alwaysCallPolicy.decide(context),
+          policyId: 'always-all-in',
+          decision: { kind: 'allIn' as const },
+        }
+      },
+    }
+    const facingShove = { action: 'b20000', clientPos: 0 as const, hole: cards('As Ad'), board: [] }
+    expect(slumbotIncrement(facingShove, shover, og, mulberry32(2))).toBe('c')
+    const open = { action: 'b200', clientPos: 0 as const, hole: cards('As Ad'), board: [] }
+    expect(slumbotIncrement(open, shover, og, mulberry32(2))).toBe('b20000')
+  })
 })

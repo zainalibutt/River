@@ -7,7 +7,9 @@ import { slumbotIncrement } from './bot-slumbot.js'
 // Usage: tsx bot-slumbot-run.ts <v5|v6> <hands> <run seed> <out.jsonl>
 // Plays hands against Slumbot's public heads-up API, one at a time, sending
 // only our own moves; Slumbot deals and reports our cards. Each finished hand
-// is appended to the output file as one JSON line.
+// is appended to the output file as one JSON line. A hand that fails, on our
+// side or Slumbot's, is logged to <out>.errors.jsonl, left unfinished and not
+// counted, and the run carries on.
 const [focalName, handText, runSeed, out] = process.argv.slice(2)
 const hands = Number(handText)
 const policies: Record<string, BotPolicy> = { v5: v5GuardPolicy, v6: pokerGuardPolicy }
@@ -49,29 +51,42 @@ async function post(path: string, body: object): Promise<SlumbotResponse> {
 const rotation = focalRotation()
 let token: string | undefined
 let total = 0
+let failed = 0
 const started = Date.now()
 for (let hand = 0; hand < hands; hand += 1) {
   const personality = rotation[hand % rotation.length]
   if (personality === undefined) throw new Error('no OG personality')
   const rng = mulberry32(seedFromString(`slumbot:${runSeed}:${hand}`))
-  let state = await post('new_hand', token === undefined ? {} : { token })
-  token = state.token ?? token
-  for (let step = 0; state.winnings === undefined; step += 1) {
-    if (step > 40) throw new Error(`hand ${hand} did not finish: ${state.action}`)
-    const incr = slumbotIncrement(
-      {
-        action: state.action,
-        clientPos: state.client_pos,
-        hole: state.hole_cards.map(parseCard),
-        board: state.board.map(parseCard),
-      },
-      policy,
-      personality,
-      rng,
-    )
-    state = await post('act', { token, incr })
+  let state: SlumbotResponse | undefined
+  let incr = ''
+  try {
+    state = await post('new_hand', token === undefined ? {} : { token })
     token = state.token ?? token
+    for (let step = 0; state.winnings === undefined; step += 1) {
+      if (step > 40) throw new Error(`hand did not finish: ${state.action}`)
+      incr = slumbotIncrement(
+        {
+          action: state.action,
+          clientPos: state.client_pos,
+          hole: state.hole_cards.map(parseCard),
+          board: state.board.map(parseCard),
+        },
+        policy,
+        personality,
+        rng,
+      )
+      state = await post('act', { token, incr })
+      token = state.token ?? token
+    }
+  } catch (error) {
+    failed += 1
+    appendFileSync(
+      `${out}.errors.jsonl`,
+      `${JSON.stringify({ hand, action: state?.action ?? null, clientPos: state?.client_pos ?? null, hole: state?.hole_cards ?? null, board: state?.board ?? null, incr, error: String(error) })}\n`,
+    )
+    continue
   }
+  if (state?.winnings === undefined) continue
   total += state.winnings
   appendFileSync(
     out,
@@ -90,7 +105,7 @@ for (let hand = 0; hand < hands; hand += 1) {
   if ((hand + 1) % 50 === 0 || hand + 1 === hands) {
     const seconds = Math.round((Date.now() - started) / 1000)
     process.stderr.write(
-      `${focalName}: ${hand + 1}/${hands} hands, ${((total / 100 / (hand + 1)) * 100).toFixed(1)} bb/100 so far, ${seconds}s\n`,
+      `${focalName}: ${hand + 1}/${hands} hands, ${((total / 100 / (hand + 1 - failed)) * 100).toFixed(1)} bb/100 so far, ${failed} failed, ${seconds}s\n`,
     )
   }
 }
