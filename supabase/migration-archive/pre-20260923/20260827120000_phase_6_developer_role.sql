@@ -62,3 +62,4 @@ comment on function private.set_river_role(uuid, text) is
 -- The role travels in the access token, so it takes effect on the next one.
 -- Sign out and back in, or wait for the refresh, before expecting the server to
 -- agree that you hold it.
+

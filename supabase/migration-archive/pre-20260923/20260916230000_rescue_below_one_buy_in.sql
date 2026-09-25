@@ -12,3 +12,4 @@ update private.economy_config set value = 50000 where key = 'rescue_threshold';
 insert into private.economy_config (key, value)
 values ('rescue_threshold', 50000)
 on conflict (key) do nothing;
+

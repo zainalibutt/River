@@ -1,22 +1,5 @@
-alter table public.players
-  drop constraint if exists players_id_fkey,
-  add constraint players_id_fkey foreign key (id) references auth.users (id) on delete restrict;
-
-alter table public.chip_ledger
-  drop constraint if exists chip_ledger_player_id_fkey,
-  add constraint chip_ledger_player_id_fkey foreign key (player_id) references public.players (id) on delete restrict;
-
-update public.chip_ledger
-set ref = 'legacy:' || id::text
-where ref is null;
-
-alter table public.chip_ledger
-  alter column ref set not null;
-
-alter table public.chip_ledger
-  add constraint chip_ledger_ref_length check (char_length(ref) between 1 and 128);
-
-create unique index chip_ledger_player_ref_idx on public.chip_ledger (player_id, ref);
+alter table public.players enable row level security;
+alter table public.chip_ledger enable row level security;
 
 drop policy if exists players_select_own on public.players;
 drop policy if exists players_update_own on public.players;
@@ -28,6 +11,7 @@ grant update (display_name) on table public.players to authenticated;
 
 create policy players_select_own on public.players
   for select to authenticated using ((select auth.uid()) = id);
+
 create policy players_update_own on public.players
   for update to authenticated using ((select auth.uid()) = id)
   with check ((select auth.uid()) = id);
@@ -109,18 +93,7 @@ declare
   existing_found boolean;
 begin
   if p_delta = 0 then
-    raise exception 'ledger delta cannot be zero';
-  end if;
-  if char_length(p_reason) not between 1 and 64 then
-    raise exception 'ledger reason must be between 1 and 64 characters';
-  end if;
-  if char_length(p_ref) not between 1 and 128 then
-    raise exception 'ledger ref must be between 1 and 128 characters';
-  end if;
-
-  perform 1 from public.players where id = p_player_id for update;
-  if not found then
-    raise exception 'unknown player';
+    raise exception 'ledger delta must be non-zero';
   end if;
 
   select delta, reason
@@ -154,3 +127,4 @@ $$;
 
 revoke all on function public.apply_ledger_entry(uuid, bigint, text, text) from public, anon, authenticated;
 grant execute on function public.apply_ledger_entry(uuid, bigint, text, text) to service_role;
+
