@@ -26,6 +26,7 @@ flowchart LR
 | v5 | No bluff-raising with any two cards; a proper preflop ranking | +122.3 over v4 |
 | v6, live on the branch | Hands judged by equity against the ranges opponents' actions suggest; balanced heads-up bluffing | +127.0 over v5 |
 | v6 under the shark | A player who knows exactly how the bot plays | Gives up 215.9 per 100 hands heads-up |
+| v6 against Slumbot | A strong public heads-up bot | −27.5 over 5,000 hands (−70.4 to +15.3) |
 | v7 | Defend against big bets | Rejected twice: no less exploitable |
 
 Big blinds per 100 hands (bb/100) is the usual poker win rate. +100 means winning a big blind a hand.
@@ -189,11 +190,13 @@ The shark found v6's hole at once. Asking v6's strategy about every hand it coul
 
 Two tools came out of this packet. The first is **all-in valuation**: when both players are all in before the river, the result is credited at each player's equity instead of the cards that fell. That removes the luck of the run-out without changing the average, and cuts the noise of a single hand by a quarter to a third. The second is a heads-up rules bug, below.
 
-### A bug in the rules
+### Two bugs in the rules
 
 The shark's tallies were odd. In every hand where it was the big blind, its first decision before the flop was whether to check, with nothing yet to call: the big blind was acting before the button. River's engine had the big blind act first before the flop whenever exactly two players were dealt in. In standard heads-up poker the button posts the small blind and acts first before the flop. An engine test from the earliest phase had pinned the wrong order in place.
 
 With Zain's approval the order was fixed, the tests rewritten to check the same rules the standard way, and the spec now states it. Old hand records still replay, because replay walks the recorded moves in order. Everything heads-up was measured again, and v6 still beat v5 on every heads-up table: **+96.7 (+88.5 to +104.8)** pooled.
+
+The Slumbot matches below found the second. When a player went all in for less than a full raise, River handed the extra chips back instead of asking the players who had already acted to call them or fold. Standard rules make them match it, though they may not re-raise. River's replay of one Slumbot hand ended at our short all-in, before Slumbot's call. An early engine test had pinned this too. With Zain's approval it was fixed the standard way, and the spec states the rule. The simulated runs in this document were taken before this fix, with stacks from 40 to 400 big blinds, where a short all-in can happen, and they have not been repeated.
 
 ### Version 7: tried twice, rejected
 
@@ -208,7 +211,7 @@ The right amount to defend depends on the bot's whole range at that moment: how 
 
 The shark is our own instrument. For an outside yardstick, the live OG now plays [Slumbot](https://slumbot.com), a well-known heads-up bot with a public API, at 200 big blinds deep. Each of our decisions rebuilds the hand at a River table with our real cards and the revealed board, so the OG decides exactly as it would in a River room. Only our own moves are sent. Every logged hand is replayed afterwards with both players' real cards, and River must pay out the same chips Slumbot did.
 
-*A 5,000-hand run is in progress; its result goes here.*
+Over 5,000 hands v6 lost **27.5 bb/100 (−70.4 to +15.3)**, or **37.5 (−76.0 to +1.1)** with the ten all-ins before the river valued at their equity. River paid out exactly what Slumbot did on all 5,000 hands. So v6 most likely loses to Slumbot, by somewhere between nothing and three quarters of a big blind a hand, and more hands would narrow that. Slumbot plays its own fixed strategy rather than hunting for a leak, which is why it wins far less than the shark does.
 
 ---
 
@@ -224,6 +227,7 @@ The shark is our own instrument. For an outside yardstick, the live OG now plays
 | 24 Sep | Train offline in Python and PyTorch; the live server stays TypeScript | Training wants the Python ecosystem; the game server must stay one simple, typed codebase |
 | 24 Sep | Benchmark against outside bots offline, sending only our own moves | An outside yardstick without sending anyone else's data |
 | 24 Sep | Fix the heads-up betting order | Standard rules first; every heads-up number after it was re-measured |
+| 25 Sep | Fix the short all-in rule | Standard rules again; found by replaying Slumbot hands at a River table |
 | 24 Sep | Shelve the first learned model | Built on a version already replaced |
 | 24 Sep | Hard to exploit before maximum profit | Close to solver strength was the stated target |
 | 25 Sep | Reject v7 | Neither variant made the bot harder to exploit |
@@ -238,7 +242,9 @@ The shark is our own instrument. For an outside yardstick, the live OG now plays
 - **Pass marks set too tight.** An early confirmation failed on interval width rather than a real loss. Every packet now declares its follow-up run in advance, for a table that is positive but not yet clear.
 - **Two bugs caught by scenario tests before they cost a run:** the nut flush that never bet the river at a full table, and a semi-bluff raise that ignored its price.
 - **A three-hour wait for a twenty-minute run.** One policy under test cost thirty times more per decision than the others, and the whole batch waited on it. Every policy is now timed on ten hands before a batch starts, and the most important one runs first.
-- **The heads-up betting order,** above. It had been wrong since the first engine and pinned by its own test.
+- **Two rules bugs,** above: the heads-up betting order and the short all-in. Both had been wrong since the first engine and pinned by its own tests.
+- **A stale build.** The first test run after the short all-in fix failed 115 tests: the server tests use the built engine package, which had not been rebuilt. The rebuild now goes with every engine change.
+- **A crash half an hour in.** The first Slumbot run stopped at hand 1,447 when Slumbot refused a bet. Going all in against an all-in only calls it, and the adapter had sent it as a bet. It now sends a call, and a failing hand is logged and skipped instead of ending the run.
 - **v7,** above. Two rounds, both rejected.
 
 ---
@@ -247,6 +253,7 @@ The shark is our own instrument. For an outside yardstick, the live OG now plays
 
 - The live OG on the development branch is v6. It is 127 bb/100 better than v5 across the twelve test tables, and v5 was 122 better than the version that lost to every style. It does not bluff into two or more opponents.
 - A player who knows exactly how it plays can take about two big blinds a hand from it heads-up by betting big. Folding every hand would lose 0.75.
+- Against Slumbot, an outside heads-up bot, it most likely loses a little, between nothing and three quarters of a big blind a hand over 5,000 hands.
 - Its memory of opponents works in simulation and is waiting on a production decision.
 - All of this is heads-up measured against simulated opponents. Real people will differ, and the shark's figure is a floor, since a smarter shark would win more.
 
@@ -255,7 +262,7 @@ The shark is our own instrument. For an outside yardstick, the live OG now plays
 - **A heads-up solver.** Two copies of the bot play a simplified game against each other millions of times. After each hand each copy asks how much better its other options would have done and shifts towards them. Those regrets settle into a balanced strategy, which is how game-theory solvers work (counterfactual regret minimisation). This is where the bot starts learning by itself, and where defence frequencies come from the whole range at once.
 - **Value networks.** No bot can solve every spot while a hand is being played. A neural network trained in PyTorch on a GPU learns, from millions of solved spots, what any spot is worth, so the live bot can think ahead quickly. DeepStack, one of the research bots that beat professional players, combined these two ideas.
 - **More seats.** Preflop play for two to nine players, then pots with three or more players, where even the best bots rely on approximations.
-- **Outside results.** Slumbot now, and other public benchmarks where their terms allow.
+- **Outside results.** More Slumbot hands to narrow its interval, the same match for each new version, and other public benchmarks where their terms allow.
 
 ---
 
