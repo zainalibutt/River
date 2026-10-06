@@ -1,0 +1,521 @@
+:root {
+  --control-type: var(--font-home-display), var(--font-inter), sans-serif;
+  --control-primary-face:
+    radial-gradient(ellipse at 50% 0, rgb(255 230 190 / 11%), transparent 70%),
+    linear-gradient(135deg, var(--river-card-back-pattern), var(--river-card-back) 55%, #381820);
+  --control-primary-edge: color-mix(in srgb, var(--river-brass-hi) 70%, transparent);
+  --control-primary-lift:
+    0 5px 0 #211015, 0 16px 36px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 230 190 / 20%);
+  --control-dark-face:
+    radial-gradient(ellipse at 0 50%, rgb(220 178 115 / 10%), transparent 70%),
+    linear-gradient(120deg, #231b18, #181314 55%, #21131a);
+  --control-panel-face: linear-gradient(145deg, #24191d, #141212 65%, #171316);
+  --control-edge: color-mix(in srgb, var(--river-brass) 46%, transparent);
+  --control-inset: inset 0 1px 0 rgb(255 230 190 / 10%), inset 0 -1px 0 rgb(0 0 0 / 45%);
+}
+
+/* Opt-in surfaces only: the betting wheel, raise arc and phone betting controls are frozen. */
+:is(.club-home-dialog, .club-private) .club-primary,
+.river-controls-2d :is(.ram-solo > button, .upgrade-panel button[type="submit"]) {
+  position: relative;
+  min-height: 52px;
+  padding: 13px 20px;
+  border: 1px solid var(--control-primary-edge);
+  border-radius: 5px;
+  background: var(--control-primary-face);
+  box-shadow:
+    0 3px 0 #211015,
+    var(--control-inset),
+    0 10px 24px rgb(0 0 0 / 30%);
+  color: var(--river-cream);
+  font-family: var(--control-type);
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+:is(.club-home-dialog, .club-private) .club-primary::before,
+.river-controls-2d .ram-solo > button::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1px solid color-mix(in srgb, var(--river-brass-hi) 24%, transparent);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.club-home-secondary,
+.club-private-back,
+.club-home-dialog :is(.club-choice-row, .club-choice-grid) button,
+.club-home-dialog .club-setting-toggle,
+.river-controls-2d :is(.hud-corner > button, .recovery-actions button),
+.river-controls-2d :is(.hud-login, .inline-join button),
+.river-controls-2d .settings-modal .club-setting-toggle,
+.river-controls-2d
+  :is(
+    .shop-tabs button,
+    .shop-row button,
+    .chat-entry button,
+    .lobby-filters button,
+    .lobby-row button,
+    .lobby-close
+  ),
+.river-controls-2d
+  .phone-table
+  :is(.phone-header > button, .phone-menu button, .club-setting-toggle) {
+  min-height: 44px;
+  border: 1px solid var(--control-edge);
+  border-radius: 5px;
+  background: var(--control-dark-face);
+  box-shadow:
+    var(--control-inset),
+    0 5px 12px rgb(0 0 0 / 18%);
+  color: var(--river-cream);
+  font-family: var(--control-type);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.club-home-secondary {
+  font-size: 19px;
+}
+
+.club-home-tools .club-home-tool,
+.club-home-dialog .club-home-tool,
+.club-home .club-home-options,
+.river-controls-2d :is(.modal-close, .upgrade-panel > button),
+.river-controls-2d .phone-table .phone-sheet > header > button {
+  min-height: 44px;
+  padding-inline: 12px;
+  border: 1px solid color-mix(in srgb, var(--river-brass) 25%, transparent);
+  border-radius: 4px;
+  background: rgb(16 13 14 / 58%);
+  color: var(--river-cream-dim);
+  font-family: var(--control-type);
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.club-home .club-home-options {
+  min-height: 44px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 15px;
+}
+
+.club-home-dialog {
+  border-color: var(--control-edge);
+  border-radius: 8px;
+  background: var(--control-panel-face);
+  box-shadow:
+    inset 0 0 0 5px rgb(220 178 115 / 4%),
+    0 24px 80px rgb(0 0 0 / 65%);
+}
+
+.club-home-dialog-heading {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--control-edge);
+}
+
+.club-home-dialog-heading h2,
+.club-private-card h2,
+.river-controls-2d :is(.modal h2, .phone-sheet h2, .upgrade-panel h2) {
+  color: var(--river-cream);
+  font-family: var(--control-type);
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: 0.035em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.club-home-dialog .club-capsule-label,
+.club-home-dialog .club-choice-legend {
+  color: var(--river-brass-hi);
+  font-family: var(--control-type);
+  font-size: 16px;
+  letter-spacing: 0.06em;
+}
+
+.club-home-dialog .club-input,
+.river-controls-2d
+  :is(
+    .upgrade-panel input,
+    .inline-join input,
+    .phone-sheet input,
+    .phone-sheet textarea,
+    .chat-entry input
+  ) {
+  border: 1px solid var(--control-edge);
+  border-radius: 4px;
+  background: #100e10;
+  box-shadow: inset 0 2px 6px rgb(0 0 0 / 32%);
+  color: var(--river-cream);
+  font-size: 16px;
+}
+
+.club-home-dialog .club-input::placeholder {
+  color: var(--river-cream-faint);
+}
+
+.club-home-dialog .river-settings .club-capsule-sub,
+.river-controls-2d .river-settings .club-capsule-sub {
+  color: var(--river-cream-dim);
+  font-family: var(--font-inter), sans-serif;
+  font-size: 13px;
+  letter-spacing: normal;
+  line-height: 1.5;
+  text-transform: none;
+}
+
+.club-home-dialog .club-setting-toggle,
+.river-controls-2d .club-setting-toggle {
+  padding: 13px 14px;
+  text-align: left;
+  gap: 12px;
+}
+
+.club-home-dialog .club-setting-toggle strong,
+.river-controls-2d .club-setting-toggle strong {
+  padding: 4px 8px;
+  border: 1px solid var(--control-edge);
+  border-radius: 3px;
+  color: var(--river-cream-dim);
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.club-home-dialog
+  :is(.club-choice-row, .club-choice-grid, .river-settings)
+  button[aria-pressed="true"],
+.river-controls-2d .club-setting-toggle[aria-pressed="true"] {
+  border-color: var(--river-brass-hi);
+  background: var(--control-primary-face);
+}
+
+.river-controls-2d :is(.shop-tabs, .lobby-filters) button.chosen {
+  border-color: var(--river-brass-hi);
+  background: var(--control-primary-face);
+  color: var(--river-brass-hi);
+}
+
+.club-home-dialog .club-setting-toggle[aria-pressed="true"] strong,
+.river-controls-2d .club-setting-toggle[aria-pressed="true"] strong {
+  color: var(--river-brass-hi);
+}
+
+:is(.club-home, .club-private) button:disabled,
+.river-controls-2d
+  :is(.ram-solo, .recovery-actions, .phone-menu, .upgrade-panel, .shop-panel, .lobby)
+  button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.club-home-dialog .club-input:focus-visible,
+.club-private button:focus-visible,
+.river-controls-2d
+  :is(.hud-corner button, .phone-sheet button, .phone-sheet input, .ram-solo button):focus-visible {
+  outline: 2px solid var(--river-brass-hi);
+  outline-offset: 3px;
+}
+
+.club-home-account .club-link {
+  padding-inline: 8px;
+  border: 1px solid var(--control-edge);
+  border-radius: 4px;
+  color: var(--river-brass-hi);
+  font-family: var(--control-type);
+  font-size: 15px;
+}
+
+.club.club-private {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: clamp(20px, 4vw, 48px);
+  background: var(--river-void);
+  color: var(--river-cream);
+}
+
+.club-private-world {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+}
+
+.club-private-world img {
+  object-fit: cover;
+  object-position: 50% 60%;
+  filter: brightness(0.55) saturate(0.8);
+}
+
+.club-private-world::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgb(10 13 12 / 65%), transparent 80%);
+}
+
+.club-private-header {
+  position: relative;
+  display: grid;
+  grid-template-columns: 100px 1fr 100px;
+  align-items: center;
+}
+
+.club-private-back {
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.club-private-brand {
+  margin: 0;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 58px;
+  font-weight: 400;
+  text-align: center;
+}
+
+.club-private-body {
+  position: relative;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-items: center;
+}
+
+.club-private-card {
+  width: min(100%, 440px);
+  max-height: 100%;
+  padding: 28px;
+  overflow-y: auto;
+  border: 1px solid var(--control-edge);
+  border-radius: 8px;
+  background: var(--control-panel-face);
+  box-shadow:
+    inset 0 0 0 5px rgb(220 178 115 / 4%),
+    0 24px 70px rgb(0 0 0 / 50%);
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.club-private-card h2 {
+  margin: 8px 0 24px;
+}
+
+.club-private-kicker {
+  margin: 0;
+  color: var(--river-brass-hi);
+  font-family: var(--control-type);
+  font-size: 16px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.club-private-details {
+  margin: 0;
+}
+
+.club-private-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid color-mix(in srgb, var(--river-brass) 22%, transparent);
+}
+
+.club-private-details dt {
+  color: var(--river-cream-dim);
+  font-size: 13px;
+}
+
+.club-private-details dd {
+  margin: 0;
+  color: var(--river-cream);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.club-private-note {
+  margin: 18px 0 24px;
+  color: var(--river-cream-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.club-private-card .club-primary {
+  width: 100%;
+}
+
+.river-controls-2d :is(.modal, .shop-panel, .social-panel, .upgrade-panel, .inline-join, .lobby),
+.river-controls-2d .phone-table :is(.phone-sheet, .modal) {
+  border-color: var(--control-edge);
+  border-radius: 8px;
+  background: var(--control-panel-face);
+  box-shadow:
+    inset 0 1px 0 rgb(255 230 190 / 10%),
+    0 20px 60px rgb(0 0 0 / 50%);
+}
+
+.river-controls-2d .phone-table :is(.phone-sheet, .modal) {
+  border-radius: 12px 12px 0 0;
+}
+
+.river-controls-2d .phone-table :is(.phone-header, .phone-dock) {
+  border-color: var(--control-edge);
+  background: linear-gradient(120deg, #21171b, #111012 75%);
+}
+
+.river-controls-2d .phone-menu button {
+  padding: 14px 16px;
+  text-align: left;
+}
+
+.river-controls-2d .hud-corner > button {
+  min-height: 48px;
+  padding-inline: 18px;
+}
+
+.river-controls-2d .hud-corner > .leave-table,
+.river-controls-2d .phone-table .phone-leave {
+  color: var(--river-danger);
+}
+
+.river-controls-2d :is(.network-mark, .phone-network) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--control-edge);
+  border-radius: 4px;
+  background: var(--control-dark-face);
+  font-family: var(--control-type);
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.river-controls-2d :is(.network-mark, .phone-network)::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.river-controls-2d .phone-network {
+  margin-left: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.river-controls-2d .phone-network.connected {
+  color: var(--river-win);
+}
+
+.river-controls-2d .phone-network.reconnecting {
+  color: var(--river-danger);
+}
+
+.river-controls-2d .ram-waiting {
+  border: 1px solid var(--control-edge);
+  border-radius: 5px;
+  background: var(--control-dark-face);
+  box-shadow: var(--control-inset);
+  color: var(--river-cream-dim);
+}
+
+.river-controls-2d .ram-waiting > span {
+  font-family: var(--control-type);
+  font-size: 18px;
+  letter-spacing: 0.06em;
+}
+
+.river-controls-2d .status-line.populated {
+  border-color: var(--control-edge);
+  border-radius: 5px;
+  background: var(--control-dark-face);
+  font-family: var(--control-type);
+  font-size: 17px;
+  letter-spacing: 0.035em;
+}
+
+.river-controls-2d .phone-status {
+  padding-block: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--river-brass) 18%, transparent);
+  background: #151113;
+}
+
+.river-controls-2d .t2d-placard {
+  border-color: var(--control-edge);
+  border-radius: 9px;
+  background: var(--control-dark-face);
+  background-blend-mode: normal;
+  box-shadow:
+    var(--control-inset),
+    0 5px 14px rgb(0 0 0 / 32%);
+}
+
+.river-controls-2d .t2d-placard.acting,
+.river-controls-2d .t2d-placard.all-in {
+  border-color: var(--river-brass-hi);
+}
+
+.river-controls-2d .t2d-placard.winning {
+  border-color: var(--river-win);
+}
+
+.river-controls-2d .t2d-stack {
+  color: var(--river-brass-hi);
+}
+
+.river-controls-2d .phone-inspected {
+  border-color: var(--river-brass-hi);
+  border-radius: 5px;
+  background: var(--control-dark-face);
+}
+
+@media (hover: hover) {
+  :is(.club-home-dialog, .club-private) button:hover:not(:disabled),
+  .club-home-secondary:hover:not(:disabled),
+  .river-controls-2d
+    :is(.hud-corner > button, .ram-solo > button, .phone-menu button):hover:not(:disabled) {
+    border-color: var(--river-brass-hi);
+    filter: brightness(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :is(.club-home-dialog, .club-private) .club-primary:active:not(:disabled),
+  .river-controls-2d .ram-solo > button:active:not(:disabled) {
+    transform: translateY(2px);
+  }
+}
+
+@media (max-width: 600px) {
+  .club.club-private {
+    gap: 16px;
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .club-private-header {
+    grid-template-columns: 72px 1fr 72px;
+  }
+
+  .club-private-brand {
+    font-size: 44px;
+  }
+
+  .club-private-card {
+    padding: 22px;
+  }
+}

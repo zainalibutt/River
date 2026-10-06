@@ -1,0 +1,1534 @@
+/*
+ * The menu layer: a private club after dark.
+ *
+ * Separate from globals.css on purpose. That file is the table HUD, it is 2,778
+ * lines, and its palette is felt green and lamp amber because it sits inside a
+ * lit room. The shell sits outside one, and mixing the two would mean every
+ * change to a menu risked a control the player uses mid-hand.
+ *
+ * The rules here are measured, from docs/images/menus_1/README.md: navigation
+ * takes 20-25 percent of frame and the venue owns the rest; focus moves in
+ * 180-250ms and screens exchange in 500-700ms with the room still behind them;
+ * brass marks focus and progress. Legacy club controls keep their destructive
+ * oxblood; the home scopes its separate wine brand to the existing card backs.
+ */
+
+:root {
+  /* Foundation. Near-black green rather than grey - the room is warm, and a
+     neutral charcoal beside it reads blue and cheap. */
+  --club-ink: #060c0a;
+  --club-charcoal: #0d1412;
+  --club-slate: #141c19;
+
+  /* Warm ivory, never pure white. #fff against a warm render looks like a
+     rendering error. */
+  --club-ivory: #ede4d4;
+  --club-ivory-dim: #9d9486;
+  --club-ivory-faint: #665f56;
+
+  /* Brushed brass. Focus and progress only. If it is decorating something it
+     is in the wrong place. */
+  --club-brass: #c6a469;
+  --club-brass-bright: #e3c791;
+  --club-brass-deep: #8a7040;
+
+  /* Destructive only: fold, leave, delete. Nowhere else. */
+  --club-oxblood: #7a2029;
+
+  /* One material hierarchy, not many competing glass cards. */
+  --club-glass: rgba(6, 12, 10, 0.74);
+  --club-glass-raised: rgba(20, 28, 25, 0.82);
+  --club-hairline: rgba(198, 164, 105, 0.16);
+  --club-hairline-strong: rgba(198, 164, 105, 0.34);
+
+  /* Motion. A clean glide, never a bounce. */
+  --club-focus: 200ms;
+  --club-screen: 600ms;
+  --club-glide: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* Layout. The rail is a percentage of the viewport, not a fixed width, so the
+     venue keeps its share of the frame at any size. */
+  --club-rail: 23vw;
+  --club-rail-min: 264px;
+  --club-rail-max: 420px;
+}
+
+/* ---------------------------------------------------------------- shell --- */
+
+/* One screen, answered by taps: nothing here pans, and a pinch does not zoom it. */
+.club {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: clamp(var(--club-rail-min), var(--club-rail), var(--club-rail-max)) 1fr;
+  background: var(--club-ink);
+  color: var(--club-ivory);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  overflow: hidden;
+  touch-action: none;
+}
+
+/*
+ * The venue, behind everything.
+ *
+ * A still rather than a live scene. The board asks for the room to stay visible
+ * across every screen, and a render costs one image where a second WebGL
+ * context costs a canvas that will not composite in a background tab, a second
+ * asset load, and a frame budget shared with the table.
+ */
+.club-stage {
+  position: relative;
+  overflow: hidden;
+  background: var(--club-ink);
+}
+
+.club-stage-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 62% 50%;
+  /* Slow, low-amplitude drift. The room should breathe, not perform. */
+  animation: club-drift 48s var(--club-glide) infinite alternate;
+}
+
+@keyframes club-drift {
+  from {
+    transform: scale(1.06) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.11) translate3d(-1.2%, -0.8%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .club-stage-image {
+    animation: none;
+    transform: scale(1.06);
+  }
+}
+
+/*
+ * The rail's edge has to sit on the render without a hard seam, so the stage
+ * carries the gradient rather than the rail carrying a border.
+ */
+.club-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    var(--club-ink) 0%,
+    rgba(6, 12, 10, 0.72) 14%,
+    rgba(6, 12, 10, 0.12) 42%,
+    rgba(6, 12, 10, 0.34) 100%
+  );
+  pointer-events: none;
+}
+
+/* Vignette and grain. Felt before it is seen. */
+.club-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 88% at 62% 44%, transparent 42%, rgba(0, 0, 0, 0.62) 100%);
+  pointer-events: none;
+}
+
+/* ----------------------------------------------------------------- rail --- */
+
+.club-rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(2rem, 4.4vh, 3.4rem) 0 clamp(1.6rem, 3.2vh, 2.6rem);
+  background: linear-gradient(180deg, var(--club-charcoal) 0%, var(--club-ink) 100%);
+  z-index: 2;
+}
+
+/* --------------------------------------------------------------- wordmark - */
+
+.club-wordmark {
+  padding: 0 clamp(1.6rem, 3vw, 2.8rem);
+  margin-bottom: clamp(2.4rem, 6vh, 4.6rem);
+}
+
+.club-wordmark-name {
+  margin: 0;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 300;
+  font-size: clamp(2.1rem, 3.1vw, 3.1rem);
+  /* Ceremony comes from tracking, not from size. */
+  letter-spacing: 0.34em;
+  text-indent: 0.34em;
+  line-height: 1;
+  color: var(--club-brass);
+  text-align: center;
+}
+
+/* Suit geometry as a monogram rule. Abstract marks, not props. */
+.club-wordmark-rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  margin-top: 0.85rem;
+  font-size: 0.62rem;
+  color: var(--club-brass-deep);
+}
+
+.club-wordmark-rule::before,
+.club-wordmark-rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--club-hairline-strong));
+}
+
+.club-wordmark-rule::after {
+  background: linear-gradient(90deg, var(--club-hairline-strong), transparent);
+}
+
+.club-wordmark-pips {
+  letter-spacing: 0.34em;
+  text-indent: 0.34em;
+}
+
+/* ------------------------------------------------------------------ nav --- */
+
+.club-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.club-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  padding: clamp(0.72rem, 1.5vh, 1.05rem) clamp(1.6rem, 3vw, 2.8rem);
+  border: 0;
+  background: transparent;
+  color: var(--club-ivory-dim);
+  font: inherit;
+  font-size: clamp(0.86rem, 1.02vw, 1.02rem);
+  font-weight: 400;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--club-focus) var(--club-glide),
+    background-color var(--club-focus) var(--club-glide),
+    padding-left var(--club-focus) var(--club-glide);
+}
+
+/* One selection rule: a brass bar, a lift in the ground, and the type warming
+   to ivory. Three signals of the same state, no fourth. */
+.club-nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12%;
+  bottom: 12%;
+  width: 2px;
+  background: var(--club-brass);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--club-focus) var(--club-glide);
+}
+
+.club-nav-item:hover,
+.club-nav-item:focus-visible {
+  color: var(--club-ivory);
+  background-color: rgba(198, 164, 105, 0.045);
+  outline: none;
+}
+
+.club-nav-item[aria-current="true"] {
+  color: var(--club-ivory);
+  background-color: rgba(198, 164, 105, 0.07);
+  padding-left: calc(clamp(1.6rem, 3vw, 2.8rem) + 0.4rem);
+}
+
+.club-nav-item[aria-current="true"]::before,
+.club-nav-item:focus-visible::before {
+  transform: scaleY(1);
+}
+
+/* The diamond markers either side of the active item. */
+.club-nav-mark {
+  font-size: 0.5rem;
+  color: var(--club-brass);
+  opacity: 0;
+  transition: opacity var(--club-focus) var(--club-glide);
+}
+
+.club-nav-item[aria-current="true"] .club-nav-mark {
+  opacity: 1;
+}
+
+.club-nav-label {
+  flex: 1;
+}
+
+/*
+ * "Soon", not silence.
+ *
+ * A greyed-out item with no explanation does not read as unbuilt. It reads as
+ * withheld - the first person to use this menu asked why he was banned from the
+ * wardrobe. A disabled control has to say which of the two it is.
+ */
+.club-nav-soon {
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  color: var(--club-brass-deep);
+  border: 1px solid var(--club-hairline);
+  padding: 0.14rem 0.4rem;
+}
+
+/* A nav item whose destination is not built yet says so rather than lying. */
+.club-nav-item[disabled] {
+  color: var(--club-ivory-faint);
+  cursor: not-allowed;
+}
+
+.club-nav-item[disabled]:hover {
+  background-color: transparent;
+}
+
+/* --------------------------------------------------------------- footer --- */
+
+.club-rail-footer {
+  padding: 0 clamp(1.6rem, 3vw, 2.8rem);
+  text-align: center;
+  font-size: 0.66rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--club-brass-deep);
+}
+
+.club-rail-footer-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+}
+
+.club-rail-footer-rule::before,
+.club-rail-footer-rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--club-hairline);
+}
+
+/* -------------------------------------------------------------- capsule --- */
+
+/*
+ * Quiet dossiers, not dashboards. Two on the primary screen at most: what is
+ * happening, and who you are.
+ */
+.club-capsule {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: clamp(0.8rem, 1.4vw, 1.3rem);
+  padding: clamp(0.7rem, 1.4vh, 1rem) clamp(1rem, 1.8vw, 1.5rem);
+  background: var(--club-glass);
+  border: 1px solid var(--club-hairline);
+  backdrop-filter: blur(14px) saturate(0.9);
+  z-index: 3;
+}
+
+.club-capsule-event {
+  top: clamp(1.4rem, 3vh, 2.4rem);
+  right: clamp(1.4rem, 2.6vw, 2.6rem);
+}
+
+.club-capsule-player {
+  bottom: clamp(1.4rem, 3vh, 2.4rem);
+  right: clamp(1.4rem, 2.6vw, 2.6rem);
+}
+
+.club-capsule-label {
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--club-ivory-dim);
+}
+
+.club-capsule-value {
+  font-size: clamp(1.05rem, 1.5vw, 1.35rem);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--club-brass);
+  font-variant-numeric: tabular-nums;
+}
+
+.club-capsule-name {
+  font-size: clamp(0.9rem, 1.1vw, 1.05rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--club-ivory);
+}
+
+.club-capsule-sub {
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--club-ivory-faint);
+}
+
+/* Progress is brass, like focus, because it is the same idea: where you are. */
+.club-progress {
+  position: relative;
+  height: 2px;
+  width: clamp(90px, 9vw, 150px);
+  margin-top: 0.5rem;
+  background: rgba(198, 164, 105, 0.16);
+  overflow: hidden;
+}
+
+.club-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--club-brass);
+  transition: width var(--club-screen) var(--club-glide);
+}
+
+/* -------------------------------------------------------------- sign in --- */
+
+.club-capsule-identity {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.club-capsule-figure {
+  text-align: right;
+}
+
+.club-capsule-signin {
+  bottom: clamp(1.4rem, 3vh, 2.4rem);
+  right: calc(clamp(1.4rem, 2.6vw, 2.6rem) + 320px);
+}
+
+.club-field {
+  display: grid;
+  gap: 0.55rem;
+}
+
+/*
+ * A text button, not a chrome one.
+ *
+ * Signing in is an offer rather than the screen's decision, so it reads as a
+ * line of type with a brass rule under it. The dominant action on this screen
+ * is Play, and a second filled button would argue with it.
+ */
+.club-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--club-hairline-strong);
+  background: transparent;
+  color: var(--club-brass);
+  font: inherit;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--club-focus) var(--club-glide);
+}
+
+.club-link:hover,
+.club-link:focus-visible {
+  color: var(--club-brass-bright);
+  outline: none;
+}
+
+@media (max-width: 720px) {
+  .club-capsule-signin {
+    right: clamp(1.4rem, 2.6vw, 2.6rem);
+    bottom: calc(clamp(1.4rem, 3vh, 2.4rem) + 96px);
+  }
+}
+
+/* ---------------------------------------------------------------- input --- */
+
+.club-input {
+  width: clamp(220px, 24vw, 340px);
+  padding: 0.6rem 0.75rem;
+  background: rgba(6, 12, 10, 0.6);
+  border: 1px solid var(--club-hairline);
+  color: var(--club-ivory);
+  font: inherit;
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  transition: border-color var(--club-focus) var(--club-glide);
+}
+
+.club-input::placeholder {
+  color: var(--club-ivory-faint);
+}
+
+.club-input:focus {
+  outline: none;
+  border-color: var(--club-hairline-strong);
+}
+
+/* Oxblood, and only here: something the player got wrong or is about to lose. */
+.club-error {
+  color: var(--club-oxblood);
+  filter: brightness(1.7);
+}
+
+/* ---------------------------------------------------------------- folio --- */
+
+/*
+ * A folio, not a dashboard.
+ *
+ * One panel holding one decision, sitting on the room rather than replacing it.
+ * It keeps to the right so the venue stays legible between it and the rail -
+ * the whole reason for choosing a venue is being able to see the one you chose.
+ */
+.club-folio {
+  position: absolute;
+  top: 50%;
+  right: clamp(1.6rem, 4vw, 4.5rem);
+  transform: translateY(-50%);
+  z-index: 3;
+  display: grid;
+  gap: 0.9rem;
+  width: clamp(300px, 27vw, 400px);
+  padding: clamp(1.4rem, 2.4vw, 2.1rem);
+  background: var(--club-glass);
+  border: 1px solid var(--club-hairline);
+  backdrop-filter: blur(16px) saturate(0.9);
+}
+
+.club-folio-head {
+  display: grid;
+  gap: 0.3rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--club-hairline);
+}
+
+.club-folio-title {
+  margin: 0;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 300;
+  font-size: clamp(1.4rem, 1.9vw, 1.8rem);
+  letter-spacing: 0.12em;
+  color: var(--club-ivory);
+}
+
+.club-folio-sub {
+  margin: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--club-brass-deep);
+}
+
+.club-folio-tagline {
+  margin: -0.3rem 0 0.3rem;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--club-ivory-dim);
+  font-style: italic;
+}
+
+.club-folio-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.66rem;
+  line-height: 1.6;
+  color: var(--club-ivory-faint);
+}
+
+/* The value row: label left, control right. The one input this layer needs. */
+.club-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(198, 164, 105, 0.08);
+}
+
+.club-row-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--club-ivory-dim);
+}
+
+.club-row-value {
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  color: var(--club-ivory);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A row that reports rather than sets. Dimmer, so the difference is visible
+   before it is discovered. */
+.club-row-fixed .club-row-value {
+  color: var(--club-ivory-dim);
+}
+
+.club-row-control {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.club-row-control .club-row-value {
+  min-width: 10ch;
+  text-align: center;
+}
+
+.club-step {
+  padding: 0.2rem 0.45rem;
+  border: 0;
+  background: transparent;
+  color: var(--club-brass-deep);
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: color var(--club-focus) var(--club-glide);
+}
+
+.club-step:hover,
+.club-step:focus-visible {
+  color: var(--club-brass-bright);
+  outline: none;
+}
+
+/*
+ * The one filled control in the layer.
+ *
+ * Brass is focus and progress everywhere else; here it is also the single
+ * dominant decision, which is the only place a filled button earns its weight.
+ */
+.club-primary {
+  margin-top: 0.5rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--club-brass-deep);
+  background: linear-gradient(180deg, rgba(198, 164, 105, 0.18), rgba(198, 164, 105, 0.07));
+  color: var(--club-brass-bright);
+  font: inherit;
+  font-size: 0.76rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background var(--club-focus) var(--club-glide),
+    color var(--club-focus) var(--club-glide);
+}
+
+.club-primary:hover:not(:disabled),
+.club-primary:focus-visible:not(:disabled) {
+  background: linear-gradient(180deg, rgba(198, 164, 105, 0.3), rgba(198, 164, 105, 0.14));
+  color: var(--club-ivory);
+  outline: none;
+}
+
+.club-primary:disabled {
+  color: var(--club-ivory-faint);
+  cursor: progress;
+}
+
+.club-table-setup,
+.club-settings {
+  width: min(420px, calc(100vw - var(--club-rail-max) - 5rem));
+}
+
+.club-choice-row,
+.club-choice-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.club-choice-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+.club-choice-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.club-choice-row,
+.club-choice-grid {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.club-choice-legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.club-choice-row button,
+.club-choice-grid button,
+.club-setting-toggle {
+  min-height: 38px;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--club-hairline);
+  background: rgba(6, 12, 10, 0.72);
+  color: var(--club-ivory-dim);
+  font: inherit;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.club-choice-row button[aria-pressed="true"],
+.club-choice-grid button[aria-pressed="true"],
+.club-setting-toggle[aria-pressed="true"] {
+  border-color: var(--club-brass);
+  background: rgba(198, 164, 105, 0.14);
+  color: var(--club-ivory);
+}
+
+.club-choice-row button:focus-visible,
+.club-choice-grid button:focus-visible,
+.club-setting-toggle:focus-visible {
+  outline: 1px solid var(--club-brass-bright);
+  outline-offset: 2px;
+}
+
+.club-setting-toggle {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.4rem;
+  width: 100%;
+}
+
+.club-setting-toggle strong {
+  color: var(--club-brass);
+}
+
+/* The settings list both SETTINGS open: the menu's capsule and the table's panel. */
+.river-settings {
+  display: grid;
+  gap: 0.55rem;
+}
+
+/* Swapping the room should be a dissolve, not a cut. */
+.club-stage-swap {
+  animation:
+    club-fade-in var(--club-screen) var(--club-glide) both,
+    club-drift 48s var(--club-glide) infinite alternate;
+}
+
+@keyframes club-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .club-stage-swap {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .club-folio {
+    top: auto;
+    bottom: clamp(1rem, 3vh, 2rem);
+    right: clamp(1rem, 3vw, 2rem);
+    left: clamp(1rem, 3vw, 2rem);
+    width: auto;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------- scene in --- */
+
+/*
+ * Screens exchange while the room stays. Centralised here so a score can attach
+ * to the same beats later without any screen being redesigned for it.
+ */
+@keyframes club-scene-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.club-scene {
+  animation: club-scene-in var(--club-screen) var(--club-glide) both;
+}
+
+.club-rail .club-nav-item {
+  animation: club-scene-in var(--club-screen) var(--club-glide) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .club-scene,
+  .club-rail .club-nav-item {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------- narrow ---- */
+
+/*
+ * Below the rail's minimum the two-column split stops being a composition and
+ * starts being a squeeze. The room goes behind the navigation rather than
+ * beside it, which keeps the venue visible - the one rule that does not bend.
+ */
+@media (max-width: 720px) {
+  .club {
+    grid-template-columns: 1fr;
+  }
+
+  .club-rail {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(6, 12, 10, 0.94) 0%, rgba(6, 12, 10, 0.8) 100%);
+    z-index: 2;
+  }
+
+  /*
+   * What the menu opens - Start a table, Join Friends, Settings - rises from
+   * the foot of the screen, over the room and clear of the menu. It was hidden
+   * here, so on a phone held upright each of those three taps changed nothing
+   * anybody could see, and there was no way on to a table.
+   */
+  .club-capsule-event {
+    top: auto;
+    right: clamp(1rem, 3vw, 2rem);
+    bottom: clamp(1rem, 3vh, 2rem);
+    left: clamp(1rem, 3vw, 2rem);
+    z-index: 4;
+  }
+
+  .club-capsule-event > * {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* Their widths leave room for the rail beside them, which here is behind them. */
+  .club-table-setup,
+  .club-settings {
+    width: auto;
+  }
+}
+
+/* Sideways, the menu runs the full height of a short screen, so the panel sits
+   to the right of its words rather than over them, and another item can still
+   be chosen while one is open. */
+@media (max-width: 720px) and (orientation: landscape) {
+  .club-capsule-event {
+    left: 45%;
+  }
+}
+
+.club-home {
+  --home-wine: var(--river-card-back);
+  --home-wine-lit: var(--river-card-back-pattern);
+  --home-brass: var(--river-brass);
+  --home-brass-lit: var(--river-brass-hi);
+  --club-ink: var(--river-void);
+  --club-ivory: var(--river-cream);
+  --club-ivory-dim: var(--river-cream-dim);
+  --club-brass-bright: var(--river-brass-hi);
+  --club-hairline: rgb(242 234 223 / 16%);
+  --club-hairline-strong: rgb(242 234 223 / 26%);
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+  background: var(--club-ink);
+  overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;
+  padding: max(36px, env(safe-area-inset-top)) max(64px, env(safe-area-inset-right))
+    max(32px, env(safe-area-inset-bottom)) max(64px, env(safe-area-inset-left));
+}
+
+.club-home-art {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--club-ink);
+}
+
+.club-home-world {
+  position: absolute;
+  inset: 0;
+}
+
+.club-home-art img {
+  object-fit: cover;
+  object-position: 62% 56%;
+  filter: brightness(0.88) saturate(0.9);
+}
+
+.club-home-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgb(10 13 12 / 82%), transparent 58%),
+    linear-gradient(
+      180deg,
+      rgb(10 13 12 / 48%) 0%,
+      transparent 32%,
+      transparent 72%,
+      rgb(10 13 12 / 82%) 100%
+    );
+}
+
+.club-home-header,
+.club-home-body {
+  position: relative;
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+}
+
+.club-home-header {
+  display: flex;
+  position: relative;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 24px;
+}
+
+.club-home .club-wordmark {
+  padding: 0;
+  margin: 0;
+}
+
+.club-home .club-wordmark-name {
+  margin: 0;
+  font-size: 112px;
+  line-height: 1;
+  color: var(--club-ivory);
+  letter-spacing: -0.035em;
+  text-indent: 0;
+  text-align: center;
+  text-shadow: 0 4px 32px rgb(0 0 0 / 45%);
+}
+
+.club-home-tagline {
+  margin: 10px 0 0;
+  color: var(--home-brass-lit);
+  font-family: var(--font-home-display), var(--font-inter), sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.club-home-tools,
+.club-home-friend-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.club-home-tools {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.club-home-tool,
+.club-home-options {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--club-ivory-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.club-home-tool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.club-home-tool strong {
+  color: var(--club-ivory);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.club-home-body {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 490px;
+  padding-block: 40px 88px;
+}
+
+.club-home-content {
+  width: min(100%, 392px);
+}
+
+.club-home-play {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.club-home-play-button {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 86px;
+  padding: 20px 24px;
+  border: 1px solid color-mix(in srgb, var(--home-brass-lit) 70%, transparent);
+  border-radius: 5px;
+  background: var(--control-primary-face);
+  color: var(--club-ivory);
+  text-align: center;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: var(--control-primary-lift);
+}
+
+.club-home-play-button::before,
+.club-home-play-button::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.club-home-play-button::before {
+  inset: 6px;
+  border: 1px solid color-mix(in srgb, var(--home-brass-lit) 28%, transparent);
+  border-radius: 2px;
+}
+
+.club-home-play-button::after {
+  inset: 10px;
+  background: repeating-linear-gradient(45deg, rgb(255 230 190 / 13%) 0 1px, transparent 1px 7px);
+  mask-image: linear-gradient(90deg, black, transparent 28%, transparent 72%, black);
+}
+
+.club-home-action-title {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-home-display), var(--font-inter), sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 1px rgb(0 0 0 / 22%);
+}
+
+.club-home-options {
+  padding-inline: 0;
+  justify-self: center;
+  font-size: 12px;
+}
+
+.club-home-nell {
+  position: relative;
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 94px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--home-brass) 45%, transparent);
+  border-radius: 5px;
+  background: var(--control-dark-face);
+  color: var(--club-ivory);
+  text-align: center;
+  font: inherit;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgb(255 230 190 / 7%),
+    0 10px 28px rgb(0 0 0 / 25%);
+}
+
+.club-home-match-mark {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3px;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--home-brass);
+  border-radius: 50%;
+  color: var(--home-brass-lit);
+  font-family: var(--font-home-display), sans-serif;
+  font-size: 25px;
+  box-shadow:
+    inset 0 0 0 3px #231b18,
+    inset 0 0 0 4px rgb(220 178 115 / 18%);
+}
+
+.club-home-match-mark small {
+  font-size: 13px;
+}
+
+.club-home-challenge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.club-home-nell .club-home-action-title {
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--home-brass-lit);
+}
+
+.club-home-action-detail {
+  color: var(--club-ivory-dim);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.club-home-friends {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  margin-top: 24px;
+}
+
+.club-home-friends h2 {
+  margin: 0;
+  color: var(--club-ivory-dim);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.club-home-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgb(242 234 223 / 15%);
+  border-radius: 3px;
+  background: rgb(10 13 12 / 48%);
+  color: var(--club-ivory);
+  font: inherit;
+  font-family: var(--font-home-display), var(--font-inter), sans-serif;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.club-home-venue {
+  position: absolute;
+  right: 0;
+  bottom: 6px;
+  margin: 0;
+  color: var(--club-ivory-dim);
+  font-size: 12px;
+}
+
+.club-home-account.club-capsule-player {
+  position: absolute;
+  inset: auto auto 0 0;
+  width: min(100%, 340px);
+  margin: 0;
+  justify-content: space-between;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  backdrop-filter: none;
+}
+
+.club-home-account .club-capsule-name,
+.club-home-account .club-capsule-value {
+  color: var(--club-ivory);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.club-home-account .club-capsule-sub,
+.club-home-account .club-capsule-label {
+  color: var(--club-ivory-dim);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.club-home-account .club-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--club-ivory-dim);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.club-home-dialog {
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 24px;
+  color: var(--club-ivory);
+  background: var(--club-ink);
+  border: 1px solid var(--club-hairline-strong);
+  border-radius: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.club-home-dialog::backdrop {
+  background: rgb(0 0 0 / 76%);
+}
+
+.club-home-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.club-home-dialog-heading h2 {
+  margin: 0;
+  font: inherit;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.club-home-dialog .club-capsule {
+  position: static;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  animation: none;
+}
+
+.club-home-dialog .club-input {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+
+.club-home-dialog .club-capsule-sub {
+  color: var(--club-ivory-dim);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.5;
+}
+
+.club-home-dialog .club-error {
+  color: var(--river-danger);
+  filter: none;
+}
+
+.club-home-dialog .club-choice-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+.club-home-dialog button {
+  min-height: 48px;
+}
+
+.club-home-dialog .club-primary {
+  background: var(--home-wine);
+  color: var(--club-ivory);
+  border-color: transparent;
+}
+
+.club-home button:focus-visible {
+  outline: 2px solid var(--club-brass-bright);
+  outline-offset: 4px;
+}
+
+.club-home button:active:not(:disabled) {
+  filter: brightness(0.85);
+}
+
+.club-home-play-button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow:
+    0 3px 0 #211015,
+    inset 0 2px 6px rgb(0 0 0 / 30%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .club-home-play-button:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+@media (hover: hover) {
+  .club-home-play-button:hover:not(:disabled) {
+    border-color: var(--home-brass-lit);
+    filter: brightness(1.14);
+  }
+
+  .club-home-nell:hover:not(:disabled) {
+    border-color: var(--home-brass-lit);
+    filter: brightness(1.18);
+  }
+
+  .club-home-nell:hover,
+  .club-home-secondary:hover,
+  .club-home-tool:hover,
+  .club-home-options:hover {
+    color: var(--club-ivory);
+  }
+}
+
+@media (min-width: 1920px) {
+  .club-home .club-wordmark-name {
+    font-size: 132px;
+  }
+
+  .club-home-content {
+    width: 420px;
+  }
+
+  .club-home-play-button {
+    min-height: 92px;
+  }
+}
+
+@media (max-width: 900px) {
+  .club-home {
+    padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+      max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  }
+
+  .club-home-header,
+  .club-home-body {
+    max-width: 480px;
+  }
+
+  .club-home .club-wordmark-name {
+    font-size: 76px;
+  }
+
+  .club-home-header {
+    padding-top: 52px;
+  }
+
+  .club-home-tagline {
+    margin-top: 8px;
+    font-size: 14px;
+  }
+
+  .club-home-tools {
+    gap: 0;
+    left: 0;
+    justify-content: flex-end;
+  }
+
+  .club-home-tool {
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+
+  .club-home-art {
+    height: 70%;
+  }
+
+  .club-home-world {
+    /* 70vh × 112% is 78vh; a 16:9 capture needs 140vh of image width. */
+    bottom: auto;
+    height: 112%;
+  }
+
+  .club-home-art img {
+    object-position: 18% 68%;
+    filter: brightness(0.9) saturate(0.85);
+  }
+
+  .club-home-art::after {
+    background:
+      linear-gradient(
+        180deg,
+        rgb(10 13 12 / 72%) 0%,
+        transparent 28%,
+        transparent 64%,
+        var(--club-ink) 100%
+      ),
+      linear-gradient(90deg, rgb(10 13 12 / 12%), transparent 70%);
+  }
+
+  .club-home-body {
+    justify-content: flex-end;
+    min-height: 440px;
+    padding-block: min(23dvh, 230px) 0;
+  }
+
+  .club-home-content {
+    width: 100%;
+  }
+
+  .club-home-play {
+    margin-bottom: 12px;
+    gap: 4px;
+  }
+
+  .club-home-play-button {
+    min-height: 76px;
+    padding: 16px 20px;
+  }
+
+  .club-home-action-title {
+    font-size: 29px;
+  }
+
+  .club-home-nell {
+    min-height: 82px;
+  }
+
+  .club-home-friends {
+    min-height: 52px;
+    margin-top: 18px;
+  }
+
+  .club-home-account.club-capsule-player {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    margin-top: 24px;
+  }
+
+  .club-home-venue {
+    display: none;
+  }
+
+  .club-home-dialog {
+    margin: auto auto max(16px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 380px) {
+  .club-home {
+    padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
+  }
+
+  .club-home .club-wordmark-name {
+    font-size: 68px;
+  }
+
+  .club-home-tool {
+    font-size: 11px;
+    padding-inline: 6px;
+  }
+}
+
+@media (max-width: 900px) and (max-height: 760px) {
+  .club-home-body {
+    min-height: 0;
+    padding-top: 72px;
+  }
+
+  .club-home-account.club-capsule-player {
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .club-home-header,
+  .club-home-body {
+    max-width: none;
+  }
+
+  .club-home .club-wordmark-name {
+    font-size: 52px;
+  }
+
+  .club-home-header {
+    padding-top: 0;
+    justify-content: flex-start;
+  }
+
+  .club-home-tools {
+    left: auto;
+  }
+
+  .club-home-body {
+    padding-top: 12px;
+    align-items: flex-start;
+  }
+
+  .club-home-content {
+    width: min(55%, 340px);
+  }
+
+  .club-home-play {
+    gap: 0;
+    margin-bottom: 4px;
+  }
+
+  .club-home-play-button {
+    min-height: 60px;
+    padding-block: 12px;
+  }
+
+  .club-home-nell {
+    min-height: 68px;
+    padding-block: 6px;
+  }
+
+  .club-home-friends {
+    margin-top: 8px;
+  }
+
+  .club-home-art {
+    height: 100%;
+  }
+
+  .club-home-world {
+    height: 100%;
+  }
+
+  .club-home-art img {
+    object-position: 72% 60%;
+  }
+
+  .club-home-art::after {
+    background: linear-gradient(90deg, var(--club-ink), rgb(10 13 12 / 75%) 28%, transparent 80%);
+  }
+}

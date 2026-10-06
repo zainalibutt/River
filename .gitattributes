@@ -1,0 +1,8 @@
+# Biome enforces LF. Without this, core.autocrlf=true materialises CRLF on
+# every checkout on Windows and lint fails on files nobody edited.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.glb binary
+*.blend binary

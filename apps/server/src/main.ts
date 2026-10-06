@@ -1,0 +1,204 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { createServer } from 'node:http'
+import { createRequire } from 'node:module'
+import type { Duplex } from 'node:stream'
+import { fileURLToPath } from 'node:url'
+import { config as loadEnv } from 'dotenv'
+import { serveApiRoutes } from './api-routes.js'
+import { createSupabaseTokenVerifier } from './auth.js'
+import { SupabaseBotOpponentStore } from './bot-opponent-store.js'
+import { workerRiverThinker } from './bot-thinker.js'
+import { readServerConfig } from './config.js'
+import { SupabaseCosmeticStore } from './cosmetic-store.js'
+import { createSupabaseEconomy } from './economy-service.js'
+import { SupabaseLedger } from './ledger.js'
+import { publicProfileRoute, SupabasePublicProfiles } from './public-profiles.js'
+import { SupabaseTableItemStore } from './table-item-store.js'
+import { tableLinkRoute } from './table-link-route.js'
+import { RoomHub } from './transport.js'
+import { attachRiverWebSocketServer } from './websocket.js'
+
+interface NextApplication {
+  prepare(): Promise<void>
+  getRequestHandler(): (request: IncomingMessage, response: ServerResponse) => Promise<void>
+  getUpgradeHandler(): (request: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>
+}
+
+const require = createRequire(import.meta.url)
+const OPPONENT_CONSOLIDATION_LAG_MS = 60 * 60 * 1000
+/**
+ * How long a new server waits before paying back what a crashed one left
+ * seated. Railway gives the server it replaces up to thirty seconds to shut
+ * down and settle its own tables; this leaves it three times that.
+ */
+const CRASH_REFUND_DELAY_MS = 90_000
+const next = require('next') as (options: {
+  dev: boolean
+  dir: string
+  hostname: string
+  port: number
+}) => NextApplication
+
+loadEnv({ path: fileURLToPath(new URL('../../../.env.local', import.meta.url)), quiet: true })
+
+function errorText(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`
+  return String(error)
+}
+
+async function start(): Promise<void> {
+  // A seating opened before now was opened by some other server.
+  const startedAtMs = Date.now()
+  const config = readServerConfig(process.env)
+  const development = process.env.NODE_ENV !== 'production'
+  const webDirectory = fileURLToPath(new URL('../../web', import.meta.url))
+  const application = next({
+    dev: development,
+    dir: webDirectory,
+    hostname: config.hostname,
+    port: config.port,
+  })
+  await application.prepare()
+  const handle = application.getRequestHandler()
+  const ledger = new SupabaseLedger({
+    supabaseUrl: config.supabaseUrl,
+    serviceRoleKey: config.serviceRoleKey,
+  })
+  const rememberOpponents = process.env.BOT_OPPONENT_PERSISTENCE === 'true'
+  // The OG's river solver, worked out on a worker thread; off unless switched on.
+  const solveRivers = process.env.BOT_RIVER_SOLVER === 'true'
+  // Paying back what a crash left seated needs the table its migration makes;
+  // off until that migration has been applied and this is switched on.
+  const refundCrashes = process.env.TABLE_CRASH_REFUND === 'true'
+  const hub = new RoomHub({
+    ...(refundCrashes ? { seatings: ledger } : {}),
+    // A person who opens River alone should find a table with people at it:
+    // three to eight of them, in chairs the table's room id picks.
+    botSeats: 'random',
+    ...(solveRivers ? { botRiverThinker: workerRiverThinker() } : {}),
+    ...(rememberOpponents
+      ? {
+          botOpponentStore: new SupabaseBotOpponentStore({
+            supabaseUrl: config.supabaseUrl,
+            serviceRoleKey: config.serviceRoleKey,
+            timeoutMs: 750,
+          }),
+        }
+      : {}),
+    verifyToken: createSupabaseTokenVerifier({ supabaseUrl: config.supabaseUrl }),
+    onError: (context, error) => {
+      process.stderr.write(`river: ${context}: ${errorText(error)}
+`)
+    },
+    ledger,
+    economy: createSupabaseEconomy({
+      supabaseUrl: config.supabaseUrl,
+      serviceRoleKey: config.serviceRoleKey,
+      ledger,
+    }),
+    tableItems: new SupabaseTableItemStore({
+      supabaseUrl: config.supabaseUrl,
+      serviceRoleKey: config.serviceRoleKey,
+    }),
+    cosmetics: new SupabaseCosmeticStore({
+      supabaseUrl: config.supabaseUrl,
+      serviceRoleKey: config.serviceRoleKey,
+    }),
+  })
+  // A short link resolves against the tables this process holds, and a profile
+  // is read with the service key it holds, so those routes are answered here.
+  // Every other request, the rest of /api included, is Next's.
+  const server = createServer(
+    serveApiRoutes(
+      [
+        tableLinkRoute(hub),
+        publicProfileRoute(
+          new SupabasePublicProfiles({
+            supabaseUrl: config.supabaseUrl,
+            serviceRoleKey: config.serviceRoleKey,
+          }),
+        ),
+      ],
+      (request, response) => handle(request, response),
+    ),
+  )
+  const sockets = attachRiverWebSocketServer(server, hub)
+  // Next owns hot reload in development and asks for it over its own upgrade.
+  // Without this the page loads but never reflects an edit.
+  if (development) {
+    const upgrade = application.getUpgradeHandler()
+    server.on('upgrade', (request, socket, head) => {
+      const requestPath = new URL(request.url ?? '/', 'http://river.local').pathname
+      if (requestPath === '/ws') return
+      void upgrade(request, socket, head)
+    })
+  }
+  // Stop taking connections first, then hand every seated stack back before
+  // the process that is holding those tables in memory goes away. Sockets close
+  // first so nobody can buy in to a table that is about to stop existing.
+  let settling = false
+  const shutdown = (): void => {
+    if (settling) return
+    settling = true
+    sockets.close(() => {
+      void hub
+        .settleAllTables()
+        .catch((error: unknown) => {
+          console.error('shutdown: could not settle every table', error)
+        })
+        .finally(() => server.close())
+    })
+  }
+  process.once('SIGINT', shutdown)
+  process.once('SIGTERM', shutdown)
+  server.listen(config.port, config.hostname)
+  if (refundCrashes) scheduleCrashRefund(hub, startedAtMs)
+  if (rememberOpponents) {
+    scheduleOpponentConsolidation(
+      new SupabaseBotOpponentStore({
+        supabaseUrl: config.supabaseUrl,
+        serviceRoleKey: config.serviceRoleKey,
+        timeoutMs: 20_000,
+      }),
+    )
+  }
+}
+
+/**
+ * Pays back the buy-ins a crashed server left seated, once the server this one
+ * replaced has had time to settle its own tables on the way out.
+ */
+function scheduleCrashRefund(hub: RoomHub, startedAtMs: number): void {
+  setTimeout(() => {
+    hub
+      .refundCrashedSeatings(startedAtMs)
+      .then((refunded) => {
+        if (refunded > 0) console.log(`crash refund: paid back ${refunded} seatings`)
+      })
+      .catch((error: unknown) => {
+        console.error('crash refund: could not run', error)
+      })
+  }, CRASH_REFUND_DELAY_MS).unref()
+}
+
+/**
+ * Folds bots' older evidence about each player into one checkpoint shortly
+ * after start-up and then once a day, so memory stays small however often a
+ * bot meets the same person. The last hour is left alone for live tables.
+ */
+function scheduleOpponentConsolidation(store: SupabaseBotOpponentStore): void {
+  const run = () => {
+    store
+      .consolidate(Date.now() - OPPONENT_CONSOLIDATION_LAG_MS)
+      .then(({ pairs, folded }) => {
+        if (folded > 0) console.log(`bot memory: folded ${folded} hands for ${pairs} pairs`)
+      })
+      .catch((error: unknown) => {
+        console.error('bot memory: consolidation failed', error)
+      })
+  }
+  setTimeout(run, 60_000).unref()
+  setInterval(run, 24 * 60 * 60 * 1000).unref()
+}
+
+await start()

@@ -1,0 +1,2994 @@
+import json
+import math
+import os
+import struct
+import sys
+
+os.environ.setdefault('RIVER_OUT', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'out'))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import bmesh
+import bpy
+import numpy as np
+from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
+
+import check_assets as checker
+import felt
+import skyline
+import stone
+import terrace
+from buildkit import (
+    add_emissive_material,
+    add_material,
+    add_metal_material,
+    build_mesh_from_geo,
+    clear_scene,
+    colorramp_material,
+    hex_to_rgb,
+    make_checker_material,
+    object_at,
+    retint,
+    seat_positions,
+    smooth_mesh_by_angle,
+)
+from build_characters import FACE_RECIPE_CELLS, HAIR_STYLES, OUTFIT_RECIPE_CELLS, build_animations
+from geo import (
+    concat,
+    fire_bowl,
+    parapet_lit_band,
+    translate_geo,
+    transform_geo,
+    balustrade,
+    bar_back,
+    card_body,
+    card_shoe,
+    box,
+    checkerboard_plane,
+    bar_bottle,
+    basement_counter,
+    chair_dining,
+    chair_folding,
+    chair_swivel,
+    chandelier,
+    chip_face,
+    chip_rim,
+    crate_stack,
+    dealer_rack,
+    discard_holder,
+    felt_oval,
+    felt_inlay_oval,
+    machine_unit,
+    ceiling_pipes,
+    room_walls,
+    laundry_cart,
+    suite_baluster,
+    suite_handrail,
+    suite_scroll,
+    chandelier_rods,
+    suite_sconces,
+    standing_patron,
+    festoon,
+    parapet_coping,
+    parapet_ring,
+    planter,
+    rail_ring_oval,
+    stepladder,
+    terrace_disc,
+    terrace_inlay,
+    wall_panel,
+    wall_sconce,
+    wood_pedestal,
+)
+from values import (
+    BUDGET,
+    VENUE_CAMERA,
+    VENUE_LIGHTS,
+    VENUE_SKY,
+    CHIP_DENOMS,
+    CHIP_THICK,
+    FELT_RX,
+    FELT_RY,
+    RAIL_T,
+    RAIL_X,
+    RAIL_Y,
+    SEAT_H,
+    TABLE_TOP,
+    VENUES,
+    WOOD_HEX,
+)
+
+OUT_DIR = os.environ['RIVER_OUT']
+TEX_DIR = os.path.join(OUT_DIR, 'textures')
+
+VENUE_CHAIR = {
+    'rooftop': chair_swivel,
+    'basement': chair_folding,
+    'suite': chair_dining,
+}
+
+# Measured against this venue's own furniture, which is already correct: the felt sits at
+# 0.760m and the chair backs top out at 0.920m, both real dimensions for a poker table and
+# a chair. A seated adult male's eyes are about 1.19m off the floor and his crown about
+# 1.32m. The character source is 1.358m from sole to crown once it is genuinely seated, so
+# 0.05 + s * 1.236 = 1.19 gives s = 0.92, and the crown lands at 1.302m.
+#
+# It was 0.73, uncommented. That number made sense while the characters were accidentally
+# STANDING at the table - apply_seated_rest_pose discarded its own result, see
+# export_native_silver.bake_seated_pose - because a 1.75m figure shrunk to 1.28m standing
+# happens to sit against a 0.76m table at almost exactly the proportion a seated adult
+# does. Once the characters actually sit, the same number makes them children: it put the
+# crown at 0.991m and the eyeline 0.19m above the felt instead of 0.44m.
+CHARACTER_SCALE = 0.92
+
+# Seat ring, as a multiple of the felt radii. The rail reaches 1.302 in X and 0.785 in Y.
+# At the original 1.42/1.58 the seat centres sat 0.44m and 0.34m clear of it, which parks
+# a stool near a table rather than pulling it in, and leaves bare floor between the stool
+# base and the table. 1.25/1.42 puts them about 0.25m off the rail - close enough that a
+# seated player's forearms reach the rail without leaning, and the stool still clears the
+# table pedestal. seated_rail_contact() derives the hand reach from these, so the two
+# cannot drift apart again.
+# 1.18/1.36 puts the seat centres at 1.463 and 0.979, about 0.16m and 0.19m off the rail.
+# The stool is 0.235 in radius, so its front edge now sits just inside the rail line -
+# which is correct rather than a collision: the rail overhangs the table, and a stool
+# pulled in to a table goes under that overhang. Much beyond this the seat meets the
+# pedestal, so the 0.25m that was asked for is not available in this direction; this is about
+# 0.09m of the 0.25.
+ROOFTOP_SEAT_RING = (1.18, 1.36)
+SUITE_SEAT_RING = (1.30, 1.44)
+CHARACTER_SEAT_Z = 0.05
+CHARACTER_VARIANTS = ('male', 'female')
+CHARACTER_BODY_LOD_RATIO = 0.60
+CHARACTER_GARMENT_LOD_RATIO = 0.32
+CHARACTER_HAIR_LOD_RATIO = 1.0
+DOWNLOAD_BUDGET_KB = 6144
+CHARACTER_ATLAS_SIZE = 1024
+CHARACTER_ATLAS_COLUMNS = 8
+CHARACTER_ATLAS_ROWS = 4
+
+
+def tune_surface(material, roughness):
+    if material.node_tree is None:
+        return
+    bsdf = next((node for node in material.node_tree.nodes if node.type == 'BSDF_PRINCIPLED'), None)
+    if bsdf is not None:
+        bsdf.inputs['Roughness'].default_value = roughness
+
+BASE_ATLAS_CELLS = {
+    'skin': (0, 0),
+    'torso': (1, 0),
+    'head': (2, 0),
+    'face': (3, 0, 2, 1),
+    'hands': (5, 0),
+    'accent': (7, 3),
+    'legs': (6, 0),
+    'shoes': (7, 0),
+}
+
+COSMETIC_ATLAS = {
+    'cap-grey': {'slot': 'head', 'paletteIndex': 0, 'colour': (0.20, 0.20, 0.21, 1.0)},
+    'cap-navy': {'slot': 'head', 'paletteIndex': 1, 'colour': (0.055, 0.038, 0.030, 1.0)},
+    'cap-tan': {'slot': 'head', 'paletteIndex': 2, 'colour': (0.115, 0.055, 0.032, 1.0)},
+    'cap-silk': {'slot': 'head', 'paletteIndex': 3, 'colour': (0.022, 0.020, 0.020, 1.0)},
+    'glasses-round': {'slot': 'face', 'paletteIndex': 4, 'colour': (0.08, 0.08, 0.09, 1.0)},
+    'glasses-shade': {'slot': 'face', 'paletteIndex': 5, 'colour': (0.04, 0.18, 0.20, 1.0)},
+    'glasses-mono': {'slot': 'face', 'paletteIndex': 6, 'colour': (0.67, 0.48, 0.16, 1.0)},
+    'jacket-leather': {'slot': 'torso', 'paletteIndex': 7, 'colour': (0.06, 0.07, 0.08, 1.0)},
+    'jacket-bomb': {'slot': 'torso', 'paletteIndex': 8, 'colour': (0.115, 0.130, 0.145, 1.0)},
+    'jacket-pinstripe': {'slot': 'torso', 'paletteIndex': 9, 'colour': (0.12, 0.13, 0.15, 1.0)},
+    'jacket-cardinal': {'slot': 'torso', 'paletteIndex': 10, 'colour': (0.145, 0.028, 0.042, 1.0)},
+    'ring-signet': {'slot': 'hands', 'paletteIndex': 11, 'colour': (0.75, 0.48, 0.10, 1.0)},
+    'ring-silver': {'slot': 'hands', 'paletteIndex': 12, 'colour': (0.63, 0.67, 0.70, 1.0)},
+    'ring-jade': {'slot': 'hands', 'paletteIndex': 13, 'colour': (0.06, 0.42, 0.25, 1.0)},
+    'ring-pearl': {'slot': 'hands', 'paletteIndex': 14, 'colour': (0.86, 0.82, 0.71, 1.0)},
+    'bandana-red': {'slot': 'accent', 'paletteIndex': 15, 'colour': (0.63, 0.05, 0.04, 1.0)},
+    'chain-gold': {'slot': 'accent', 'paletteIndex': 16, 'colour': (0.82, 0.55, 0.10, 1.0)},
+    'watch-brass': {'slot': 'accent', 'paletteIndex': 17, 'colour': (0.55, 0.31, 0.08, 1.0)},
+    'scarf-plaid': {'slot': 'accent', 'paletteIndex': 18, 'colour': (0.19, 0.32, 0.20, 1.0)},
+    'pin-diamond': {'slot': 'accent', 'paletteIndex': 19, 'colour': (0.26, 0.62, 0.68, 1.0)},
+    'beanie-wool': {'slot': 'head', 'paletteIndex': 20, 'colour': (0.070, 0.060, 0.075, 1.0)},
+    'scarf-silk': {'slot': 'accent', 'paletteIndex': 21, 'colour': (0.42, 0.16, 0.38, 1.0)},
+}
+
+COSMETIC_PREVIEW_LOADOUTS = (
+    {
+        'head': 'cap-grey',
+        'face': 'glasses-round',
+        'torso': 'jacket-leather',
+        'hands': 'ring-signet',
+        'accent': 'chain-gold',
+    },
+    {
+        'head': 'cap-silk',
+        'face': 'glasses-mono',
+        'torso': 'jacket-cardinal',
+        'hands': 'ring-jade',
+        'accent': 'scarf-silk',
+    },
+)
+
+CHARACTER_CAST = (
+    {'variant': 'female', 'bodyPreset': 'slight', 'age': 'young', 'presentation': 'glamorous', 'hairStyle': 'bob', 'outfitStyle': 'f1_cocktail', 'head': 'cap-silk', 'face': 'glasses-round', 'torso': 'jacket-cardinal', 'hands': 'ring-signet', 'accent': 'chain-gold'},
+    {'variant': 'male', 'bodyPreset': 'broad', 'age': 'older', 'presentation': 'everyday', 'hairStyle': 'side_part', 'outfitStyle': 'm5_leather', 'head': 'cap-grey', 'face': 'glasses-round', 'torso': 'jacket-leather', 'hands': 'ring-silver', 'accent': 'watch-brass'},
+    {'variant': 'female', 'bodyPreset': 'standard', 'age': 'established', 'presentation': 'everyday', 'hairStyle': 'bun', 'outfitStyle': 'f1_cocktail', 'head': 'cap-tan', 'face': 'glasses-round', 'torso': 'jacket-bomb', 'hands': 'ring-pearl', 'accent': 'scarf-silk'},
+    {'variant': 'male', 'bodyPreset': 'slight', 'age': 'young', 'presentation': 'glamorous', 'hairStyle': 'quiff', 'outfitStyle': 'm1_dinner', 'head': 'cap-silk', 'face': 'glasses-round', 'torso': 'jacket-pinstripe', 'hands': 'ring-jade', 'accent': 'chain-gold'},
+    {'variant': 'female', 'bodyPreset': 'broad', 'age': 'older', 'presentation': 'glamorous', 'hairStyle': 'crop', 'outfitStyle': 'f1_cocktail', 'head': 'cap-grey', 'face': 'glasses-round', 'torso': 'jacket-cardinal', 'hands': 'ring-silver', 'accent': 'scarf-silk'},
+    {'variant': 'male', 'bodyPreset': 'standard', 'age': 'established', 'presentation': 'everyday', 'hairStyle': 'slick_back', 'outfitStyle': 'm5_leather', 'head': 'cap-navy', 'face': 'glasses-round', 'torso': 'jacket-leather', 'hands': 'ring-signet', 'accent': 'watch-brass'},
+    {'variant': 'female', 'bodyPreset': 'slight', 'age': 'young', 'presentation': 'everyday', 'hairStyle': 'bald', 'outfitStyle': 'f1_cocktail', 'head': 'cap-tan', 'face': 'glasses-round', 'torso': 'jacket-bomb', 'hands': 'ring-pearl', 'accent': 'scarf-silk'},
+    {'variant': 'male', 'bodyPreset': 'broad', 'age': 'established', 'presentation': 'glamorous', 'hairStyle': 'crop', 'outfitStyle': 'm1_dinner', 'head': 'cap-silk', 'face': 'glasses-round', 'torso': 'jacket-pinstripe', 'hands': 'ring-jade', 'accent': 'chain-gold'},
+)
+
+BODY_PRESET_SCALE = {
+    'slight': (0.94, 0.95, 0.98),
+    'standard': (1.0, 1.0, 1.0),
+    'broad': (1.08, 1.10, 1.02),
+}
+
+DEALER_LOADOUT = {
+    'bodyPreset': 'standard',
+    'age': 'established',
+    'presentation': 'everyday',
+    'hairStyle': 'slick_back',
+    'outfitStyle': 'dealer_ivory',
+    'head': 'cap-navy',
+    'face': 'glasses-round',
+    'torso': 'jacket-bomb',
+    'hands': 'ring-silver',
+    'accent': 'bandana-red',
+}
+
+
+def atlas_cell(column, row, column_span=1, row_span=1):
+    return (
+        column / CHARACTER_ATLAS_COLUMNS,
+        row / CHARACTER_ATLAS_ROWS,
+        column_span / CHARACTER_ATLAS_COLUMNS,
+        row_span / CHARACTER_ATLAS_ROWS,
+    )
+
+
+def atlas_region_for_slot(slot):
+    return atlas_cell(*BASE_ATLAS_CELLS[slot])
+
+
+def atlas_region_for_cosmetic(cosmetic_id):
+    cosmetic = COSMETIC_ATLAS[cosmetic_id]
+    index = cosmetic['paletteIndex']
+    return atlas_cell(index % CHARACTER_ATLAS_COLUMNS, 1 + index // CHARACTER_ATLAS_COLUMNS)
+
+
+def cosmetic_metadata(cosmetic_id):
+    cosmetic = COSMETIC_ATLAS[cosmetic_id]
+    return {
+        'id': cosmetic_id,
+        'slot': cosmetic['slot'],
+        'paletteIndex': cosmetic['paletteIndex'],
+        'region': list(atlas_region_for_cosmetic(cosmetic_id)),
+    }
+
+
+def remap_character_uv(obj, region, face_region=None, hand_region=None, leg_region=None, shoe_region=None):
+    if obj.type != 'MESH':
+        return
+    uv_layer = obj.data.uv_layers[0] if obj.data.uv_layers else obj.data.uv_layers.new(name='UVMap')
+    u0, v0, width, height = region
+    inset_u = width * 0.08
+    inset_v = height * 0.08
+    for loop_index, uv in enumerate(uv_layer.data):
+        vertex = obj.data.vertices[obj.data.loops[loop_index].vertex_index].co
+        active_region = region
+        if hand_region is not None and abs(vertex.x) > 0.37 and vertex.z < 1.12:
+            active_region = hand_region
+        elif shoe_region is not None and vertex.z < 0.18:
+            active_region = shoe_region
+        elif leg_region is not None and vertex.z < 0.96:
+            active_region = leg_region
+        elif face_region is not None and vertex.z > 1.34 and abs(vertex.x) < 0.18 and -0.159 < vertex.y < -0.08:
+            active_region = face_region
+        active_u0, active_v0, active_width, active_height = active_region
+        active_inset_u = active_width * 0.08
+        active_inset_v = active_height * 0.08
+        if face_region is not None and active_region == face_region:
+            source_u = max(0.02, min(0.98, (vertex.x + 0.115) / 0.23))
+            source_v = max(0.02, min(0.98, (vertex.z - 1.475) / 0.17))
+        else:
+            source_u = float(uv.uv.x) % 1.0
+            source_v = float(uv.uv.y) % 1.0
+        uv.uv.x = active_u0 + active_inset_u + source_u * (active_width - active_inset_u * 2.0)
+        uv.uv.y = active_v0 + active_inset_v + source_v * (active_height - active_inset_v * 2.0)
+
+
+def remap_face_recipe_uv(obj, recipe):
+    if recipe not in FACE_RECIPE_CELLS or not obj.data.uv_layers:
+        return
+    source_u0, source_v0, source_width, source_height = atlas_cell(3, 0, 2, 1)
+    target_u0, target_v0, target_width, target_height = atlas_cell(*FACE_RECIPE_CELLS[recipe], 2, 1)
+    for uv in obj.data.uv_layers[0].data:
+        if not (source_u0 <= uv.uv.x <= source_u0 + source_width and source_v0 <= uv.uv.y <= source_v0 + source_height):
+            continue
+        local_u = (uv.uv.x - source_u0) / source_width
+        local_v = (uv.uv.y - source_v0) / source_height
+        uv.uv.x = target_u0 + local_u * target_width
+        uv.uv.y = target_v0 + local_v * target_height
+
+
+def project_garment_uv(obj, region):
+    """Map the garment front-on, so painted structure lands where it belongs.
+
+    The garment carries the UVs it was born with, and they occupy a strip about
+    nine percent of a cell wide, off to one side. Anything painted into that
+    cell as a shape - a collar, a lapel, the wedge of shirt a jacket leaves
+    open - is then sampled by a sliver that misses it entirely, so the cloth
+    comes out one flat colour and the paint is never seen by anybody. The face
+    is projected from vertex position for exactly this reason; the torso needs
+    the same treatment and never got it.
+
+    The vertical map is set so the collar lands at the top of the wedge and the
+    sternum at its point, rather than stretching the wedge over the whole
+    garment. The back of the garment is sent to the lower part of the cell,
+    which is plain jacket, because a shirt front on somebody's back would be
+    worse than no shirt front at all.
+    """
+    if obj.type != 'MESH' or obj.data is None or not obj.data.uv_layers:
+        return
+    u0, v0, width, height = region
+    inset_u = width * 0.08
+    inset_v = height * 0.08
+    uv_layer = obj.data.uv_layers[0]
+    for loop_index, uv in enumerate(uv_layer.data):
+        vertex = obj.data.vertices[obj.data.loops[loop_index].vertex_index].co
+        across = max(-1.0, min(1.0, vertex.x / 0.40))
+        source_u = 0.5 + across * 0.5
+        if vertex.y < -0.02:
+            source_v = max(0.02, min(0.98, 0.63 + (vertex.z - 1.22) * 1.6))
+        else:
+            source_v = max(0.02, min(0.55, 0.05 + (vertex.z - 0.92) * 0.5))
+        uv.uv.x = u0 + inset_u + source_u * (width - inset_u * 2.0)
+        uv.uv.y = v0 + inset_v + source_v * (height - inset_v * 2.0)
+
+
+def apply_seated_rest_pose(armature, pose_legs=True, pose_arms=True, contact=None):
+    """Pose a standing character into a seated rest pose and bake it into the rest.
+
+    pose_arms=False leaves the arms, hands and fingers exactly where the bind pose put
+    them, for callers that author the arms themselves afterwards.
+
+    A caller that poses the arms here AND authors them again later deforms every sleeve
+    twice: once into this pose and once out of it. Skinning error does not cancel when
+    you rotate a limb back - it accumulates in the mesh - so the garment carries the
+    damage of an intermediate pose that no longer exists anywhere in the file. The
+    silver character measured 152 degrees of forearm rotation on one side against 72 on
+    the other for a pose that is symmetric by the time it ships, which is the signature
+    of exactly that: the asymmetry belongs to the discarded intermediate, not the result.
+    """
+    reach, rail_height = contact if contact is not None else seated_rail_contact()
+    ik_items = []
+    for bone_name, degrees in (('spine01', 4.0), ('spine02', 2.0), ('head', -2.0)):
+        bone = armature.pose.bones.get(bone_name)
+        if bone is not None:
+            bone.rotation_mode = 'XYZ'
+            bone.rotation_euler = (math.radians(degrees), 0.0, 0.0)
+    for side, rotation, leg_spread in (('L', -0.68, math.radians(6.0)), ('R', 0.68, math.radians(-6.0))):
+        sign = 1.0 if side == 'L' else -1.0
+        forearm = None
+        if pose_arms:
+            bone = armature.pose.bones.get('upperarm01.' + side)
+            if bone is not None:
+                bone.rotation_mode = 'XYZ'
+                bone.rotation_euler = (math.radians(-10.0), 0.0, rotation)
+            forearm = armature.pose.bones.get('lowerarm01.' + side)
+            if forearm is not None:
+                forearm.rotation_mode = 'XYZ'
+                forearm.rotation_euler = (math.radians(56.0), 0.0, 0.0)
+            wrist = armature.pose.bones.get('wrist.' + side)
+            if wrist is not None:
+                wrist.rotation_mode = 'XYZ'
+                wrist.rotation_euler = (math.radians(10.0), 0.0, math.radians(-sign * 55.0))
+            for joint, curl in ((1, 12.0), (2, 24.0), (3, 30.0)):
+                thumb = armature.pose.bones.get('finger1-%d.%s' % (joint, side))
+                if thumb is not None:
+                    thumb.rotation_mode = 'XYZ'
+                    thumb.rotation_euler = (math.radians(curl), 0.0, 0.0)
+            for finger in range(2, 6):
+                for joint in range(1, 4):
+                    digit = armature.pose.bones.get('finger%d-%d.%s' % (finger, joint, side))
+                    if digit is None:
+                        continue
+                    digit.rotation_mode = 'XYZ'
+                    digit.rotation_euler = (math.radians(15.0 + joint * 8.0), 0.0, 0.0)
+        if forearm is not None:
+            target = bpy.data.objects.new('seated_wrist_target.' + side, None)
+            pole = bpy.data.objects.new('seated_elbow_pole.' + side, None)
+            bpy.context.scene.collection.objects.link(target)
+            bpy.context.scene.collection.objects.link(pole)
+            # Wrists sit just inside shoulder width on the near rail, with elbows held
+            # outside them. The reach and the height come from seated_rail_contact rather
+            # than from constants, so the hands stay on the rail when the seat ring or the
+            # character scale moves.
+            target.location = armature.matrix_world @ Vector(
+                (sign * 0.10, -reach, rail_height))
+            pole.location = armature.matrix_world @ Vector(
+                (sign * 0.42, -reach * 0.34, rail_height + 0.16))
+            constraint = forearm.constraints.new('IK')
+            constraint.target = target
+            constraint.pole_target = pole
+            constraint.chain_count = 2
+            ik_items.append((forearm, constraint, target, pole))
+        if pose_legs:
+            thigh = armature.pose.bones.get('upperleg01.' + side)
+            if thigh is not None:
+                thigh.rotation_mode = 'XYZ'
+                thigh.rotation_euler = (math.radians(-82.0), 0.0, leg_spread)
+            shin = armature.pose.bones.get('lowerleg01.' + side)
+            if shin is not None:
+                shin.rotation_mode = 'XYZ'
+                shin.rotation_euler = (math.radians(78.0), 0.0, 0.0)
+    bpy.context.view_layer.update()
+    bpy.ops.object.select_all(action='DESELECT')
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode='POSE')
+    bpy.ops.pose.select_all(action='SELECT')
+    bpy.ops.pose.visual_transform_apply()
+    bpy.ops.object.mode_set(mode='OBJECT')
+    for forearm, constraint, target, pole in ik_items:
+        forearm.constraints.remove(constraint)
+        bpy.data.objects.remove(target, do_unlink=True)
+        bpy.data.objects.remove(pole, do_unlink=True)
+    bpy.ops.object.mode_set(mode='POSE')
+    bpy.ops.pose.armature_apply(selected=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def strip_opaque_hair_planes(obj):
+    mesh = obj.data
+    adjacency = [[] for _ in mesh.vertices]
+    for edge in mesh.edges:
+        first, second = edge.vertices
+        adjacency[first].append(second)
+        adjacency[second].append(first)
+    components = []
+    seen = set()
+    for vertex in mesh.vertices:
+        if vertex.index in seen:
+            continue
+        component = set()
+        pending = [vertex.index]
+        while pending:
+            current = pending.pop()
+            if current in component:
+                continue
+            component.add(current)
+            seen.add(current)
+            pending.extend(adjacency[current])
+        components.append(component)
+    hair_vertices = set()
+    hair_faces = 0
+    hair_components = 0
+    for component in components:
+        points = [mesh.vertices[index].co for index in component]
+        z_min = min(point.z for point in points)
+        z_max = max(point.z for point in points)
+        faces = sum(1 for face in mesh.polygons if all(index in component for index in face.vertices))
+        if len(component) <= 18 and faces <= 16 and z_max >= 1.62 and z_max - z_min >= 0.18:
+            hair_vertices.update(component)
+            hair_faces += faces
+            hair_components += 1
+    if not hair_vertices:
+        return 0, 0, 0
+    mesh_data = bmesh.new()
+    mesh_data.from_mesh(mesh)
+    mesh_data.verts.ensure_lookup_table()
+    bmesh.ops.delete(mesh_data, geom=[mesh_data.verts[index] for index in sorted(hair_vertices)], context='VERTS')
+    mesh_data.to_mesh(mesh)
+    mesh_data.free()
+    obj['removedOpaqueHairComponents'] = hair_components
+    obj['removedOpaqueHairFaces'] = hair_faces
+    obj['removedOpaqueHairVertices'] = len(hair_vertices)
+    return hair_components, hair_faces, len(hair_vertices)
+
+
+def build_chip_meshes():
+    face_geo = chip_face()
+    rim_geo = chip_rim()
+    face_faces = len(face_geo[1])
+    pooled_geo = concat([face_geo, rim_geo])
+    lookup = {}
+    for denom, face_hex, rim_hex in CHIP_DENOMS:
+        face_mat = add_material(denom + '_face', face_hex)
+        rim_mat = add_material(denom + '_rim', rim_hex)
+        mesh = build_mesh_from_geo(denom + '_chip_pool', pooled_geo)
+        mesh.materials.append(face_mat)
+        mesh.materials.append(rim_mat)
+        for polygon in mesh.polygons[:face_faces]:
+            polygon.material_index = 0
+        for polygon in mesh.polygons[face_faces:]:
+            polygon.material_index = 1
+        lookup[denom] = mesh
+    return lookup
+
+
+def build_cards():
+    back_mat = add_material('river_card_back', '5A2733')
+    card = build_mesh_from_geo('river_card', card_body())
+    card.materials.append(back_mat)
+    return card
+
+
+def add_board_cards(card_mesh, count=5):
+    spacing = 0.09
+    total = (count - 1) * spacing
+    instances = []
+    for i in range(count):
+        x = -total / 2 + i * spacing
+        instances.append({
+            'id': 'card_%d' % i,
+            'translation': [x, 0.0, 0.9],
+            'rotation': [0.0, 0.0, 0.0, 1.0],
+            'scale': [1.0, 1.0, 1.0],
+        })
+    return instances
+
+
+FELT_PRINT_WIDTH = 2048
+FLOOR_PRINT_WIDTH = 2048
+# The terrace was a 4m disc, at 62 percent of the size the venue was designed at, and the
+# only room it had outside the camera's orbit was a 0.3m ring against the parapet: enough for
+# a planter, not for a place. At 7.5m the orbit keeps its clear tube and the terrace gains
+# a band four metres deep around it for the pool, the bar, the lounge and a second table.
+TERRACE_RADIUS = 7.5
+# Where the terrace's own dressing stands, just inside the parapet.
+EDGE_RADIUS = 7.1
+
+
+def printed_material(name, pixels, roughness):
+    """A material whose colour is a printed image - the felt, the terrace floor.
+
+    Saved as a JPEG, not a PNG like the build's other textures: cloth and stone are noise,
+    and noise that costs a few hundred kilobytes as a JPEG is several megabytes as a PNG.
+    The saved file is read back and compared with what was drawn, because an image save
+    that runs through the scene's view transform returns different colours with no error.
+    """
+    height, width, _ = pixels.shape
+    image = bpy.data.images.new(name, width=width, height=height, alpha=False)
+    rgba = np.concatenate([pixels, np.ones((height, width, 1), dtype=np.float32)], axis=2)
+    image.pixels.foreach_set(rgba.astype(np.float32).ravel())
+    os.makedirs(TEX_DIR, exist_ok=True)
+    path = os.path.join(TEX_DIR, name + '.jpg')
+    image.file_format = 'JPEG'
+    image.filepath_raw = path
+    image.save(filepath=path, quality=90)
+    bpy.data.images.remove(image)
+    saved = bpy.data.images.load(path)
+    saved.name = name
+    read_back = np.empty(width * height * 4, dtype=np.float32)
+    saved.pixels.foreach_get(read_back)
+    drift = abs(float(read_back.reshape(-1, 4)[:, :3].mean()) - float(pixels.mean()))
+    if drift > 0.004:
+        raise SystemExit('FAIL: %s came back %.4f off in mean colour after saving' % (name, drift))
+
+    material = bpy.data.materials.new(name.replace('_print', ''))
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    texture = nodes.new('ShaderNodeTexImage')
+    texture.image = saved
+    bsdf = next(n for n in nodes if n.type == 'BSDF_PRINCIPLED')
+    material.node_tree.links.new(texture.outputs['Color'], bsdf.inputs['Base Color'])
+    bsdf.inputs['Roughness'].default_value = roughness
+    print('PRINT %s %dx%d, %.0fKB, mean drift %.4f' % (name, width, height, os.path.getsize(path) / 1024.0, drift))
+    return material
+
+
+def printed_felt_material(venue):
+    """The Rooftop felt with its layout printed on it - see felt.py."""
+    pixels = felt.render_felt(FELT_PRINT_WIDTH, FELT_RX, FELT_RY, venue['felt'], venue['felt_ink'],
+                              venue['felt_pattern'])
+    return printed_material(venue['id'] + '_felt_print', pixels, 0.92)
+
+
+def printed_floor_material(venue):
+    """The Rooftop terrace in large stone tiles - see stone.py."""
+    pixels = stone.render_floor(FLOOR_PRINT_WIDTH, TERRACE_RADIUS, venue['floor'], venue['floor_grout'])
+    return printed_material(venue['id'] + '_floor_print', pixels, 0.55)
+
+
+def map_planar_uvs(mesh, rx, ry):
+    """Lay an image flat across a shape centred on the origin, rx by ry metres either side."""
+    layer = mesh.uv_layers.new(name='UVMap')
+    for loop in mesh.loops:
+        x, y, _ = mesh.vertices[loop.vertex_index].co
+        layer.data[loop.index].uv = ((x / rx + 1.0) / 2.0, (y / ry + 1.0) / 2.0)
+
+
+def map_felt_uvs(mesh):
+    """Lay the felt image flat across the oval: one texel per ~1.2mm, the long axis along x."""
+    map_planar_uvs(mesh, FELT_RX, FELT_RY)
+
+
+def skyline_material(venue):
+    """The city's one texture, worn as emission - see skyline.py.
+
+    Emission rather than a lit surface, because nothing in the rig reaches two hundred
+    metres: under ambient alone every tower is the same flat navy, which is what the old
+    skyline was. The walls, windows, crowns and haze are painted into the atlas, so what it
+    holds is what the browser shows, through the same tone curve as the sky dome behind it.
+    The PNG is written by skyline.py and read back here, and a round trip that changed a
+    single texel fails the build.
+    """
+    pixels = skyline.atlas(VENUE_SKY[venue['id']]['band'], venue['skyline_ridge'])
+    name = venue['id'] + '_skyline_atlas'
+    os.makedirs(TEX_DIR, exist_ok=True)
+    path = os.path.join(TEX_DIR, name + '.png')
+    with open(path, 'wb') as handle:
+        handle.write(skyline.png_bytes(pixels))
+    image = bpy.data.images.load(path)
+    image.name = name
+    read_back = np.empty(image.size[0] * image.size[1] * 4, dtype=np.float32)
+    image.pixels.foreach_get(read_back)
+    expected = np.round(pixels * 255.0) / 255.0
+    drift = float(np.abs(read_back.reshape(-1, 4)[:, :3] - expected.reshape(-1, 3)).max())
+    if drift > 0.5 / 255.0:
+        raise SystemExit('FAIL: the skyline atlas came back %.4f off after saving' % drift)
+
+    material = bpy.data.materials.new(venue['id'] + '_skyline')
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    texture = nodes.new('ShaderNodeTexImage')
+    texture.image = image
+    bsdf = next(n for n in nodes if n.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs['Base Color'].default_value = (0.0, 0.0, 0.0, 1.0)
+    bsdf.inputs['Roughness'].default_value = 1.0
+    material.node_tree.links.new(texture.outputs['Color'], bsdf.inputs['Emission Color'])
+    bsdf.inputs['Emission Strength'].default_value = venue['skyline_emission']
+    print('SKYLINE atlas %dx%d, %.0fKB' % (image.size[0], image.size[1], os.path.getsize(path) / 1024.0))
+    return material
+
+
+def set_corner_uvs(mesh, uvs):
+    """One UV per face corner, in the order the faces were given."""
+    if len(uvs) != len(mesh.loops):
+        raise SystemExit('FAIL: %s has %d UVs for %d corners' % (mesh.name, len(uvs), len(mesh.loops)))
+    layer = mesh.uv_layers.new(name='UVMap')
+    layer.data.foreach_set('uv', np.asarray(uvs, dtype=np.float32).ravel())
+
+
+def build_dealer_station(venue, wood_mat):
+    """The dealer's side of the table: a chip rack against the rail, the shoe to one side and
+    the discards to the other.
+
+    Chair 0 is the dealer's, at +Y, and nothing else lives between the betting line and the
+    rail there: the pot is stacked at 0.26m and the runtime's flights start from it. Every
+    piece is drawn in a material the scene already has - the table's wood, the chips' own
+    rims, the card back - so the station costs draw calls and no materials.
+    """
+    tray, columns = dealer_rack()
+    shoe = card_shoe()
+    holder, cards = discard_holder()
+    wood_geo = concat([
+        translate_geo(tray, 0.0, 0.605, 0.0),
+        transform_geo(shoe, 0.31, 0.575, 0.0, math.radians(-12.0)),
+        transform_geo(holder, -0.31, 0.585, 0.0, math.radians(12.0)),
+    ])
+    wood = build_mesh_from_geo('river_%s_dealer_station' % venue['id'], wood_geo)
+    wood.materials.append(wood_mat)
+    object_at('river_%s_dealer_station' % venue['id'], wood)
+
+    # Sorted high to low, as a rack is: the big chips furthest from the dealer's right hand.
+    order = ['chip_25k', 'chip_5k', 'chip_5k', 'chip_1k', 'chip_1k', 'chip_500', 'chip_500', 'chip_100']
+    denominations = sorted(set(order), key=order.index)
+    geometry = {denom: [] for denom in denominations}
+    for denom, column in zip(order, columns):
+        geometry[denom].append(translate_geo(column, 0.0, 0.605, 0.0))
+    parts = [concat(geometry[denom]) for denom in denominations]
+    rack = build_mesh_from_geo('river_%s_dealer_rack' % venue['id'], concat(parts))
+    first = 0
+    for slot, (denom, part) in enumerate(zip(denominations, parts)):
+        material = bpy.data.materials.get(denom + '_rim')
+        if material is None:
+            raise SystemExit('FAIL: the rack needs the %s rim material, which is not in the scene' % denom)
+        rack.materials.append(material)
+        for polygon in rack.polygons[first:first + len(part[1])]:
+            polygon.material_index = slot
+        first += len(part[1])
+    object_at('river_%s_dealer_rack' % venue['id'], rack)
+
+    back = bpy.data.materials.get('river_card_back')
+    if back is None:
+        raise SystemExit('FAIL: the discards need the card back material, which is not in the scene')
+    mucked = build_mesh_from_geo('river_%s_dealer_discards' % venue['id'],
+                                 transform_geo(cards, -0.31, 0.585, 0.0, math.radians(12.0)))
+    mucked.materials.append(back)
+    object_at('river_%s_dealer_discards' % venue['id'], mucked)
+
+
+def build_table(venue, rail_mat, wood_mat):
+    printed = 'felt_ink' in venue
+    if printed:
+        felt_mat = printed_felt_material(venue)
+    else:
+        felt_mat, _ramp = colorramp_material(venue['id'] + '_felt', [(0.0, venue['felt']), (1.0, venue['felt'])])
+        tune_surface(felt_mat, 0.92)
+    tune_surface(rail_mat, venue.get('rail_roughness', 0.72))
+    tune_surface(wood_mat, 0.38)
+    felt = build_mesh_from_geo('river_' + venue['id'] + '_felt', felt_oval())
+    if printed:
+        map_felt_uvs(felt)
+    felt.materials.append(felt_mat)
+    object_at('river_' + venue['id'] + '_table_felt', felt, (0.0, 0.0, 0.0))
+    if venue['id'] == 'rooftop':
+        inlay_mat = add_metal_material('rooftop_felt_inlay', venue['felt_pattern'], roughness=0.48)
+        inlay = build_mesh_from_geo('river_rooftop_felt_inlay', felt_inlay_oval())
+        inlay.materials.append(inlay_mat)
+        object_at('river_rooftop_table_felt_inlay', inlay, (0.0, 0.0, 0.0))
+    # The rail's cross-section turns through more than 35 degrees between its rings, so the
+    # default smoothing split it into hard bands that read as a black hoop. Smoothing across
+    # them rounds the padding in the light without moving a vertex - and the seats are placed
+    # by measuring this geometry, so moving a vertex is exactly what must not happen here.
+    rail = build_mesh_from_geo('river_' + venue['id'] + '_rail', rail_ring_oval(),
+                               smooth_angle=85.0 if venue['id'] == 'rooftop' else 35.0)
+    rail.materials.append(rail_mat)
+    object_at('river_' + venue['id'] + '_table_rail', rail, (0.0, 0.0, 0.0))
+    pedestal = build_mesh_from_geo('river_' + venue['id'] + '_wood', wood_pedestal())
+    pedestal.materials.append(wood_mat)
+    object_at('river_' + venue['id'] + '_table_base', pedestal, (0.0, 0.0, 0.0))
+    if venue['id'] == 'rooftop':
+        build_dealer_station(venue, wood_mat)
+
+
+def build_chairs(venue, chair_fn, chair_mat, count=9):
+    tune_surface(chair_mat, 0.42 if venue['id'] == 'rooftop' else 0.58)
+    # A chair goes where the person sitting in it goes.
+    #
+    # These two rings were separate: chairs on the buildkit default of FELT_RX * 1.42,
+    # characters on the venue's own ring, which for the Rooftop is FELT_RX * 1.18. That
+    # is 30cm of daylight, so every character sat in front of his stool rather than on
+    # it, with the seat pan visible behind him. Pulling the character ring in to fix the
+    # reach to the rail widened the gap and nothing said so, because nothing was
+    # comparing the two.
+    positions = character_seat_positions(venue, count)
+    ring = math.hypot(*positions[0])
+    rail = 1.0 / math.sqrt((positions[0][0] / ring / RAIL_X) ** 2
+                           + (positions[0][1] / ring / RAIL_Y) ** 2)
+    print('CHAIRS %-9s ring=%.3f rail=%.3f clearance=%.0fmm'
+          % (venue['id'], ring, rail, (ring - rail) * 1000.0))
+    if ring <= rail:
+        raise SystemExit('FAIL: the %s chair ring at %.3f is inside the rail at %.3f, so '
+                         'the stools are in the table' % (venue['id'], ring, rail))
+    for index, (x, y) in enumerate(positions):
+        chair_geo = chair_fn()
+        leather_faces = None
+        if venue['id'] == 'rooftop':
+            chair_geo, leather_faces = chair_geo
+        mesh = build_mesh_from_geo('%s_chair_%d' % (venue['id'], index), chair_geo)
+        mesh.materials.append(chair_mat)
+        if leather_faces is not None:
+            # The chair's chrome is the chair's own. This used to reach for
+            # 'chip_100_rim' - a poker chip's edge - so every chair pedestal and
+            # foot ring in the venue was painted whatever colour the 100 chip
+            # happened to be, and restyling the chips would silently restyle the
+            # furniture. The palette has defined 'chrome' the whole time.
+            chrome = bpy.data.materials.get('rooftop_chrome')
+            if chrome is None:
+                chrome = add_metal_material('rooftop_chrome', venue['chrome'])
+            mesh.materials.append(chrome)
+            for polygon in mesh.polygons[leather_faces:]:
+                polygon.material_index = 1
+            pass
+        # A chair faces the table, the same way the person in it does.
+        #
+        # This is the character placement formula with no half turn added, and
+        # the half turn is what was wrong. Measured on the shipped asset: every
+        # chair pointed its +Y at the table while every character pointed its
+        # -Y at it - exactly 180 degrees apart, so nine chairs sat with their
+        # backs to the felt and their occupants facing out of them. Two
+        # different expressions were being used for one relationship, and a
+        # third for the characters, which is how they drifted apart.
+        angle = math.atan2(-x, y)
+        object_at(
+            '%s_chair_%d' % (venue['id'], index),
+            mesh,
+            (x, y, 0.0),
+            (0.0, 0.0, angle),
+        )
+
+
+def seated_rail_contact(seat_index=1, count=9):
+    """Where the rail is, in character-local units, for a seated player.
+
+    The seated pose drove the wrists to a hardcoded 0.58m forward. On the Rooftop the
+    rail is 0.25m in front of the seat, so the hands were reaching a third of a metre
+    PAST it and ended up hovering over the felt with nothing under them. Height was
+    already right; only the reach was invented.
+
+    Derived so that contact survives the next time the seat ring or the character scale
+    moves - both have already moved once, and the hardcoded reach did not follow.
+    """
+    ring_x = FELT_RX * ROOFTOP_SEAT_RING[0]
+    ring_y = FELT_RY * ROOFTOP_SEAT_RING[1]
+    angle = math.pi / 2 + 2.0 * math.pi * seat_index / count
+    x, y = ring_x * math.cos(angle), ring_y * math.sin(angle)
+    seat_radius = math.hypot(x, y)
+    unit_x, unit_y = x / seat_radius, y / seat_radius
+    rail_radius = 1.0 / math.sqrt((unit_x / RAIL_X) ** 2 + (unit_y / RAIL_Y) ** 2)
+    # Reaching the rail's near edge is not resting on it. Stopping the wrists there leaves
+    # the forearms angled up and back with the hands held at the chest - a guard, not a
+    # player - even though the numbers read as correct, because the forearm is level and
+    # the wrist is at rail height. The hands have to go ONTO the table, so the wrist
+    # carries past the rail band and onto the felt and the forearm lies along it.
+    # Bracketed: 0.00 stops the wrists at the rail's near edge and the forearms fold back
+    # into a guard at the chest; 0.26 straightens the arm to near full extension and lifts
+    # the elbow to 0.859, which reads as reaching across the table rather than resting on
+    # it. 0.13 puts the hands on the rail with the elbow still bent.
+    reach_onto_felt = 0.13
+    forward = (seat_radius - rail_radius) / CHARACTER_SCALE + reach_onto_felt
+    height = (TABLE_TOP + RAIL_T - CHARACTER_SEAT_Z) / CHARACTER_SCALE
+    return forward, height
+
+
+def character_seat_positions(venue, count=9):
+    if venue['id'] == 'suite':
+        return seat_positions(count, FELT_RX * SUITE_SEAT_RING[0], FELT_RY * SUITE_SEAT_RING[1])
+    return seat_positions(count, FELT_RX * ROOFTOP_SEAT_RING[0], FELT_RY * ROOFTOP_SEAT_RING[1])
+
+
+def apply_seated_lod(obj, ratio_override=None):
+    if obj.type != 'MESH':
+        return
+    if obj.data.shape_keys is not None and len(obj.data.shape_keys.key_blocks) > 1:
+        obj['seatedLodSkipped'] = 'facial_morph_targets'
+        return
+    names = (obj.name.lower(), obj.data.name.lower())
+    if ratio_override is not None:
+        ratio = ratio_override
+    elif any('garment_' in name for name in names):
+        ratio = CHARACTER_GARMENT_LOD_RATIO
+    elif any('_hair' in name for name in names):
+        ratio = CHARACTER_HAIR_LOD_RATIO
+    else:
+        ratio = CHARACTER_BODY_LOD_RATIO
+    if ratio >= 1.0:
+        return
+    modifier = obj.modifiers.new('river_seated_lod', 'DECIMATE')
+    modifier.ratio = ratio
+    modifier.use_collapse_triangulate = False
+    modifier_index = obj.modifiers.find(modifier.name)
+    if modifier_index > 0:
+        obj.modifiers.move(modifier_index, 0)
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.modifier_apply(modifier=modifier.name)
+    obj.select_set(False)
+
+
+def atlas_blend(a, b, amount):
+    return tuple(a[index] * (1.0 - amount) + b[index] * amount for index in range(3)) + (1.0,)
+
+
+def garment_pixel(jacket, x, y):
+    """A jacket swatch: dark mass, ivory wedge, lapels bounding it.
+
+    Torso cells used to come out of `atlas_pixel` like every other cell - a skin
+    tone with a face painted into it, tinted thirteen percent towards the
+    garment colour. So a jacket was mostly the colour of a cheek, and every
+    person at the table sat within a few points of value of every other one.
+    That is the whole reason nine characters read as one grey-pink mass at
+    playing distance, and no amount of work on the geometry could have fixed it.
+
+    The shape is the one River settled on: the wedge of shirt a jacket leaves
+    open, widest at the collar and closed at the sternum, with the lapel riding
+    its boundary. Nothing below the button stance.
+    """
+    ivory = (0.74, 0.68, 0.56)
+    lapel = (0.02, 0.025, 0.03)
+    top = 0.95
+    apex = 0.63
+    half_at_collar = 0.17
+    feather = 0.022
+    colour = jacket[:3]
+    if apex - feather < y < top + feather:
+        down = (top - y) / (top - apex)
+        half = half_at_collar * (1.0 - max(0.0, min(1.0, down)))
+        across = abs(x - 0.5)
+        if y > top:
+            vertical = max(0.0, 1.0 - (y - top) / feather)
+        elif y < apex:
+            vertical = max(0.0, 1.0 - (apex - y) / feather)
+        else:
+            vertical = 1.0
+        coverage = max(0.0, min(1.0, (half - across) / feather + 0.5)) * vertical
+        colour = atlas_blend(colour, ivory, coverage)[:3]
+        edge = max(0.0, 1.0 - abs(half - across) / feather) * 0.85 * vertical
+        colour = atlas_blend(colour, lapel, edge)[:3]
+    if y > 0.955:
+        colour = atlas_blend(colour, lapel, 0.9)[:3]
+    return tuple(colour) + (1.0,)
+
+
+def atlas_pixel(base, x, y, male, variant, face_details=True, slot=None):
+    # A garment is a garment and hair is hair. Both used to be painted as skin
+    # with a face on it and a faint wash of their own colour on top.
+    if base is not None and slot == 'torso':
+        return garment_pixel(base, x, y)
+    if base is not None and slot == 'head':
+        hairline = min(1.0, y / (6.0 / (CHARACTER_ATLAS_SIZE / CHARACTER_ATLAS_ROWS)))
+        hairline = hairline * hairline * (3.0 - 2.0 * hairline)
+        crown = 0.84 + 0.18 * y
+        sweep = 0.0
+        for centre in (0.24, 0.50, 0.76):
+            distance = abs(x - (centre + 0.08 * (y - 0.5)))
+            sweep += 0.075 * max(0.0, 1.0 - distance / 0.10) ** 2
+        shade = (0.78 + 0.06 * hairline) + (crown - 0.84) + sweep * hairline
+        return tuple(min(1.0, channel * shade) for channel in base[:3]) + (1.0,)
+    skin_warm = (0.72, 0.43, 0.29)
+    skin_cool = (0.36, 0.28, 0.27)
+    skin = atlas_blend(skin_cool, skin_warm, 0.34 + 0.32 * (variant % 3) / 2.0)
+    grain = 0.018 * math.sin((x + variant * 17) * 0.31) * math.sin((y + variant * 11) * 0.19)
+    colour = tuple(max(0.0, min(1.0, channel + grain)) for channel in skin[:3]) + (1.0,)
+    if face_details and 0.22 < x < 0.78 and 0.16 < y < 0.92:
+        brow = ((x < 0.47 and 0.61 < y < 0.68) or (x > 0.53 and 0.61 < y < 0.68))
+        lashes = ((x < 0.47 and 0.57 < y < 0.625) or (x > 0.53 and 0.57 < y < 0.625))
+        eye = ((x < 0.47 and 0.585 < y < 0.64) or (x > 0.53 and 0.585 < y < 0.64))
+        nose = 0.46 < x < 0.54 and 0.47 < y < 0.58
+        lips = 0.43 < x < 0.57 and 0.39 < y < 0.45
+        hairline_start = 0.875 - 0.018 * math.cos((x - 0.5) * 14.0)
+        hairline = max(0.0, min(1.0, (y - hairline_start) / (6.0 / (CHARACTER_ATLAS_SIZE / CHARACTER_ATLAS_ROWS))))
+        hairline = hairline * hairline * (3.0 - 2.0 * hairline)
+        stubble = male and 0.34 < x < 0.66 and 0.28 < y < 0.46
+        if hairline > 0.0:
+            hair = (0.08 + 0.06 * (variant % 4), 0.035, 0.025)
+            colour = atlas_blend(colour, hair, 0.92 * hairline)
+        elif brow or lashes:
+            colour = atlas_blend(colour, (0.07, 0.025, 0.02), 0.94)
+        elif eye:
+            colour = atlas_blend(colour, (0.015, 0.02, 0.018), 0.98)
+        elif nose:
+            colour = atlas_blend(colour, (0.40, 0.20, 0.16), 0.22)
+        elif lips:
+            lip_tone = (0.52 + 0.05 * (variant % 3), 0.15, 0.16)
+            colour = atlas_blend(colour, lip_tone, 0.72)
+        elif stubble and math.sin(x * 480.0 + y * 271.0 + variant) > 0.12:
+            colour = atlas_blend(colour, (0.16, 0.09, 0.07), 0.36)
+    if base is not None:
+        colour = atlas_blend(colour, base[:3], 0.13)
+    return colour
+
+
+def build_character_atlas():
+    image = bpy.data.images.new('river_character_atlas', width=CHARACTER_ATLAS_SIZE, height=CHARACTER_ATLAS_SIZE, alpha=True)
+    base_colours = {
+        'skin': (0.60, 0.40, 0.29, 1.0),
+        'torso': (0.16, 0.20, 0.23, 1.0),
+        'head': (0.08, 0.055, 0.045, 1.0),
+        'face': (0.63, 0.42, 0.15, 1.0),
+        'hands': (0.60, 0.40, 0.29, 1.0),
+        'accent': (0.63, 0.42, 0.15, 1.0),
+        'legs': (0.14, 0.17, 0.23, 1.0),
+        'shoes': (0.04, 0.045, 0.055, 1.0),
+    }
+    cell_width = CHARACTER_ATLAS_SIZE // CHARACTER_ATLAS_COLUMNS
+    cell_height = CHARACTER_ATLAS_SIZE // CHARACTER_ATLAS_ROWS
+    pixels = []
+    for y in range(CHARACTER_ATLAS_SIZE):
+        for x in range(CHARACTER_ATLAS_SIZE):
+            column = x // cell_width
+            row = y // cell_height
+            cell_x = (x % cell_width) / cell_width
+            cell_y = (y % cell_height) / cell_height
+            if row == 0 and column == 0:
+                pixels.extend(atlas_pixel(base_colours['skin'], cell_x, cell_y, False, column, False))
+            elif row == 0 and column == 1:
+                # The torso cell every garment samples, whatever cosmetic the
+                # rest of the character is wearing - the garment is excluded
+                # from the cosmetic remap on purpose, so this one cell dresses
+                # every person at every table.
+                pixels.extend(garment_pixel(base_colours['torso'], cell_x, cell_y))
+            elif row == 0 and column == 2:
+                pixels.extend(base_colours['head'])
+            elif row == 0 and column in (3, 4):
+                face_x = ((column - 3) + cell_x) / 2.0
+                pixels.extend(atlas_pixel(base_colours['face'], face_x, cell_y, False, 0, True))
+            elif row == 0 and column == 5:
+                pixels.extend(base_colours['hands'])
+            elif row == 0 and column == 6:
+                pixels.extend(base_colours['legs'])
+            elif row == 0 and column == 7:
+                pixels.extend(base_colours['shoes'])
+            elif row > 0 and column < CHARACTER_ATLAS_COLUMNS:
+                palette_index = (row - 1) * CHARACTER_ATLAS_COLUMNS + column
+                cosmetic = next((item for item in COSMETIC_ATLAS.values() if item['paletteIndex'] == palette_index), None)
+                pixels.extend(atlas_pixel(
+                    cosmetic['colour'] if cosmetic else None,
+                    cell_x,
+                    cell_y,
+                    palette_index % 2 == 1,
+                    palette_index,
+                    slot=cosmetic['slot'] if cosmetic else None,
+                ))
+            else:
+                pixels.extend((0.025, 0.025, 0.03, 1.0))
+    for y in range(8):
+        for x in range(8):
+            offset = (y * CHARACTER_ATLAS_SIZE + x) * 4
+            pixels[offset:offset + 4] = [1.0, 1.0, 1.0, 1.0]
+    image.pixels = pixels
+    image.filepath_raw = os.path.join(TEX_DIR, 'character_atlas.png')
+    image.file_format = 'PNG'
+    image.save_render(image.filepath_raw)
+    material = bpy.data.materials.new('river_character_atlas_material')
+    material.use_nodes = True
+    material.use_backface_culling = True
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    texture = nodes.new('ShaderNodeTexImage')
+    texture.name = 'river_character_atlas'
+    texture.image = image
+    bsdf = nodes.get('Principled BSDF')
+    if bsdf is not None:
+        links.new(texture.outputs['Color'], bsdf.inputs['Base Color'])
+        bsdf.inputs['Roughness'].default_value = 0.62
+    material['atlasSchema'] = '8x4 shared atlas: base regions row 0, catalogue cosmetics rows 1-3'
+    material['paletteProperty'] = 'paletteIndex'
+    material['atlasColumns'] = CHARACTER_ATLAS_COLUMNS
+    material['atlasRows'] = CHARACTER_ATLAS_ROWS
+    material['cosmeticRegions'] = json.dumps({
+        cosmetic_id: cosmetic_metadata(cosmetic_id) for cosmetic_id in COSMETIC_ATLAS
+    }, sort_keys=True, separators=(',', ':'))
+    return material
+
+
+def build_garment_material():
+    material = bpy.data.materials.new('river_garment_flat_material')
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    bsdf = nodes.get('Principled BSDF')
+    colour = nodes.new('ShaderNodeVertexColor')
+    colour.name = 'river_garment_palette_colour'
+    colour.layer_name = 'Color'
+    if bsdf is not None:
+        links.new(colour.outputs['Color'], bsdf.inputs['Base Color'])
+        bsdf.inputs['Roughness'].default_value = 0.82
+    material['paletteProperty'] = 'paletteIndex'
+    material['paletteSource'] = 'vertex colour Color'
+    return material
+
+
+def import_character_templates(atlas_material):
+    templates = {}
+    animation_actions = []
+    for variant in CHARACTER_VARIANTS:
+        path = os.path.join(OUT_DIR, 'char_' + variant + '.glb')
+        if not os.path.exists(path):
+            raise SystemExit('FAIL: missing character asset ' + path)
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=path)
+        imported_all = [obj for obj in bpy.data.objects if obj not in before]
+        # Take what the character file ships, rather than guessing its names.
+        #
+        # This used to keep meshes whose data name began with "base" or whose
+        # object name began with "garment_", which was a filter written against
+        # what MPFB happened to call things. The moment the character export
+        # gained a proper body mesh and real hair geometry - char_male_body and
+        # char_male_hair - both were silently dropped, and only the garment
+        # matched. The venue lost 59,000 triangles and every texture, built
+        # without complaint, and nine skinned garments walked around with no
+        # bodies inside them.
+        #
+        # It is not the venue's business what the characters are called, but it
+        # is the venue's business whether a thing is art. A mesh carrying no
+        # material is not something anybody authored: MPFB leaves helper
+        # primitives behind at several points and a two-metre Icosphere with no
+        # material has reached this file before. Trusting the character export
+        # to have stripped its own scaffolding was tried and it put ten of them
+        # in the room, each a two-metre cone through the middle of frame.
+        #
+        # Material-bearing is the rule because it survives renaming, which the
+        # name prefixes did not, and it excludes scaffolding by what scaffolding
+        # actually is rather than by what it happens to be called this week.
+        imported = [
+            obj for obj in bpy.data.objects
+            if obj not in before
+            and (
+                obj.type == 'ARMATURE'
+                or (
+                    obj.type == 'MESH'
+                    and obj.data is not None
+                    and len(obj.data.materials) > 0
+                    and any(slot is not None for slot in obj.data.materials)
+                )
+            )
+        ]
+        if not imported:
+            raise SystemExit('FAIL: character asset imported no renderable objects ' + path)
+        for obj in imported_all:
+            if obj not in imported:
+                bpy.data.objects.remove(obj, do_unlink=True)
+        body = next(
+            (
+                obj for obj in imported
+                if obj.type == 'MESH'
+                and not (obj.name.startswith('garment_') or obj.data.name.startswith('garment_'))
+                and '_hair' not in obj.name
+                and '_hair' not in obj.data.name
+            ),
+            None,
+        )
+        if body is not None:
+            components, faces, vertices = strip_opaque_hair_planes(body)
+            print('CHAR %s stripped hair components=%d faces=%d vertices=%d' % (
+                variant, components, faces, vertices
+            ))
+        for obj in imported:
+            garment = obj.type == 'MESH' and (
+                obj.name.startswith('garment_') or obj.data.name.startswith('garment_')
+            )
+            if not garment:
+                apply_seated_lod(obj)
+            if obj.type == 'MESH':
+                smooth_mesh_by_angle(obj.data, 180.0)
+            if garment:
+                evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+                mesh = evaluated.to_mesh()
+                try:
+                    triangles = sum(1 if len(poly.vertices) == 3 else 2 for poly in mesh.polygons)
+                    ratio = len(mesh.vertices) / triangles if triangles else 0.0
+                    print('GARMENT %s vertices=%d triangles=%d vertices_per_triangle=%.3f' % (
+                        variant, len(mesh.vertices), triangles, ratio
+                    ))
+                finally:
+                    evaluated.to_mesh_clear()
+        armature = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
+        if body is not None and armature is not None:
+            apply_seated_rest_pose(armature)
+            smooth_mesh_by_angle(body.data, 180.0)
+        if variant == 'male' and armature is not None:
+            for action in list(bpy.data.actions):
+                bpy.data.actions.remove(action, do_unlink=True)
+            animation_actions = [bpy.data.actions[name] for name in build_animations(armature)]
+        templates[variant] = imported
+    return templates, animation_actions
+
+
+def apply_garment_palette(obj, colour):
+    if obj.type != 'MESH':
+        return
+    for layer in list(obj.data.color_attributes):
+        obj.data.color_attributes.remove(layer)
+    layer = obj.data.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')
+    for item in layer.data:
+        item.color = colour
+    obj.data.color_attributes.active_color_index = 0
+    obj.data.color_attributes.render_color_index = 0
+
+
+def duplicate_character(template, animation_actions, seat_index, variant, x, y, angle, atlas_material, garment_material, loadout, root_name=None, role='player'):
+    mapping = {}
+    keep_gold_detail = seat_index == 0 and variant == 'female' and role == 'player'
+    hair_style = loadout.get('hairStyle', 'side_part')
+    if hair_style not in HAIR_STYLES:
+        raise ValueError('unknown hair style ' + hair_style)
+    face_recipe = loadout.get('age', 'young') + '_' + loadout.get('presentation', 'everyday')
+    if face_recipe not in FACE_RECIPE_CELLS:
+        raise ValueError('unknown face recipe ' + face_recipe)
+    outfit_style = loadout.get('outfitStyle', 'f1_cocktail' if variant == 'female' else 'm1_dinner')
+    outfit_recipe = (
+        outfit_style + '_' + loadout.get('presentation', 'everyday')
+        if outfit_style == 'f1_cocktail'
+        else outfit_style
+    )
+    if outfit_recipe not in OUTFIT_RECIPE_CELLS:
+        raise ValueError('unknown outfit recipe ' + outfit_recipe)
+    face_cosmetic_id = loadout.get('face') or loadout.get('head')
+    body_palette_index = COSMETIC_ATLAS[face_cosmetic_id]['paletteIndex'] if face_cosmetic_id is not None else 0
+    garment_colour = COSMETIC_ATLAS[loadout['torso']]['colour']
+    for source in template:
+        garment = source.type == 'MESH' and (source.name.startswith('garment_') or source.data.name.startswith('garment_'))
+        if garment and source.get('outfitStyle') != outfit_style:
+            continue
+        # Hair carries no cosmetic slot, so it fell through to the body branch
+        # and was remapped onto the skin cell along with the arms and the neck.
+        # It was therefore painted the exact colour of the face it sat above,
+        # which is what made a shell on the skull read as a flesh-coloured cap
+        # no matter what shape it was given.
+        # Matched as a substring, not a suffix: Blender appends .001 to any name
+        # it has already seen, and every character after the first is a copy.
+        hair = source.type == 'MESH' and (
+            '_hair' in source.name or '_hair' in source.data.name
+        )
+        if hair and source.get('hairStyle') != hair_style:
+            continue
+        clone = source.copy()
+        if source.data is not None:
+            slot = source.get('cosmeticSlot')
+            selected = loadout.get(slot) if slot is not None else None
+            cosmetic_id = selected if selected in COSMETIC_ATLAS else None
+            clone.data = source.data.copy() if source.type == 'MESH' else source.data
+            if hair:
+                # Hair ships with authored strand-direction UVs. Remapping it
+                # onto the headwear slot painted cap/scalp swatches over the
+                # crown, which looked like missing geometry in close camera.
+                pass
+            elif cosmetic_id is not None and not garment:
+                remap_character_uv(clone, atlas_region_for_cosmetic(cosmetic_id))
+            elif garment:
+                project_garment_uv(clone, atlas_cell(*OUTFIT_RECIPE_CELLS[outfit_recipe]))
+        bpy.context.scene.collection.objects.link(clone)
+        if garment:
+            apply_seated_lod(clone, ratio_override=1.0 if keep_gold_detail else None)
+            smooth_mesh_by_angle(clone.data, 180.0)
+        keep_gold_morphs = keep_gold_detail
+        if clone.type == 'MESH' and clone.data.shape_keys is not None and not keep_gold_morphs:
+            for key in list(clone.data.shape_keys.key_blocks)[::-1]:
+                clone.shape_key_remove(key)
+            apply_seated_lod(clone)
+        mapping[source] = clone
+    for source, clone in mapping.items():
+        clone.parent = mapping.get(source.parent)
+        if clone.type == 'ARMATURE':
+            if seat_index == 0:
+                animation_data = clone.animation_data_create()
+                animation_data.action = None
+                for track in list(animation_data.nla_tracks):
+                    animation_data.nla_tracks.remove(track)
+                for action in animation_actions:
+                    track = animation_data.nla_tracks.new()
+                    track.name = action.name
+                    track.strips.new(action.name, int(action.frame_range[0]), action)
+                clone['animationOwner'] = True
+            else:
+                clone.animation_data_clear()
+                clone['animationOwner'] = False
+        for modifier in clone.modifiers:
+            if modifier.type == 'ARMATURE' and modifier.object in mapping:
+                modifier.object = mapping[modifier.object]
+        if clone.type == 'MESH':
+            is_garment = source.name.startswith('garment_') or source.data.name.startswith('garment_')
+            is_hair = '_hair' in source.name or '_hair' in source.data.name
+            if clone.data.uv_layers and not is_garment:
+                clone.data.uv_layers[0].name = 'UVMap'
+            # Body UVs arrive authored across face, hands, legs and shoes. Venue
+            # assembly must not project them again: the second projection turned
+            # the accepted face masses into bands and made forearm boundaries
+            # jagged. Hair and garments still remap through their own branches.
+            if not is_garment and not is_hair:
+                remap_face_recipe_uv(clone, face_recipe)
+            if is_garment:
+                apply_garment_palette(clone, garment_colour)
+            if source.get('characterFeature'):
+                clone.data.name = 'river_' + variant + '_feature'
+            elif source.name.startswith('char_') or source.data.name.startswith('base'):
+                clone.data.name = 'char_' + variant + '_body'
+            else:
+                clone.data.name = 'char_' + variant + '_garment'
+            # Keep the atlas the character arrived wearing.
+            #
+            # There are two atlas painters on this project. The character build
+            # paints a real one - brows, eye sockets, a nose, a lip line, and
+            # the soft shadow masses that let a face read at ninety pixels - and
+            # this file painted a second one that is flat colour per island,
+            # 'face' being a single orange-brown. Assembly then assigned the
+            # flat one over the top, so every face in the game was blank no
+            # matter how carefully the character build drew it.
+            #
+            # The venue's atlas stays as the fallback for a character that
+            # arrives without one, because a mesh with no material is worse than
+            # a flat one. But if the character brought a texture, that is the
+            # authored article and it wins.
+            inherited = next(
+                (
+                    material
+                    for material in source.data.materials
+                    if material is not None
+                    and material.use_nodes
+                    and any(node.type == 'TEX_IMAGE' for node in material.node_tree.nodes)
+                ),
+                None,
+            )
+            clone.data.materials.clear()
+            # The garment used to take a flat, untextured material, so whatever
+            # was painted for it could never arrive - a jacket was a single
+            # colour by construction. It takes the character's own atlas now,
+            # projected onto its jacket swatch, which is where the collar, the
+            # lapels and the wedge of shirt actually live.
+            clone.data.materials.append(inherited or atlas_material)
+            slot = source.get('cosmeticSlot')
+            cosmetic_id = loadout.get(slot) if slot is not None else None
+            clone['paletteIndex'] = body_palette_index
+            clone['cosmeticId'] = cosmetic_id or ''
+            clone['cosmeticSlot'] = slot or ''
+            clone['atlasRegion'] = list(atlas_region_for_cosmetic(cosmetic_id)) if cosmetic_id is not None else list(atlas_region_for_slot('skin'))
+            clone['atlasMaterial'] = atlas_material.name if not is_garment else ''
+            clone['garmentMaterial'] = garment_material.name if is_garment else ''
+    root = bpy.data.objects.new(root_name or 'river_character_%02d' % seat_index, None)
+    bpy.context.scene.collection.objects.link(root)
+    for source, clone in mapping.items():
+        if source.parent is None:
+            clone.parent = root
+    root.location = (x, y, CHARACTER_SEAT_Z)
+    root.rotation_euler = (0.0, 0.0, angle)
+    body_scale = BODY_PRESET_SCALE[loadout.get('bodyPreset', 'standard')]
+    root.scale = tuple(CHARACTER_SCALE * value for value in body_scale)
+    if seat_index is not None:
+        root['seatIndex'] = seat_index
+    if role != 'player':
+        root['role'] = role
+    root['variant'] = variant
+    root['paletteIndex'] = body_palette_index
+    root['paletteIndices'] = json.dumps({
+        slot: COSMETIC_ATLAS[cosmetic_id]['paletteIndex']
+        for slot, cosmetic_id in loadout.items()
+        if cosmetic_id in COSMETIC_ATLAS
+    }, sort_keys=True, separators=(',', ':'))
+    root['loadout'] = json.dumps(loadout, sort_keys=True, separators=(',', ':'))
+    root['atlasMaterial'] = atlas_material.name
+    return root
+
+
+def build_rooftop_dealer(templates, animation_actions, atlas_material, garment_material):
+    position = character_seat_positions({'id': 'rooftop'})[0]
+    dealer = duplicate_character(
+        templates['male'],
+        animation_actions,
+        None,
+        'male',
+        position[0],
+        position[1],
+        0.0,
+        atlas_material,
+        garment_material,
+        DEALER_LOADOUT,
+        root_name='river_dealer',
+        role='dealer',
+    )
+    return dealer
+
+
+def import_native_gold_template():
+    static_review = os.environ.get('RIVER_NATIVE_GOLD_STATIC') == '1'
+    path = os.environ.get('RIVER_NATIVE_GOLD_ASSET', os.path.join(OUT_DIR, 'char_native_gold.glb'))
+    if not os.path.exists(path):
+        raise SystemExit('FAIL: missing native gold character ' + path)
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=path)
+    imported = [
+        obj for obj in bpy.data.objects
+        if obj not in before
+        and (
+            obj.type == 'ARMATURE'
+            or (
+                obj.type == 'MESH'
+                and obj.data is not None
+                and any(material is not None for material in obj.data.materials)
+            )
+        )
+    ]
+    body = next(
+        (
+            obj for obj in imported
+            if obj.type == 'MESH'
+            and obj.data.name.startswith(('char_native_gold_body', 'review_native_gold_body'))
+        ),
+        None,
+    )
+    armature = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
+    if body is None or (armature is None and not static_review):
+        raise SystemExit('FAIL: native gold character lost its body or armature')
+    if static_review:
+        for obj in imported:
+            obj['nativeGold'] = True
+            if obj.type == 'MESH':
+                smooth_mesh_by_angle(obj.data, 180.0)
+        return imported
+    # An asset that already carries its seated pose baked into its rest pose and its mesh
+    # must not be posed again. This pass sets spine01, spine02 and head and then calls
+    # armature_apply, which bakes over the animation channels of the bones it touches: a
+    # head with 151 keyframes of gaze drift arrived in the venue with 2 constant ones, so
+    # the character breathed but never looked at anything, and nothing said why.
+    if armature.get('riverSeatedBaked'):
+        print('SEATED already baked into the asset, skipping the venue pass')
+    else:
+        apply_seated_rest_pose(armature)
+    bpy.context.view_layer.update()
+    # Freezing everything but the body to static geometry - which is what clearing the
+    # modifiers and the parent does - was fine while the seated pose was the only thing
+    # these meshes had to follow. It is fatal once they animate: the body skins to the rig
+    # and the suit, hair, shoes and eyes do not, so the head turns inside a hairstyle that
+    # stays where it was and the jacket stops following the shoulders.
+    #
+    # An asset that already carries its seated pose baked in needs no freezing anyway: its
+    # pose is zero, so the deformation is identity and the bake would only strip the
+    # skinning that makes the rest of the character move.
+    if armature.get('riverSeatedBaked'):
+        print('SKIN keeping armature modifiers on %d meshes'
+              % sum(1 for obj in imported if obj.type == 'MESH'))
+    else:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        for obj in imported:
+            if obj.type != 'MESH' or obj is body:
+                continue
+            evaluated = obj.evaluated_get(depsgraph)
+            baked = bpy.data.meshes.new_from_object(
+                evaluated,
+                preserve_all_data_layers=True,
+                depsgraph=depsgraph,
+            )
+            world = obj.matrix_world.copy()
+            obj.data = baked
+            obj.modifiers.clear()
+            obj.parent = None
+            obj.matrix_world = world
+    for obj in imported:
+        obj['nativeGold'] = True
+        if obj.type == 'MESH':
+            smooth_mesh_by_angle(obj.data, 180.0)
+    return imported
+
+
+def duplicate_native_gold(template, seat_index, x, y, angle):
+    mapping = {}
+    for source in template:
+        clone = source.copy()
+        if source.data is not None:
+            clone.data = source.data.copy()
+        bpy.context.scene.collection.objects.link(clone)
+        mapping[source] = clone
+    for source, clone in mapping.items():
+        clone.parent = mapping.get(source.parent)
+        for modifier in clone.modifiers:
+            if modifier.type == 'ARMATURE' and modifier.object in mapping:
+                modifier.object = mapping[modifier.object]
+        if clone.type == 'ARMATURE':
+            # The clips are kept. This used to call animation_data_clear(), which meant
+            # the native character path shipped a venue with no animations at all - and
+            # the runtime reads its clips from the venue GLB, so it logged "carries no
+            # animation clips" and every native character sat perfectly still. Motion
+            # authored on either native character could not reach the browser.
+            #
+            # Object.copy() carries animation_data and its NLA tracks, so the imported
+            # clips ride along; a source with none is still silent, exactly as before.
+            clone.name = 'char_native_gold_rig'
+            clone['animationOwner'] = clone.animation_data is not None
+        elif clone.type == 'MESH':
+            suffix = source.name.removeprefix('river_native_gold_')
+            clone.name = 'char_native_gold_' + suffix
+            if not clone.data.name.startswith('char_native_gold_body'):
+                clone.data.name = 'char_native_gold_' + suffix
+        clone['nativeGold'] = True
+    root = bpy.data.objects.new('river_character_%02d' % seat_index, None)
+    bpy.context.scene.collection.objects.link(root)
+    for source, clone in mapping.items():
+        if source.parent is None:
+            clone.parent = root
+    root.location = (x, y, CHARACTER_SEAT_Z)
+    root.rotation_euler = (0.0, 0.0, angle)
+    root.scale = (CHARACTER_SCALE,) * 3
+    root['seatIndex'] = seat_index
+    root['variant'] = 'female'
+    root['nativeGold'] = True
+    return root
+
+
+# The native Silver cast.
+#
+# The browser instances one Silver character per occupied seat from his own GLB, so this
+# venue carries where each seat's character goes rather than the character. Eight copies
+# baked into the venue file would be 537,408 triangles and 184 draw calls before any
+# furniture, more than twice the scene triangle budget below.
+#
+# The placement reproduces the stage the Silver clips were reviewed on. Measured in the
+# character's own units on 17 September, the A21 proof chair's pan is 480.2mm and its felt
+# 793.5mm above the character origin, and the proof rail's near edge is 151.9mm in front of
+# it. Scaling the character so that pan-to-felt matches this table's puts the seat and the
+# felt at the heights every clip expects, and each origin is then set back from its own
+# seat's rail by the proof reach at that scale - the table is an ellipse, so that distance
+# is different at every seat. This is the candidate check_silver_seating.py measures every
+# clip against; it is not a claim that the contacts are right.
+NATIVE_SILVER_SEATS = 8
+PROOF_PAN_HEIGHT = 0.4802
+PROOF_FELT_HEIGHT = 0.7935
+PROOF_RAIL_EDGE = 0.1519
+NATIVE_SILVER_SCALE = (TABLE_TOP - SEAT_H) / (PROOF_FELT_HEIGHT - PROOF_PAN_HEIGHT)
+NATIVE_SILVER_LIFT = SEAT_H - NATIVE_SILVER_SCALE * PROOF_PAN_HEIGHT
+NATIVE_SILVER_RAIL_REACH = NATIVE_SILVER_SCALE * PROOF_RAIL_EDGE
+# Set back from the proof reach. At the proof reach his chest meets this rail - it bulges
+# towards him where the proof rail was a flat face - and his knees reach 101mm into the
+# base's flare. Swept across all eight seats and the seated clips, 60mm back clears the
+# chest and 120mm the knees. His forearms still pass through the raised rail at every
+# set-back measured: this rail stands about 50mm above the felt, and the proof rail the
+# clips were made on was level with it. That is the table's to change, not the placement's.
+NATIVE_SILVER_SET_BACK = 0.12
+NATIVE_SILVER_BACKREST_CONTACT = 0.005
+
+
+# The native Gold cast, in the same anchors.
+#
+# She was authored on this table rather than on a proof stage of her own - her felt is this
+# felt and her chair this chair - so a seat scales her by nothing at all and the anchor's
+# own scale is undone in the browser. Two numbers differ from his and both are hers: she
+# sits at world scale, and her dress spreads further behind her than his jacket does, so a
+# chair tucked to his back would stand inside hers. The second is measured per seat below
+# and travels with the anchor, because the chair it is measured against is the venue's.
+GOLD_FELT_HEIGHT = 0.76
+GOLD_PAN_HEIGHT = 0.46
+GOLD_SCALE = (TABLE_TOP - SEAT_H) / (GOLD_FELT_HEIGHT - GOLD_PAN_HEIGHT)
+GOLD_LIFT = SEAT_H - GOLD_SCALE * GOLD_PAN_HEIGHT
+
+
+def import_native_silver(path):
+    """The exported Silver character, posed on the first frame of his idle, and his points.
+
+    Imported only to measure against. The venue file does not ship him.
+    """
+    if not os.path.exists(path):
+        raise SystemExit('FAIL: missing native Silver character ' + path)
+    objects_before = set(bpy.data.objects)
+    actions_before = set(bpy.data.actions)
+    bpy.ops.import_scene.gltf(filepath=path)
+    imported = [obj for obj in bpy.data.objects if obj not in objects_before]
+    rig = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
+    # Only what hangs off the rig. The glTF importer adds a unit icosphere of its own to
+    # draw bones with; counted as part of him, it put his back half a metre behind his
+    # chair and failed the backrest measurement at every seat.
+    meshes = [obj for obj in imported if obj.type == 'MESH' and obj.parent is not None and obj.parent == rig]
+    if rig is None or len(meshes) != 20:
+        raise SystemExit('FAIL: the native Silver character has no rig or not 20 meshes (%d)' % len(meshes))
+    # A rig without this flag did not come through export_silver_integration.py, and
+    # nothing else guarantees its clips carry their own seated pose.
+    if not rig.get('riverSeatedBaked'):
+        raise SystemExit('FAIL: the native Silver rig does not carry riverSeatedBaked')
+    idle, slot = None, None
+    for track in (rig.animation_data.nla_tracks if rig.animation_data else []):
+        for strip in track.strips:
+            named = strip.action.name if strip.action is not None else ''
+            if 'IDLE_thinking_readable' in (track.name, strip.name) or named.startswith('IDLE_thinking_readable'):
+                idle, slot = strip.action, getattr(strip, 'action_slot', None)
+        track.mute = True
+    if idle is None:
+        raise SystemExit('FAIL: the native Silver character has no IDLE_thinking_readable')
+    rig.animation_data.action = idle
+    if slot is not None:
+        rig.animation_data.action_slot = slot
+    bpy.context.scene.frame_set(0)
+    bpy.context.view_layer.update()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    points = []
+    for obj in meshes:
+        evaluated = obj.evaluated_get(depsgraph)
+        mesh = evaluated.to_mesh()
+        points.extend(evaluated.matrix_world @ vertex.co for vertex in mesh.vertices)
+        evaluated.to_mesh_clear()
+    imported_actions = [action for action in bpy.data.actions if action not in actions_before]
+    return imported, imported_actions, points
+
+
+def import_native_gold_cast(path):
+    """The exported Gold character, posed on the first frame of her idle, and her points.
+
+    Imported only to measure against, exactly as Silver is: the venue file ships neither of
+    them. Her points come out in her own frame, which is this venue's metres, so a seat's
+    placement is a turn and a move and no scale at all.
+    """
+    if not os.path.exists(path):
+        raise SystemExit('FAIL: missing native Gold character ' + path)
+    objects_before = set(bpy.data.objects)
+    actions_before = set(bpy.data.actions)
+    bpy.ops.import_scene.gltf(filepath=path)
+    imported = [obj for obj in bpy.data.objects if obj not in objects_before]
+    rig = next((obj for obj in imported if obj.type == 'ARMATURE'), None)
+    meshes = [obj for obj in imported if obj.type == 'MESH' and obj.parent is not None and obj.parent == rig]
+    if rig is None or len(meshes) != 7:
+        raise SystemExit('FAIL: the native Gold character has no rig or not 7 meshes (%d)' % len(meshes))
+    if not rig.get('riverSeatedBaked'):
+        raise SystemExit('FAIL: the native Gold rig does not carry riverSeatedBaked')
+    idle, slot = None, None
+    for track in (rig.animation_data.nla_tracks if rig.animation_data else []):
+        for strip in track.strips:
+            named = strip.action.name if strip.action is not None else ''
+            if 'IDLE_thinking_readable' in (track.name, strip.name) or named.startswith('IDLE_thinking_readable'):
+                idle, slot = strip.action, getattr(strip, 'action_slot', None)
+        track.mute = True
+    if idle is None:
+        raise SystemExit('FAIL: the native Gold character has no IDLE_thinking_readable')
+    rig.animation_data.action = idle
+    if slot is not None:
+        rig.animation_data.action_slot = slot
+    bpy.context.scene.frame_set(0)
+    bpy.context.view_layer.update()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    points = []
+    for obj in meshes:
+        evaluated = obj.evaluated_get(depsgraph)
+        mesh = evaluated.to_mesh()
+        points.extend(evaluated.matrix_world @ vertex.co for vertex in mesh.vertices)
+        evaluated.to_mesh_clear()
+    imported_actions = [action for action in bpy.data.actions if action not in actions_before]
+    return imported, imported_actions, points
+
+
+def rail_edge_distance(rail_tree, seat_xy, inward):
+    """How far in front of a seat the rail's nearest face is, over the heights a forearm crosses it."""
+    nearest = None
+    for step in range(21):
+        origin = Vector((seat_xy[0], seat_xy[1], TABLE_TOP - 0.02 + step * 0.005))
+        location, _normal, _index, distance = rail_tree.ray_cast(origin, Vector((inward[0], inward[1], 0.0)), 3.0)
+        if location is not None and (nearest is None or distance < nearest):
+            nearest = distance
+    return nearest
+
+
+def build_native_silver_seats(venue, path, gold_path):
+    if venue['id'] != 'rooftop':
+        raise SystemExit('FAIL: the native Silver cast is Rooftop-only')
+    imported, imported_actions, points = import_native_silver(path)
+    gold_imported, gold_actions, gold_points = import_native_gold_cast(gold_path)
+    rail = bpy.data.objects.get('river_%s_table_rail' % venue['id'])
+    if rail is None:
+        raise SystemExit('FAIL: no rail to seat the native Silver cast against')
+    bpy.context.view_layer.update()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    evaluated = rail.evaluated_get(depsgraph)
+    mesh = evaluated.to_mesh()
+    rail_tree = BVHTree.FromPolygons([evaluated.matrix_world @ v.co for v in mesh.vertices],
+                                     [tuple(p.vertices) for p in mesh.polygons])
+    evaluated.to_mesh_clear()
+    band = (SEAT_H + 0.06, SEAT_H + 0.42)
+    print('SILVER scale=%.5f lift=%.4fm rail reach=%.4fm set back=%.3fm'
+          % (NATIVE_SILVER_SCALE, NATIVE_SILVER_LIFT, NATIVE_SILVER_RAIL_REACH, NATIVE_SILVER_SET_BACK))
+    ring = character_seat_positions(venue)
+    for seat_index in range(NATIVE_SILVER_SEATS):
+        # Seat n sits in chair n + 1; chair 0 is the dealer's.
+        x, y = ring[seat_index + 1]
+        radius = math.hypot(x, y)
+        outward = Vector((x / radius, y / radius, 0.0))
+        edge = rail_edge_distance(rail_tree, (x, y), (-outward.x, -outward.y))
+        if edge is None:
+            raise SystemExit('FAIL: seat %d found no rail in front of it' % seat_index)
+        shift = edge - NATIVE_SILVER_RAIL_REACH - NATIVE_SILVER_SET_BACK
+        origin_x, origin_y = x - outward.x * shift, y - outward.y * shift
+        angle = math.atan2(-origin_x, origin_y)
+        root = bpy.data.objects.new('river_character_%02d' % seat_index, None)
+        bpy.context.scene.collection.objects.link(root)
+        root.location = (origin_x, origin_y, NATIVE_SILVER_LIFT)
+        root.rotation_euler = (0.0, 0.0, angle)
+        root.scale = (NATIVE_SILVER_SCALE,) * 3
+        root['seatIndex'] = seat_index
+        root['riverCast'] = 'native_silver'
+        placement = (Matrix.Translation((origin_x, origin_y, NATIVE_SILVER_LIFT))
+                     @ Matrix.Rotation(angle, 4, 'Z')
+                     @ Matrix.Diagonal((NATIVE_SILVER_SCALE,) * 3 + (1.0,)))
+
+        # The chair follows the man, not the ring: its backrest goes to his back.
+        chair = bpy.data.objects.get('%s_chair_%d' % (venue['id'], seat_index + 1))
+        if chair is None:
+            raise SystemExit('FAIL: seat %d has no chair' % seat_index)
+        bpy.context.view_layer.update()
+        backs = []
+        for point in points:
+            placed = placement @ point
+            if band[0] <= placed.z <= band[1]:
+                backs.append(placed.x * outward.x + placed.y * outward.y)
+        seat_axis = Vector((chair.location.x, chair.location.y, 0.0)).dot(outward)
+        rests = []
+        for vertex in chair.data.vertices:
+            point = chair.matrix_world @ vertex.co
+            if band[0] <= point.z <= band[1]:
+                along = Vector((point.x, point.y, 0.0)).dot(outward)
+                if along > seat_axis:
+                    rests.append(along)
+        if not backs or not rests:
+            raise SystemExit('FAIL: seat %d has no back or backrest in the contact band' % seat_index)
+        gap = min(rests) - max(backs) - NATIVE_SILVER_BACKREST_CONTACT
+        if abs(gap) > 0.25:
+            raise SystemExit('FAIL: seat %d measured a %.0fmm backrest gap, too large to be one: '
+                             'origin %.3f, back %.3f, backrest %.3f, chair centre %.3f along the seat axis, '
+                             '%d back points'
+                             % (seat_index, gap * 1000.0, origin_x * outward.x + origin_y * outward.y,
+                                max(backs), min(rests), seat_axis, len(backs)))
+        chair.location.x -= outward.x * gap
+        chair.location.y -= outward.y * gap
+        chair_radius = math.hypot(chair.location.x, chair.location.y)
+        rail_radius = 1.0 / math.sqrt((outward.x / RAIL_X) ** 2 + (outward.y / RAIL_Y) ** 2)
+        if chair_radius <= rail_radius:
+            raise SystemExit('FAIL: seating %d put its chair at %.3f, inside the rail at %.3f'
+                             % (seat_index, chair_radius, rail_radius))
+        print('SILVER seat %d rail edge %.0fmm, origin %+.0fmm and chair %+.0fmm towards the table'
+              % (seat_index, edge * 1000.0, shift * 1000.0, gap * 1000.0))
+
+        # The same seat, with Gold in it. Her placement is the anchor's without its scale,
+        # so this measures her where the browser puts her; what comes out is how much
+        # further out her chair stands than his, which is the only part of the seat that is
+        # hers rather than the anchor's.
+        gold_placement = (Matrix.Translation((origin_x, origin_y, GOLD_LIFT))
+                          @ Matrix.Rotation(angle, 4, 'Z')
+                          @ Matrix.Diagonal((GOLD_SCALE,) * 3 + (1.0,)))
+        # Along the seat's own axis, measured from her origin: positive is away from the table.
+        origin_along = origin_x * outward.x + origin_y * outward.y
+        gold_backs, gold_reach = [], []
+        for point in gold_points:
+            placed = gold_placement @ point
+            along = placed.x * outward.x + placed.y * outward.y
+            if band[0] <= placed.z <= band[1]:
+                gold_backs.append(along)
+            if TABLE_TOP - 0.02 <= placed.z <= TABLE_TOP + 0.08:
+                gold_reach.append(origin_along - along)
+        if not gold_backs:
+            raise SystemExit('FAIL: seat %d has no Gold back in the contact band' % seat_index)
+        chair_back = max(gold_backs) - max(backs)
+        if abs(chair_back) > 0.25:
+            raise SystemExit('FAIL: seat %d wants its chair %.0fmm further out for Gold, which is '
+                             'not a chair moving but a character in the wrong place'
+                             % (seat_index, chair_back * 1000.0))
+        root['castChairBack'] = json.dumps({'gold': round(chair_back, 5)}, sort_keys=True,
+                                           separators=(',', ':'))
+        # Her forearms cross the rail where his do - the rail stands about 50mm above the
+        # felt and both sets of clips were authored on a flat one - so this is printed
+        # rather than failed, next to his, and read from the review renders.
+        print('GOLD   seat %d chair %+.0fmm further out, reaches %.0fmm towards a rail %.0fmm away'
+              % (seat_index, chair_back * 1000.0,
+                 max(gold_reach) * 1000.0 if gold_reach else 0.0,
+                 (edge - shift) * 1000.0))
+
+    for obj in imported + gold_imported:
+        bpy.data.objects.remove(obj, do_unlink=True)
+    for action in imported_actions + gold_actions:
+        bpy.data.actions.remove(action)
+
+
+def build_venue_characters(venue):
+    if os.environ.get('RIVER_NATIVE_SILVER_ASSET'):
+        gold = os.environ.get('RIVER_NATIVE_GOLD_CAST')
+        if not gold:
+            raise SystemExit('FAIL: the cast is Silver and Gold; set RIVER_NATIVE_GOLD_CAST '
+                             'to the character file the browser loads, so her chair is measured too')
+        build_native_silver_seats(venue, os.environ['RIVER_NATIVE_SILVER_ASSET'], gold)
+        return
+    if os.environ.get('RIVER_NATIVE_GOLD_ONLY') == '1':
+        if venue['id'] != 'rooftop':
+            raise SystemExit('FAIL: native gold isolation is Rooftop-only')
+        template = import_native_gold_template()
+        x, y = character_seat_positions(venue)[1]
+        angle = math.atan2(-x, y)
+        # Was 0.12, nudging the character off the seat centre toward the table. That was
+        # reaching compensation from when the seat ring sat 0.44m clear of the rail and
+        # the characters were standing anyway. With the ring pulled in to 0.30m and the
+        # character genuinely seated, the same nudge slides him off the front of the stool
+        # - the backside ends up in the air between seat and table.
+        seat_offset = 0.0
+        duplicate_native_gold(
+            template,
+            0,
+            x + math.sin(angle) * seat_offset,
+            y - math.cos(angle) * seat_offset,
+            angle,
+        )
+        for obj in template:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        return
+    atlas_material = build_character_atlas()
+    garment_material = build_garment_material()
+    templates, animation_actions = import_character_templates(atlas_material)
+    # Slot 0 belongs to the dealer, so the players take the other eight.
+    # Placing a character in every slot put one of them inside the dealer.
+    positions = character_seat_positions(venue)[1:]
+    for seat_index, (x, y) in enumerate(positions):
+        loadout = CHARACTER_CAST[seat_index % len(CHARACTER_CAST)]
+        variant = loadout['variant']
+        angle = math.atan2(-x, y)
+        seat_offset = 0.12 if venue['id'] == 'rooftop' else 0.0
+        duplicate_character(
+            templates[variant],
+            animation_actions,
+            seat_index,
+            variant,
+            x + math.sin(angle) * seat_offset,
+            y - math.cos(angle) * seat_offset,
+            angle,
+            atlas_material,
+            garment_material,
+            loadout,
+        )
+    if venue['id'] == 'rooftop':
+        build_rooftop_dealer(templates, animation_actions, atlas_material, garment_material)
+    for template in templates.values():
+        for obj in template:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    # The venue's flat atlas is a fallback, so it only ships if something fell
+    # back to it. Every character now arrives wearing its own painted one, and
+    # leaving the spare behind put the Rooftop over its material budget with a
+    # texture nothing sampled.
+    if not any(
+        material is atlas_material
+        for mesh in bpy.data.meshes
+        for material in mesh.materials
+        if material is not None
+    ):
+        bpy.data.materials.remove(atlas_material)
+    for action in list(bpy.data.actions):
+        if action.users == 0:
+            bpy.data.actions.remove(action)
+
+
+def _surface_colour(mesh, colour_fn):
+    for existing in list(mesh.color_attributes):
+        mesh.color_attributes.remove(existing)
+    layer = mesh.color_attributes.new(name='Color', type='FLOAT_COLOR', domain='CORNER')
+    for polygon in mesh.polygons:
+        for loop_index in polygon.loop_indices:
+            vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
+            layer.data[loop_index].color = colour_fn(vertex)
+    mesh.color_attributes.active_color_index = 0
+    mesh.color_attributes.render_color_index = 0
+
+
+def _use_vertex_colour(material):
+    if material.get('riverVertexColour'):
+        return tuple(material['riverVertexColourBase'])
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    bsdf = next((node for node in nodes if node.type == 'BSDF_PRINCIPLED'), None)
+    if bsdf is None or any(node.type == 'TEX_IMAGE' for node in nodes):
+        return None
+    base = tuple(bsdf.inputs['Base Color'].default_value[:3])
+    colour = nodes.new('ShaderNodeVertexColor')
+    colour.layer_name = 'Color'
+    base_input = bsdf.inputs['Base Color']
+    if base_input.links:
+        links.remove(base_input.links[0])
+    links.new(colour.outputs['Color'], base_input)
+    material['riverVertexColour'] = True
+    material['riverVertexColourBase'] = base
+    return base
+
+
+def _detail_factor(point, venue_id, role):
+    radius = math.sqrt(point.x * point.x + point.y * point.y)
+    noise = math.sin(point.x * 3.71 + point.y * 5.13) * 0.035
+    noise += math.sin(point.x * 10.19 - point.y * 7.37) * 0.018
+    if venue_id == 'rooftop' and role == 'floor':
+        edge = min(1.0, radius / 4.0)
+        return 0.95 - edge * 0.28 + noise
+    if venue_id == 'rooftop' and role == 'parapet':
+        return 0.76 + noise * 1.4 - max(0.0, point.z - 0.75) * 0.05
+    if role == 'floor':
+        return 0.88 - min(1.0, radius / 7.0) * 0.16 + noise
+    if role == 'wall':
+        return 0.83 + noise * 1.2 - min(0.13, max(0.0, point.z) * 0.035)
+    return 0.90 + noise
+
+
+def _surface_bvh():
+    vertices = []
+    polygons = []
+    for obj in bpy.context.scene.objects:
+        if obj.type != 'MESH' or obj.data.name.startswith('char_') or obj.name.startswith('char_'):
+            continue
+        if obj.name in {'river_card', 'board_card_pool'} or obj.name.startswith('chip_'):
+            continue
+        offset = len(vertices)
+        matrix = obj.matrix_world
+        vertices.extend(matrix @ vertex.co for vertex in obj.data.vertices)
+        polygons.extend(tuple(offset + index for index in polygon.vertices) for polygon in obj.data.polygons)
+    return BVHTree.FromPolygons(vertices, polygons, all_triangles=False)
+
+
+def _ambient_factor(bvh, obj, point, normal):
+    matrix = obj.matrix_world
+    world_point = matrix @ point
+    world_normal = (matrix.to_3x3() @ normal).normalized()
+    tangent = world_normal.cross(Vector((0.0, 0.0, 1.0)))
+    if tangent.length < 0.001:
+        tangent = world_normal.cross(Vector((0.0, 1.0, 0.0)))
+    tangent.normalize()
+    bitangent = world_normal.cross(tangent).normalized()
+    directions = [
+        world_normal,
+        (world_normal + tangent * 0.55).normalized(),
+        (world_normal - tangent * 0.55).normalized(),
+        (world_normal + bitangent * 0.55).normalized(),
+        (world_normal - bitangent * 0.55).normalized(),
+    ]
+    hits = 0
+    origin = world_point + world_normal * 0.025
+    for direction in directions:
+        _location, _normal, _index, distance = bvh.ray_cast(origin, direction, 1.35)
+        if distance is not None:
+            hits += 1
+    return 1.0 - hits / len(directions) * 0.28
+
+
+def add_venue_surface_detail(venue_id):
+    roles = {
+        'rooftop': {
+            'floor': ['rooftop_terrace'],
+            'parapet': ['rooftop_parapet', 'rooftop_parapet_coping', 'rooftop_festoon_rig',
+                        'rooftop_brazier_0', 'rooftop_brazier_1'],
+            'wall': ['rooftop_planter_%d' % index for index in range(8)] + ['rooftop_trees'],
+        },
+        'basement': {
+            'floor': ['basement_floor'],
+            'wall': ['basement_room_walls', 'basement_ceiling', 'basement_ceiling_pipes', 'basement_machine_bank', 'basement_counter', 'basement_carts', 'basement_crates', 'basement_ladder'],
+        },
+        'suite': {
+            'floor': ['suite_floor'],
+            'wall': ['suite_room_walls', 'suite_ceiling', 'suite_bar', 'suite_balusters', 'suite_handrail', 'suite_scroll_ornaments', 'suite_standing_patrons'],
+        },
+    }[venue_id]
+    targets = []
+    for role, names in roles.items():
+        for name in names:
+            obj = bpy.data.objects.get(name)
+            if obj is not None:
+                targets.append((obj, role))
+    bvh = _surface_bvh()
+    for obj, role in targets:
+        if _use_vertex_colour(obj.data.materials[0]) is None:
+            continue
+        def colour(vertex, obj=obj, role=role):
+            factor = _detail_factor(vertex.co, venue_id, role) * _ambient_factor(bvh, obj, vertex.co, vertex.normal)
+            return (factor, factor, factor, 1.0)
+        _surface_colour(obj.data, colour)
+
+
+def build_rooftop(venue):
+    floor_mat = printed_floor_material(venue)
+    floor = build_mesh_from_geo('rooftop_terrace', terrace_disc(TERRACE_RADIUS, 96))
+    map_planar_uvs(floor, TERRACE_RADIUS, TERRACE_RADIUS)
+    floor.materials.append(floor_mat)
+    object_at('rooftop_terrace', floor, (0.0, 0.0, -0.02))
+    floor_inlay = build_mesh_from_geo('rooftop_terrace_inlay', terrace_inlay())
+    floor_inlay.materials.append(bpy.data.materials['rooftop_felt_inlay'])
+    object_at('rooftop_terrace_inlay', floor_inlay, (0.0, 0.0, -0.02))
+    parapet_mat = add_material('rooftop_parapet', venue['parapet'])
+    parapet = build_mesh_from_geo('rooftop_parapet', parapet_ring())
+    parapet.materials.append(parapet_mat)
+    object_at('rooftop_parapet', parapet, (0.0, 0.0, 0.0))
+    # The coping is stone a shade lighter than the wall, so the terrace's edge is drawn
+    # against the city rather than lost in the dark under it.
+    coping_mat = add_material('rooftop_coping', venue['coping'])
+    coping = build_mesh_from_geo('rooftop_parapet_coping', parapet_coping())
+    coping.materials.append(coping_mat)
+    object_at('rooftop_parapet_coping', coping, (0.0, 0.0, 0.0))
+    # A strip of light under the coping's lip, which is what an edge is.
+    #
+    # This was once the whole parapet ring built a second time, at full height, made
+    # emissive and raised 1.1m - so the terrace was walled in by an 8.2m glowing
+    # box standing from 1.1m to 2.22m, directly at eye level for a camera at
+    # 1.5m. It filled the top sixth of every frame with a flat tan band and hid
+    # the skyline. The room read as a beige studio cyclorama because it was
+    # standing inside one.
+    lit_mat = add_emissive_material('rooftop_lit_edge', venue['parapet_lit'], venue['parapet_lit_strength'])
+    lit = build_mesh_from_geo('rooftop_lit_edge', parapet_lit_band())
+    lit.materials.append(lit_mat)
+    object_at('rooftop_lit_edge', lit, (0.0, 0.0, 0.0))
+    planter_mat = add_material('rooftop_planter', venue['planter'])
+    # Outside the orbit, not on it.
+    #
+    # These once stood at exactly 3.2m, which is exactly the play camera's orbit
+    # radius, so the camera swept straight through them. They stand in pairs on the
+    # terrace's diagonals now, between the pool, the bar, the lounge and the second
+    # table, against the parapet and far outside the orbit.
+    # An olive tree and a clipped box ball on each diagonal, in pots turned to put a face to
+    # the table and standing clear of the parapet.
+    grove = [math.radians(diagonal + side) for diagonal in (45.0, 135.0, 225.0, 315.0) for side in (-5.5, 5.5)]
+    GROVE_RADIUS = 6.9
+    for index, angle in enumerate(grove):
+        x = GROVE_RADIUS * math.cos(angle)
+        y = GROVE_RADIUS * math.sin(angle)
+        tree = index % 2 == 0
+        pot = planter(width=0.7, foot=0.56, height=0.62) if tree else planter(width=0.56, foot=0.44, height=0.5)
+        planter_mesh = build_mesh_from_geo('rooftop_planter_%d' % index, pot)
+        planter_mesh.materials.append(planter_mat)
+        object_at('rooftop_planter_%d' % index, planter_mesh, (x, y, 0.0), (0.0, 0.0, angle))
+    # Strength 3 clipped these to pure white and six segments made them
+    # hexagons, so the first honest venue render showed two floating white
+    # blobs at head height that read as characters with no faces.
+    # Strength 3 clipped these to pure white and read as two floating hexagons, so
+    # it was pulled back to 0.55. 0.9 is enough to light the bowl the flame now
+    # sits in without going back towards that.
+    fire_mat = add_emissive_material('rooftop_fire', venue['fire'], 0.9)
+    bowl_geo, flame_geo = fire_bowl()
+    # Either end of the lounge's banquette.
+    for index in range(2):
+        angle = math.radians(-31.0 + index * 62.0)
+        x = 6.5 * math.cos(angle)
+        y = 6.5 * math.sin(angle)
+        bowl_mesh = build_mesh_from_geo('rooftop_brazier_%d' % index, bowl_geo)
+        bowl_mesh.materials.append(parapet_mat)
+        object_at('rooftop_brazier_%d' % index, bowl_mesh, (x, y, 0.0))
+        flame_mesh = build_mesh_from_geo('rooftop_fire_%d' % index, flame_geo)
+        flame_mesh.materials.append(fire_mat)
+        object_at('rooftop_fire_%d' % index, flame_mesh, (x, y, 0.0))
+    festoon_mat = add_emissive_material('rooftop_festoon', venue['festoon'], venue['festoon_strength'])
+    bulbs_geo, rig_geo = festoon()
+    bulbs = build_mesh_from_geo('rooftop_festoon', bulbs_geo)
+    bulbs.materials.append(festoon_mat)
+    object_at('rooftop_festoon', bulbs, (0.0, 0.0, 0.0))
+    rig = build_mesh_from_geo('rooftop_festoon_rig', rig_geo)
+    rig.materials.append(parapet_mat)
+    object_at('rooftop_festoon_rig', rig, (0.0, 0.0, 0.0))
+    # The skyline is the venue's identity - a rooftop without a city is a patio.
+    # Every tower, its windows and the ridges of hills behind them are one mesh on
+    # one texture, and the warning lights on the masts are a second so the browser
+    # can flash them apart from the city - see apps/web/src/lib/beacons.ts.
+    city, beacons = skyline.city()
+    towers = build_mesh_from_geo('rooftop_skyline', (city.verts, city.faces))
+    set_corner_uvs(towers, city.uvs)
+    towers.materials.append(skyline_material(venue))
+    object_at('rooftop_skyline', towers, (0.0, 0.0, 0.0))
+    beacon_mat = add_emissive_material('rooftop_beacon', venue['skyline_beacon'], venue['skyline_beacon_strength'])
+    beacon_mesh = build_mesh_from_geo('rooftop_skyline_beacons', (beacons.verts, beacons.faces))
+    beacon_mesh.materials.append(beacon_mat)
+    object_at('rooftop_skyline_beacons', beacon_mesh, (0.0, 0.0, 0.0))
+
+    foliage_mat = add_material('rooftop_foliage', venue['foliage'])
+    # A palm is taller than the people under it.
+    #
+    # These were 1.45m, shorter than a standing person, so their canopies sat at
+    # exactly the height of the play camera and no radius could fix it: the
+    # fronds spread about 0.8m, and clearing the camera's path sideways would
+    # need a trunk at 4.4m on a terrace whose parapet is at 4.1m. The problem
+    # was never where they stood. It was that a rooftop palm was modelled at
+    # chest height, so the camera flew through the leaves instead of under them.
+    # Olive trees and box balls where there were palms. The palms grew to three and a half
+    # metres once the terrace was big enough, and a seated player saw only their trunks: the
+    # crowns stood above the frame. An olive keeps its canopy at head height and above, which
+    # is inside it.
+    trunks, canopies = [], []
+    for index, angle in enumerate(grove):
+        x = GROVE_RADIUS * math.cos(angle)
+        y = GROVE_RADIUS * math.sin(angle)
+        if index % 2 == 0:
+            trunk, canopy = terrace.olive_tree(x, y, 0.56, height=2.05 + 0.2 * ((index // 2) % 2), seed=5 + index)
+            trunks.append(trunk)
+            canopies.append(canopy)
+        else:
+            canopies.append(terrace.topiary_ball(x, y, 0.44, seed=9 + index))
+    tree_mesh = build_mesh_from_geo('rooftop_trees', concat(canopies), smooth_angle=70.0)
+    tree_mesh.materials.append(foliage_mat)
+    object_at('rooftop_trees', tree_mesh, (0.0, 0.0, 0.0))
+    _place('rooftop_tree_trunks', concat(trunks), _existing_material('rooftop_wood'), smooth_angle=60.0)
+
+    build_rooftop_pool_court(venue, coping_mat, parapet_mat, fire_mat, festoon_mat)
+    build_rooftop_bar(coping_mat, parapet_mat, festoon_mat, lit_mat)
+    build_rooftop_lounge(venue, coping_mat, parapet_mat)
+    build_rooftop_blackjack(venue, parapet_mat, festoon_mat)
+
+
+def _existing_material(name):
+    material = bpy.data.materials.get(name)
+    if material is None:
+        raise SystemExit('FAIL: %s is not built yet - the terrace reuses it rather than adding one' % name)
+    return material
+
+
+def _place(name, geo, material, smooth_angle=35.0):
+    mesh = build_mesh_from_geo(name, geo, smooth_angle=smooth_angle)
+    mesh.materials.append(material)
+    return object_at(name, mesh, (0.0, 0.0, 0.0))
+
+
+def build_rooftop_bar(stone_mat, dark_mat, glow_mat, panel_mat):
+    """The bar, on the far side of the terrace from the lounge: a curved wooden counter with a
+    stone top and a strip of light under its lip, a back bar whose bottles stand as silhouettes
+    against a lit panel, five stools, and three ring pendants hung from a steel beam - the
+    reference's bar and its pendant lights.
+
+    Every piece is drawn in a material the room already has - the table's wood, the chairs'
+    leather and chrome, the coping's stone, the parapet's dark steel, the festoon's warm light -
+    and merged by material, so the whole bar is seven draw calls and no new materials. The back
+    panel burns at the strip light's strength rather than the festoon's: at the festoon's it was
+    a lightbox that pulled the eye off the table from across the terrace.
+    """
+    a0, a1 = math.radians(155.0), math.radians(205.0)
+    body, top, strip = terrace.bar_counter(6.05, 6.65, a0, a1)
+    frame, glow, bottles = terrace.back_bar(6.95, 7.3, a0, a1)
+    seats, chrome = [], []
+    for step in range(5):
+        angle = math.radians(160.0 + 10.0 * step)
+        seat, legs = terrace.bar_stool(5.7 * math.cos(angle), 5.7 * math.sin(angle))
+        seats.append(seat)
+        chrome.append(legs)
+    rings, cables = [], []
+    for angle in (math.radians(166.0), math.radians(180.0), math.radians(194.0)):
+        ring, cable = terrace.ring_pendant(6.35 * math.cos(angle), 6.35 * math.sin(angle), 2.35, 2.83)
+        rings.append(ring)
+        cables.append(cable)
+    _place('rooftop_bar_counter', body, _existing_material('rooftop_wood'))
+    _place('rooftop_bar_top', top, stone_mat)
+    _place('rooftop_bar_steel', concat([frame, bottles, terrace.pergola(6.35, a0 - 0.02, a1 + 0.02)] + cables),
+           dark_mat)
+    _place('rooftop_bar_light', concat([strip] + rings), glow_mat)
+    _place('rooftop_bar_panel', glow, panel_mat)
+    _place('rooftop_bar_stools', concat(seats), _existing_material('rooftop_chair'))
+    _place('rooftop_bar_chrome', concat(chrome), _existing_material('rooftop_chrome'))
+
+
+def build_rooftop_lounge(venue, stone_mat, dark_mat):
+    """The lounge on the fire side, between the braziers: a curved banquette along the
+    parapet, two low stone tables and two armchairs turned away from the game.
+
+    The one new material on the terrace is here. Everything else a player sits on is black
+    leather and chrome; a warm fabric is what says the lounge is a different part of the room.
+    """
+    fabric_mat = add_material('rooftop_fabric', venue['fabric'])
+    tune_surface(fabric_mat, 0.92)
+    a0, a1 = math.radians(-22.0), math.radians(22.0)
+    banquette, plinth = terrace.banquette(6.55, 7.25, a0, a1)
+    seats = [banquette]
+    dark = [plinth]
+    tops = []
+    for degrees in (-11.0, 11.0):
+        angle = math.radians(degrees)
+        chair, legs = terrace.armchair(5.0 * math.cos(angle), 5.0 * math.sin(angle), angle)
+        seats.append(chair)
+        dark.append(legs)
+    for degrees in (-9.0, 9.0):
+        angle = math.radians(degrees)
+        top, base = terrace.low_table(5.85 * math.cos(angle), 5.85 * math.sin(angle))
+        tops.append(top)
+        dark.append(base)
+    _place('rooftop_lounge_fabric', concat(seats), fabric_mat, smooth_angle=50.0)
+    _place('rooftop_lounge_tables', concat(tops), stone_mat)
+    _place('rooftop_lounge_dark', concat(dark), dark_mat)
+
+
+BLACKJACK_RADIUS = 0.95
+
+
+def build_rooftop_blackjack(venue, dark_mat, glow_mat):
+    """A blackjack table on the players' side of the terrace, ahead of blackjack itself: a
+    half-moon table printed with its own layout, the dealer's rack, shoe and discards on the
+    straight side - the main station's own meshes, turned to face the curve - five of the
+    table's chairs round the curve, a few bets out, and the arc lamp over it.
+
+    Its felt is the terrace's thirtieth material, which is the budget's ceiling.
+    """
+    cx, cy = 0.0, -5.75
+    felt_geo, rail_geo, wood_geo = terrace.blackjack_table(cx, cy, BLACKJACK_RADIUS)
+    felt_mesh = build_mesh_from_geo('rooftop_blackjack_felt', felt_geo)
+    layer = felt_mesh.uv_layers.new(name='UVMap')
+    for loop in felt_mesh.loops:
+        x, y, _ = felt_mesh.vertices[loop.vertex_index].co
+        layer.data[loop.index].uv = (((x - cx) / BLACKJACK_RADIUS + 1.0) / 2.0, (y - cy) / BLACKJACK_RADIUS)
+    pixels = felt.render_blackjack(FELT_PRINT_WIDTH, BLACKJACK_RADIUS, venue['felt'], venue['felt_ink'],
+                                   venue['felt_pattern'])
+    felt_mesh.materials.append(printed_material(venue['id'] + '_blackjack_print', pixels, 0.92))
+    object_at('rooftop_blackjack_felt', felt_mesh, (0.0, 0.0, 0.0))
+    _place('rooftop_blackjack_rail', rail_geo, _existing_material('rooftop_rail'), smooth_angle=80.0)
+    _place('rooftop_blackjack_wood', wood_geo, _existing_material('rooftop_wood'))
+
+    # The main dealer's station, turned half round and lifted onto this table's 0.78m top.
+    for part in ('station', 'rack', 'discards'):
+        source = bpy.data.objects['river_%s_dealer_%s' % (venue['id'], part)].data
+        object_at('rooftop_blackjack_%s' % part, source, (cx, cy + 0.725, 0.02), (0.0, 0.0, math.pi))
+
+    chair_mesh = bpy.data.objects['rooftop_chair_1'].data
+    for letter, degrees in zip('abcde', (30.0, 60.0, 90.0, 120.0, 150.0)):
+        angle = math.radians(degrees)
+        dx, dy = 1.3 * math.cos(angle), 1.3 * math.sin(angle)
+        object_at('rooftop_blackjack_chair_%s' % letter, chair_mesh, (cx + dx, cy + dy, 0.0),
+                  (0.0, 0.0, math.atan2(-dx, dy)))
+
+    felt_z = 0.781
+    bets = {'chip_500_rim': [], 'chip_1k_rim': [], 'chip_5k_rim': []}
+    cards = []
+    for index, degrees in enumerate((28.0, 90.0, 121.0)):
+        angle = math.radians(degrees)
+        bx, by = cx + 0.64 * math.cos(angle), cy + 0.64 * math.sin(angle)
+        name = list(bets)[index % 3]
+        bets[name].append(terrace.chip_stack(bx, by, felt_z, 3 + index * 2))
+        for card in range(2):
+            cards.append(terrace.dealt_card(bx + 0.03 * (card - 0.5) * 2.0, by - 0.13, felt_z + 0.001 + card * 0.001,
+                                            angle - math.pi / 2.0 + 0.12 * (card - 0.5)))
+    cards.append(terrace.dealt_card(cx, cy + 0.33, felt_z + 0.001, 0.0))
+    for name, parts in bets.items():
+        _place('rooftop_blackjack_%s' % name.replace('_rim', 's'), concat(parts), _existing_material(name))
+    _place('rooftop_blackjack_cards', concat(cards), _existing_material('river_card_back'))
+
+    steel, diffuser = terrace.arc_lamp(cx + 1.55, cy - 0.35, cx, cy + 0.4)
+    _place('rooftop_blackjack_lamp', steel, dark_mat, smooth_angle=60.0)
+    _place('rooftop_blackjack_lamp_light', diffuser, glow_mat)
+
+
+def build_rooftop_pool_court(venue, stone_mat, dark_mat, fire_mat, ember_mat):
+    """Behind the dealer, where the default camera looks: a raised pool lit from inside, a
+    run of fire along its front and three bronzes against the city.
+
+    The reference puts fire along a pool; here the fire stands between the pool and the
+    table, so the dealer's side of the frame has a warm line at the height of the players'
+    shoulders and the cool glow of the water behind it.
+    """
+    water_mat = add_material('rooftop_water', venue['water'])
+    bsdf = next(n for n in water_mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs['Roughness'].default_value = 0.08
+    glow = hex_to_rgb(venue['pool_glow'])
+    bsdf.inputs['Emission Color'].default_value = (glow[0], glow[1], glow[2], 1.0)
+    bsdf.inputs['Emission Strength'].default_value = venue['pool_glow_strength']
+    stone_geo, water_geo = terrace.raised_pool(-2.8, 4.35, 2.8, 6.05)
+    pool = build_mesh_from_geo('rooftop_pool_stone', stone_geo)
+    pool.materials.append(stone_mat)
+    object_at('rooftop_pool_stone', pool, (0.0, 0.0, 0.0))
+    water = build_mesh_from_geo('rooftop_pool', water_geo)
+    water.materials.append(water_mat)
+    object_at('rooftop_pool', water, (0.0, 0.0, 0.0))
+
+    trough_geo, bed_geo, flame_geo = terrace.fire_run(-2.6, 2.6, 4.05)
+    trough = build_mesh_from_geo('rooftop_fire_trough', trough_geo)
+    trough.materials.append(dark_mat)
+    object_at('rooftop_fire_trough', trough, (0.0, 0.0, 0.0))
+    # The bed burns in the festoon's warm yellow, hotter than the tongues standing in it.
+    bed = build_mesh_from_geo('rooftop_fire_bed', bed_geo)
+    bed.materials.append(ember_mat)
+    object_at('rooftop_fire_bed', bed, (0.0, 0.0, 0.0))
+    run = build_mesh_from_geo('rooftop_fire_run', flame_geo, smooth_angle=80.0)
+    run.materials.append(fire_mat)
+    object_at('rooftop_fire_run', run, (0.0, 0.0, 0.0))
+
+    bronze_mat = add_metal_material('rooftop_bronze', venue['bronze'], roughness=0.38)
+    bases = concat([terrace.plinth(-2.35, 6.4), terrace.plinth(0.0, 6.72), terrace.plinth(2.35, 6.4)])
+    plinths = build_mesh_from_geo('rooftop_plinths', bases)
+    plinths.materials.append(stone_mat)
+    object_at('rooftop_plinths', plinths, (0.0, 0.0, 0.0))
+    figures = concat([
+        terrace.standing_figure(-2.35, 6.4, 0.9, height=1.55, facing=0.25, seed=3),
+        terrace.ring_sculpture(0.0, 6.72, 0.9),
+        terrace.standing_figure(2.35, 6.4, 0.9, height=1.45, facing=-0.3, seed=11),
+    ])
+    bronzes = build_mesh_from_geo('rooftop_bronzes', figures, smooth_angle=60.0)
+    bronzes.materials.append(bronze_mat)
+    object_at('rooftop_bronzes', bronzes, (0.0, 0.0, 0.0))
+
+
+def build_basement(venue):
+    checker_mat, _image, _path = make_checker_material(
+        'basement_checker', 128, venue['checker_a'], venue['checker_b'], TEX_DIR
+    )
+    plane = build_mesh_from_geo('basement_floor', checkerboard_plane(12.0, 9.6))
+    plane.materials.append(checker_mat)
+    object_at('basement_floor', plane, (0.0, 0.0, -0.02))
+    wall_mat = add_material('basement_wall', venue['wall'])
+    walls = build_mesh_from_geo('basement_room_walls', room_walls(12.0, 9.6, 3.1))
+    walls.materials.append(wall_mat)
+    object_at('basement_room_walls', walls, (0.0, 0.2, 0.0))
+    ceiling_surface = build_mesh_from_geo('basement_ceiling', checkerboard_plane(12.0, 9.6))
+    ceiling_surface.materials.append(wall_mat)
+    object_at('basement_ceiling', ceiling_surface, (0.0, 0.2, 3.35))
+    ceiling = build_mesh_from_geo('basement_ceiling_pipes', ceiling_pipes())
+    ceiling.materials.append(wall_mat)
+    object_at('basement_ceiling_pipes', ceiling, (0.0, 0.0, 0.0))
+    machine_mat = add_material('basement_machine', venue['machine'])
+    machines = []
+    for row in range(2):
+        z = 0.42 + row * 0.94
+        for index in range(7):
+            x = -5.55 + index * 1.70
+            machines.append(transform_geo(machine_unit(), x, 4.05, z))
+            y = -3.95 + index * 1.18
+            machines.append(transform_geo(machine_unit(), -5.72, y, z, math.pi / 2.0))
+    machine_mesh = build_mesh_from_geo('basement_machine_bank', concat(machines))
+    machine_mesh.materials.append(machine_mat)
+    object_at('basement_machine_bank', machine_mesh, (0.0, 0.0, 0.0))
+    counter_mat = add_material('basement_counter', venue['wood'])
+    counter = build_mesh_from_geo('basement_counter', basement_counter())
+    counter.materials.append(counter_mat)
+    object_at('basement_counter', counter, (0.0, 0.0, 0.0))
+    carts = build_mesh_from_geo(
+        'basement_carts',
+        concat([transform_geo(laundry_cart(), 2.9, -3.1, 0.0), transform_geo(laundry_cart(), 2.9, 2.35, 0.0)]),
+    )
+    carts.materials.append(machine_mat)
+    object_at('basement_carts', carts, (0.0, 0.0, 0.0))
+    crate_mat = add_material('basement_crate', venue['crate'])
+    crates = build_mesh_from_geo(
+        'basement_crates',
+        concat([transform_geo(crate_stack(), 3.5, 2.7, 0.0), transform_geo(crate_stack(), 4.1, 2.7, 0.0, 0.2)]),
+    )
+    crates.materials.append(crate_mat)
+    object_at('basement_crates', crates, (0.0, 0.0, 0.0))
+    ladder_mat = add_material('basement_ladder', venue['ladder'])
+    ladder = build_mesh_from_geo('basement_ladder', stepladder())
+    ladder.materials.append(ladder_mat)
+    object_at('basement_ladder', ladder, (2.3, -3.8, 0.0))
+
+
+def build_suite(venue):
+    bal_mat = add_material('suite_balustrade', venue['balustrade'])
+    wall_mat = add_material('suite_wall', venue['wall'])
+    floor = build_mesh_from_geo('suite_floor', terrace_disc(8.2, 64))
+    floor.materials.append(wall_mat)
+    object_at('suite_floor', floor, (0.0, 0.0, -0.02))
+    walls = build_mesh_from_geo('suite_room_walls', room_walls(16.4, 16.4, 4.4))
+    walls.materials.append(wall_mat)
+    object_at('suite_room_walls', walls, (0.0, 0.0, 0.0))
+    ceiling = build_mesh_from_geo('suite_ceiling', checkerboard_plane(16.4, 16.4))
+    ceiling.materials.append(wall_mat)
+    object_at('suite_ceiling', ceiling, (0.0, 0.0, 4.4))
+    balusters = []
+    scrolls = []
+    for index in range(56):
+        angle = 2.0 * math.pi * index / 56.0
+        x = 5.4 * math.cos(angle)
+        y = 5.4 * math.sin(angle)
+        balusters.append(transform_geo(suite_baluster(), x, y, 0.0))
+        scrolls.append(transform_geo(suite_scroll(), x, y, 0.0, angle))
+    baluster_mesh = build_mesh_from_geo('suite_balusters', concat(balusters))
+    baluster_mesh.materials.append(bal_mat)
+    object_at('suite_balusters', baluster_mesh, (0.0, 0.0, 0.0))
+    scroll_mesh = build_mesh_from_geo('suite_scroll_ornaments', concat(scrolls))
+    scroll_mesh.materials.append(bal_mat)
+    object_at('suite_scroll_ornaments', scroll_mesh, (0.0, 0.0, 0.0))
+    handrail = build_mesh_from_geo('suite_handrail', suite_handrail())
+    handrail.materials.append(bal_mat)
+    object_at('suite_handrail', handrail, (0.0, 0.0, 0.0))
+    bar_mat = add_material('suite_bar', venue['bar_wood'])
+    bar = build_mesh_from_geo('suite_bar', bar_back())
+    bar.materials.append(bar_mat)
+    object_at('suite_bar', bar, (6.6, -1.0, 0.0), (0.0, 0.0, math.pi / 2))
+    bar_light = add_emissive_material('suite_bar_lit', venue['bar_lit'], 2.0)
+    shelf = build_mesh_from_geo('suite_bar_lit', bar_back())
+    shelf.materials.append(bar_light)
+    object_at('suite_bar_lit', shelf, (6.6, -1.0, 1.2), (0.0, 0.0, math.pi / 2))
+    bottles = build_mesh_from_geo('suite_bar_bottles', bar_bottle())
+    bottles.materials.append(bar_light)
+    object_at('suite_bar_bottles', bottles, (0.0, 0.0, 0.0))
+    sconce_mat = add_emissive_material('suite_sconce', venue['sconce'], 1.2)
+    sconces = build_mesh_from_geo('suite_wall_sconces', suite_sconces())
+    sconces.materials.append(sconce_mat)
+    object_at('suite_wall_sconces', sconces, (0.0, 0.0, 0.0))
+    chandelier_mat = add_material('suite_chandelier', venue['chandelier'])
+    chandelier_lit = add_emissive_material('suite_chandelier_lit', venue['sconce'], 1.5)
+    rods = build_mesh_from_geo('suite_chandelier_rods', chandelier_rods())
+    rods.materials.append(chandelier_mat)
+    object_at('suite_chandelier_rods', rods, (6.0, 0.0, 0.0))
+    chandy = build_mesh_from_geo('suite_chandelier', chandelier())
+    chandy.materials.append(chandelier_mat)
+    object_at('suite_chandelier', chandy, (6.0, 0.0, 2.4))
+    chandy_lit = build_mesh_from_geo('suite_chandelier_lit', chandelier())
+    chandy_lit.materials.append(chandelier_lit)
+    object_at('suite_chandelier_lit', chandy_lit, (6.0, 0.0, 2.4))
+    patrons = []
+    for degrees in (40, 95, 150, 215, 300):
+        angle = math.radians(degrees)
+        patrons.append(transform_geo(standing_patron(), 6.9 * math.cos(angle), 6.9 * math.sin(angle), 0.0, angle + math.pi))
+    patron_mesh = build_mesh_from_geo('suite_standing_patrons', concat(patrons))
+    patron_mesh.materials.append(wall_mat)
+    object_at('suite_standing_patrons', patron_mesh, (0.0, 0.0, 0.0))
+
+
+def hex_to_linear(hex_rgb):
+    # Kept as a name because the lighting code reads better for it, but the
+    # conversion lives in one place now. There were two of these - this one,
+    # correct, used for lights and the world; and buildkit's hex_to_rgb, which
+    # skipped the transfer curve entirely and was used for every material in
+    # every venue. Two functions for one job is how one of them stays wrong.
+    return hex_to_rgb(hex_rgb)
+
+
+def build_lighting(venue_id):
+    """Add the measured light rig and world for a venue.
+
+    The pipeline previously exported geometry and emissive materials only, with
+    no lights at all, so every venue rendered flat. These values are measured
+    from the lookdev builds - see docs/art-pipeline.md.
+    """
+    import math
+
+    spec = VENUE_LIGHTS.get(venue_id)
+    if spec is None:
+        return []
+
+    world_hex, world_strength = spec['world']
+    world = bpy.data.worlds.new('world_' + venue_id)
+    world.use_nodes = True
+    background = world.node_tree.nodes.get('Background')
+    if background is not None:
+        background.inputs[0].default_value = hex_to_linear(world_hex) + (1.0,)
+        background.inputs[1].default_value = world_strength
+
+    stops = spec.get('world_gradient')
+    if stops and background is not None:
+        # TexCoord > SeparateXYZ > ColorRamp > Background. The Rooftop sky is a
+        # vertical gradient; a flat colour reads as a grey lid over the skyline.
+        tree = world.node_tree
+        coord = tree.nodes.new('ShaderNodeTexCoord')
+        separate = tree.nodes.new('ShaderNodeSeparateXYZ')
+        ramp = tree.nodes.new('ShaderNodeValToRGB')
+        tree.links.new(coord.outputs['Generated'], separate.inputs[0])
+        tree.links.new(separate.outputs['Z'], ramp.inputs['Fac'])
+        tree.links.new(ramp.outputs['Color'], background.inputs[0])
+        elements = ramp.color_ramp.elements
+        while len(elements) > 1:
+            elements.remove(elements[-1])
+        for index, (position, colour) in enumerate(stops):
+            element = elements[0] if index == 0 else elements.new(position)
+            element.position = position
+            element.color = hex_to_linear(colour) + (1.0,)
+
+    bpy.context.scene.world = world
+
+    created = []
+    for name, kind, colour, energy, size, shadow, loc, rot in spec['lights']:
+        data = bpy.data.lights.new('lgt_%s_%s' % (venue_id, name), type=kind)
+        data.color = hex_to_linear(colour)
+        data.energy = energy
+        if hasattr(data, 'size'):
+            data.size = size
+        data.use_shadow = shadow
+        obj = bpy.data.objects.new('lgt_%s_%s' % (venue_id, name), data)
+        obj.location = loc
+        obj.rotation_euler = tuple(math.radians(a) for a in rot)
+        bpy.context.scene.collection.objects.link(obj)
+        created.append(obj.name)
+    return created
+
+
+def clear_radius_violations(venue_id):
+    """Flag geometry that would ruin the orbit camera.
+
+    Two distinct hazards, both drawn from things that actually went wrong:
+
+    1. Orbit intrusion - geometry sitting on the camera's circular path and tall
+       enough to reach it. A Rooftop palm at 6.0m against a 6.1m orbit put the
+       camera inside the foliage, and the fronds read convincingly as shadow
+       artifacts across three diagnostic passes.
+    2. Occlusion - geometry inside the orbit that rises above the sight line
+       from the camera down to the table, putting a wall between the player and
+       the felt.
+
+    Measured per vertex, not from the bounding box. An axis-aligned box around a
+    ring has its corners at R*sqrt(2), so bound_box reports a 4.1m parapet as
+    5.8m and a 45m skyline as 64m. The parapet is exactly the case a blunt
+    height rule condemns wrongly - it is 2.2m tall but the camera looks well
+    over it.
+    """
+    import math
+
+    from mathutils import Vector
+
+    camera = VENUE_CAMERA.get(venue_id)
+    if camera is None:
+        return []
+
+    # bound_box and matrix_world are stale until the dependency graph catches
+    # up. Without this the gate reads zeros and silently passes everything.
+    bpy.context.view_layer.update()
+
+    orbit = camera['radius']
+    height = camera['height']
+    table_top = 0.76
+    # The camera is a point plus near-plane clearance, not a two-metre band.
+    # A room wall outside the orbit is correct architecture, not an intrusion.
+    tube_inner = orbit - 0.4
+    tube_outer = orbit + 0.4
+    tube_floor = height - 1.5
+    # And a ceiling, for the same reason there is a floor.
+    #
+    # The camera is a point at `height`, and the radial bound already says so -
+    # "a point plus near-plane clearance, not a two-metre band". Vertically it
+    # said nothing, so anything in the band at any height counted as being in
+    # the way, and a canopy three metres up was reported as blocking a camera at
+    # one and a half. A branch overhead is not an obstruction; it is a ceiling.
+    tube_roof = height + 0.9
+
+    offenders = []
+    for obj in bpy.data.objects:
+        if obj.type != 'MESH' or obj.data is None:
+            continue
+        # People are not set dressing.
+        #
+        # This check exists to stop scenery standing between the camera and the
+        # table. A seated player standing between the camera and the table is
+        # the shot: the reference frames its near players' shoulders and backs
+        # across the bottom of frame, and a head at 1.27m is 0.2m above a sight
+        # line drawn to the felt because that is where a head sits when someone
+        # is playing cards. Flagging them measures the wrong thing, and the only
+        # way to satisfy it would be to seat nobody.
+        #
+        # The tube rule still applies to everything, characters included - a
+        # person standing in the camera's path is a real fault. Only the
+        # occlusion rule is waived.
+        is_person = obj.name.startswith(('char_', 'garment_', 'river_dealer'))
+        matrix = obj.matrix_world
+        worst_tube = None
+        worst_occlude = None
+        for vertex in obj.data.vertices:
+            point = matrix @ Vector(vertex.co)
+            radius = math.hypot(point.x, point.y)
+            if radius < 0.35:
+                continue
+            if tube_inner <= radius <= tube_outer and tube_floor <= point.z <= tube_roof:
+                if worst_tube is None or point.z > worst_tube[1]:
+                    worst_tube = (radius, point.z)
+            elif radius < tube_inner and not is_person:
+                sight = table_top + (height - table_top) * (radius / orbit)
+                if point.z > sight and (worst_occlude is None or point.z - sight > worst_occlude[2]):
+                    worst_occlude = (radius, point.z, point.z - sight)
+
+        if worst_tube is not None:
+            offenders.append(
+                '%s crosses the camera orbit at r=%.2f z=%.2f (orbit %.2f, camera height %.2f)'
+                % (obj.name, worst_tube[0], worst_tube[1], orbit, height)
+            )
+        if worst_occlude is not None:
+            offenders.append(
+                '%s blocks the table view at r=%.2f z=%.2f, %.2fm above the sight line'
+                % (obj.name, worst_occlude[0], worst_occlude[1], worst_occlude[2])
+            )
+    return offenders
+
+
+def lighting_sidecar():
+    """Emit the light rigs as JSON beside the GLBs.
+
+    glTF carries only KHR_lights_punctual - point, spot and directional - so the
+    exporter drops every area light with 'Unsupported light source AREA'. three.js
+    has RectAreaLight, which is what these actually are, so the rig travels as a
+    sidecar rather than being degraded to point lights on the way out.
+    """
+    out = {}
+    for venue_id, spec in VENUE_LIGHTS.items():
+        world_hex, world_strength = spec['world']
+        entry = {
+            'world': {'colour': '#' + world_hex, 'strength': world_strength},
+            'camera': VENUE_CAMERA[venue_id],
+            'lights': [
+                {
+                    'name': name,
+                    'type': kind.lower(),
+                    'colour': '#' + colour,
+                    'energy': energy,
+                    'size': size,
+                    'shadow': shadow,
+                    'position': list(loc),
+                    'rotation_deg': list(rot),
+                }
+                for name, kind, colour, energy, size, shadow, loc, rot in spec['lights']
+            ],
+        }
+        gradient = spec.get('world_gradient')
+        if gradient:
+            entry['world']['gradient'] = [
+                {'position': position, 'colour': '#' + colour} for position, colour in gradient
+            ]
+        sky = VENUE_SKY.get(venue_id)
+        if sky is not None:
+            entry['sky'] = {key: '#' + sky[key] for key in ('low', 'band', 'hot', 'high')}
+            entry['sky']['bands'] = [list(band) for band in sky['bands']]
+        out[venue_id] = entry
+    path = os.path.join(OUT_DIR, 'lighting.json')
+    # newline='' keeps LF on Windows. Biome lints this file once it is published
+    # into the web app, and CRLF fails the shared lint gate.
+    with open(path, 'w', newline='') as handle:
+        json.dump(out, handle, indent=2)
+        handle.write(chr(10))
+    return path
+
+
+def _append_accessor(gltf, binary, values, accessor_type):
+    component_count = {'VEC3': 3, 'VEC4': 4}[accessor_type]
+    payload = struct.pack('<%sf' % (len(values) * component_count), *[
+        component for value in values for component in value
+    ])
+    padding = (-len(binary)) % 4
+    binary += b'\0' * padding
+    offset = len(binary)
+    binary += payload
+    view_index = len(gltf.setdefault('bufferViews', []))
+    gltf['bufferViews'].append({
+        'buffer': 0,
+        'byteOffset': offset,
+        'byteLength': len(payload),
+        'target': 34962,
+    })
+    accessor_index = len(gltf.setdefault('accessors', []))
+    gltf['accessors'].append({
+        'bufferView': view_index,
+        'componentType': 5126,
+        'count': len(values),
+        'type': accessor_type,
+    })
+    return accessor_index, binary
+
+
+def append_gpu_instances(glb, pools):
+    with open(glb, 'rb') as handle:
+        raw = handle.read()
+    _version, _length = struct.unpack_from('<II', raw, 4)
+    offset = 12
+    json_chunk = None
+    binary = b''
+    while offset < len(raw):
+        chunk_length, chunk_type = struct.unpack_from('<II', raw, offset)
+        offset += 8
+        chunk = raw[offset:offset + chunk_length]
+        offset += chunk_length
+        if chunk_type == 0x4E4F534A:
+            json_chunk = chunk
+        elif chunk_type == 0x004E4942:
+            binary += chunk
+    if json_chunk is None:
+        raise SystemExit('FAIL: exported GLB has no JSON chunk')
+    gltf = json.loads(json_chunk.decode('utf-8'))
+    for pool in pools:
+        node = next((candidate for candidate in gltf.get('nodes', []) if candidate.get('name') == pool['node']), None)
+        if node is None:
+            raise SystemExit('FAIL: pooled node missing from export: ' + pool['node'])
+        translations = [instance['translation'] for instance in pool['instances']]
+        rotations = [instance['rotation'] for instance in pool['instances']]
+        scales = [instance['scale'] for instance in pool['instances']]
+        translation_accessor, binary = _append_accessor(gltf, binary, translations, 'VEC3')
+        rotation_accessor, binary = _append_accessor(gltf, binary, rotations, 'VEC4')
+        scale_accessor, binary = _append_accessor(gltf, binary, scales, 'VEC3')
+        node.setdefault('extensions', {})['EXT_mesh_gpu_instancing'] = {
+            'attributes': {
+                'TRANSLATION': translation_accessor,
+                'ROTATION': rotation_accessor,
+                'SCALE': scale_accessor,
+            }
+        }
+        node['extras'] = {
+            'riverInstanceIds': [instance['id'] for instance in pool['instances']],
+            'riverInstanceCount': len(pool['instances']),
+            'riverInstanceOrder': 'stable per node; update the matching instance matrix for animation',
+        }
+    gltf['extensionsUsed'] = sorted(set(gltf.get('extensionsUsed', [])) | {'EXT_mesh_gpu_instancing'})
+    gltf.setdefault('buffers', [{}])[0]['byteLength'] = len(binary)
+    json_bytes = json.dumps(gltf, separators=(',', ':')).encode('utf-8')
+    json_bytes += b' ' * ((-len(json_bytes)) % 4)
+    binary += b'\0' * ((-len(binary)) % 4)
+    total_length = 12 + 8 + len(json_bytes) + 8 + len(binary)
+    output = bytearray()
+    output.extend(struct.pack('<4sII', b'glTF', 2, total_length))
+    output.extend(struct.pack('<II', len(json_bytes), 0x4E4F534A))
+    output.extend(json_bytes)
+    output.extend(struct.pack('<II', len(binary), 0x004E4942))
+    output.extend(binary)
+    with open(glb, 'wb') as handle:
+        handle.write(output)
+
+
+def dedupe_materials(glb):
+    with open(glb, 'rb') as handle:
+        raw = handle.read()
+    offset = 12
+    json_chunk = None
+    binary = b''
+    while offset < len(raw):
+        chunk_length, chunk_type = struct.unpack_from('<II', raw, offset)
+        offset += 8
+        chunk = raw[offset:offset + chunk_length]
+        offset += chunk_length
+        if chunk_type == 0x4E4F534A:
+            json_chunk = chunk
+        elif chunk_type == 0x004E4942:
+            binary += chunk
+    if json_chunk is None:
+        raise SystemExit('FAIL: exported GLB has no JSON chunk')
+    gltf = json.loads(json_chunk.decode('utf-8'))
+
+    def normalise(value):
+        if isinstance(value, dict):
+            return {
+                key: normalise(item)
+                for key, item in value.items()
+                if not (key == 'texCoord' and item == -1)
+            }
+        if isinstance(value, list):
+            return [normalise(item) for item in value]
+        return value
+
+    materials = gltf.get('materials', [])
+    canonical = []
+    mapping = {}
+    seen = {}
+    for index, material in enumerate(materials):
+        key = json.dumps(normalise(material), sort_keys=True, separators=(',', ':'))
+        target = seen.get(key)
+        if target is None:
+            target = len(canonical)
+            seen[key] = target
+            canonical.append(material)
+        mapping[index] = target
+    if len(canonical) == len(materials):
+        return
+    gltf['materials'] = canonical
+    for mesh in gltf.get('meshes', []):
+        for primitive in mesh.get('primitives', []):
+            if 'material' in primitive:
+                primitive['material'] = mapping[primitive['material']]
+    json_bytes = json.dumps(gltf, separators=(',', ':')).encode('utf-8')
+    json_bytes += b' ' * ((-len(json_bytes)) % 4)
+    total_length = 12 + 8 + len(json_bytes) + 8 + len(binary)
+    output = bytearray(struct.pack('<4sII', b'glTF', 2, total_length))
+    output.extend(struct.pack('<II', len(json_bytes), 0x4E4F534A))
+    output.extend(json_bytes)
+    output.extend(struct.pack('<II', len(binary), 0x004E4942))
+    output.extend(binary)
+    with open(glb, 'wb') as handle:
+        handle.write(output)
+
+
+def restore_vertex_colour_base_factors(glb):
+    with open(glb, 'rb') as handle:
+        raw = handle.read()
+    offset = 12
+    json_chunk = None
+    binary = b''
+    while offset < len(raw):
+        chunk_length, chunk_type = struct.unpack_from('<II', raw, offset)
+        offset += 8
+        chunk = raw[offset:offset + chunk_length]
+        offset += chunk_length
+        if chunk_type == 0x4E4F534A:
+            json_chunk = chunk
+        elif chunk_type == 0x004E4942:
+            binary += chunk
+    if json_chunk is None:
+        raise SystemExit('FAIL: exported GLB has no JSON chunk')
+    gltf = json.loads(json_chunk.decode('utf-8'))
+    for material in gltf.get('materials', []):
+        base = material.get('extras', {}).get('riverVertexColourBase')
+        if not isinstance(base, list) or len(base) != 3:
+            continue
+        material.setdefault('pbrMetallicRoughness', {})['baseColorFactor'] = [
+            float(base[0]), float(base[1]), float(base[2]), 1.0,
+        ]
+    json_bytes = json.dumps(gltf, separators=(',', ':')).encode('utf-8')
+    json_bytes += b' ' * ((-len(json_bytes)) % 4)
+    total_length = 12 + 8 + len(json_bytes) + 8 + len(binary)
+    output = bytearray(struct.pack('<4sII', b'glTF', 2, total_length))
+    output.extend(struct.pack('<II', len(json_bytes), 0x4E4F534A))
+    output.extend(json_bytes)
+    output.extend(struct.pack('<II', len(binary), 0x004E4942))
+    output.extend(binary)
+    with open(glb, 'wb') as handle:
+        handle.write(output)
+
+
+def tuck_chairs_to_backs(venue, contact=0.005):
+    """Slide the chairs in until the backrest meets the back that is sitting against it.
+
+    Putting the chairs on the character ring got the seat pan under the figure, but a
+    chair's backrest is at the BACK of the chair and a person's back is roughly over the
+    middle of the seat, so sharing a centre still leaves a hand's width of daylight
+    between the two. It reads as a man perched on the front edge of his stool.
+
+    The distance is measured rather than dialled in, because "move it forward a bit" has
+    no units and the answer changes with the character's scale, the seat ring and the
+    chair model. Both surfaces are sampled over the height band where a backrest actually
+    touches a back - above the seat pan, below the shoulders - so buttocks on the pan and
+    a headrest above the shoulders cannot stand in for the contact.
+    """
+    # The characters were parented and placed moments ago and nothing has evaluated the
+    # dependency graph since, so matrix_world still reads as identity on every one of
+    # them. Measuring through it puts the whole figure at the origin, which is how a
+    # backrest 100mm behind a back measured as 771mm in front of one.
+    bpy.context.view_layer.update()
+
+    band = (SEAT_H + 0.06, SEAT_H + 0.42)
+    chairs = [obj for obj in bpy.data.objects
+              if obj.type == 'MESH' and obj.name.startswith(venue['id'] + '_chair_')]
+    people = [obj for obj in bpy.data.objects
+              if obj.type == 'MESH' and obj.name.startswith('char_')]
+    if not chairs or not people:
+        print('TUCK %-9s chairs=%d people=%d - nothing to measure against'
+              % (venue['id'], len(chairs), len(people)))
+        return 0.0
+
+    # One seat, along that seat's own outward direction. The seat ring is an ellipse, so
+    # radius from the origin is not comparable between seats - taking the furthest chair
+    # on the ring and the character on a different seat measured 1194mm of "gap" and
+    # drove every stool into the table.
+    seated = sum((sum((obj.matrix_world @ vertex.co for vertex in obj.data.vertices),
+                      Vector((0, 0, 0))) / len(obj.data.vertices) for obj in people),
+                 Vector((0, 0, 0))) / len(people)
+    outward = Vector((seated.x, seated.y, 0.0))
+    if outward.length < 1e-6:
+        raise SystemExit('FAIL: the %s character sits on the table axis, so there is no '
+                         'outward direction to tuck along' % venue['id'])
+    outward.normalize()
+    chair = min(chairs, key=lambda obj: (obj.location.xy - seated.xy).length)
+
+    def reach(objects, behind=None):
+        found = []
+        for obj in objects:
+            for vertex in obj.data.vertices:
+                point = obj.matrix_world @ vertex.co
+                if not band[0] <= point.z <= band[1]:
+                    continue
+                along = Vector((point.x, point.y, 0.0)).dot(outward)
+                if behind is None or along > behind:
+                    found.append(along)
+        return found
+
+    # His rearmost point in the band is his back. The backrest's is its OUTER face, which
+    # is the wrong side of a shell 60mm thick - so the chair is narrowed to the geometry
+    # behind its own centre, and the nearest of that is the face a back actually rests on.
+    seat_axis = Vector((chair.location.x, chair.location.y, 0.0)).dot(outward)
+    backs = reach(people)
+    rests = reach([chair], behind=seat_axis)
+    back = max(backs) if backs else None
+    rest = min(rests) if rests else None
+    if back is None or rest is None:
+        raise SystemExit('FAIL: %s found no geometry between %.2f and %.2f to measure a '
+                         'backrest contact against' % (venue['id'], band[0], band[1]))
+    gap = rest - back - contact
+    print('TUCK %-9s back=%.3f backrest=%.3f gap=%.0fmm'
+          % (venue['id'], back, rest, gap * 1000.0))
+    if gap <= 0.0:
+        print('TUCK %-9s already in contact, leaving the chairs alone' % venue['id'])
+        return 0.0
+    # A backrest is a hand's width behind a back at worst. Anything larger means the two
+    # surfaces being compared are not the ones that touch, and moving the stools by it
+    # puts them inside the table - which is exactly what the first version of this did.
+    if gap > 0.25:
+        raise SystemExit('FAIL: %s measured a %.0fmm backrest gap, which is too large to '
+                         'be one - back=%.3f backrest=%.3f along the seat axis'
+                         % (venue['id'], gap * 1000.0, back, rest))
+    for chair in chairs:
+        radius = math.hypot(chair.location.x, chair.location.y)
+        if radius < 1e-6:
+            continue
+        chair.location.x -= chair.location.x / radius * gap
+        chair.location.y -= chair.location.y / radius * gap
+    print('TUCK %-9s moved %d chairs %.0fmm towards the table'
+          % (venue['id'], len(chairs), gap * 1000.0))
+    # Re-check the rail after moving, not just before. The gate in build_chairs ran on the
+    # untucked ring, and a tuck large enough to close the gap is also large enough to put
+    # the stools through the table - which is what a 247mm reading would have done.
+    for moved in chairs:
+        radius = math.hypot(moved.location.x, moved.location.y)
+        unit_x, unit_y = moved.location.x / radius, moved.location.y / radius
+        rail = 1.0 / math.sqrt((unit_x / RAIL_X) ** 2 + (unit_y / RAIL_Y) ** 2)
+        if radius <= rail:
+            raise SystemExit('FAIL: tucking %s by %.0fmm put it at %.3f, inside the rail '
+                             'at %.3f' % (moved.name, gap * 1000.0, radius, rail))
+    return gap
+
+
+def build_venue(venue, chip_meshes, card_mesh):
+    shared_meshes = list(chip_meshes.values()) + [card_mesh]
+    keep_names = {mesh.name for mesh in shared_meshes}
+    clear_scene(keep_names)
+    chair_fn = VENUE_CHAIR[venue['id']]
+    rail_mat = colorramp_material(venue['id'] + '_rail', [(0.0, venue['rail']), (1.0, venue['rail'])])[0]
+    wood_mat = colorramp_material(venue['id'] + '_wood', [(0.0, venue['wood']), (1.0, venue['wood'])])[0]
+    chair_mat = colorramp_material(venue['id'] + '_chair', [(0.0, venue['chair']), (1.0, venue['chair'])])[0]
+    build_table(venue, rail_mat, wood_mat)
+    build_chairs(venue, chair_fn, chair_mat)
+    build_venue_characters(venue)
+    tuck_chairs_to_backs(venue)
+    chip_instances = {}
+    for index in range(4):
+        denom = list(CHIP_DENOMS)[index % len(CHIP_DENOMS)][0]
+        chip_instances.setdefault(denom, [])
+        for stack in range(2):
+            z = 0.77 + stack * CHIP_THICK
+            x = 0.3 + index * 0.1 - 0.18
+            y = 0.4
+            chip_instances[denom].append({
+                'id': 'chip_%d_%d' % (index, stack),
+                'translation': [x, y, z],
+                'rotation': [0.0, 0.0, 0.0, 1.0],
+                'scale': [1.0, 1.0, 1.0],
+            })
+    pools = []
+    for denom, instances in chip_instances.items():
+        node_name = 'chip_pool_' + denom
+        object_at(node_name, chip_meshes[denom])
+        pools.append({'node': node_name, 'instances': instances})
+    card_instances = add_board_cards(card_mesh)
+    object_at('board_card_pool', card_mesh)
+    pools.append({'node': 'board_card_pool', 'instances': card_instances})
+    if venue['id'] == 'rooftop':
+        build_rooftop(venue)
+    elif venue['id'] == 'basement':
+        build_basement(venue)
+    else:
+        build_suite(venue)
+    add_venue_surface_detail(venue['id'])
+    lights = build_lighting(venue['id'])
+    intrusions = clear_radius_violations(venue['id'])
+    glb = os.path.join(OUT_DIR, venue['id'] + '_assets.glb')
+    bpy.ops.export_scene.gltf(
+        filepath=glb,
+        check_existing=False,
+        export_format='GLB',
+        export_copyright='',
+        export_apply=False,
+        export_yup=True,
+        export_materials='EXPORT',
+        export_lights=False,
+        export_extras=True,
+        export_animations=True,
+        export_animation_mode='ACTIONS',
+    )
+    append_gpu_instances(glb, pools)
+    dedupe_materials(glb)
+    restore_vertex_colour_base_factors(glb)
+    report = checker.Report()
+    # File size is a budget too. Triangles, materials and draw calls were all
+    # gated while the download grew from 185KB to 12MB unnoticed, because
+    # nothing measured the thing a player actually waits for.
+    glb_kb = os.path.getsize(glb) / 1024.0
+    report.glb_kb = glb_kb
+    gltf, binary = checker.read_glb(glb)
+    checker.compute_counts(gltf, binary, report)
+    failures = []
+    checker_check_fail(venue['id'], report, failures, gltf)
+    if not lights:
+        failures.append('no light rig built for ' + venue['id'])
+    for intrusion in intrusions:
+        failures.append('orbit clear radius: ' + intrusion)
+    for action in list(bpy.data.actions):
+        bpy.data.actions.remove(action, do_unlink=True)
+    return glb, report, failures
+
+
+def checker_check_fail(venue_id, report, failures, gltf):
+    punctual = gltf.get('extensions', {}).get('KHR_lights_punctual', {}).get('lights', [])
+    if punctual or 'KHR_lights_punctual' in gltf.get('extensionsUsed', []):
+        names = ', '.join(light.get('name', 'unnamed') for light in punctual)
+        failures.append('punctual light export prohibited: ' + (names or 'KHR_lights_punctual'))
+    if report.glb_kb > DOWNLOAD_BUDGET_KB:
+        failures.append('download budget exceeded: %.0fKB > %dKB' % (report.glb_kb, DOWNLOAD_BUDGET_KB))
+    if report.total_triangles > 250000:
+        failures.append('scene triangle budget exceeded: %d' % report.total_triangles)
+    # Read the budget rather than restating it. This was a hardcoded 24 while
+    # values.py held the real number, so raising the budget in the one place it
+    # is documented left the build still failing on a copy of it - two numbers
+    # for one rule, which is the same fault as two colour conversions.
+    if report.materials > BUDGET['max_materials']:
+        failures.append('material budget exceeded: %d' % report.materials)
+    if report.draw_calls > 120:
+        failures.append('draw-call budget exceeded: %d' % report.draw_calls)
+    if report.max_texture_dim > 2048:
+        failures.append('texture dimension exceeded: %d' % report.max_texture_dim)
+    if report.texture_bytes > 128 * 1024 * 1024:
+        failures.append('texture memory exceeded: %d' % report.texture_bytes)
+
+
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+    os.makedirs(TEX_DIR, exist_ok=True)
+    clear_scene()
+    chip_meshes = build_chip_meshes()
+    card_mesh = build_cards()
+    manifest = {}
+    overall_failures = []
+    requested = {
+        venue.strip()
+        for venue in os.environ.get('RIVER_VENUES', '').split(',')
+        if venue.strip()
+    }
+    venues = [venue for venue in VENUES if not requested or venue['id'] in requested]
+    if requested and {venue['id'] for venue in venues} != requested:
+        unknown = sorted(requested - {venue['id'] for venue in venues})
+        raise SystemExit('unknown RIVER_VENUES: ' + ', '.join(unknown))
+    for venue in venues:
+        glb, report, failures = build_venue(venue, chip_meshes, card_mesh)
+        manifest[venue['id']] = report.to_dict(glb)
+        if failures:
+            overall_failures.append(venue['id'] + ': ' + '; '.join(failures))
+        print('VENUE %s triangles=%d materials=%d draw_calls=%d download=%.0fKB' % (
+            venue['id'],
+            report.total_triangles,
+            report.materials,
+            report.draw_calls,
+            getattr(report, 'glb_kb', 0.0),
+        ))
+    manifest['lighting'] = lighting_sidecar()
+    manifest['verdict'] = 'PASS' if not overall_failures else 'FAIL'
+    manifest['failures'] = overall_failures
+    with open(os.path.join(OUT_DIR, 'manifest.json'), 'w') as handle:
+        json.dump(manifest, handle, indent=2)
+    if overall_failures:
+        for failure in overall_failures:
+            print('FAIL ' + failure)
+        raise SystemExit(1)
+    print('OUT ' + os.path.join(OUT_DIR, 'manifest.json'))
+
+
+if __name__ == '__main__':
+    main()

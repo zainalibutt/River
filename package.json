@@ -1,0 +1,40 @@
+{
+  "name": "river",
+  "version": "0.1.0",
+  "description": "Server-authoritative multiplayer Texas Hold'em for the browser.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "predev": "npm run build --workspace @river/engine",
+    "dev": "npm run dev --workspace @river/server",
+    "dev:web": "npm run dev --workspace @river/web",
+    "dev:server": "npm run dev --workspace @river/server",
+    "build": "npm run build --workspace @river/web && npm run build --workspace @river/server",
+    "start": "npm run start --workspace @river/server",
+    "demo": "tsx packages/engine/src/cli/demo.ts",
+    "check:penetration": "node art/pipeline/run_blender.mjs art/pipeline/check_penetration.py",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "pretest": "npm run build --workspace @river/engine",
+    "test": "vitest run",
+    "test:ui": "playwright test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.0.0",
+    "supabase": "2.115.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

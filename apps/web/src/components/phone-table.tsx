@@ -1,0 +1,606 @@
+'use client'
+
+import { DEFAULT_STAKE, type TurnAction } from '@river/engine'
+import type { RoomView } from '@river/server'
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { RiverHandHistory } from '@/components/river-hand-history'
+import { RiverSettings } from '@/components/river-settings'
+import { Table2D, type Table2DProps } from '@/components/table-2d/table-2d'
+import { CardBack, PlayingCard } from '@/components/table-pieces'
+import { sizingPresets } from '@/lib/betting'
+import type { SessionHand } from '@/lib/history'
+import { phoneGeometry, phoneKeyboardInset } from '@/lib/phone-layout'
+import { censorProfanity, type Preferences } from '@/lib/preferences'
+import { formatAmount } from '@/lib/presentation'
+import { PRESET_LABELS, type PresetKind } from '@/lib/preset'
+import { CHAT_MAX_LENGTH, type SocialFeedEntry } from '@/lib/social'
+import './phone-table.css'
+
+type Panel = 'menu' | 'chat' | 'history' | 'settings' | 'verify' | 'invite' | 'raise' | 'account'
+
+export interface PhoneTableProps {
+  view: RoomView
+  viewport: { width: number; height: number }
+  table: Omit<Table2DProps, 'view' | 'geometry'>
+  peek: boolean
+  onPeek: (held: boolean) => void
+  localTurn: boolean
+  connected: boolean
+  status: string | null
+  waitingActions: ReactNode
+  raiseTo: number
+  onRaiseTo: (value: number) => void
+  onAction: (action: TurnAction) => void
+  preset: PresetKind | null
+  onPreset: (preset: PresetKind | null) => void
+  presetArmable: boolean
+  onLeave: () => void
+  leaveLabel: string
+  leaveDisabled: boolean
+  preferences: Preferences
+  onPreferences: (next: Preferences) => void
+  hands: readonly SessionHand[]
+  feed: readonly SocialFeedEntry[]
+  unread: number
+  onChatOpen: (open: boolean) => void
+  chatDraft: string
+  onChatDraft: (value: string) => void
+  onSendChat: () => void
+  onInvite: () => Promise<void>
+  verifyContent: ReactNode
+  accountContent: (onClose: () => void) => ReactNode
+  onAccount: () => void
+}
+
+export function PhoneTable(props: PhoneTableProps) {
+  const { view, peek, onPeek } = props
+  const [panel, setPanel] = useState<Panel | null>(null)
+  const [inspected, setInspected] = useState<number | null>(null)
+  const [keyboardInset, setKeyboardInset] = useState(0)
+  const root = useRef<HTMLElement | null>(null)
+  const [safeInset, setSafeInset] = useState(0)
+  const geometry = phoneGeometry(props.viewport.width, props.viewport.height - safeInset)
+  const hero = view.seats.find((seat) => seat.playerId === view.selfId)
+  const holding = hero?.hasHole && hero.hole !== null
+  const legal = props.localTurn ? view.legal : null
+  const bigBlind = props.table.bigBlind ?? null
+  const turnKey = props.table.turnKey
+  const lastTurn = useRef(turnKey)
+  const close = () => setPanel(null)
+  const open = (next: Panel) => {
+    onPeek(false)
+    setInspected(null)
+    setPanel(next)
+  }
+
+  useEffect(() => {
+    const element = root.current
+    if (element === null) return
+    const measure = () => {
+      const style = getComputedStyle(element)
+      setSafeInset(Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    const resize = () =>
+      setKeyboardInset(
+        viewport === null
+          ? 0
+          : phoneKeyboardInset(window.innerHeight, viewport.height, viewport.offsetTop),
+      )
+    resize()
+    viewport?.addEventListener('resize', resize)
+    viewport?.addEventListener('scroll', resize)
+    return () => {
+      viewport?.removeEventListener('resize', resize)
+      viewport?.removeEventListener('scroll', resize)
+    }
+  }, [])
+
+  useEffect(() => {
+    props.onChatOpen(panel === 'chat')
+    return () => props.onChatOpen(false)
+  }, [panel, props.onChatOpen])
+
+  useEffect(() => {
+    if (lastTurn.current !== turnKey) {
+      lastTurn.current = turnKey
+      setPanel((current) => (current === 'raise' ? null : current))
+      onPeek(false)
+    }
+  }, [turnKey, onPeek])
+
+  useEffect(() => {
+    const release = () => onPeek(false)
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPanel(null)
+        release()
+      }
+    }
+    window.addEventListener('blur', release)
+    document.addEventListener('visibilitychange', release)
+    window.addEventListener('keydown', key)
+    return () => {
+      release()
+      window.removeEventListener('blur', release)
+      document.removeEventListener('visibilitychange', release)
+      window.removeEventListener('keydown', key)
+    }
+  }, [onPeek])
+
+  const min = legal?.raiseTo.min ?? 0
+  const max = legal?.allIn.amount ?? min
+  const amount = Math.min(max, Math.max(min, props.raiseTo))
+  const sizes =
+    legal === null
+      ? []
+      : sizingPresets({
+          pot: view.pot,
+          currentBet: view.currentBet,
+          toCall: legal.call.amount,
+          minRaiseTo: min,
+          allInTo: max,
+        })
+  const inspectedSeat = view.seats.find((seat) => seat.seat === inspected)
+
+  return (
+    <section
+      ref={root}
+      className="phone-table"
+      aria-label="River poker table"
+      style={{ '--phone-keyboard-inset': `${keyboardInset}px` } as CSSProperties}
+    >
+      <header className="phone-header" data-phone-region="header">
+        <PhoneHold
+          className="phone-leave"
+          onComplete={props.onLeave}
+          disabled={props.leaveDisabled}
+          label="Hold to leave table"
+        >
+          {props.leaveLabel}
+        </PhoneHold>
+        <div className="phone-pot" role="status">
+          <span>
+            POT <strong>{formatAmount(view.pot, false, bigBlind)}</strong>
+          </span>
+          <small>
+            {DEFAULT_STAKE.smallBlind} / {DEFAULT_STAKE.bigBlind} ·{' '}
+            <span className={`phone-network ${props.connected ? 'connected' : 'reconnecting'}`}>
+              {props.connected ? 'LIVE' : 'LINK'}
+            </span>
+          </small>
+        </div>
+        <button
+          type="button"
+          aria-label="Table menu"
+          aria-expanded={panel !== null}
+          onClick={() => (panel === null ? open('menu') : close())}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          {props.unread > 0 ? <i className="phone-unread" /> : null}
+        </button>
+      </header>
+      <div
+        className="phone-felt"
+        style={{ height: geometry.stage.height }}
+        data-phone-region="table"
+      >
+        <Table2D
+          {...props.table}
+          view={view}
+          geometry={geometry}
+          platesHeld
+          phone
+          onSelect={setInspected}
+        />
+        {inspectedSeat?.playerId ? (
+          <button className="phone-inspected" type="button" onClick={() => setInspected(null)}>
+            {inspectedSeat.name} · {formatAmount(inspectedSeat.stack, false, bigBlind)} · Close
+          </button>
+        ) : null}
+      </div>
+      <p className="phone-status" aria-live="polite" data-phone-region="status">
+        {props.status}
+      </p>
+      <footer className="phone-dock" data-phone-region="dock">
+        <div className="phone-hand">
+          <div>
+            <span>{hero?.name ?? 'Take your place'}</span>
+            <strong>{hero ? formatAmount(hero.stack, false, bigBlind) : 'Joining table…'}</strong>
+            <small>
+              {hero?.dealer && view.seats.length === 2 ? 'DEALER · ' : ''}
+              In {formatAmount(hero?.betStreet ?? 0, true, bigBlind)}
+            </small>
+          </div>
+          <button
+            type="button"
+            className="phone-peek"
+            disabled={!holding || hero?.folded === true || panel !== null}
+            aria-label="Press and hold to look at your cards"
+            aria-pressed={peek && holding}
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerDown={(event) => {
+              if (event.button !== 0 || !holding) return
+              event.preventDefault()
+              event.currentTarget.setPointerCapture(event.pointerId)
+              onPeek(true)
+            }}
+            onPointerUp={() => onPeek(false)}
+            onPointerCancel={() => onPeek(false)}
+            onLostPointerCapture={() => onPeek(false)}
+            onKeyDown={(event) => {
+              if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault()
+                onPeek(true)
+              }
+            }}
+            onKeyUp={() => onPeek(false)}
+            onBlur={() => onPeek(false)}
+          >
+            <span className="phone-card-backs">
+              <CardBack />
+              <CardBack />
+            </span>
+            <span>Hold to peek</span>
+          </button>
+        </div>
+        <section
+          className="phone-actions"
+          aria-label={legal === null ? 'Waiting actions' : 'Your actions'}
+        >
+          {legal !== null ? (
+            <>
+              <button
+                type="button"
+                className="phone-fold"
+                disabled={!props.connected || !legal.fold.enabled}
+                onClick={() => props.onAction({ kind: 'fold' })}
+              >
+                Fold
+              </button>
+              <button
+                type="button"
+                className="phone-call"
+                disabled={!props.connected || !(legal.check.enabled || legal.call.enabled)}
+                onClick={() =>
+                  props.onAction(legal.check.enabled ? { kind: 'check' } : { kind: 'call' })
+                }
+              >
+                {legal.check.enabled ? 'Check' : 'Call'}
+                {legal.check.enabled ? null : (
+                  <small>{formatAmount(legal.call.amount, false, bigBlind)}</small>
+                )}
+              </button>
+              {legal.raiseTo.enabled ? (
+                <button
+                  type="button"
+                  className="phone-raise"
+                  disabled={!props.connected}
+                  onClick={() => open('raise')}
+                >
+                  Raise
+                </button>
+              ) : (
+                <PhoneHold
+                  key={turnKey}
+                  className="phone-raise"
+                  disabled={!props.connected || !legal.allIn.enabled}
+                  onComplete={() => props.onAction({ kind: 'allIn' })}
+                  label="Hold to go all in"
+                >
+                  All in
+                </PhoneHold>
+              )}
+            </>
+          ) : props.presetArmable ? (
+            (['fold', 'check-fold', 'call-any'] as const).map((preset) => (
+              <button
+                type="button"
+                key={preset}
+                aria-pressed={props.preset === preset}
+                onClick={() => props.onPreset(props.preset === preset ? null : preset)}
+              >
+                {PRESET_LABELS[preset]}
+              </button>
+            ))
+          ) : (
+            props.waitingActions
+          )}
+        </section>
+        {props.localTurn && view.turnBudgetMs !== null ? (
+          <progress
+            className="phone-turn-progress"
+            aria-label="Time left to act"
+            max={view.turnBudgetMs}
+            value={props.table.turnRemaining ?? 0}
+          />
+        ) : null}
+        <span className="phone-turn-label">
+          {props.localTurn
+            ? 'Your turn'
+            : view.phase === 'hand'
+              ? 'Waiting for the table'
+              : 'Ready when you are'}
+        </span>
+      </footer>
+      {peek && holding && hero.hole !== null && panel === null ? (
+        <section className="phone-peek-display" aria-label="Your enlarged cards">
+          <div>
+            {hero.hole.map((card) => (
+              <PlayingCard key={`${card.rank}${card.suit}`} card={card} />
+            ))}
+          </div>
+          <span>YOUR HAND</span>
+        </section>
+      ) : null}
+      {panel === 'history' ? (
+        <RiverHandHistory
+          hands={props.hands}
+          selfId={view.selfId}
+          bigBlind={bigBlind}
+          onClose={close}
+        />
+      ) : panel !== null ? (
+        <div className="phone-sheet-backdrop">
+          <section
+            className="phone-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="phone-sheet-title"
+          >
+            <header>
+              <h2 id="phone-sheet-title">
+                {panel === 'raise'
+                  ? 'Raise to'
+                  : panel === 'menu'
+                    ? 'At the table'
+                    : panel === 'chat'
+                      ? 'Table chat'
+                      : panel === 'verify'
+                        ? 'Fairness'
+                        : panel === 'invite'
+                          ? 'Invite friends'
+                          : panel === 'account'
+                            ? 'Keep your chips'
+                            : 'Settings'}
+              </h2>
+              <button type="button" onClick={close} aria-label="Close panel">
+                Close
+              </button>
+            </header>
+            {panel === 'menu' ? (
+              <nav className="phone-menu" aria-label="Table panels">
+                <button type="button" onClick={() => open('chat')}>
+                  Chat{props.unread > 0 ? ` · ${props.unread} new` : ''}
+                </button>
+                <button type="button" onClick={() => open('history')}>
+                  Hand history · {props.hands.length}
+                </button>
+                <button type="button" onClick={() => open('settings')}>
+                  Settings
+                </button>
+                <button
+                  type="button"
+                  disabled={view.commit === null}
+                  onClick={() => open('verify')}
+                >
+                  Verify hand
+                </button>
+                <button type="button" onClick={() => open('invite')}>
+                  Invite friends
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    props.onAccount()
+                    open('account')
+                  }}
+                >
+                  Log in
+                </button>
+              </nav>
+            ) : null}
+            {panel === 'settings' ? (
+              <RiverSettings preferences={props.preferences} onChange={props.onPreferences} />
+            ) : null}
+            {panel === 'chat' ? (
+              <>
+                <ol className="phone-chat-feed" aria-live="polite">
+                  {props.feed.map((entry) => (
+                    <li key={entry.id}>
+                      <strong>{entry.name}</strong>
+                      <span>
+                        {props.preferences.censorProfanity
+                          ? censorProfanity(entry.text)
+                          : entry.text}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                <form
+                  className="phone-chat-entry"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    props.onSendChat()
+                  }}
+                >
+                  <label className="visually-hidden" htmlFor="phone-chat">
+                    Message the table
+                  </label>
+                  <input
+                    id="phone-chat"
+                    autoComplete="off"
+                    placeholder="Say something"
+                    value={props.chatDraft}
+                    onChange={(event) => props.onChatDraft(event.target.value)}
+                    maxLength={CHAT_MAX_LENGTH}
+                  />
+                  <button type="submit" disabled={!props.connected}>
+                    Send
+                  </button>
+                </form>
+              </>
+            ) : null}
+            {panel === 'invite' ? (
+              <>
+                <p>Share this code or copy the link to your table.</p>
+                <strong className="phone-invite-code">{view.inviteCode || 'Connecting…'}</strong>
+                <button
+                  type="button"
+                  disabled={!view.inviteCode}
+                  onClick={() => void props.onInvite()}
+                >
+                  Copy invite link
+                </button>
+              </>
+            ) : null}
+            {panel === 'verify' ? props.verifyContent : null}
+            {panel === 'account' ? props.accountContent(close) : null}
+            {panel === 'raise' && legal !== null ? (
+              <>
+                <output className="phone-raise-amount">
+                  {formatAmount(amount, false, bigBlind)}
+                </output>
+                <label className="phone-raise-slider">
+                  <span className="visually-hidden">Raise amount</span>
+                  <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={1}
+                    value={amount}
+                    onChange={(event) => props.onRaiseTo(Number(event.target.value))}
+                  />
+                </label>
+                <div className="phone-sizing">
+                  {sizes.map((size) => (
+                    <button
+                      type="button"
+                      key={size.id}
+                      aria-pressed={amount === size.amount}
+                      onClick={() => props.onRaiseTo(size.amount)}
+                    >
+                      {size.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="phone-confirm">
+                  <PhoneHold
+                    key={turnKey}
+                    className="phone-all-in"
+                    disabled={!props.connected || !legal.allIn.enabled}
+                    label="Hold to go all in"
+                    onComplete={() => {
+                      props.onAction({ kind: 'allIn' })
+                      close()
+                    }}
+                  >
+                    Hold all in
+                  </PhoneHold>
+                  <button
+                    type="button"
+                    className="phone-call"
+                    disabled={!props.connected || amount >= max}
+                    onClick={() => {
+                      props.onAction({ kind: 'raiseTo', to: amount })
+                      close()
+                    }}
+                  >
+                    {amount >= max
+                      ? 'Hold all in to confirm'
+                      : `Confirm ${formatAmount(amount, false, bigBlind)}`}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function PhoneHold({
+  children,
+  onComplete,
+  label,
+  className,
+  disabled = false,
+}: {
+  children: ReactNode
+  onComplete: () => void
+  label: string
+  className: string
+  disabled?: boolean
+}) {
+  const timeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [holding, setHolding] = useState(false)
+  const cancel = useCallback(() => {
+    if (timeout.current !== null) clearTimeout(timeout.current)
+    timeout.current = null
+    setHolding(false)
+  }, [])
+  const begin = () => {
+    if (disabled || timeout.current !== null) return
+    setHolding(true)
+    timeout.current = setTimeout(() => {
+      cancel()
+      onComplete()
+    }, 600)
+  }
+  useEffect(() => {
+    const release = () => {
+      if (timeout.current !== null) clearTimeout(timeout.current)
+      timeout.current = null
+      setHolding(false)
+    }
+    window.addEventListener('blur', release)
+    document.addEventListener('visibilitychange', release)
+    return () => {
+      release()
+      window.removeEventListener('blur', release)
+      document.removeEventListener('visibilitychange', release)
+    }
+  }, [])
+  useEffect(() => {
+    if (disabled) cancel()
+  }, [disabled, cancel])
+  return (
+    <button
+      type="button"
+      className={`${className} phone-hold${holding ? ' holding' : ''}`}
+      disabled={disabled}
+      aria-label={label}
+      style={{ '--hold-duration': '600ms' } as CSSProperties}
+      onContextMenu={(event) => event.preventDefault()}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.currentTarget.setPointerCapture(event.pointerId)
+        begin()
+      }}
+      onPointerUp={cancel}
+      onPointerCancel={cancel}
+      onLostPointerCapture={cancel}
+      onPointerLeave={cancel}
+      onKeyDown={(event) => {
+        if (!event.repeat && (event.key === ' ' || event.key === 'Enter')) {
+          event.preventDefault()
+          begin()
+        }
+      }}
+      onKeyUp={cancel}
+      onBlur={cancel}
+    >
+      {children}
+    </button>
+  )
+}

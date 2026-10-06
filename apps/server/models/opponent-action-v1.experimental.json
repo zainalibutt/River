@@ -1,0 +1,175 @@
+{
+  "kind": "river-opponent-action-experiment",
+  "campaign": {
+    "version": 1,
+    "trainingSeed": "opponent-action-v1-train",
+    "validationSeed": "opponent-action-v1-validation",
+    "testSeed": "opponent-action-v1-test",
+    "trainingHands": 800,
+    "validationHands": 200,
+    "testHands": 400,
+    "castIndices": [0, 5, 10, 12],
+    "minimumLogLossImprovement": 0.02,
+    "maximumCalibrationRegression": 0,
+    "minimumRaiseRecall": 0.3
+  },
+  "source": "seeded River rule-bot hands; no human observations",
+  "examples": {
+    "training": 9064,
+    "validation": 2162,
+    "test": 4426
+  },
+  "tuning": {
+    "epochs": 140,
+    "learningRate": 0.35,
+    "l2": 0.002,
+    "identityPriorWeight": 12,
+    "probabilityFloor": 1e-12,
+    "calibrationBuckets": 10,
+    "calibrationEpochs": 90,
+    "calibrationLearningRate": 0.4,
+    "calibrationL2": 0.01,
+    "temperatureFirstStep": 12,
+    "temperatureLastStep": 36,
+    "temperatureStepDivisor": 20
+  },
+  "evaluation": {
+    "learned": {
+      "count": 4426,
+      "logLoss": 0.5602128113545131,
+      "brier": 0.08077998824232581,
+      "accuracy": 0.7505648441030276,
+      "calibrationError": 0.04236141622084491,
+      "byClass": {
+        "fold": {
+          "count": 741,
+          "recall": 0.7004048582995951,
+          "probabilityBrier": 0.09979205604202662,
+          "probabilityCalibrationError": 0.019617061071290385
+        },
+        "check": {
+          "count": 2244,
+          "recall": 1,
+          "probabilityBrier": 0.011588264520449754,
+          "probabilityCalibrationError": 0.008080880401192923
+        },
+        "call": {
+          "count": 711,
+          "recall": 0.7060478199718706,
+          "probabilityBrier": 0.09753080322821951,
+          "probabilityCalibrationError": 0.0242430479382746
+        },
+        "raise": {
+          "count": 730,
+          "recall": 0.07808219178082192,
+          "probabilityBrier": 0.11420882917860214,
+          "probabilityCalibrationError": 0.019154213418834398
+        }
+      }
+    },
+    "statistical": {
+      "count": 4426,
+      "logLoss": 0.5672180862715185,
+      "brier": 0.08329036832834379,
+      "accuracy": 0.702440126525079,
+      "calibrationError": 0.008792490438402259,
+      "byClass": {
+        "fold": {
+          "count": 741,
+          "recall": 0.26180836707152494,
+          "probabilityBrier": 0.10869671893951731,
+          "probabilityCalibrationError": 0.0030063649532066456
+        },
+        "check": {
+          "count": 2244,
+          "recall": 1,
+          "probabilityBrier": 0.011431638799885041,
+          "probabilityCalibrationError": 0.00021277313456281508
+        },
+        "call": {
+          "count": 711,
+          "recall": 0.41068917018284107,
+          "probabilityBrier": 0.10072734958935507,
+          "probabilityCalibrationError": 0.007650108734904358
+        },
+        "raise": {
+          "count": 730,
+          "recall": 0.5191780821917809,
+          "probabilityBrier": 0.11230576598462744,
+          "probabilityCalibrationError": 0.00797620488113694
+        }
+      }
+    },
+    "logLossImprovement": 0.007005274917005422,
+    "calibrationImprovement": -0.03356892578244265,
+    "logLossConfidence95": [-0.0037049070832309468, 0.01771545691724179],
+    "heldOutHands": 400
+  },
+  "promotionEligible": false,
+  "liveInferenceEnabled": false,
+  "model": {
+    "version": 1,
+    "featureSchemaVersion": 1,
+    "featureNames": [
+      "street_preflop",
+      "street_flop",
+      "street_turn",
+      "street_river",
+      "facing_bet",
+      "call_share_of_pot_after_call",
+      "pot_log_100bb",
+      "stack_log_100bb",
+      "current_bet_log_100bb",
+      "committed_share_of_actor_chips",
+      "position_from_dealer",
+      "active_player_fraction",
+      "prior_action_count",
+      "prior_aggressive_fraction",
+      "prior_street_aggressive_fraction",
+      "prior_actor_action_fraction",
+      "legal_fold",
+      "legal_check",
+      "legal_call",
+      "legal_raise"
+    ],
+    "labels": ["fold", "check", "call", "raise"],
+    "weights": [
+      [
+        -0.21395468632668832, 0.010654433992271192, -0.09476994977666353, -0.1036910377099533,
+        -0.008912142067962894, 0.1952848616533049, 0.3211375437706258, -0.37586401797724206,
+        -0.19395822041769514, -0.0948993828297201, -0.04847558623781667, -0.1886511305842852,
+        0.019825240822774214, -0.5455260997149874, -0.22818313745565458, -0.10071582581805467,
+        -0.2415844727033502, -0.1967186955623052, -0.39200355721561225, 0.1952848616533049,
+        -0.15045665167716316
+      ],
+      [
+        0.5158422755747445, 0.003872500377774983, 0.2850475899770799, 0.2050754839830454,
+        -0.020390471190640233, 0, 0, 0.2069665306572395, 0.4732131489607967, 0.0005816127030219369,
+        0.000019362501888874924, 0.202470616683912, 0.31259732554619785, 0.28967568242429925,
+        0.08735903595621282, 0, 0.11950815759646344, 0.4736051031472574, 0.4736051031472574, 0,
+        0.4736051031472574
+      ],
+      [
+        -0.17401897742362823, 0.1065102244342611, -0.03760461133365432, -0.06865622292644215,
+        -0.16190810237054754, -0.1616587121963828, -0.28814662961331816, 0.0921582125169067,
+        -0.16368911743037862, -0.029222233667710058, -0.0054883877284044105, 0.06695664469757308,
+        -0.12640327349430844, 0.24834146797003745, 0.203968935514852, 0.11734610168994744,
+        0.08047360355374777, -0.1616587121963828, 0, -0.1616587121963828, -0.20792075608152497
+      ],
+      [
+        -0.1278686118244218, -0.12103715880430645, -0.15267302886676223, -0.03272822334664994,
+        0.19121071562915076, -0.033626149456921856, -0.032990914157307434, 0.07673927480309566,
+        -0.11556581111271748, 0.12354000379440823, 0.05394461146433221, -0.08077613079719875,
+        -0.2060192928746633, 0.007508949320649867, -0.06314483401541002, -0.01663027587189273,
+        0.04160271155313945, -0.11522769538856394, -0.08160154593164501, -0.033626149456921856,
+        -0.11522769538856394
+      ]
+    ],
+    "trainedExamples": 9064,
+    "epochs": 140,
+    "temperature": 0.75,
+    "calibrationBias": [
+      0.06933798239137232, -0.06553630817182625, 0.03901126693172573, -0.04281294115127178
+    ]
+  }
+}

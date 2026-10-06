@@ -1,0 +1,101 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+.next/
+.turbo/
+*.tsbuildinfo
+**/next-env.d.ts
+**/__pycache__/
+*.pyc
+*.log
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment. Only the template is tracked.
+.env
+.env.*
+!.env.example
+
+# Supabase CLI state
+supabase/.branches/
+supabase/.temp/
+
+# Tests
+test-results/
+playwright-report/
+
+# Documentation is default-deny: only the curated public documents are tracked.
+# Specs, working notes, design contracts, research and anything that records
+# production details stay local under docs/.
+/docs/*
+!/docs/architecture.md
+!/docs/fairness.md
+!/docs/bots.md
+!/docs/art-pipeline.md
+!/docs/development-method.md
+!/docs/decisions.md
+!/docs/screenshots/
+
+# Local working notes and AI-assistant state
+AGENTS.md
+CLAUDE.md
+**/AGENTS.md
+**/CLAUDE.md
+IDEAS.md
+LOCAL.md
+read_this_*.md
+**/*.ai.md
+**/*.private.md
+.claude/
+.codex/
+.kilo/
+.kilocode/
+kilo.json
+kilo.jsonc
+.mcp.json
+.ai/
+/out/
+
+# Publication records
+.publication-audit.md
+PUBLIC-STAGING-MANIFEST.txt
+
+# Art: pipeline output, working files and source scenes stay local.
+# The pipeline code is public; the .blend masters it builds from are not.
+art/out/
+art/work/
+art/source/
+*.blend
+*.blend1
+*.blend2
+*.blend@
+apps/web/public/dev-proofs/
+art/pipeline/build_native_bronze.py
+
+# Trained models. The current best model is never committed: it lives outside
+# the repository or in apps/server/models/private/, and loads from a path given
+# in the environment. An older model may be published deliberately into
+# apps/server/models/ once a newer one has replaced it.
+apps/server/models/private/
+ml/out/
+ml/runs/
+ml/data/
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.safetensors
+!apps/server/models/*.bin
+
+# Media that is not part of the product
+music/
+*.mp4
+*.mov
+*.mkv
+*.webm

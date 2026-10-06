@@ -1,0 +1,6 @@
+# Training for v9's value networks (docs/bots.md).
+# PyTorch's CUDA builds come from its own index; on the RTX 2060 SUPER this is:
+#   python -m pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cu126
+#   python -m pip install numpy
+torch==2.14.1
+numpy

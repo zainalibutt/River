@@ -1,0 +1,250 @@
+/*
+ * The cards, drawn once for every place a card appears.
+ *
+ * Every size of card - the hand in the lower-left cluster, the board on the felt, a hand
+ * turned over at a showdown - is the same card at a different width. The inside is laid out
+ * in container widths, so a context only says how big a card is and never re-sizes its type.
+ */
+
+.playing-card {
+  container-type: inline-size;
+  /*
+   * A card's corner is sized against the card, and a container cannot measure
+   * itself: a length in cqw on the container's own box is resolved against the
+   * next container up, or against the window when there is none. On the felt
+   * there is none, so the corner came out at a slice of the window's width -
+   * about 125 pixels on a card 92 wide - and every card on the table was drawn
+   * as a pill, with the rank cut off by its own rounded top. The hand in the
+   * corner looked right only because it sets its own corner in pixels.
+   *
+   * Percentages are the card's own. Seven of its width by five of its height is
+   * the same curve both ways on a card of these proportions.
+   */
+  border-radius: 7% / 5%;
+}
+
+.rcard-face {
+  position: absolute;
+  inset: 0;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variant-numeric: lining-nums;
+}
+
+/* The printed border a real deck has, a hairline in the suit's own ink. */
+.rcard-face::before {
+  position: absolute;
+  border-radius: 4cqw;
+  box-shadow: inset 0 0 0 max(1px, 0.9cqw) color-mix(in srgb, currentColor 14%, transparent);
+  content: "";
+  inset: 4.5cqw;
+}
+
+.rcard-index {
+  position: absolute;
+  /* Clear of the corner's curve, where it was being eaten. */
+  top: 8.5cqw;
+  left: 9cqw;
+  display: grid;
+  width: 26cqw;
+  justify-items: center;
+  line-height: 0.84;
+}
+
+.rcard-index b {
+  font-size: 30cqw;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+}
+
+.rcard-face.wide .rcard-index b {
+  font-size: 25cqw;
+  letter-spacing: -0.09em;
+}
+
+.rcard-index svg {
+  width: 17cqw;
+  height: 17cqw;
+  margin-top: 2.5cqw;
+  fill: currentColor;
+}
+
+.rcard-index-foot {
+  top: auto;
+  right: 9cqw;
+  bottom: 8.5cqw;
+  left: auto;
+  rotate: 180deg;
+}
+
+.rcard-centre {
+  position: absolute;
+  display: grid;
+  inset: 0;
+  place-content: center;
+  place-items: center;
+}
+
+.rcard-centre svg {
+  width: 44cqw;
+  height: 44cqw;
+  fill: currentColor;
+  filter: drop-shadow(0 0.6cqw 0 color-mix(in srgb, currentColor 18%, transparent));
+}
+
+.rcard-face.ace .rcard-centre svg {
+  width: 58cqw;
+  height: 58cqw;
+}
+
+/* An ace's suit sits in a thin ring, the one ornament the deck allows itself. */
+.rcard-face.ace .rcard-centre::before {
+  position: absolute;
+  width: 72cqw;
+  height: 72cqw;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 max(1px, 0.8cqw) color-mix(in srgb, currentColor 30%, transparent);
+  content: "";
+}
+
+/* Jacks, queens and kings: the letter, framed, over a small suit. */
+.rcard-face.court .rcard-centre {
+  inset: 21cqw 17cqw;
+  border-radius: 3cqw;
+  box-shadow:
+    inset 0 0 0 max(1px, 0.8cqw) color-mix(in srgb, currentColor 34%, transparent),
+    inset 0 0 0 max(2px, 2.6cqw) color-mix(in srgb, currentColor 4%, transparent),
+    inset 0 0 0 max(3px, 3.4cqw) color-mix(in srgb, currentColor 22%, transparent);
+  gap: 1cqw;
+}
+
+.rcard-face.court .rcard-centre b {
+  font-size: 40cqw;
+  font-style: italic;
+  font-weight: 560;
+  line-height: 0.9;
+}
+
+.rcard-face.court .rcard-centre svg {
+  width: 17cqw;
+  height: 17cqw;
+  filter: none;
+}
+
+/* Small cards - the backs and faces on the felt - keep one index and a smaller centre. */
+@container (max-width: 64px) {
+  .rcard-index-foot {
+    display: none;
+  }
+
+  .rcard-index {
+    top: 9cqw;
+    left: 9cqw;
+  }
+
+  .rcard-index b {
+    font-size: 34cqw;
+  }
+
+  .rcard-face.wide .rcard-index b {
+    font-size: 29cqw;
+  }
+
+  .rcard-index svg {
+    width: 20cqw;
+    height: 20cqw;
+  }
+
+  .rcard-centre {
+    inset: 34cqw 6cqw 6cqw 34cqw;
+  }
+
+  .rcard-centre svg {
+    width: 50cqw;
+    height: 50cqw;
+  }
+
+  .rcard-face.ace .rcard-centre::before {
+    display: none;
+  }
+
+  .rcard-face.court .rcard-centre {
+    inset: 40cqw 8cqw 8cqw 40cqw;
+    box-shadow: inset 0 0 0 max(1px, 1cqw) color-mix(in srgb, currentColor 30%, transparent);
+  }
+
+  .rcard-face.court .rcard-centre b {
+    font-size: 30cqw;
+  }
+
+  .rcard-face.court .rcard-centre svg {
+    display: none;
+  }
+}
+
+/*
+ * The back: the wine field and lit brass frame the cluster's hand already had, with an
+ * engraved ground under the monogram - fine lines, the way a banknote proves it is not a
+ * photocopy.
+ */
+.card-back {
+  position: relative;
+  overflow: hidden;
+  container-type: inline-size;
+  /* The card's own corner, for the same reason as the face's: see .playing-card. */
+  border-radius: 7% / 5%;
+}
+
+.card-back:has(> .rcard-back),
+.hero-cards .card-back:has(> .rcard-back),
+.seat-cards .card-back:has(> .rcard-back),
+.showdown-cards .card-back:has(> .rcard-back) {
+  border: 0;
+  background: var(--river-brass-lit, #a87c42);
+  color: transparent;
+  font-size: 0;
+}
+
+.rcard-back {
+  position: absolute;
+  display: grid;
+  border-radius: 7.5cqw;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12' viewBox='0 0 24 12'%3E%3Cpath d='M0 6c3 0 3-4 6-4s3 4 6 4 3-4 6-4 3 4 6 4M0 12c3 0 3-4 6-4s3 4 6 4 3-4 6-4 3 4 6 4' fill='none' stroke='%23e9c78e' stroke-opacity='0.13' stroke-width='0.7'/%3E%3C/svg%3E"),
+    radial-gradient(circle at 50% 38%, #74344a, #3b1620 82%);
+  background-size:
+    9cqw 4.5cqw,
+    auto;
+  box-shadow:
+    inset 0 0 0 max(1px, 1.2cqw) rgb(20 8 12 / 70%),
+    inset 0 0 0 max(2px, 3cqw) rgb(233 199 142 / 9%);
+  inset: 4cqw;
+  place-items: center;
+}
+
+/* The monogram in its own ring, so the R reads as a mark rather than a letter. */
+.rcard-monogram {
+  display: grid;
+  width: 46cqw;
+  height: 46cqw;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 36%, #5b2436, #2c0f18 78%);
+  box-shadow:
+    0 0 0 max(1px, 1.2cqw) #c9a15f,
+    0 0 0 max(2px, 2.6cqw) rgb(20 8 12 / 60%),
+    0 0 0 max(3px, 3.6cqw) rgb(233 199 142 / 22%);
+  color: #e8c98f;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 30cqw;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+  place-items: center;
+}
+
+@container (max-width: 64px) {
+  .rcard-monogram {
+    width: 52cqw;
+    height: 52cqw;
+    font-size: 34cqw;
+  }
+}

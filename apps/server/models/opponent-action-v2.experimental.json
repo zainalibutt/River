@@ -1,0 +1,742 @@
+{
+  "kind": "river-opponent-action-experiment",
+  "campaign": {
+    "version": 2,
+    "trainingSeed": "opponent-action-v2-train",
+    "validationSeed": "opponent-action-v2-validation",
+    "testSeeds": [
+      "opponent-action-v2-test-a",
+      "opponent-action-v2-test-b",
+      "opponent-action-v2-test-c"
+    ],
+    "confirmationSeeds": [
+      "opponent-action-v2-confirm-a",
+      "opponent-action-v2-confirm-b",
+      "opponent-action-v2-confirm-c"
+    ],
+    "unseenSeed": "opponent-action-v2-unseen-cast",
+    "trainingHands": 1000,
+    "validationHands": 250,
+    "testHandsPerSeed": 350,
+    "confirmationHandsPerSeed": 350,
+    "unseenHands": 400,
+    "castIndices": [0, 5, 10, 12],
+    "unseenCastIndices": [2, 7, 9, 11],
+    "trainingEpochs": 600,
+    "minimumLogLossImprovement": 0.02,
+    "maximumCalibrationRegression": 0,
+    "minimumRaiseRecall": 0.3
+  },
+  "source": "seeded River rule-bot hands; causal public actor-action history; no human observations",
+  "examples": {
+    "training": 10816,
+    "validation": 2873,
+    "tests": [
+      {
+        "seed": "opponent-action-v2-test-a",
+        "count": 3829
+      },
+      {
+        "seed": "opponent-action-v2-test-b",
+        "count": 3711
+      },
+      {
+        "seed": "opponent-action-v2-test-c",
+        "count": 4060
+      }
+    ],
+    "confirmation": [
+      {
+        "seed": "opponent-action-v2-confirm-a",
+        "count": 4018
+      },
+      {
+        "seed": "opponent-action-v2-confirm-b",
+        "count": 3875
+      },
+      {
+        "seed": "opponent-action-v2-confirm-c",
+        "count": 3789
+      }
+    ],
+    "unseen": 5043
+  },
+  "tuning": {
+    "epochs": 140,
+    "learningRate": 0.35,
+    "l2": 0.002,
+    "identityPriorWeight": 12,
+    "probabilityFloor": 1e-12,
+    "calibrationBuckets": 10,
+    "calibrationEpochs": 90,
+    "calibrationLearningRate": 0.4,
+    "calibrationL2": 0.01,
+    "temperatureFirstStep": 12,
+    "temperatureLastStep": 36,
+    "temperatureStepDivisor": 20
+  },
+  "testResults": [
+    {
+      "seed": "opponent-action-v2-test-a",
+      "evaluation": {
+        "learned": {
+          "count": 3829,
+          "logLoss": 0.4889891525666288,
+          "brier": 0.07144657375843853,
+          "accuracy": 0.7696526508226691,
+          "calibrationError": 0.011361955521759923,
+          "byClass": {
+            "fold": {
+              "count": 635,
+              "recall": 0.6157480314960629,
+              "probabilityBrier": 0.09381924942850917,
+              "probabilityCalibrationError": 0.03130558707474581
+            },
+            "check": {
+              "count": 2050,
+              "recall": 1,
+              "probabilityBrier": 0.008656507335400873,
+              "probabilityCalibrationError": 0.000056272717367109847
+            },
+            "call": {
+              "count": 602,
+              "recall": 0.632890365448505,
+              "probabilityBrier": 0.08567346933462822,
+              "probabilityCalibrationError": 0.02436564128154461
+            },
+            "raise": {
+              "count": 542,
+              "recall": 0.23062730627306274,
+              "probabilityBrier": 0.09763706893521612,
+              "probabilityCalibrationError": 0.010471621040316051
+            }
+          }
+        },
+        "statistical": {
+          "count": 3829,
+          "logLoss": 0.5265670435811425,
+          "brier": 0.07718997813861983,
+          "accuracy": 0.7296944371898668,
+          "calibrationError": 0.004286723940790689,
+          "byClass": {
+            "fold": {
+              "count": 635,
+              "recall": 0.5228346456692914,
+              "probabilityBrier": 0.10501549268859718,
+              "probabilityCalibrationError": 0.007205609194756219
+            },
+            "check": {
+              "count": 2050,
+              "recall": 1,
+              "probabilityBrier": 0.008743547758357818,
+              "probabilityCalibrationError": 0.0009087182831666278
+            },
+            "call": {
+              "count": 602,
+              "recall": 0.41029900332225916,
+              "probabilityBrier": 0.0960240785664311,
+              "probabilityCalibrationError": 0.010176148656493618
+            },
+            "raise": {
+              "count": 542,
+              "recall": 0.3044280442804428,
+              "probabilityBrier": 0.09897679354110232,
+              "probabilityCalibrationError": 0.00880436167263484
+            }
+          }
+        },
+        "logLossImprovement": 0.0375778910145137,
+        "calibrationImprovement": -0.007075231580969234,
+        "logLossConfidence95": [0.029672932126597766, 0.04548284990242963],
+        "heldOutHands": 350
+      }
+    },
+    {
+      "seed": "opponent-action-v2-test-b",
+      "evaluation": {
+        "learned": {
+          "count": 3711,
+          "logLoss": 0.5121477662698681,
+          "brier": 0.07510324681689799,
+          "accuracy": 0.751818916734034,
+          "calibrationError": 0.01996632840165382,
+          "byClass": {
+            "fold": {
+              "count": 667,
+              "recall": 0.5997001499250375,
+              "probabilityBrier": 0.09954189036360823,
+              "probabilityCalibrationError": 0.038354600041678746
+            },
+            "check": {
+              "count": 1915,
+              "recall": 1,
+              "probabilityBrier": 0.008424494274520997,
+              "probabilityCalibrationError": 0.00010711313303900363
+            },
+            "call": {
+              "count": 571,
+              "recall": 0.5814360770577933,
+              "probabilityBrier": 0.08848219156765909,
+              "probabilityCalibrationError": 0.019517601465476892
+            },
+            "raise": {
+              "count": 558,
+              "recall": 0.25627240143369173,
+              "probabilityBrier": 0.10396441106180389,
+              "probabilityCalibrationError": 0.012623533981152178
+            }
+          }
+        },
+        "statistical": {
+          "count": 3711,
+          "logLoss": 0.547024213577387,
+          "brier": 0.08052882847031544,
+          "accuracy": 0.7092427917003503,
+          "calibrationError": 0.006417872867382296,
+          "byClass": {
+            "fold": {
+              "count": 667,
+              "recall": 0.4947526236881559,
+              "probabilityBrier": 0.11173500780634509,
+              "probabilityCalibrationError": 0.006824648524980165
+            },
+            "check": {
+              "count": 1915,
+              "recall": 1,
+              "probabilityBrier": 0.008483464393486483,
+              "probabilityCalibrationError": 0.0008243626986981847
+            },
+            "call": {
+              "count": 571,
+              "recall": 0.4010507880910683,
+              "probabilityBrier": 0.0979474067020779,
+              "probabilityCalibrationError": 0.0019581408715775702
+            },
+            "raise": {
+              "count": 558,
+              "recall": 0.2831541218637993,
+              "probabilityBrier": 0.10394943497935971,
+              "probabilityCalibrationError": 0.006372721155981875
+            }
+          }
+        },
+        "logLossImprovement": 0.03487644730751882,
+        "calibrationImprovement": -0.013548455534271524,
+        "logLossConfidence95": [0.025520139556410974, 0.04423275505862667],
+        "heldOutHands": 350
+      }
+    },
+    {
+      "seed": "opponent-action-v2-test-c",
+      "evaluation": {
+        "learned": {
+          "count": 4060,
+          "logLoss": 0.5094751712241323,
+          "brier": 0.07486038204068855,
+          "accuracy": 0.7541871921182266,
+          "calibrationError": 0.004773147830047536,
+          "byClass": {
+            "fold": {
+              "count": 617,
+              "recall": 0.5705024311183144,
+              "probabilityBrier": 0.09265617122814673,
+              "probabilityCalibrationError": 0.03048490962321324
+            },
+            "check": {
+              "count": 2112,
+              "recall": 1,
+              "probabilityBrier": 0.008876293207963945,
+              "probabilityCalibrationError": 0.0005838517081571266
+            },
+            "call": {
+              "count": 651,
+              "recall": 0.5944700460829493,
+              "probabilityBrier": 0.08948101379744403,
+              "probabilityCalibrationError": 0.020925256413730508
+            },
+            "raise": {
+              "count": 680,
+              "recall": 0.31029411764705883,
+              "probabilityBrier": 0.10842804992919913,
+              "probabilityCalibrationError": 0.005365504270371242
+            }
+          }
+        },
+        "statistical": {
+          "count": 4060,
+          "logLoss": 0.5473727283690158,
+          "brier": 0.08038018550701001,
+          "accuracy": 0.7160098522167487,
+          "calibrationError": 0.0062120172725711326,
+          "byClass": {
+            "fold": {
+              "count": 617,
+              "recall": 0.5348460291734197,
+              "probabilityBrier": 0.10358806632376788,
+              "probabilityCalibrationError": 0.022160440540343652
+            },
+            "check": {
+              "count": 2112,
+              "recall": 1,
+              "probabilityBrier": 0.00896232457145748,
+              "probabilityCalibrationError": 0.0004844267543454595
+            },
+            "call": {
+              "count": 651,
+              "recall": 0.3978494623655914,
+              "probabilityBrier": 0.0995613827235274,
+              "probabilityCalibrationError": 0.009069752567348089
+            },
+            "raise": {
+              "count": 680,
+              "recall": 0.3029411764705882,
+              "probabilityBrier": 0.10940896840929105,
+              "probabilityCalibrationError": 0.01357355497165224
+            }
+          }
+        },
+        "logLossImprovement": 0.03789755714488352,
+        "calibrationImprovement": 0.0014388694425235965,
+        "logLossConfidence95": [0.030044550884959775, 0.045750563404807265],
+        "heldOutHands": 350
+      }
+    }
+  ],
+  "confirmationResults": [
+    {
+      "seed": "opponent-action-v2-confirm-a",
+      "evaluation": {
+        "learned": {
+          "count": 4018,
+          "logLoss": 0.5308150917041115,
+          "brier": 0.07787227996343593,
+          "accuracy": 0.7434046789447486,
+          "calibrationError": 0.004586856041747416,
+          "byClass": {
+            "fold": {
+              "count": 626,
+              "recall": 0.5798722044728435,
+              "probabilityBrier": 0.09468937944407424,
+              "probabilityCalibrationError": 0.0297322813464185
+            },
+            "check": {
+              "count": 2020,
+              "recall": 1,
+              "probabilityBrier": 0.009906551595434358,
+              "probabilityCalibrationError": 0.0019634340426156684
+            },
+            "call": {
+              "count": 675,
+              "recall": 0.6533333333333333,
+              "probabilityBrier": 0.09261723095725513,
+              "probabilityCalibrationError": 0.01939633031375996
+            },
+            "raise": {
+              "count": 697,
+              "recall": 0.23385939741750358,
+              "probabilityBrier": 0.11427595785697894,
+              "probabilityCalibrationError": 0.012196082275571406
+            }
+          }
+        },
+        "statistical": {
+          "count": 4018,
+          "logLoss": 0.5684124894045609,
+          "brier": 0.0832994646102739,
+          "accuracy": 0.7038327526132404,
+          "calibrationError": 0.007352587557184362,
+          "byClass": {
+            "fold": {
+              "count": 626,
+              "recall": 0.5255591054313099,
+              "probabilityBrier": 0.10603622207575215,
+              "probabilityCalibrationError": 0.02325613981642937
+            },
+            "check": {
+              "count": 2020,
+              "recall": 1,
+              "probabilityBrier": 0.010009979489776447,
+              "probabilityCalibrationError": 0.0009454643876989358
+            },
+            "call": {
+              "count": 675,
+              "recall": 0.4192592592592593,
+              "probabilityBrier": 0.10174983865952564,
+              "probabilityCalibrationError": 0.009619111905561419
+            },
+            "raise": {
+              "count": 697,
+              "recall": 0.2812051649928264,
+              "probabilityBrier": 0.11540181821604635,
+              "probabilityCalibrationError": 0.014582492298563333
+            }
+          }
+        },
+        "logLossImprovement": 0.03759739770044945,
+        "calibrationImprovement": 0.002765731515436946,
+        "logLossConfidence95": [0.02927822746113867, 0.04591656793976023],
+        "heldOutHands": 350
+      }
+    },
+    {
+      "seed": "opponent-action-v2-confirm-b",
+      "evaluation": {
+        "learned": {
+          "count": 3875,
+          "logLoss": 0.5141041549317006,
+          "brier": 0.07531476640461565,
+          "accuracy": 0.7527741935483871,
+          "calibrationError": 0.014820633026113606,
+          "byClass": {
+            "fold": {
+              "count": 648,
+              "recall": 0.6126543209876543,
+              "probabilityBrier": 0.09502966316114157,
+              "probabilityCalibrationError": 0.028806447455969927
+            },
+            "check": {
+              "count": 1975,
+              "recall": 1,
+              "probabilityBrier": 0.008830488389210757,
+              "probabilityCalibrationError": 0.0006203817273347545
+            },
+            "call": {
+              "count": 609,
+              "recall": 0.6026272577996716,
+              "probabilityBrier": 0.08835436685882836,
+              "probabilityCalibrationError": 0.02071484039586701
+            },
+            "raise": {
+              "count": 643,
+              "recall": 0.27682737169517885,
+              "probabilityBrier": 0.10904454720928301,
+              "probabilityCalibrationError": 0.013120383653725589
+            }
+          }
+        },
+        "statistical": {
+          "count": 3875,
+          "logLoss": 0.55415800184813,
+          "brier": 0.0814286800470985,
+          "accuracy": 0.7184516129032258,
+          "calibrationError": 0.0065074421873902565,
+          "byClass": {
+            "fold": {
+              "count": 648,
+              "recall": 0.5354938271604939,
+              "probabilityBrier": 0.1084202685417883,
+              "probabilityCalibrationError": 0.01001917459110589
+            },
+            "check": {
+              "count": 1975,
+              "recall": 1,
+              "probabilityBrier": 0.008860978106595549,
+              "probabilityCalibrationError": 0.00034694467317310603
+            },
+            "call": {
+              "count": 609,
+              "recall": 0.4269293924466338,
+              "probabilityBrier": 0.09807618683911336,
+              "probabilityCalibrationError": 0.003775622288983873
+            },
+            "raise": {
+              "count": 643,
+              "recall": 0.3141524105754277,
+              "probabilityBrier": 0.11035728670090489,
+              "probabilityCalibrationError": 0.009135750619683561
+            }
+          }
+        },
+        "logLossImprovement": 0.040053846916429436,
+        "calibrationImprovement": -0.00831319083872335,
+        "logLossConfidence95": [0.03148720530256769, 0.04862048853029118],
+        "heldOutHands": 350
+      }
+    },
+    {
+      "seed": "opponent-action-v2-confirm-c",
+      "evaluation": {
+        "learned": {
+          "count": 3789,
+          "logLoss": 0.53229151531712,
+          "brier": 0.07802098059778007,
+          "accuracy": 0.745315386645553,
+          "calibrationError": 0.01380100542002631,
+          "byClass": {
+            "fold": {
+              "count": 683,
+              "recall": 0.5739385065885798,
+              "probabilityBrier": 0.10123765860400771,
+              "probabilityCalibrationError": 0.03932687035842596
+            },
+            "check": {
+              "count": 1901,
+              "recall": 1,
+              "probabilityBrier": 0.010711042858955015,
+              "probabilityCalibrationError": 0.002642270667442176
+            },
+            "call": {
+              "count": 577,
+              "recall": 0.5597920277296361,
+              "probabilityBrier": 0.08839439868298297,
+              "probabilityCalibrationError": 0.020721585153540032
+            },
+            "raise": {
+              "count": 628,
+              "recall": 0.33121019108280253,
+              "probabilityBrier": 0.11174082224517397,
+              "probabilityCalibrationError": 0.01543394020968569
+            }
+          }
+        },
+        "statistical": {
+          "count": 3789,
+          "logLoss": 0.5674128885705956,
+          "brier": 0.08335496930375584,
+          "accuracy": 0.705727104776986,
+          "calibrationError": 0.009092051121529872,
+          "byClass": {
+            "fold": {
+              "count": 683,
+              "recall": 0.5109809663250366,
+              "probabilityBrier": 0.11293512077683335,
+              "probabilityCalibrationError": 0.007360881651853382
+            },
+            "check": {
+              "count": 1901,
+              "recall": 1,
+              "probabilityBrier": 0.01082008845219822,
+              "probabilityCalibrationError": 0.0018589723411346329
+            },
+            "call": {
+              "count": 577,
+              "recall": 0.41074523396880414,
+              "probabilityBrier": 0.09761089713839666,
+              "probabilityCalibrationError": 0.0045316738604675565
+            },
+            "raise": {
+              "count": 628,
+              "recall": 0.29777070063694266,
+              "probabilityBrier": 0.11205377084760028,
+              "probabilityCalibrationError": 0.006163523955857025
+            }
+          }
+        },
+        "logLossImprovement": 0.03512137325347553,
+        "calibrationImprovement": -0.004708954298496439,
+        "logLossConfidence95": [0.025287431459272203, 0.04495531504767886],
+        "heldOutHands": 350
+      }
+    }
+  ],
+  "unseenResult": {
+    "seed": "opponent-action-v2-unseen-cast",
+    "evaluation": {
+      "learned": {
+        "count": 5043,
+        "logLoss": 0.5413863417353275,
+        "brier": 0.07937439499627405,
+        "accuracy": 0.734285147729526,
+        "calibrationError": 0.02703050134728835,
+        "byClass": {
+          "fold": {
+            "count": 685,
+            "recall": 0.5284671532846715,
+            "probabilityBrier": 0.09007186963878872,
+            "probabilityCalibrationError": 0.03519490942195853
+          },
+          "check": {
+            "count": 2526,
+            "recall": 1,
+            "probabilityBrier": 0.013624815413794662,
+            "probabilityCalibrationError": 0.005938468731375225
+          },
+          "call": {
+            "count": 841,
+            "recall": 0.5969084423305588,
+            "probabilityBrier": 0.09566488286676167,
+            "probabilityCalibrationError": 0.013785120228350874
+          },
+          "raise": {
+            "count": 991,
+            "recall": 0.3158425832492432,
+            "probabilityBrier": 0.11813601206575237,
+            "probabilityCalibrationError": 0.037245709936631136
+          }
+        }
+      },
+      "statistical": {
+        "count": 5043,
+        "logLoss": 0.5986809563961225,
+        "brier": 0.08787227079080182,
+        "accuracy": 0.6424747174301011,
+        "calibrationError": 0.04802000039474509,
+        "byClass": {
+          "fold": {
+            "count": 685,
+            "recall": 0.9868613138686131,
+            "probabilityBrier": 0.10162826276118832,
+            "probabilityCalibrationError": 0.043541316931854236
+          },
+          "check": {
+            "count": 2526,
+            "recall": 1,
+            "probabilityBrier": 0.01373455649206795,
+            "probabilityCalibrationError": 0.004569251744155969
+          },
+          "call": {
+            "count": 841,
+            "recall": 0.04518430439952437,
+            "probabilityBrier": 0.1075958231068954,
+            "probabilityCalibrationError": 0.01019927282214844
+          },
+          "raise": {
+            "count": 991,
+            "recall": 0,
+            "probabilityBrier": 0.1285304408030432,
+            "probabilityCalibrationError": 0.037911295853885925
+          }
+        }
+      },
+      "logLossImprovement": 0.057294614660794996,
+      "calibrationImprovement": 0.02098949904745674,
+      "logLossConfidence95": [0.04810096704000472, 0.06648826228158526],
+      "heldOutHands": 400
+    }
+  },
+  "promotionEligible": false,
+  "liveInferenceEnabled": false,
+  "model": {
+    "version": 1,
+    "featureSchemaVersion": 2,
+    "featureNames": [
+      "street_preflop",
+      "street_flop",
+      "street_turn",
+      "street_river",
+      "facing_bet",
+      "call_share_of_pot_after_call",
+      "pot_log_100bb",
+      "stack_log_100bb",
+      "current_bet_log_100bb",
+      "committed_share_of_actor_chips",
+      "position_from_dealer",
+      "active_player_fraction",
+      "prior_action_count",
+      "prior_aggressive_fraction",
+      "prior_street_aggressive_fraction",
+      "prior_actor_action_fraction",
+      "legal_fold",
+      "legal_check",
+      "legal_call",
+      "legal_raise",
+      "actor_facing_bet_sample_count",
+      "actor_facing_bet_fold_smoothed_rate",
+      "actor_facing_bet_call_smoothed_rate",
+      "actor_facing_bet_raise_smoothed_rate",
+      "actor_free_action_sample_count",
+      "actor_free_action_fold_smoothed_rate",
+      "actor_free_action_check_smoothed_rate",
+      "actor_free_action_raise_smoothed_rate"
+    ],
+    "labels": ["fold", "check", "call", "raise"],
+    "weights": [
+      [
+        -0.4644072773369031, -0.014301437250655321, -0.10052607478287018, -0.1048974025922709,
+        -0.11615793853270283, 0, 0, -0.16101990788746182, -0.3353194061963455,
+        -0.0021479397714691735, -0.00007150718625327649, -0.16383414074643227, -0.22877746369852647,
+        -0.22246726285739069, -0.054385730594511815, 0, -0.08685874408121877, -0.3358828531584928,
+        -0.3358828531584928, 0, -0.3358828531584928, -0.32854836788269354, -0.12837228355029484,
+        -0.10247838791444937, -0.10503218169375453, -0.32839893761737027, -0.0020382681314833713,
+        -0.32564885325830145, -0.008195731768714866
+      ],
+      [
+        0.5236274165011578, -0.21655463033357608, 0.5330826984850143, 0.24901538126893788,
+        -0.19198115899322082, 0, 0, 0.15689554670619224, 0.3686549105851237, -0.032524444574126884,
+        -0.001082773151667881, 0.01832785390499513, 0.20773066039776636, 0.23602949338888743,
+        0.14308412262776124, 0, 0.15492939304559958, 0.3735622904271457, 0.3735622904271457, 0,
+        0.3735622904271457, 0.3608334868566438, 0.13391931185389327, 0.19418080105575075,
+        0.04546217751751219, 0.35189695859621867, 0.006353798082223943, 0.3548204364260491,
+        0.012388055918883934
+      ],
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [
+        -0.05922013916425489, 0.2308560675842312, -0.432556623702145, -0.14411797867666676,
+        0.3081390975259232, 0, 0, 0.004124361181269852, -0.03333550438877842, 0.03467238434559608,
+        0.001154280337921156, 0.1455062868414378, 0.021046803300760034, -0.013562230531496456,
+        -0.08869839203324965, 0, -0.06807064896438092, -0.03767943726865229, -0.03767943726865229,
+        0, -0.03767943726865229, -0.03228511897395023, -0.005547028303598514, -0.09170241314130147,
+        0.05957000417624251, -0.023498020978848188, -0.004315529950740565, -0.029171583167748143,
+        -0.004192324150169059
+      ]
+    ],
+    "trainedExamples": 10816,
+    "epochs": 600,
+    "temperature": 0.9,
+    "contextWeights": {
+      "free": [
+        [
+          -0.4644072773369031, -0.014301437250655321, -0.10052607478287018, -0.1048974025922709,
+          -0.11615793853270283, 0, 0, -0.16101990788746182, -0.3353194061963455,
+          -0.0021479397714691735, -0.00007150718625327649, -0.16383414074643227,
+          -0.22877746369852647, -0.22246726285739069, -0.054385730594511815, 0,
+          -0.08685874408121877, -0.3358828531584928, -0.3358828531584928, 0, -0.3358828531584928,
+          -0.32854836788269354, -0.12837228355029484, -0.10247838791444937, -0.10503218169375453,
+          -0.32839893761737027, -0.0020382681314833713, -0.32564885325830145, -0.008195731768714866
+        ],
+        [
+          0.5236274165011578, -0.21655463033357608, 0.5330826984850143, 0.24901538126893788,
+          -0.19198115899322082, 0, 0, 0.15689554670619224, 0.3686549105851237,
+          -0.032524444574126884, -0.001082773151667881, 0.01832785390499513, 0.20773066039776636,
+          0.23602949338888743, 0.14308412262776124, 0, 0.15492939304559958, 0.3735622904271457,
+          0.3735622904271457, 0, 0.3735622904271457, 0.3608334868566438, 0.13391931185389327,
+          0.19418080105575075, 0.04546217751751219, 0.35189695859621867, 0.006353798082223943,
+          0.3548204364260491, 0.012388055918883934
+        ],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [
+          -0.05922013916425489, 0.2308560675842312, -0.432556623702145, -0.14411797867666676,
+          0.3081390975259232, 0, 0, 0.004124361181269852, -0.03333550438877842, 0.03467238434559608,
+          0.001154280337921156, 0.1455062868414378, 0.021046803300760034, -0.013562230531496456,
+          -0.08869839203324965, 0, -0.06807064896438092, -0.03767943726865229, -0.03767943726865229,
+          0, -0.03767943726865229, -0.03228511897395023, -0.005547028303598514,
+          -0.09170241314130147, 0.05957000417624251, -0.023498020978848188, -0.004315529950740565,
+          -0.029171583167748143, -0.004192324150169059
+        ]
+      ],
+      "facing": [
+        [
+          0.13092016240857485, -0.5731411133437062, 0.0423167624235614, 0.30538948754203393,
+          0.32403133374023046, 0.09859647036211978, 1.0268088367566808, -0.6043897179612824,
+          0.09715060438226125, -0.10235447732605131, -0.16944977474973635, -0.2741764865746558,
+          0.1961274826667646, -0.9794224934198837, -0.18672913986113593, -0.05095048139096022,
+          -0.46983212765457966, 0.09859647036211978, 0, 0.09859647036211978, 0.2568593014287419,
+          0.038045362732984936, 0.058941314269858554, -0.07627071708846322, 0.11592587318072506,
+          0.04203405351812799, 0.014068395357283405, 0.07673851162447826, 0.007789563380358853
+        ],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [
+          -0.16251562853405405, 0.6866256449345011, -0.08505668840620308, -0.36682508948768894,
+          -0.35876396474906835, -0.12402009770845802, -0.9086505930279307, 0.29174923490395166,
+          -0.11596560051681776, -0.298663716428581, -0.1359031783844993, 0.2434548973453971,
+          0.06519015574745554, 1.1354959050088367, 0.22558731806767832, 0.013274913739589113,
+          0.3547923453651216, -0.12402009770845802, 0, -0.12402009770845802, -0.28228292877507977,
+          -0.024502419579915967, -0.25744222590518046, 0.9596183020819379, -0.8261961738852166,
+          -0.03700296027919638, -0.02486721667623753, -0.03866904276963883, -0.060483838262582156
+        ],
+        [
+          0.03159546612547907, -0.11348453159079773, 0.04273992598264161, 0.06143560194565538,
+          0.03473263100883876, 0.02542362734633846, -0.11815824372874963, 0.3126404830573306,
+          0.01881499613455673, 0.40101819375463205, 0.3053529531342353, 0.030721589229258977,
+          -0.26131763841422057, -0.15607341158895172, -0.03885817820654219, 0.03767556765137129,
+          0.11503978228945716, 0.02542362734633846, 0, 0.02542362734633846, 0.02542362734633846,
+          -0.013542943153068726, 0.1985009116353219, -0.8833475849934753, 0.7102703007044909,
+          -0.005031093238931517, 0.010798821318954101, -0.03806946885483923, 0.05269427488222329
+        ]
+      ]
+    },
+    "calibrationBias": [
+      -0.05890229669641595, -0.12868762218283783, 0.05706933431388398, 0.13052058456536977
+    ]
+  }
+}

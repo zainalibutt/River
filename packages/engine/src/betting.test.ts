@@ -1,0 +1,296 @@
+import { describe, expect, it } from 'vitest'
+import { BettingError, BettingHand } from './betting.js'
+
+function hand(stacks: number[], dealer: number, seats?: string[]): BettingHand {
+  const ids = seats ?? stacks.map((_, i) => `p${i}`)
+  return new BettingHand({
+    seats: stacks.map((stack, i) => ({ id: ids[i] ?? `p${i}`, stack })),
+    dealerIndex: dealer,
+    smallBlind: 10,
+    bigBlind: 20,
+  })
+}
+
+function totals(betting: BettingHand): Record<string, number> {
+  return Object.fromEntries(betting.players.map((p) => [p.id, p.betThisHand]))
+}
+
+describe('betting heads-up', () => {
+  it('posts blinds with the button as small blind', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    expect(totals(betting)).toEqual({ a: 10, b: 20 })
+    expect(betting.players[0]?.stack).toBe(990)
+    expect(betting.players[1]?.stack).toBe(980)
+    expect(betting.toActId).toBe('a')
+    expect(betting.betToCall('a')).toBe(10)
+  })
+
+  it('lets the button act first preflop, then gives the big blind its option', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    betting.call('a')
+    expect(betting.street).toBe('preflop')
+    expect(betting.toActId).toBe('b')
+    expect(betting.betToCall('b')).toBe(0)
+    betting.check('b')
+    expect(betting.street).toBe('flop')
+    expect(betting.toActId).toBe('b')
+    expect(betting.players[0]?.betThisStreet).toBe(0)
+    expect(betting.players[1]?.betThisStreet).toBe(0)
+  })
+
+  it('lets the big blind raise after the button limps', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    betting.call('a')
+    betting.raiseTo('b', 60)
+    expect(betting.street).toBe('preflop')
+    expect(betting.toActId).toBe('a')
+    expect(betting.betToCall('a')).toBe(40)
+  })
+
+  it('rotates the button so roles swap', () => {
+    const first = hand([1000, 1000], 0, ['a', 'b'])
+    expect(totals(first)).toEqual({ a: 10, b: 20 })
+    const second = hand([1000, 1000], 1, ['a', 'b'])
+    expect(totals(second)).toEqual({ a: 20, b: 10 })
+    expect(second.toActId).toBe('b')
+  })
+})
+
+describe('betting raises', () => {
+  it('enforces a minimum bet of the big blind postflop', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    betting.call('a')
+    betting.check('b')
+    expect(betting.street).toBe('flop')
+    expect(() => betting.raiseTo('b', 15)).toThrow(BettingError)
+    betting.raiseTo('b', 500)
+    expect(betting.minRaiseTo()).toBe(1000)
+  })
+
+  it('sizes the next minimum raise from the previous raise', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    betting.raiseTo('a', 60)
+    expect(betting.minRaiseTo()).toBe(100)
+    expect(() => betting.raiseTo('b', 99)).toThrow(BettingError)
+    betting.raiseTo('b', 100)
+    expect(betting.minRaiseTo()).toBe(140)
+  })
+
+  it('allows uncapped raises as long as the stack covers them', () => {
+    const betting = hand([5000, 5000], 0, ['a', 'b'])
+    betting.raiseTo('a', 200)
+    betting.raiseTo('b', 2000)
+    betting.raiseTo('a', 4500)
+    expect(() => betting.raiseTo('b', 6000)).toThrow(BettingError)
+  })
+
+  it('reopens betting for players who already acted after a full raise', () => {
+    const betting = hand([1000, 1000, 1000], 2, ['a', 'b', 'c'])
+    betting.raiseTo('c', 100)
+    betting.call('a')
+    betting.raiseTo('b', 300)
+    expect(betting.toActId).toBe('c')
+    betting.call('c')
+    expect(betting.toActId).toBe('a')
+    betting.call('a')
+    expect(betting.street).toBe('flop')
+  })
+})
+
+describe('betting all-in and side pots', () => {
+  it('runs through remaining streets when nobody can act', () => {
+    const betting = hand([10, 20], 0, ['a', 'b'])
+    expect(betting.finished).toBe(true)
+    expect(betting.street).toBe('river')
+    expect(betting.toActId).toBeUndefined()
+  })
+
+  it('runs through remaining streets after the last player matches an all-in blind', () => {
+    const betting = hand([1000, 20], 0, ['a', 'b'])
+    expect(betting.toActId).toBe('a')
+    betting.call('a')
+    expect(betting.finished).toBe(true)
+    expect(betting.street).toBe('river')
+    expect(betting.toActId).toBeUndefined()
+  })
+
+  it('requires the last player with chips to answer an unmatched all-in', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    betting.allIn('a')
+    expect(betting.finished).toBe(false)
+    expect(betting.toActId).toBe('b')
+    betting.call('b')
+    expect(betting.finished).toBe(true)
+    expect(betting.street).toBe('river')
+  })
+
+  it('makes an all-in for less than a full raise be called, without reopening raising', () => {
+    const betting = hand([1000, 1000, 150], 2, ['a', 'b', 'c'])
+    betting.call('c')
+    betting.raiseTo('a', 100)
+    betting.call('b')
+    betting.allIn('c')
+    expect(betting.street).toBe('preflop')
+    expect(betting.toActId).toBe('a')
+    expect(betting.betToCall('a')).toBe(50)
+    expect(betting.canRaise('a')).toBe(false)
+    expect(() => betting.raiseTo('a', 400)).toThrow(BettingError)
+    expect(() => betting.allIn('a')).toThrow(BettingError)
+    betting.call('a')
+    betting.call('b')
+    expect(betting.street).toBe('flop')
+    expect(betting.sidePots()).toEqual([{ amount: 450, eligibleIds: ['a', 'b', 'c'] }])
+  })
+
+  it('lets a player who has not acted raise over a short all-in', () => {
+    const betting = hand([1000, 130, 1000], 0, ['a', 'b', 'c'])
+    betting.raiseTo('a', 100)
+    betting.allIn('b')
+    expect(betting.toActId).toBe('c')
+    expect(betting.canRaise('c')).toBe(true)
+    betting.raiseTo('c', 300)
+    expect(betting.toActId).toBe('a')
+    expect(betting.canRaise('a')).toBe(true)
+  })
+
+  it('makes the last raiser answer a short all-in heads-up', () => {
+    const betting = hand([4000, 4000], 0, ['a', 'b'])
+    betting.raiseTo('a', 73)
+    betting.raiseTo('b', 300)
+    betting.raiseTo('a', 937)
+    betting.raiseTo('b', 2700)
+    betting.allIn('a')
+    expect(betting.finished).toBe(false)
+    expect(betting.toActId).toBe('b')
+    expect(betting.betToCall('b')).toBe(1300)
+    expect(betting.canRaise('b')).toBe(false)
+    betting.call('b')
+    expect(betting.finished).toBe(true)
+  })
+
+  it('builds classic side pots across three players', () => {
+    const betting = hand([1000, 290, 480], 0, ['a', 'b', 'c'])
+    betting.call('a')
+    betting.allIn('b')
+    betting.allIn('c')
+    betting.call('a')
+    expect(betting.street).toBe('river')
+    expect(betting.finished).toBe(true)
+    expect(betting.toActId).toBeUndefined()
+    expect(betting.sidePots()).toEqual([
+      { amount: 870, eligibleIds: ['a', 'b', 'c'] },
+      { amount: 380, eligibleIds: ['a', 'c'] },
+    ])
+  })
+
+  it('refunds uncalled money when everyone folds', () => {
+    const betting = hand([2000, 2000, 2000], 2, ['a', 'b', 'c'])
+    betting.raiseTo('c', 200)
+    betting.fold('a')
+    betting.fold('b')
+    expect(betting.finished).toBe(true)
+    expect(betting.uncontestedWinnerId).toBe('c')
+    expect(betting.sidePots()).toEqual([
+      { amount: 30, eligibleIds: ['c'] },
+      { amount: 20, eligibleIds: ['c'] },
+      { amount: 180, eligibleIds: ['c'] },
+    ])
+  })
+
+  it('handles a short all-in call', () => {
+    const betting = hand([1000, 600], 0, ['a', 'b'])
+    betting.raiseTo('a', 1000)
+    betting.call('b')
+    expect(betting.players[1]?.allIn).toBe(true)
+    expect(betting.betToCall('a')).toBe(0)
+    expect(betting.street).toBe('river')
+    expect(betting.finished).toBe(true)
+    expect(betting.sidePots()).toEqual([
+      { amount: 1200, eligibleIds: ['a', 'b'] },
+      { amount: 400, eligibleIds: ['a'] },
+    ])
+  })
+})
+
+describe('forfeiting a hand', () => {
+  it('folds a player off their turn and leaves the turn where it was', () => {
+    // Three-handed from the button: a acts first, b posted the small blind and c the big.
+    const betting = hand([1000, 1000, 1000], 0, ['a', 'b', 'c'])
+    expect(betting.toActId).toBe('a')
+    expect(betting.forfeit('b')).toBe(true)
+    expect(betting.players[1]?.folded).toBe(true)
+    expect(betting.toActId).toBe('a')
+    // The small blind stays in the pot.
+    expect(betting.pot()).toBe(30)
+    betting.call('a')
+    expect(betting.toActId).toBe('c')
+  })
+
+  it('ends the hand when it leaves one player in it', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    expect(betting.toActId).toBe('a')
+    expect(betting.forfeit('b')).toBe(true)
+    expect(betting.finished).toBe(true)
+    expect(betting.uncontestedWinnerId).toBe('a')
+  })
+
+  it('is an ordinary fold on the player own turn', () => {
+    const betting = hand([1000, 1000, 1000], 0, ['a', 'b', 'c'])
+    expect(betting.forfeit('a')).toBe(true)
+    expect(betting.players[0]?.folded).toBe(true)
+    expect(betting.toActId).toBe('b')
+  })
+
+  it('runs the board out when the one left with chips has nobody to bet against', () => {
+    const betting = hand([1000, 300, 1000], 0, ['a', 'b', 'c'])
+    betting.call('a')
+    betting.allIn('b')
+    betting.call('c')
+    betting.call('a')
+    expect(betting.street).toBe('flop')
+    expect(betting.toActId).toBe('c')
+    expect(betting.forfeit('a')).toBe(true)
+    expect(betting.finished).toBe(true)
+    expect(betting.street).toBe('river')
+  })
+
+  it('leaves an all-in hand and a folded one as they are', () => {
+    const betting = hand([1000, 300, 1000], 0, ['a', 'b', 'c'])
+    betting.call('a')
+    betting.allIn('b')
+    expect(betting.forfeit('b')).toBe(false)
+    expect(betting.players[1]?.folded).toBe(false)
+    betting.fold('c')
+    expect(betting.forfeit('c')).toBe(false)
+    expect(betting.toActId).toBe('a')
+  })
+})
+
+describe('betting validation', () => {
+  it('rejects actions out of turn', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    expect(() => betting.check('b')).toThrow(BettingError)
+  })
+
+  it('rejects check when facing a bet', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    betting.raiseTo('a', 100)
+    expect(() => betting.check('b')).toThrow(BettingError)
+  })
+
+  it('rejects a raise below the minimum', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    expect(() => betting.raiseTo('a', 30)).toThrow(BettingError)
+  })
+
+  it('rejects raises above the stack', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    expect(() => betting.raiseTo('a', 1500)).toThrow(BettingError)
+  })
+
+  it('rejects unknown players and lone games', () => {
+    const betting = hand([1000, 1000], 0, ['a', 'b'])
+    expect(() => betting.call('ghost')).toThrow(BettingError)
+    expect(() => hand([1000], 0, ['a'])).toThrow(BettingError)
+  })
+})
