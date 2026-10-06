@@ -20,7 +20,7 @@ import {
  */
 
 /** The two card keys of every holding, by its place among the 1,326. */
-const HOLDING_CARDS: readonly (readonly [number, number])[] = (() => {
+export const HOLDING_CARDS: readonly (readonly [number, number])[] = (() => {
   const cards: [number, number][] = []
   for (let a = 0; a < 52; a += 1) {
     for (let b = a + 1; b < 52; b += 1) cards.push([a, b])
