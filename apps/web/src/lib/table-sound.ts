@@ -75,6 +75,7 @@ const GAP_MS: Partial<Record<SoundEffect, number>> = {
 }
 
 const MUTED_KEY = 'river:sound-muted'
+const FIRST_CLICK_WINDOW_MS = 120
 
 function readMuted(): boolean {
   try {
@@ -89,6 +90,7 @@ class TableSound {
   private readonly buffers = new Map<SoundEffect, AudioBuffer>()
   private master: GainNode | null = null
   private muted: boolean | null = null
+  private pendingClick: { expires: number; volume: number } | null = null
   private readonly lastPlayed = new Map<SoundEffect, number>()
   private readonly listeners = new Set<(muted: boolean) => void>()
 
@@ -99,6 +101,7 @@ class TableSound {
 
   setMuted(muted: boolean): void {
     this.muted = muted
+    if (muted) this.pendingClick = null
     try {
       window.localStorage.setItem(MUTED_KEY, muted ? '1' : '0')
     } catch {
@@ -135,6 +138,17 @@ class TableSound {
           const response = await fetch(`/audio/${effect}.wav`)
           if (!response.ok) return
           this.buffers.set(effect, await context.decodeAudioData(await response.arrayBuffer()))
+          if (effect === 'ui_click') {
+            const pending = this.pendingClick
+            this.pendingClick = null
+            if (
+              pending !== null &&
+              performance.now() <= pending.expires &&
+              context.state === 'running' &&
+              (typeof document === 'undefined' || document.visibilityState !== 'hidden')
+            )
+              this.play(effect, pending.volume)
+          }
         } catch {
           // A missing effect is silence, not an error the table should show.
         }
@@ -146,7 +160,12 @@ class TableSound {
   play(effect: SoundEffect, volume = 1): void {
     const context = this.context
     const buffer = this.buffers.get(effect)
-    if (context === null || this.master === null || buffer === undefined || this.isMuted()) return
+    if (context === null || this.master === null || this.isMuted()) return
+    if (buffer === undefined) {
+      if (effect === 'ui_click')
+        this.pendingClick = { expires: performance.now() + FIRST_CLICK_WINDOW_MS, volume }
+      return
+    }
     const at = context.currentTime * 1000
     const last = this.lastPlayed.get(effect) ?? Number.NEGATIVE_INFINITY
     if (at - last < (GAP_MS[effect] ?? REPEAT_GAP_MS)) return

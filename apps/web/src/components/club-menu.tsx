@@ -68,6 +68,7 @@ export function ClubMenu() {
   const router = useRouter()
   useInterfaceSound()
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const closingMotion = useRef<Animation | null>(null)
   const visibleViewport = useVisibleViewport()
   const [me, setMe] = useState<Me | null>(null)
   // Where this member's public profile lives, once their name is known to have one.
@@ -152,11 +153,39 @@ export function ClubMenu() {
     setNaming(false)
     setSignIn('idle')
   }, [])
+  const dismissPanel = useCallback(() => {
+    const dialog = dialogRef.current
+    if (dialog === null || !dialog.open || closingMotion.current !== null) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !dialog.animate) {
+      dialog.close()
+      closePanels()
+      return
+    }
+    dialog.dataset.closing = 'true'
+    const duration = Number.parseFloat(getComputedStyle(dialog).getPropertyValue('--home-exit-ms'))
+    const motion = dialog.animate([{ opacity: 0, transform: 'translateY(10px)' }], {
+      duration,
+      easing: 'cubic-bezier(0.4, 0, 1, 1)',
+    })
+    closingMotion.current = motion
+    motion.onfinish = () => {
+      closingMotion.current = null
+      delete dialog.dataset.closing
+      dialog.close()
+      closePanels()
+    }
+  }, [closePanels])
+  useEffect(() => () => closingMotion.current?.cancel(), [])
   useEffect(() => {
     const dialog = dialogRef.current
     if (dialog === null) return
     if (panelOpen && !dialog.open) dialog.showModal()
-    if (!panelOpen && dialog.open) dialog.close()
+    if (!panelOpen) {
+      closingMotion.current?.cancel()
+      closingMotion.current = null
+      delete dialog.dataset.closing
+      if (dialog.open) dialog.close()
+    }
     if (joining) inviteRef.current?.focus()
     else if (naming) nameRef.current?.focus()
     else if (signIn === 'editing') emailRef.current?.focus()
@@ -456,7 +485,10 @@ export function ClubMenu() {
                 } as CSSProperties)
           }
           aria-labelledby="club-panel-title"
-          onCancel={closePanels}
+          onCancel={(event) => {
+            event.preventDefault()
+            dismissPanel()
+          }}
           onClose={closePanels}
         >
           <div className="club-home-dialog-heading">
@@ -471,7 +503,7 @@ export function ClubMenu() {
                       ? 'Your name'
                       : 'Sign in'}
             </h2>
-            <button type="button" className="club-home-tool" onClick={closePanels}>
+            <button type="button" className="club-home-tool" onClick={dismissPanel}>
               Close
             </button>
           </div>
@@ -507,7 +539,6 @@ export function ClubMenu() {
                   }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') void sendMagicLink()
-                    if (event.key === 'Escape') setSignIn('idle')
                   }}
                   placeholder="you@example.com"
                 />
@@ -545,7 +576,6 @@ export function ClubMenu() {
                   }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') openInvite()
-                    if (event.key === 'Escape') setJoining(false)
                   }}
                   placeholder="https://…/t/…"
                   aria-describedby={inviteError === null ? undefined : 'club-invite-error'}
@@ -631,7 +661,6 @@ export function ClubMenu() {
                   onChange={(event) => setNameDraft(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && nameClaimable) void claimName()
-                    if (event.key === 'Escape') setNaming(false)
                   }}
                   placeholder={memberName?.name ?? ''}
                 />

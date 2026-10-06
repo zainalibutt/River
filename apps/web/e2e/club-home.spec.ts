@@ -7,6 +7,174 @@ test.beforeEach(async ({ page }) => {
 })
 
 for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 1440, height: 900 },
+]) {
+  test.describe(`${viewport.width}x${viewport.height} menu feedback`, () => {
+    test.use({ viewport })
+
+    test('keeps sheet contents and modal focus through exit, then restores the trigger', async ({
+      page,
+    }) => {
+      await page.goto('/')
+      const trigger = page.getByRole('button', { name: 'Join', exact: true })
+      await trigger.click()
+      const dialog = page.getByRole('dialog', { name: 'Join a table' })
+      await expect(dialog.getByLabel('Paste an invite link')).toBeFocused()
+      await dialog.getByRole('button', { name: 'Close', exact: true }).click()
+      const closing = await page.locator('dialog').evaluate((element) => {
+        const sheet = element as HTMLDialogElement
+        return {
+          open: sheet.open,
+          closing: sheet.dataset.closing,
+          hasContents: sheet.querySelector('#club-invite') !== null,
+          modal: sheet.matches(':modal'),
+          focusInside: sheet.contains(document.activeElement),
+          durations: sheet
+            .getAnimations()
+            .map((animation) => animation.effect?.getTiming().duration),
+        }
+      })
+      expect(closing).toMatchObject({
+        open: true,
+        closing: 'true',
+        hasContents: true,
+        modal: true,
+        focusInside: true,
+      })
+      expect(closing.durations).toContain(180)
+      await expect(dialog).toBeHidden()
+      await expect(trigger).toBeFocused()
+      await trigger.click()
+      await expect(dialog.getByLabel('Paste an invite link')).toBeFocused()
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('Escape')
+      await expect(dialog).toBeHidden()
+      await expect(trigger).toBeFocused()
+      await page.getByRole('button', { name: 'Settings', exact: true }).click()
+      await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible()
+    })
+
+    test('reduces motion without removing focus or blocking immediate play', async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: 'reduce' })
+      await page.goto('/')
+      const play = page.getByRole('button', { name: 'Quick Play', exact: true })
+      expect(
+        await page
+          .locator('.club-home-header, .club-home-content')
+          .evaluateAll((elements) =>
+            elements.every((element) => getComputedStyle(element).animationName === 'none'),
+          ),
+      ).toBe(true)
+      expect(await play.evaluate((element) => getComputedStyle(element).transitionDuration)).toBe(
+        '0s',
+      )
+      await page.getByRole('button', { name: 'Join', exact: true }).click()
+      const dialog = page.getByRole('dialog', { name: 'Join a table' })
+      expect(await dialog.evaluate((element) => getComputedStyle(element).animationName)).toBe(
+        'none',
+      )
+      await dialog.getByLabel('Paste an invite link').fill('not an invite')
+      const submit = dialog.getByRole('button', { name: 'Join table', exact: true })
+      const target = await submit.boundingBox()
+      if (target === null) throw new Error('Submit action is not on screen')
+      await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2)
+      await page.mouse.down()
+      expect(await submit.evaluate((element) => getComputedStyle(element).transform)).toBe('none')
+      await page.mouse.up()
+      await page.keyboard.press('Escape')
+      expect(
+        await page.locator('dialog').evaluate((element) => (element as HTMLDialogElement).open),
+      ).toBe(false)
+      await expect(page.getByRole('button', { name: 'Join', exact: true })).toBeFocused()
+      await page.route('**/table?**', (route) => route.fulfill({ body: 'Immediate destination' }))
+      await play.click()
+      await expect(page).toHaveURL(/\/table\?new=1&strength=random$/)
+    })
+  })
+}
+
+test('can dismiss a sheet before its entrance finishes and open another', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Join', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await page.getByRole('button', { name: 'Table options', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Table options' })
+  await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeFocused()
+  await dialog.getByRole('button', { name: 'People only', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Table options', exact: true })).toBeFocused()
+})
+
+test('falls back to native immediate dismissal without the animation API', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Element.prototype, 'animate', { value: undefined, configurable: true })
+  })
+  await page.goto('/')
+  const trigger = page.getByRole('button', { name: 'Join', exact: true })
+  await trigger.click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(trigger).toBeFocused()
+})
+
+test.describe('touch sound feedback', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } })
+
+  test('first tap plays once, touch hover stays silent, and mute survives reload', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const probe = window as typeof window & { startedSounds: number }
+      probe.startedSounds = 0
+      class AudioProbe {
+        state = 'running'
+        currentTime = 1
+        destination = {}
+        createGain = () => ({ gain: { value: 1 }, connect: () => {} })
+        createBufferSource = () => ({
+          buffer: null,
+          playbackRate: { value: 1 },
+          connect: () => {},
+          start: () => probe.startedSounds++,
+        })
+        decodeAudioData = () => new Promise((resolve) => window.setTimeout(() => resolve({}), 30))
+        resume = async () => {}
+      }
+      window.AudioContext = AudioProbe as unknown as typeof AudioContext
+      const originalFetch = window.fetch
+      window.fetch = (input, init) =>
+        typeof input === 'string' && input.startsWith('/audio/')
+          ? Promise.resolve(new Response(new ArrayBuffer(8)))
+          : originalFetch(input, init)
+    })
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Join', exact: true }).tap()
+    const sounds = () =>
+      page.evaluate(() => (window as typeof window & { startedSounds: number }).startedSounds)
+    await expect.poll(sounds).toBe(1)
+    await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).tap()
+    await expect(page.getByRole('dialog')).toBeHidden()
+    const beforeHover = await sounds()
+    await page.getByRole('button', { name: 'Join', exact: true }).dispatchEvent('pointerover', {
+      pointerType: 'touch',
+    })
+    expect(await sounds()).toBe(beforeHover)
+    await page.getByRole('button', { name: 'Sound', exact: true }).tap()
+    await expect(page.getByRole('button', { name: 'Sound', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    await page.reload()
+    await page.getByRole('button', { name: 'Join', exact: true }).tap()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    expect(await sounds()).toBe(0)
+  })
+})
+
+for (const viewport of [
   { width: 320, height: 740 },
   { width: 390, height: 844 },
   { width: 844, height: 390 },
