@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { type Card, cardKey, handScore, makeDeck, parseCard } from '@river/engine'
+import { type Card, cardKey, handScore, makeDeck, mulberry32, parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
+  compatibleMasses,
   prepare,
   type RangeCombo,
   type RiverOpponentModel,
@@ -9,9 +10,12 @@ import {
   solveRiver,
   terminal,
 } from './bot-river-solver.js'
-import { turnRivers } from './bot-turn-end-data.js'
+import { comboIndex52 } from './bot-river-value-data.js'
+import { checkedDownValues, turnLayout, turnRivers } from './bot-turn-end-data.js'
 import { allInShowdown, solveTurn, turnShowdown } from './bot-turn-solver.js'
 import {
+  bucketInputs,
+  holdingValues,
   type RiverValueNetwork,
   type ValueNetworkDescription,
   valueNetworkFrom,
@@ -204,6 +208,73 @@ describe('a turn-end network that learns what betting adds', () => {
       checkedDown(traverser, hands[other].weights, 300, 100, expected)
       expected.forEach((value, h) => {
         expect(out[h]).toBeCloseTo(value, 3)
+      })
+    }
+  })
+})
+
+describe('a turn-end network that sees the buckets’ checked-down values by range', () => {
+  it('is fed exactly what its training gave it, worked out from the showdown table', () => {
+    const board = cards('Ah Kd 7s 4c')
+    const ranges: [RangeCombo[], RangeCombo[]] = [
+      [combo('8s 8h'), combo('Qc Jc', 2), combo('5d 6d'), combo('Ac 2c')],
+      [combo('7c 7d'), combo('Kc Qh', 3), combo('8c 9c'), combo('Ad Td')],
+    ]
+    const spot: RiverSpot = {
+      board,
+      pot: 100,
+      stack: 400,
+      ranges,
+      betSizes: [0.66],
+      allIn: true,
+      maxRaises: 1,
+    }
+    const buckets = 8
+    const random = mulberry32(11)
+    const columns = 5 * buckets + 1
+    const network: RiverValueNetwork = {
+      buckets,
+      layers: [
+        {
+          weight: Float32Array.from({ length: 2 * buckets * columns }, () => (random() - 0.5) / 4),
+          bias: Float32Array.from({ length: 2 * buckets }, () => (random() - 0.5) / 4),
+          rows: 2 * buckets,
+          columns,
+          slope: null,
+        },
+      ],
+      checked: { inputs: 'range' },
+    }
+    const hands = [prepare(ranges[0], board), prepare(ranges[1], board)] as const
+    const rivers = turnRivers(board)
+    const layout = turnLayout(rivers, network)
+    const index = (player: 0 | 1, h: number) =>
+      comboIndex52(hands[player].cards[2 * h] as number, hands[player].cards[2 * h + 1] as number)
+    const reach = [new Float64Array(1326), new Float64Array(1326)] as const
+    for (const player of [0, 1] as const) {
+      hands[player].weights.forEach((weight, h) => {
+        reach[player][index(player, h)] = weight
+      })
+    }
+    // The independent way: every holding's checked-down value from the sorted showdowns.
+    const checked = checkedDownValues(spot, rivers)
+    const values = holdingValues(
+      network,
+      layout,
+      bucketInputs(layout, reach, 300, 300, checked, 'range'),
+      checked,
+    )
+    const leaf = turnShowdown(spot, network)
+    const node = { kind: 'showdown', paid: [100, 100] } as const
+    for (const traverser of [0, 1] as const) {
+      const other = traverser === 0 ? 1 : 0
+      const out = new Float64Array(hands[traverser].combos.length)
+      leaf(node, traverser, hands, hands[traverser].weights, hands[other].weights, out)
+      const met = compatibleMasses(hands[traverser], hands[other], hands[other].weights)
+      out.forEach((value, h) => {
+        const expected =
+          (met[h] as number) * ((values[traverser][index(traverser, h)] as number) * 300 - 100)
+        expect(value).toBeCloseTo(expected, 3)
       })
     }
   })

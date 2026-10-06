@@ -98,6 +98,17 @@ describe('a network that learns what betting adds', () => {
     expect(inputs[10]).toBeCloseTo(0.1, 6)
   })
 
+  it('weighs those means by the range when asked, nought where the range has none', () => {
+    const inputs = bucketInputs(layout, ranges, 300, 100, checked, 'range')
+    expect(inputs).toHaveLength(5 * 2 + 1)
+    expect(inputs[7]).toBeCloseTo(0.3, 6)
+    expect(inputs[8]).toBeCloseTo(0.9, 6)
+    expect(inputs[9]).toBeCloseTo(0.8, 6)
+    expect(inputs[10]).toBeCloseTo(0.1, 6)
+    const empty = [new Float64Array(COMBOS), ranges[1]] as const
+    expect(bucketInputs(layout, empty, 300, 100, checked, 'range')[7]).toBe(0)
+  })
+
   it('adds each holding its own checked-down value, and refuses to run without one', () => {
     // One layer: bucket outputs 0.05 and -0.05 for the first player, 0 and 0.1 for the second.
     const network: RiverValueNetwork = {

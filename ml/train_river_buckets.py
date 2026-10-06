@@ -34,7 +34,7 @@ def bucket_features(
     buckets: int,
     ids: np.ndarray | None = None,
     checked: np.ndarray | None = None,
-    checked_inputs: bool = False,
+    checked_inputs: str | None = None,
 ) -> dict[str, np.ndarray]:
     """Inputs, bucket targets, bucket masks and each holding's bucket, for a batch of records.
     With `ids` (one row of 1,326 per record, 255 where blocked), holdings take those buckets,
@@ -42,7 +42,9 @@ def bucket_features(
     With `checked` (each holding's value if nobody bets again, shape (n, 2, 1326)), the targets
     are the values less the checked-down ones: the network learns only what betting adds, while
     each holding keeps its own exact checked-down value. With `checked_inputs` as well, it is
-    also given each bucket's mean checked-down value over its live holdings, for both players."""
+    also given each bucket's mean checked-down value for both players: over the bucket's live
+    holdings ("live"), or weighted by the player's own range there ("range", 0 where the range has
+    none), which a solver can work out from the ranges' holdings alone."""
     n = len(records)
     if ids is not None:
         bucket = ids.astype(np.int64)
@@ -79,10 +81,17 @@ def bucket_features(
         x.append((mass * buckets).astype(np.float32))
         y.append(np.where(mass > 0, weighted / np.maximum(mass, 1e-300), 0).astype(np.float32))
     x.append((held / live_count[:, None] * buckets).astype(np.float32))
-    if checked is not None and checked_inputs:
+    if checked is not None and checked_inputs is not None:
         for player in (0, 1):
-            total = np.bincount(flat, weights=checked[:, player, :][live].astype(np.float64), minlength=size)
-            x.append(np.where(held > 0, total.reshape(n, buckets) / np.maximum(held, 1), 0).astype(np.float32))
+            value = checked[:, player, :][live].astype(np.float64)
+            if checked_inputs == "range":
+                weight = records["ranges"][:, player, :][live].astype(np.float64)
+                mass = np.bincount(flat, weights=weight, minlength=size).reshape(n, buckets)
+                total = np.bincount(flat, weights=weight * value, minlength=size).reshape(n, buckets)
+                x.append(np.where(mass > 0, total / np.maximum(mass, 1e-300), 0).astype(np.float32))
+            else:
+                total = np.bincount(flat, weights=value, minlength=size).reshape(n, buckets)
+                x.append(np.where(held > 0, total / np.maximum(held, 1), 0).astype(np.float32))
     mask = (held > 0).astype(np.float32)
     return {
         "x": np.concatenate(x, axis=1),
@@ -107,7 +116,7 @@ def build(
     buckets: int,
     ids: np.ndarray | None = None,
     checked: np.ndarray | None = None,
-    checked_inputs: bool = False,
+    checked_inputs: str | None = None,
 ) -> dict[str, np.ndarray]:
     parts = [
         bucket_features(
@@ -175,8 +184,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--checked-inputs",
-        action="store_true",
-        help="with --checked, also give the network each bucket's mean checked-down value",
+        nargs="?",
+        const="live",
+        choices=["live", "range"],
+        default=None,
+        help="with --checked, also give the network each bucket's mean checked-down value: over its live holdings, or weighted by the range",
     )
     args = parser.parse_args()
 
@@ -271,7 +283,7 @@ def main() -> None:
                 "outputs": outputs,
                 "buckets": args.buckets,
                 **({} if turn_buckets is None else {"turnBuckets": turn_buckets}),
-                **({} if checked is None else {"checked": True, "checkedInputs": args.checked_inputs}),
+                **({} if checked is None else {"checked": True, "checkedInputs": args.checked_inputs or False}),
                 "width": args.width,
                 "depth": args.depth,
                 "validationBucketError": best[0],

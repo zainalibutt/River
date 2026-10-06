@@ -30,16 +30,17 @@ export interface RiverValueNetwork {
    * For a turn-end network that learns what betting adds to each holding's
    * checked-down value, its value if nobody bets again: a holding is worth its
    * bucket's output plus its own checked-down value. With `inputs`, the network
-   * also sees each bucket's mean checked-down value, for both players.
+   * also sees each bucket's mean checked-down value for both players, over the
+   * bucket's live holdings or weighted by the player's range there.
    */
-  readonly checked?: { readonly inputs: boolean }
+  readonly checked?: { readonly inputs: false | 'live' | 'range' }
 }
 
 export interface ValueNetworkDescription {
   readonly buckets: number
   readonly turnBuckets?: { readonly strength: number; readonly potential: number }
   readonly checked?: boolean
-  readonly checkedInputs?: boolean
+  readonly checkedInputs?: boolean | 'live' | 'range'
   readonly tensors: readonly {
     readonly name: string
     readonly shape: readonly number[]
@@ -84,7 +85,16 @@ export function valueNetworkFrom(
     layers,
     ...(description.turnBuckets === undefined ? {} : { turnBuckets: description.turnBuckets }),
     ...(description.checked === true
-      ? { checked: { inputs: description.checkedInputs === true } }
+      ? {
+          checked: {
+            inputs:
+              description.checkedInputs === true || description.checkedInputs === 'live'
+                ? ('live' as const)
+                : description.checkedInputs === 'range'
+                  ? ('range' as const)
+                  : false,
+          },
+        }
       : {}),
   }
 }
@@ -172,7 +182,9 @@ export function bucketsFromIds(ids: Uint8Array, buckets: number): BucketLayout {
  * live holdings, also scaled. `ranges` are weights by holding, by
  * `comboIndex52`; they need not sum to one. With `checked`, every holding's
  * checked-down value for both players, it also sees each bucket's mean of
- * them over the bucket's live holdings, the first player's buckets first.
+ * them, the first player's buckets first: over the bucket's live holdings, or
+ * with `weighting` 'range' weighted by the player's range there, 0 where the
+ * range has none, which needs only the values of holdings in the range.
  */
 export function bucketInputs(
   layout: BucketLayout,
@@ -180,6 +192,7 @@ export function bucketInputs(
   stack: number,
   pot: number,
   checked?: readonly [ArrayLike<number>, ArrayLike<number>],
+  weighting: 'live' | 'range' = 'live',
 ): Float32Array {
   const buckets = layout.held.length
   const inputs = new Float32Array((checked === undefined ? 3 : 5) * buckets + 1)
@@ -202,6 +215,23 @@ export function bucketInputs(
   }
   checked?.forEach((values, player) => {
     const start = 1 + (3 + player) * buckets
+    if (weighting === 'range') {
+      const range = ranges[player] as ArrayLike<number>
+      const mass = new Float64Array(buckets)
+      const sum = new Float64Array(buckets)
+      for (let index = 0; index < COMBOS; index += 1) {
+        const bucket = layout.bucketOf[index] as number
+        const weight = range[index] as number
+        if (bucket < 0 || weight === 0) continue
+        mass[bucket] = (mass[bucket] as number) + weight
+        sum[bucket] = (sum[bucket] as number) + weight * (values[index] as number)
+      }
+      for (let bucket = 0; bucket < buckets; bucket += 1) {
+        const total = mass[bucket] as number
+        inputs[start + bucket] = total > 0 ? (sum[bucket] as number) / total : 0
+      }
+      return
+    }
     for (let index = 0; index < COMBOS; index += 1) {
       const bucket = layout.bucketOf[index] as number
       if (bucket < 0) continue

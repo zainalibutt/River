@@ -87,11 +87,13 @@ function massesFor(
  * How the turn's closed betting is valued: by the turn-end network while chips
  * remain behind, and by the exact average showdown once a player is all in. A
  * network that learns what betting adds gets each holding's checked-down
- * value from the same showdown table the all-ins use.
+ * value from the same showdown table the all-ins use, and one that sees the
+ * buckets' checked-down values gets them weighted by range, since the table
+ * holds only the ranges' holdings.
  */
 export function turnShowdown(spot: RiverSpot, network: RiverValueNetwork): ShowdownValues {
-  if (network.checked?.inputs === true) {
-    throw new Error('the turn solver cannot yet give a network checked-down inputs')
+  if (network.checked?.inputs === 'live') {
+    throw new Error('the turn solver gives a network checked-down inputs weighted by range only')
   }
   const rivers = turnRivers(spot.board)
   const layout = turnLayout(rivers, network)
@@ -103,6 +105,8 @@ export function turnShowdown(spot: RiverSpot, network: RiverValueNetwork): Showd
   let masses: ReturnType<typeof massesFor> | undefined
   const met = new Float64Array(COMBOS)
   const won = new Float64Array(COMBOS)
+  const metOther = new Float64Array(COMBOS)
+  const wonOther = new Float64Array(COMBOS)
   return (node, traverser, hands, self, opponent, out) => {
     const other = traverser === 0 ? 1 : 0
     const total = spot.pot + node.paid[0] + node.paid[1]
@@ -132,8 +136,9 @@ export function turnShowdown(spot: RiverSpot, network: RiverValueNetwork): Showd
     }
     masses ??= massesFor(hands)
     masses(traverser, opponent, met)
+    const ranged = network.checked?.inputs === 'range'
     if (network.checked !== undefined) {
-      // Only the traverser's holdings are read back, so only its row is filled.
+      // The traverser's holdings are read back; the opponent's feed the inputs only.
       table ??= showdownTable(rivers, hands)
       table.won(traverser, opponent, won)
       checked[traverser].fill(0)
@@ -141,11 +146,27 @@ export function turnShowdown(spot: RiverSpot, network: RiverValueNetwork): Showd
         const meets = met[h] as number
         checked[traverser][own[h] as number] = meets > 0 ? (won[h] as number) / meets : 0
       }
+      if (ranged) {
+        table.won(other, ownRange, wonOther)
+        masses(other, ownRange, metOther)
+        checked[other].fill(0)
+        for (let o = 0; o < theirs.length; o += 1) {
+          const meets = metOther[o] as number
+          checked[other][theirs[o] as number] = meets > 0 ? (wonOther[o] as number) / meets : 0
+        }
+      }
     }
     const values = holdingValues(
       network,
       layout,
-      bucketInputs(layout, [reach[0], reach[1]], behind, total),
+      bucketInputs(
+        layout,
+        [reach[0], reach[1]],
+        behind,
+        total,
+        ranged ? checked : undefined,
+        'range',
+      ),
       network.checked === undefined ? undefined : checked,
     )[traverser]
     for (let h = 0; h < own.length; h += 1) {

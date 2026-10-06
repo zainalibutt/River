@@ -96,7 +96,8 @@ for (const record of records) {
       rangeWeights(spot),
       spot.stack,
       spot.pot,
-      turnEnd.checked?.inputs === true ? checked : undefined,
+      turnEnd.checked !== undefined && turnEnd.checked.inputs !== false ? checked : undefined,
+      turnEnd.checked !== undefined && turnEnd.checked.inputs === 'range' ? 'range' : 'live',
     ),
     checked,
   )
