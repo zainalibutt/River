@@ -11,8 +11,10 @@ import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js
 import { botPlayerId } from './bot-service.js'
 import { focalRotation } from './bot-session-campaign.js'
 import { slumbotIncrement, slumbotMemory } from './bot-slumbot.js'
+import { type TurnPolicyStats, turnSolverPolicy } from './bot-turn-policy.js'
+import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
+// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z|v9a> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
 // Plays hands against Slumbot's public heads-up API, one at a time, sending
 // only our own moves; Slumbot deals and reports our cards. Each finished hand
 // is appended to the output file as one JSON line. A hand that fails, on our
@@ -23,13 +25,22 @@ import { slumbotIncrement, slumbotMemory } from './bot-slumbot.js'
 // alone. Without `reads` the bot remembers nothing between hands, and plays
 // every hand the way it plays the first hands against somebody new. With it,
 // the bot keeps what a table keeps of an opponent (see `slumbotMemory`), as it
-// does in the session campaigns and at River's live tables.
+// does in the session campaigns and at River's live tables. v9a solves every
+// turn with the turn-end network named by RIVER_TURN_NETWORK, and plays v8z
+// everywhere else.
 const [focalName, handText, runSeed, out, castName = 'rotation', readsName] = process.argv.slice(2)
 const hands = Number(handText)
+const v8z = () => riverSolverPolicy(pokerGuardPolicy, 'river-solver', 1, RIVER_CANDIDATE_TUNING)
+let turnStats: TurnPolicyStats | undefined
 const policies: Record<string, () => BotPolicy> = {
   v5: () => v5GuardPolicy,
   v6: () => pokerGuardPolicy,
-  v8z: () => riverSolverPolicy(pokerGuardPolicy, 'river-solver', 1, RIVER_CANDIDATE_TUNING).policy,
+  v8z: () => v8z().policy,
+  v9a: () => {
+    const solver = turnSolverPolicy(v8z().policy, turnNetworkFromEnvironment(), 'turn-solver', 1)
+    turnStats = solver.stats
+    return solver.policy
+  },
 }
 const make = policies[focalName ?? '']
 const casts = { rotation: focalRotation, champion: () => [championPersonality()] }
@@ -43,7 +54,9 @@ if (
   !out ||
   (readsName !== undefined && readsName !== 'reads')
 ) {
-  throw new Error('usage: <v5|v6|v8z> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]')
+  throw new Error(
+    'usage: <v5|v6|v8z|v9a> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
+  )
 }
 const policy = make()
 const memory = readsName === 'reads' ? slumbotMemory() : null
@@ -164,7 +177,11 @@ for (let hand = 0; hand < hands; hand += 1) {
   if ((hand + 1) % 50 === 0 || hand + 1 === hands) {
     const seconds = Math.round((Date.now() - started) / 1000)
     process.stderr.write(
-      `${focalName}: ${hand + 1}/${hands} hands, ${((total / 100 / (hand + 1 - failed)) * 100).toFixed(1)} bb/100 so far, ${failed} failed, ${memory === null ? 'no reads' : `${unobserved} unobserved`}, ${seconds}s\n`,
+      `${focalName}: ${hand + 1}/${hands} hands, ${((total / 100 / (hand + 1 - failed)) * 100).toFixed(1)} bb/100 so far, ${failed} failed, ${memory === null ? 'no reads' : `${unobserved} unobserved`}, ${seconds}s${
+        turnStats === undefined
+          ? ''
+          : `, turns solved ${turnStats.solved}, fallbacks ${JSON.stringify(turnStats.fallbacks)}`
+      }\n`,
     )
   }
 }
