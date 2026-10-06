@@ -16,6 +16,8 @@ import { loadValueNetwork } from './bot-value-network.js'
 // network. The first decision and the second player's decision after each first
 // move are scored against the reference, and the spot's total weighs each second
 // decision by how often the reference's first player makes the move before it.
+// A candidate written name=network@rounds solves with that many rounds instead
+// of the candidate rounds given, so the rounds a solve needs can be measured.
 // One JSON line per spot; a spot already in the file is skipped.
 const [
   out,
@@ -34,9 +36,13 @@ const workers = Number(workersText)
 const referenceRounds = Number(referenceText)
 const candidateRounds = Number(candidateText)
 const candidates = named.map((entry) => {
-  const [name, stem] = entry.split('=')
-  if (!name || !stem) throw new Error(`a candidate is name=network: ${entry}`)
-  return { name, network: loadValueNetwork(stem) }
+  const [name, given] = entry.split('=')
+  const [stem, roundsText] = (given ?? '').split('@')
+  const rounds = roundsText === undefined ? undefined : Number(roundsText)
+  if (!name || !stem || (rounds !== undefined && !Number.isSafeInteger(rounds))) {
+    throw new Error(`a candidate is name=network or name=network@rounds: ${entry}`)
+  }
+  return { name, network: loadValueNetwork(stem), rounds }
 })
 if (
   !out ||
@@ -71,9 +77,9 @@ for (let index = worker; index < spots; index += workers) {
   }
   const hands = [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)] as const
   const reference = solveRiver(spot, referenceRounds, undefined, riverAveragedShowdown(spot, river))
-  const solved = candidates.map(({ name, network }) => ({
+  const solved = candidates.map(({ name, network, rounds }) => ({
     name,
-    solution: solveTurn(spot, candidateRounds, network),
+    solution: solveTurn(spot, rounds ?? candidateRounds, network),
   }))
   const scoring = riverAveragedShowdown(spot, river)
   const root = reference.tree
