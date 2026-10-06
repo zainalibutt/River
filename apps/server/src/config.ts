@@ -26,8 +26,12 @@ export function readServerConfig(env: Readonly<Record<string, string | undefined
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
     throw new Error('PORT must be a valid TCP port')
   }
+  const hostname = env.HOST_BIND ?? '0.0.0.0'
+  if (hostname !== '0.0.0.0' && hostname !== '127.0.0.1' && hostname !== '::1') {
+    throw new Error('HOST_BIND must be a wildcard or loopback address')
+  }
   return {
-    hostname: '0.0.0.0',
+    hostname,
     port,
     supabaseUrl: url.toString().replace(/\/$/, ''),
     serviceRoleKey,

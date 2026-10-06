@@ -43,4 +43,23 @@ describe('server config', () => {
       }),
     ).toThrow('must not be blank')
   })
+
+  it('can restrict the local runtime to loopback without changing the default bind', () => {
+    for (const hostname of ['127.0.0.1', '::1']) {
+      expect(
+        readServerConfig({
+          SUPABASE_URL: 'http://127.0.0.1:55421',
+          SUPABASE_SERVICE_ROLE_KEY: 'local-test',
+          HOST_BIND: hostname,
+        }).hostname,
+      ).toBe(hostname)
+    }
+    expect(() =>
+      readServerConfig({
+        SUPABASE_URL: 'http://127.0.0.1:55421',
+        SUPABASE_SERVICE_ROLE_KEY: 'local-test',
+        HOST_BIND: 'remote.example',
+      }),
+    ).toThrow('wildcard or loopback')
+  })
 })
