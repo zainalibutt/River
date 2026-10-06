@@ -135,6 +135,54 @@ test('sound defaults on and a saved mute is shared with settings across reloads'
   await expect(sound).toHaveAttribute('aria-pressed', 'true')
 })
 
+test.describe('home sheets with an overlay keyboard', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test('keeps the invite field and submit action above the visible viewport edge', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const viewport = new EventTarget()
+      Object.assign(viewport, { height: 500, offsetTop: 0, scale: 1 })
+      Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true })
+    })
+    await page.goto('/')
+    const trigger = page.getByRole('button', { name: 'Join', exact: true })
+    await trigger.click()
+    const dialog = page.getByRole('dialog', { name: 'Join a table' })
+    await expect(dialog.getByLabel('Paste an invite link')).toBeFocused()
+    await expect
+      .poll(async () => {
+        const box = await dialog.boundingBox()
+        return box === null ? Infinity : box.y + box.height
+      })
+      .toBeLessThanOrEqual(500)
+    await expect(dialog.getByRole('button', { name: 'Join table' })).toBeInViewport()
+    await page.evaluate(() => {
+      Object.assign(window.visualViewport as VisualViewport, { height: 620, offsetTop: 24 })
+      window.visualViewport?.dispatchEvent(new Event('scroll'))
+    })
+    await expect
+      .poll(async () => {
+        const box = await dialog.boundingBox()
+        return box === null ? Infinity : box.y + box.height
+      })
+      .toBeLessThanOrEqual(644)
+    await page.evaluate(() => {
+      Object.assign(window.visualViewport as VisualViewport, { height: 844, offsetTop: 0 })
+      window.visualViewport?.dispatchEvent(new Event('resize'))
+    })
+    await expect
+      .poll(async () => {
+        const box = await dialog.boundingBox()
+        return box === null ? 0 : box.y + box.height
+      })
+      .toBeGreaterThan(800)
+    await page.keyboard.press('Escape')
+    await expect(trigger).toBeFocused()
+  })
+})
+
 for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 844 },

@@ -311,6 +311,79 @@ for (const viewport of [
       await expect(page.getByRole('dialog')).toHaveCount(0)
     })
 
+    test('sheets own focus and isolate the table until they close', async ({ page }) => {
+      await phoneFixture(page)
+      await page.goto('/table?new=1')
+      await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
+      const menu = page.getByRole('button', { name: 'Table menu' })
+      await menu.tap()
+      const close = page.getByRole('button', { name: 'Close panel' })
+      await expect(close).toBeFocused()
+      expect(await page.locator('.phone-dock').evaluate((element) => element.inert)).toBe(true)
+      await page.keyboard.press('Tab')
+      await expect(page.getByRole('button', { name: 'Chat', exact: true })).toBeFocused()
+      await page.keyboard.press('Shift+Tab')
+      await expect(close).toBeFocused()
+      await page.keyboard.press('Shift+Tab')
+      await expect(page.getByRole('button', { name: 'Log in', exact: true })).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(close).toBeFocused()
+      await page.getByRole('button', { name: 'Settings', exact: true }).focus()
+      await page.keyboard.press('Space')
+      await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
+      await expect(page.locator('.phone-peek-display')).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      await expect(menu).toBeFocused()
+      expect(await page.locator('.phone-dock').evaluate((element) => element.inert)).toBe(false)
+      await menu.tap()
+      await page.getByRole('button', { name: /Hand history/ }).tap()
+      await expect(
+        page.getByRole('dialog', { name: 'Hand history' }).getByRole('button', {
+          name: 'CLOSE',
+          exact: true,
+        }),
+      ).toBeFocused()
+      await page.keyboard.press('Escape')
+      await expect(menu).toBeFocused()
+    })
+
+    test('chat stays above an overlay keyboard without disabling text editing', async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        const viewport = new EventTarget()
+        Object.assign(viewport, { height: 500, offsetTop: 0, scale: 1 })
+        Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true })
+      })
+      await phoneFixture(page)
+      await page.goto('/table?new=1')
+      await page.getByRole('button', { name: 'Table menu' }).tap()
+      await page.getByRole('button', { name: 'Chat', exact: true }).tap()
+      const dialog = page.getByRole('dialog', { name: 'Table chat' })
+      const input = dialog.getByRole('textbox', { name: 'Message the table' })
+      await input.fill('Hello table')
+      await input.selectText()
+      await expect(input).toHaveValue('Hello table')
+      expect(
+        await input.evaluate((element) => {
+          const text = element as HTMLInputElement
+          return (text.selectionEnd ?? 0) - (text.selectionStart ?? 0)
+        }),
+      ).toBe(11)
+      for (const control of [
+        dialog,
+        input,
+        dialog.getByRole('button', { name: 'Send', exact: true }),
+      ]) {
+        const box = await control.boundingBox()
+        if (box === null) throw new Error('Chat control is not visible')
+        expect(box.y).toBeGreaterThanOrEqual(0)
+        expect(box.y + box.height).toBeLessThanOrEqual(500)
+      }
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('button', { name: 'Table menu' })).toBeFocused()
+    })
+
     test('heads-up faces the opponent and follows the server dealer flag across hands', async ({
       page,
     }) => {

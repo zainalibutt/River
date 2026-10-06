@@ -4,7 +4,7 @@ import type { BotTablePreset } from '@river/engine'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
 import {
@@ -24,6 +24,7 @@ import { profilePath } from '@/lib/profile'
 import { startTableHref } from '@/lib/start-table'
 import { inviteDestination } from '@/lib/table-target'
 import { useInterfaceSound } from '@/lib/use-interface-sound'
+import { useVisibleViewport } from '@/lib/use-visible-viewport'
 
 /**
  * The front door.
@@ -67,6 +68,7 @@ export function ClubMenu() {
   const router = useRouter()
   useInterfaceSound()
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const visibleViewport = useVisibleViewport()
   const [me, setMe] = useState<Me | null>(null)
   // Where this member's public profile lives, once their name is known to have one.
   const [profile, setProfile] = useState<string | null>(null)
@@ -445,6 +447,14 @@ export function ClubMenu() {
         <dialog
           ref={dialogRef}
           className="club-home-dialog"
+          style={
+            visibleViewport === null
+              ? undefined
+              : ({
+                  '--visible-viewport-height': `${visibleViewport.height}px`,
+                  '--viewport-bottom-inset': `${visibleViewport.bottomInset}px`,
+                } as CSSProperties)
+          }
           aria-labelledby="club-panel-title"
           onCancel={closePanels}
           onClose={closePanels}

@@ -1439,7 +1439,9 @@
   }
 
   .club-home-dialog {
-    margin: auto auto max(16px, env(safe-area-inset-bottom));
+    max-height: calc(var(--visible-viewport-height, 100dvh) - 32px);
+    margin: auto auto
+      calc(max(16px, env(safe-area-inset-bottom)) + var(--viewport-bottom-inset, 0px));
   }
 }
 

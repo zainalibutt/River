@@ -9,11 +9,13 @@ import { Table2D, type Table2DProps } from '@/components/table-2d/table-2d'
 import { CardBack, PlayingCard } from '@/components/table-pieces'
 import { sizingPresets } from '@/lib/betting'
 import type { SessionHand } from '@/lib/history'
-import { phoneGeometry, phoneKeyboardInset } from '@/lib/phone-layout'
+import { phoneGeometry } from '@/lib/phone-layout'
 import { censorProfanity, type Preferences } from '@/lib/preferences'
 import { formatAmount } from '@/lib/presentation'
 import { PRESET_LABELS, type PresetKind } from '@/lib/preset'
 import { CHAT_MAX_LENGTH, type SocialFeedEntry } from '@/lib/social'
+import { usePhoneSheetFocus } from '@/lib/use-phone-sheet-focus'
+import { useVisibleViewport } from '@/lib/use-visible-viewport'
 import './phone-table.css'
 
 type Panel = 'menu' | 'chat' | 'history' | 'settings' | 'verify' | 'invite' | 'raise' | 'account'
@@ -56,7 +58,7 @@ export function PhoneTable(props: PhoneTableProps) {
   const { view, peek, onPeek } = props
   const [panel, setPanel] = useState<Panel | null>(null)
   const [inspected, setInspected] = useState<number | null>(null)
-  const [keyboardInset, setKeyboardInset] = useState(0)
+  const visibleViewport = useVisibleViewport()
   const root = useRef<HTMLElement | null>(null)
   const [safeInset, setSafeInset] = useState(0)
   const geometry = phoneGeometry(props.viewport.width, props.viewport.height - safeInset)
@@ -66,7 +68,8 @@ export function PhoneTable(props: PhoneTableProps) {
   const bigBlind = props.table.bigBlind ?? null
   const turnKey = props.table.turnKey
   const lastTurn = useRef(turnKey)
-  const close = () => setPanel(null)
+  const close = useCallback(() => setPanel(null), [])
+  usePhoneSheetFocus(root, panel, close)
   const open = (next: Panel) => {
     onPeek(false)
     setInspected(null)
@@ -84,23 +87,6 @@ export function PhoneTable(props: PhoneTableProps) {
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    const viewport = window.visualViewport
-    const resize = () =>
-      setKeyboardInset(
-        viewport === null
-          ? 0
-          : phoneKeyboardInset(window.innerHeight, viewport.height, viewport.offsetTop),
-      )
-    resize()
-    viewport?.addEventListener('resize', resize)
-    viewport?.addEventListener('scroll', resize)
-    return () => {
-      viewport?.removeEventListener('resize', resize)
-      viewport?.removeEventListener('scroll', resize)
-    }
   }, [])
 
   useEffect(() => {
@@ -155,7 +141,9 @@ export function PhoneTable(props: PhoneTableProps) {
       ref={root}
       className="phone-table"
       aria-label="River poker table"
-      style={{ '--phone-keyboard-inset': `${keyboardInset}px` } as CSSProperties}
+      style={
+        { '--phone-keyboard-inset': `${visibleViewport?.bottomInset ?? 0}px` } as CSSProperties
+      }
     >
       <header className="phone-header" data-phone-region="header">
         <PhoneHold
