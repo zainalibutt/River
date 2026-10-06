@@ -484,7 +484,10 @@
   background: var(--control-dark-face);
 }
 
-.river-controls-2d .phone-table .phone-actions > :is(.phone-fold, .phone-call, .phone-raise),
+.river-controls-2d
+  .phone-table
+  .phone-actions
+  > :is(.phone-fold, .phone-call, .phone-raise, .phone-preset),
 .river-controls-2d .phone-table .phone-confirm > button,
 .river-controls-2d .phone-table .phone-sizing > button {
   border: 1px solid transparent;
@@ -520,6 +523,17 @@
   align-self: center;
 }
 
+.river-controls-2d .phone-table .phone-actions > .phone-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
 .river-controls-2d .phone-actions small {
   margin-top: 4px;
   color: var(--river-cream-dim);
@@ -541,6 +555,11 @@
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--phone-action-tone) 35%, transparent));
 }
 
+.river-controls-2d .phone-actions > .phone-preset svg {
+  width: 22px;
+  height: 22px;
+}
+
 .river-controls-2d .phone-table .phone-fold {
   --phone-action-tone: #e17b58;
 }
@@ -557,7 +576,10 @@
   --phone-action-tone: var(--river-amber-bright);
 }
 
-.river-controls-2d .phone-table .phone-actions > :is(.phone-fold, .phone-call, .phone-raise):active,
+.river-controls-2d
+  .phone-table
+  .phone-actions
+  > :is(.phone-fold, .phone-call, .phone-raise, .phone-preset):active,
 .river-controls-2d .phone-table .phone-confirm > button:active,
 .river-controls-2d .phone-table .phone-sizing > button:active {
   filter: brightness(0.85);
@@ -659,7 +681,8 @@
   outline-offset: 3px;
 }
 
-.river-controls-2d .phone-table .phone-sizing > button[aria-pressed="true"] {
+.river-controls-2d .phone-table .phone-sizing > button[aria-pressed="true"],
+.river-controls-2d .phone-table .phone-actions > .phone-preset[aria-pressed="true"] {
   background:
     var(--river-grain) padding-box,
     radial-gradient(circle at 35% 24%, #514429, #1b241b 85%) padding-box,
@@ -716,7 +739,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .river-controls-2d .phone-table .phone-actions > :is(.phone-fold, .phone-call, .phone-raise),
+  .river-controls-2d
+    .phone-table
+    .phone-actions
+    > :is(.phone-fold, .phone-call, .phone-raise, .phone-preset),
   .river-controls-2d .phone-table .phone-confirm > button,
   .river-controls-2d .phone-table .phone-sizing > button {
     transition: none;

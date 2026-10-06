@@ -332,11 +332,13 @@ export function tableLayout(
     })
   }
   const boardCard = geometry.boardCard ?? { width: 92, height: 128 }
+  const holeCard = geometry.holeCard ?? { width: 58, height: 81 }
   const gap = geometry.boardGap ?? 12
   const boardSpan = boardCard.width * 5 + gap * 4
+  const boardV = 8
   const board = Array.from({ length: 5 }, (_, index) => ({
     u: -boardSpan / 2 + boardCard.width / 2 + index * (boardCard.width + gap),
-    v: 8,
+    v: boardV,
   }))
   return {
     geometry,
@@ -344,12 +346,18 @@ export function tableLayout(
     seats,
     dealer: project(geometry, { u: 0, v: -geometry.b + geometry.rail * 0.2 }),
     shoe: { u: geometry.a * 0.2, v: -inner.b * 0.8 },
-    muck: { u: -geometry.a * 0.2, v: -inner.b * 0.8 },
+    muck:
+      geometry.orientation === 'portrait'
+        ? {
+            u: -boardSpan / 2 + boardCard.width,
+            v: boardV - (boardCard.height + holeCard.height) / 2 - 16,
+          }
+        : { u: -geometry.a * 0.2, v: -inner.b * 0.8 },
     board,
     pot: { u: 0, v: -inner.b * 0.42 },
     mark: { u: 0, v: inner.b * 0.42 },
     boardCard,
-    holeCard: geometry.holeCard ?? { width: 58, height: 81 },
+    holeCard,
   }
 }
 

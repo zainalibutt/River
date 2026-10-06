@@ -316,10 +316,18 @@ export function PhoneTable(props: PhoneTableProps) {
               <button
                 type="button"
                 key={preset}
+                className={`phone-preset ${preset === 'fold' ? 'phone-fold' : preset === 'call-any' ? 'phone-call' : 'phone-check'}`}
                 aria-pressed={props.preset === preset}
                 onClick={() => props.onPreset(props.preset === preset ? null : preset)}
               >
-                {PRESET_LABELS[preset]}
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  {preset === 'fold'
+                    ? BETTING_ICON.fold
+                    : preset === 'call-any'
+                      ? BETTING_ICON.call
+                      : BETTING_ICON.checkFold}
+                </svg>
+                <span>{PRESET_LABELS[preset]}</span>
               </button>
             ))
           ) : (

@@ -171,6 +171,24 @@ async function phoneFixture(page: Page, seatCount = 9) {
   return {
     actions,
     commands,
+    update: (next: Partial<RoomView>) => {
+      Object.assign(view, next)
+      for (const socket of sockets)
+        socket.send(
+          JSON.stringify({
+            kind: 'snapshot',
+            requestId: null,
+            roomId: 'phone-proof',
+            view,
+            events: [],
+            balance: 150000,
+            botSeats: 0,
+            ownedItems: [],
+            ownedCosmetics: [],
+          }),
+        )
+    },
+    hero: { playerId: id, seat: heroSeat },
     signups: () => signedUp,
     connections: () => sockets.length,
     waiting: () => waitingForAuthentication.length,
@@ -223,6 +241,82 @@ async function targets(page: Page, scope = '.phone-table') {
     for (const other of boxes.slice(index + 1))
       expect(overlaps(box, other), `${box.label} / ${other.label}`).toBe(false)
 }
+
+test.describe('mobile waiting controls and burns', () => {
+  for (const viewport of [
+    { width: 320, height: 740 },
+    { width: 390, height: 844 },
+  ]) {
+    test.describe(`${viewport.width}px`, () => {
+      test.use({ viewport, isMobile: true, hasTouch: true })
+
+      test('keeps pre-actions in the material language and honours arming and cancellation', async ({
+        page,
+      }) => {
+        const fixture = await phoneFixture(page, 2)
+        await page.goto('/table?new=1&strength=champion')
+        await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
+        fixture.update({ currentActor: { playerId: 'bot:phone-0', seat: 0 } })
+        const waiting = page.locator('.phone-actions > .phone-preset')
+        await expect(waiting).toHaveCount(3)
+        await targets(page)
+        for (const button of await waiting.all()) {
+          expect(await button.evaluate((el) => getComputedStyle(el).backgroundImage)).toContain(
+            'conic-gradient',
+          )
+          expect(await button.evaluate((el) => getComputedStyle(el).fontFamily)).toContain(
+            'Barlow Condensed',
+          )
+          await expect(button.locator('svg path')).toHaveCount(1)
+          await button.tap()
+          await expect(button).toHaveAttribute('aria-pressed', 'true')
+          await button.tap()
+          await expect(button).toHaveAttribute('aria-pressed', 'false')
+        }
+        expect(fixture.actions).toEqual([])
+        await page.getByRole('button', { name: 'CALL ANY', exact: true }).tap()
+        fixture.update({ currentActor: fixture.hero })
+        await expect.poll(() => fixture.actions).toEqual([{ kind: 'call' }])
+        await expect(page.getByRole('button', { name: 'Raise', exact: true })).toBeVisible()
+        await targets(page)
+      })
+
+      test('places the face-down burn beside the community board, not Nell’s private cards', async ({
+        page,
+      }) => {
+        const fixture = await phoneFixture(page, 2)
+        await page.goto('/table?new=1&strength=champion')
+        await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
+        await expect(page.locator('.t2d-card-hole:not(.moving)')).toHaveCount(4)
+        fixture.update({
+          street: 'flop',
+          board: [
+            { rank: '2', suit: 'diamonds' },
+            { rank: '7', suit: 'clubs' },
+            { rank: 'J', suit: 'hearts' },
+          ],
+          currentActor: { playerId: 'bot:phone-0', seat: 0 },
+        })
+        const burn = page.locator('.t2d-card-burn:not(.moving)')
+        await expect(burn).toHaveCount(1)
+        await expect(page.locator('.t2d-card-board:not(.moving)')).toHaveCount(3)
+        await expect(burn.getByRole('img', { name: 'Face-down card' })).toBeVisible()
+        const box = await burn.boundingBox()
+        if (box === null) throw new Error('Burn pile is not visible')
+        for (const card of await page.locator('.t2d-card-hole, .t2d-card-board').all()) {
+          const other = await card.boundingBox()
+          if (other === null) throw new Error('Table card is not visible')
+          expect(overlaps(box, other)).toBe(false)
+        }
+        const board = await page.locator('.t2d-card-board').first().boundingBox()
+        if (board === null) throw new Error('Community board is not visible')
+        expect(box.y + box.height).toBeLessThan(board.y)
+        expect(board.y - box.y - box.height).toBeLessThan(30)
+        await onScreen(page, burn)
+      })
+    })
+  }
+})
 
 test.describe('mobile betting material', () => {
   test.describe('all-in material feedback', () => {

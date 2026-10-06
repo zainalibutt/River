@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { phoneGeometry, phoneKeyboardInset, phoneViewport } from './phone-layout'
-import { overlaps, tableLayout } from './table-2d-geometry'
+import { LANDSCAPE, overlaps, tableLayout } from './table-2d-geometry'
 
 describe('phone table composition', () => {
   it('uses upright phones without changing desktop or sideways layouts', () => {
@@ -39,6 +39,49 @@ describe('phone table composition', () => {
       }
     }
     expect(tableLayout(phoneGeometry(390, 844), 9, 0).headsUp).toBe(false)
+  })
+
+  it('keeps portrait discards beside the board, away from either private hand', () => {
+    for (const [width, height] of [
+      [320, 568],
+      [390, 667],
+      [390, 844],
+      [430, 932],
+    ] as const) {
+      for (const hero of [0, 1]) {
+        const layout = tableLayout(phoneGeometry(width, height), 2, hero)
+        const burn = {
+          x: layout.muck.u - layout.holeCard.width / 2 - 12,
+          y: layout.muck.v - layout.holeCard.height / 2 - 12,
+          width: layout.holeCard.width + 24,
+          height: layout.holeCard.height + 24,
+        }
+        expect(Math.abs(layout.muck.v)).toBeLessThan(layout.geometry.b / 2)
+        for (const point of layout.board) {
+          expect(
+            overlaps(burn, {
+              x: point.u - layout.boardCard.width / 2,
+              y: point.v - layout.boardCard.height / 2,
+              ...layout.boardCard,
+            }),
+          ).toBe(false)
+        }
+        for (const seat of layout.seats) {
+          for (const point of seat.cards) {
+            expect(
+              overlaps(burn, {
+                x: point.u - layout.holeCard.width / 2,
+                y: point.v - layout.holeCard.height / 2,
+                ...layout.holeCard,
+              }),
+            ).toBe(false)
+          }
+        }
+      }
+    }
+    const desktop = tableLayout(LANDSCAPE, 2, 0)
+    expect(desktop.muck.u).toBe(-LANDSCAPE.a * 0.2)
+    expect(desktop.muck.v).toBe(-(LANDSCAPE.b - LANDSCAPE.rail) * 0.8)
   })
 
   for (const [width, height] of [
