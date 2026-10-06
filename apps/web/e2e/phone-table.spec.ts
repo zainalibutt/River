@@ -224,6 +224,106 @@ async function targets(page: Page, scope = '.phone-table') {
       expect(overlaps(box, other), `${box.label} / ${other.label}`).toBe(false)
 }
 
+test.describe('mobile betting material', () => {
+  test.describe('all-in material feedback', () => {
+    test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+    for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+      test(`hold keeps its confirmation guard with ${reducedMotion} motion`, async ({ page }) => {
+        const fixture = await phoneFixture(page)
+        await page.emulateMedia({ reducedMotion })
+        await page.goto('/table?new=1')
+        await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
+        await page.getByRole('button', { name: 'Raise', exact: true }).tap()
+        const hold = page.getByRole('button', { name: 'Hold to go all in' })
+        await hold.focus()
+        await page.keyboard.down('Space')
+        await expect(hold).toHaveClass(/holding/)
+        expect(await hold.evaluate((el) => getComputedStyle(el, '::after').animationName)).toBe(
+          reducedMotion === 'reduce' ? 'none' : 'phone-material-hold',
+        )
+        expect(await hold.evaluate((el) => getComputedStyle(el).backgroundImage)).toContain(
+          'conic-gradient',
+        )
+        await hold.dispatchEvent('pointercancel')
+        await page.keyboard.up('Space')
+        await expect(hold).not.toHaveClass(/holding/)
+        await page.waitForTimeout(650)
+        expect(fixture.actions).toEqual([])
+        await page.keyboard.down('Space')
+        await expect.poll(() => fixture.actions).toEqual([{ kind: 'allIn' }])
+        await page.keyboard.up('Space')
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      })
+    }
+  })
+
+  for (const viewport of [
+    { width: 320, height: 740 },
+    { width: 390, height: 844 },
+  ]) {
+    test.describe(`${viewport.width}px upright controls`, () => {
+      test.use({ viewport, isMobile: true, hasTouch: true })
+
+      test('reuses wheel graphics while preserving labelled touch actions and native sizing', async ({
+        page,
+      }) => {
+        const fixture = await phoneFixture(page)
+        await page.goto('/table?new=1')
+        await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
+        const actions = page.getByRole('region', { name: 'Your actions' })
+        await expect(actions.getByRole('button')).toHaveCount(3)
+        expect(
+          await actions
+            .locator('svg path')
+            .evaluateAll((paths) => paths.map((p) => p.getAttribute('d'))),
+        ).toEqual([
+          'M7 7l10 10M17 7 7 17',
+          'M12 19V6M6.5 11.5 12 6l5.5 5.5',
+          'M12 21V11M7 15.5l5-5 5 5M7 9.5l5-5 5 5',
+        ])
+        await expect(actions.getByRole('button', { name: 'Fold', exact: true })).toBeVisible()
+        await expect(actions.getByRole('button', { name: 'Call 500', exact: true })).toBeVisible()
+        const raise = actions.getByRole('button', { name: 'Raise', exact: true })
+        await expect
+          .poll(() => raise.evaluate((el) => getComputedStyle(el).fontFamily))
+          .toContain('Barlow Condensed')
+        expect(await raise.evaluate((el) => getComputedStyle(el).backgroundImage)).toContain(
+          'conic-gradient',
+        )
+        await targets(page)
+        await onScreen(page, page.locator('.phone-dock'))
+        await raise.tap()
+        const sheet = page.getByRole('dialog', { name: 'Raise to', exact: true })
+        await expect(sheet).toHaveClass(/phone-raise-sheet/)
+        await targets(page, '.phone-sheet')
+        await onScreen(page, sheet)
+        const slider = sheet.getByRole('slider', { name: 'Raise amount' })
+        await expect(slider).toHaveAttribute('type', 'range')
+        await expect(slider).toHaveAttribute('min', '1000')
+        await expect(slider).toHaveAttribute('max', '100000')
+        await expect(slider).toHaveAttribute('step', '1')
+        await expect
+          .poll(() => sheet.locator('output').evaluate((el) => getComputedStyle(el).fontFamily))
+          .toContain('Fraunces')
+        await slider.fill('2000')
+        await slider.press('ArrowRight')
+        await expect(slider).toHaveValue('2001')
+        expect(fixture.actions).toEqual([])
+        expect(await sheet.locator('.phone-confirm svg path').count()).toBe(2)
+        await sheet.getByRole('button', { name: 'MIN', exact: true }).tap()
+        await expect(slider).toHaveValue('1000')
+        await sheet.getByRole('button', { name: 'Confirm 1,000', exact: true }).tap()
+        await expect.poll(() => fixture.actions).toEqual([{ kind: 'raiseTo', to: 1000 }])
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        )
+      })
+    })
+  }
+})
+
 test.describe('phone card and sizing feedback', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 

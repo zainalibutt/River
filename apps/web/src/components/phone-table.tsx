@@ -3,6 +3,7 @@
 import { DEFAULT_STAKE, type TurnAction } from '@river/engine'
 import type { RoomView } from '@river/server'
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { BETTING_ICON } from '@/components/betting-icons'
 import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverSettings } from '@/components/river-settings'
 import { Table2D, type Table2DProps } from '@/components/table-2d/table-2d'
@@ -260,20 +261,28 @@ export function PhoneTable(props: PhoneTableProps) {
                 disabled={!props.connected || !legal.fold.enabled}
                 onClick={() => props.onAction({ kind: 'fold' })}
               >
-                Fold
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  {BETTING_ICON.fold}
+                </svg>
+                <span>Fold</span>
               </button>
               <button
                 type="button"
-                className="phone-call"
+                className={`phone-call${legal.check.enabled ? ' phone-check' : ''}`}
                 disabled={!props.connected || !(legal.check.enabled || legal.call.enabled)}
                 onClick={() =>
                   props.onAction(legal.check.enabled ? { kind: 'check' } : { kind: 'call' })
                 }
               >
-                {legal.check.enabled ? 'Check' : 'Call'}
-                {legal.check.enabled ? null : (
-                  <small>{formatAmount(legal.call.amount, false, bigBlind)}</small>
-                )}
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  {legal.check.enabled ? BETTING_ICON.check : BETTING_ICON.call}
+                </svg>
+                <span>
+                  {legal.check.enabled ? 'Check' : 'Call'}
+                  {legal.check.enabled ? null : (
+                    <small>{formatAmount(legal.call.amount, false, bigBlind)}</small>
+                  )}
+                </span>
               </button>
               {legal.raiseTo.enabled ? (
                 <button
@@ -282,7 +291,10 @@ export function PhoneTable(props: PhoneTableProps) {
                   disabled={!props.connected}
                   onClick={() => open('raise')}
                 >
-                  Raise
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    {BETTING_ICON.raise}
+                  </svg>
+                  <span>Raise</span>
                 </button>
               ) : (
                 <PhoneHold
@@ -292,7 +304,10 @@ export function PhoneTable(props: PhoneTableProps) {
                   onComplete={() => props.onAction({ kind: 'allIn' })}
                   label="Hold to go all in"
                 >
-                  All in
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    {BETTING_ICON.allIn}
+                  </svg>
+                  <span>All in</span>
                 </PhoneHold>
               )}
             </>
@@ -347,7 +362,7 @@ export function PhoneTable(props: PhoneTableProps) {
       ) : panel !== null ? (
         <div className="phone-sheet-backdrop">
           <section
-            className="phone-sheet"
+            className={`phone-sheet${panel === 'raise' ? ' phone-raise-sheet' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="phone-sheet-title"
@@ -465,7 +480,14 @@ export function PhoneTable(props: PhoneTableProps) {
                 <output className="phone-raise-amount">
                   {formatAmount(amount, false, bigBlind)}
                 </output>
-                <label className="phone-raise-slider">
+                <label
+                  className="phone-raise-slider"
+                  style={
+                    {
+                      '--phone-raise-progress': `${max === min ? 0 : ((amount - min) / (max - min)) * 100}%`,
+                    } as CSSProperties
+                  }
+                >
                   <span className="visually-hidden">Raise amount</span>
                   <input
                     type="range"
@@ -499,20 +521,28 @@ export function PhoneTable(props: PhoneTableProps) {
                       close()
                     }}
                   >
-                    Hold all in
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      {BETTING_ICON.allIn}
+                    </svg>
+                    <span>Hold all in</span>
                   </PhoneHold>
                   <button
                     type="button"
-                    className="phone-call"
+                    className="phone-call phone-confirm-raise"
                     disabled={!props.connected || amount >= max}
                     onClick={() => {
                       props.onAction({ kind: 'raiseTo', to: amount })
                       close()
                     }}
                   >
-                    {amount >= max
-                      ? 'Hold all in to confirm'
-                      : `Confirm ${formatAmount(amount, false, bigBlind)}`}
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      {BETTING_ICON.raise}
+                    </svg>
+                    <span>
+                      {amount >= max
+                        ? 'Hold all in to confirm'
+                        : `Confirm ${formatAmount(amount, false, bigBlind)}`}
+                    </span>
                   </button>
                 </div>
               </>

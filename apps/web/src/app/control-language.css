@@ -14,7 +14,7 @@
   --control-inset: inset 0 1px 0 rgb(255 230 190 / 10%), inset 0 -1px 0 rgb(0 0 0 / 45%);
 }
 
-/* Opt-in surfaces only: the betting wheel, raise arc and phone betting controls are frozen. */
+/* Phone adapts wheel materials; desktop betting geometry remains untouched. */
 :is(.club-home-dialog, .club-private) .club-primary,
 .river-controls-2d :is(.ram-solo > button, .upgrade-panel button[type="submit"]) {
   position: relative;
@@ -482,6 +482,249 @@
   border-color: var(--river-brass-hi);
   border-radius: 5px;
   background: var(--control-dark-face);
+}
+
+.river-controls-2d .phone-table .phone-actions > :is(.phone-fold, .phone-call, .phone-raise),
+.river-controls-2d .phone-table .phone-confirm > button,
+.river-controls-2d .phone-table .phone-sizing > button {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background:
+    var(--river-grain) padding-box,
+    radial-gradient(circle at 36% 24%, #26342b, #0b110e 85%) padding-box,
+    var(--river-brass-lit) border-box;
+  background-blend-mode: overlay, normal, normal;
+  box-shadow:
+    inset 0 2px 5px rgb(0 0 0 / 70%),
+    inset 0 -1px 0 rgb(214 170 96 / 25%),
+    0 1px 0 rgb(255 226 170 / 12%);
+  color: var(--river-cream);
+  font-family: var(--control-type);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  line-height: 1;
+  transition: filter 120ms var(--ease-out);
+}
+
+.river-controls-2d .phone-table .phone-actions > :is(.phone-fold, .phone-call, .phone-raise) {
+  display: grid;
+  grid-template-columns: 28px minmax(0, auto);
+  align-content: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+}
+
+.river-controls-2d .phone-actions > button > span {
+  align-self: center;
+}
+
+.river-controls-2d .phone-actions small {
+  margin-top: 4px;
+  color: var(--river-cream-dim);
+  font-family: var(--font-inter), sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.river-controls-2d :is(.phone-actions, .phone-confirm) svg {
+  width: 28px;
+  height: 28px;
+  align-self: center;
+  fill: none;
+  stroke: var(--phone-action-tone, var(--river-amber-bright));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--phone-action-tone) 35%, transparent));
+}
+
+.river-controls-2d .phone-table .phone-fold {
+  --phone-action-tone: #e17b58;
+}
+
+.river-controls-2d .phone-table .phone-call {
+  --phone-action-tone: #62a6f2;
+}
+
+.river-controls-2d .phone-table :is(.phone-raise, .phone-check, .phone-confirm-raise) {
+  --phone-action-tone: #6fe09a;
+}
+
+.river-controls-2d .phone-table .phone-all-in {
+  --phone-action-tone: var(--river-amber-bright);
+}
+
+.river-controls-2d .phone-table .phone-actions > :is(.phone-fold, .phone-call, .phone-raise):active,
+.river-controls-2d .phone-table .phone-confirm > button:active,
+.river-controls-2d .phone-table .phone-sizing > button:active {
+  filter: brightness(0.85);
+}
+
+.river-controls-2d
+  .phone-table
+  :is(.phone-actions, .phone-confirm, .phone-sizing)
+  > button:focus-visible {
+  outline: 2px solid var(--river-brass-hi);
+  outline-offset: 3px;
+}
+
+.river-controls-2d .phone-table .phone-raise-sheet {
+  border-top: 2px solid transparent;
+  background:
+    radial-gradient(ellipse at 50% 0, #233128, #0e1410 72%) padding-box,
+    var(--river-brass-lit) border-box;
+  box-shadow:
+    inset 0 1px 0 rgb(255 230 190 / 10%),
+    0 -12px 44px rgb(0 0 0 / 55%);
+}
+
+.river-controls-2d .phone-raise-sheet .phone-raise-amount {
+  margin-block: 4px 8px;
+  color: var(--river-amber-bright);
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-shadow: 0 2px 14px rgb(232 169 60 / 24%);
+}
+
+.river-controls-2d .phone-raise-slider {
+  display: block;
+  padding-inline: 6px;
+}
+
+.river-controls-2d .phone-raise-slider input {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.river-controls-2d .phone-raise-slider input::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 1px solid var(--river-brass-lo);
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--river-brass-hi) var(--phone-raise-progress, 0%),
+    #0a100d var(--phone-raise-progress, 0%)
+  );
+  box-shadow: 0 1px 0 rgb(255 225 180 / 15%);
+}
+
+.river-controls-2d .phone-raise-slider input::-moz-range-track {
+  height: 6px;
+  border: 1px solid var(--river-brass-lo);
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--river-brass-hi) var(--phone-raise-progress, 0%),
+    #0a100d var(--phone-raise-progress, 0%)
+  );
+  box-shadow: 0 1px 0 rgb(255 225 180 / 15%);
+}
+
+.river-controls-2d .phone-raise-slider input::-webkit-slider-thumb {
+  width: 28px;
+  height: 28px;
+  margin-top: -12px;
+  border: 4px solid var(--river-brass-hi);
+  border-radius: 50%;
+  appearance: none;
+  background: radial-gradient(circle at 35% 28%, #28372e, #0a100d 70%);
+  box-shadow:
+    0 0 0 1px var(--river-brass-lo),
+    0 3px 7px rgb(0 0 0 / 65%);
+}
+
+.river-controls-2d .phone-raise-slider input::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 4px solid var(--river-brass-hi);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #28372e, #0a100d 70%);
+  box-shadow:
+    0 0 0 1px var(--river-brass-lo),
+    0 3px 7px rgb(0 0 0 / 65%);
+}
+
+.river-controls-2d .phone-raise-slider input:focus-visible {
+  outline: 2px solid var(--river-brass-hi);
+  outline-offset: 3px;
+}
+
+.river-controls-2d .phone-table .phone-sizing > button[aria-pressed="true"] {
+  background:
+    var(--river-grain) padding-box,
+    radial-gradient(circle at 35% 24%, #514429, #1b241b 85%) padding-box,
+    var(--river-brass-lit) border-box;
+  box-shadow:
+    inset 0 -2px 0 var(--river-brass-hi),
+    inset 0 2px 5px rgb(0 0 0 / 60%);
+  color: var(--river-brass-hi);
+}
+
+.river-controls-2d .phone-confirm {
+  padding-top: 12px;
+  border-top: 1px solid rgb(194 149 63 / 45%);
+}
+
+.river-controls-2d .phone-table .phone-confirm > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  font-size: 19px;
+}
+
+.river-controls-2d .phone-table .phone-confirm > button.phone-confirm-raise {
+  background:
+    var(--river-grain) padding-box,
+    radial-gradient(circle at 35% 24%, #294c34, #101d14 85%) padding-box,
+    var(--river-brass-lit) border-box;
+}
+
+.river-controls-2d .phone-table :is(.phone-actions, .phone-confirm) > .phone-hold.holding {
+  background-size: auto;
+  animation: none;
+}
+
+.river-controls-2d .phone-table :is(.phone-actions, .phone-confirm) > .phone-hold.holding::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--river-amber-bright);
+  content: "";
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: phone-material-hold var(--hold-duration) linear forwards;
+}
+
+@keyframes phone-material-hold {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .river-controls-2d .phone-table .phone-actions > :is(.phone-fold, .phone-call, .phone-raise),
+  .river-controls-2d .phone-table .phone-confirm > button,
+  .river-controls-2d .phone-table .phone-sizing > button {
+    transition: none;
+  }
+  .river-controls-2d .phone-table :is(.phone-actions, .phone-confirm) > .phone-hold.holding::after {
+    animation: none;
+    transform: scaleX(1);
+  }
 }
 
 @media (hover: hover) {
