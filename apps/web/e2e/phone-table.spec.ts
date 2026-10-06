@@ -1,10 +1,14 @@
-import { expect, type Locator, type Page, test } from '@playwright/test'
+import { expect, type Locator, type Page, test, type WebSocketRoute } from '@playwright/test'
 import type { TurnAction } from '@river/engine'
 import type { RoomView } from '@river/server'
 import { overlaps } from '../src/lib/table-2d-geometry'
 
 async function phoneFixture(page: Page, seatCount = 9) {
   const actions: TurnAction[] = []
+  const commands: string[] = []
+  const sockets: WebSocketRoute[] = []
+  const waitingForAuthentication: WebSocketRoute[] = []
+  let acceptingConnections = true
   let signedUp = 0
   const id = '00000000-0000-4000-8000-000000000001'
   const heroSeat = seatCount - 1
@@ -82,6 +86,9 @@ async function phoneFixture(page: Page, seatCount = 9) {
   await page.routeWebSocket(
     (url) => url.pathname === '/ws',
     (socket) => {
+      sockets.push(socket)
+      const authenticate = () =>
+        socket.send(JSON.stringify({ kind: 'authenticated', playerId: id, anonymous: true }))
       const snapshot = (requestId: string | null) =>
         socket.send(
           JSON.stringify({
@@ -136,10 +143,13 @@ async function phoneFixture(page: Page, seatCount = 9) {
       }
       socket.onMessage((raw) => {
         const message = JSON.parse(String(raw))
-        if (message.kind === 'authenticate')
-          socket.send(JSON.stringify({ kind: 'authenticated', playerId: id, anonymous: true }))
+        if (message.kind === 'authenticate') {
+          if (acceptingConnections) authenticate()
+          else waitingForAuthentication.push(socket)
+        }
         if (message.kind === 'enter') snapshot(message.requestId)
         if (message.kind === 'command') {
+          commands.push(message.command.kind)
           if (message.command.kind === 'sit') {
             const hero = view.seats[heroSeat]
             if (hero === undefined) throw new Error('Phone fixture has no hero seat')
@@ -157,7 +167,24 @@ async function phoneFixture(page: Page, seatCount = 9) {
       })
     },
   )
-  return { actions, signups: () => signedUp }
+  return {
+    actions,
+    commands,
+    signups: () => signedUp,
+    connections: () => sockets.length,
+    waiting: () => waitingForAuthentication.length,
+    disconnect: async () => {
+      acceptingConnections = false
+      const socket = sockets.at(-1)
+      if (socket === undefined) throw new Error('Phone fixture has no connected socket')
+      await socket.close({ code: 1012, reason: 'Fixture connection interrupted' })
+    },
+    reconnect: () => {
+      acceptingConnections = true
+      for (const socket of waitingForAuthentication.splice(0))
+        socket.send(JSON.stringify({ kind: 'authenticated', playerId: id, anonymous: true }))
+    },
+  }
 }
 
 async function onScreen(page: Page, locator: Locator) {
@@ -202,6 +229,44 @@ for (const viewport of [
 ]) {
   test.describe(`upright phone ${viewport.width}`, () => {
     test.use({ viewport, isMobile: true, hasTouch: true })
+    test('a connection interruption keeps the hand and does not repeat the buy-in', async ({
+      page,
+    }) => {
+      const fixture = await phoneFixture(page)
+      await page.goto('/table?new=1')
+      await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
+      const call = page.locator('.phone-actions .phone-call')
+      await expect(call).toBeEnabled()
+      const handBefore = await page.locator('.phone-hand').innerText()
+      const potBefore = await page.locator('.phone-pot > span').innerText()
+      await fixture.disconnect()
+      await expect(page.locator('.phone-network')).toHaveText('LINK')
+      await expect(call).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Fold', exact: true })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Raise', exact: true })).toBeDisabled()
+      expect(await page.locator('.phone-hand').innerText()).toBe(handBefore)
+      expect(await page.locator('.phone-pot > span').innerText()).toBe(potBefore)
+      await expect.poll(() => fixture.waiting()).toBe(1)
+      fixture.reconnect()
+      await expect(page.locator('.phone-network')).toHaveText('LIVE')
+      await expect(call).toBeEnabled()
+      expect(fixture.connections()).toBe(2)
+      expect(fixture.signups()).toBe(1)
+      expect(fixture.commands.filter((kind) => kind === 'sit')).toHaveLength(1)
+      expect(fixture.commands.filter((kind) => kind === 'startHand')).toHaveLength(1)
+      expect(fixture.actions).toEqual([])
+      expect(await page.locator('.phone-hand').innerText()).toBe(handBefore)
+      expect(await page.locator('.phone-pot > span').innerText()).toBe(potBefore)
+      const peek = page.getByRole('button', { name: 'Press and hold to look at your cards' })
+      await peek.focus()
+      await page.keyboard.down('Space')
+      await expect(page.locator('.phone-peek-display .playing-card')).toHaveCount(2)
+      await expect(page.locator('.phone-peek-display')).toContainText('A')
+      await expect(page.locator('.phone-peek-display')).toContainText('K')
+      await page.keyboard.up('Space')
+      await expect(page.locator('.phone-peek-display')).toHaveCount(0)
+    })
+
     test('a fresh guest sits, peeks, acts and uses the panels', async ({ page }) => {
       const fixture = await phoneFixture(page)
       await page.goto('/table?new=1')
