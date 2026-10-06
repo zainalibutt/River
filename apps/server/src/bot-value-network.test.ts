@@ -1,8 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { RIVER_DATA_SETTINGS, sampleRiverSpot } from './bot-river-value-data.js'
+import { COMBOS, RIVER_DATA_SETTINGS, sampleRiverSpot } from './bot-river-value-data.js'
 import {
+  bucketInputs,
+  bucketsFromIds,
   forward,
+  holdingValues,
+  type RiverValueNetwork,
   riverBucketInputs,
   riverHoldingValues,
   type ValueNetworkDescription,
@@ -67,5 +71,54 @@ describe('the value network in the server', () => {
         expect(values[1][index]).toBe(out[fixture.buckets + bucket])
       }
     })
+  })
+})
+
+describe('a network that learns what betting adds', () => {
+  // Two buckets: holdings 0 and 1 in the first, holding 2 in the second.
+  const ids = new Uint8Array(COMBOS).fill(255)
+  ids[0] = 0
+  ids[1] = 0
+  ids[2] = 1
+  const layout = bucketsFromIds(ids, 2)
+  const checked = [new Float64Array(COMBOS), new Float64Array(COMBOS)] as const
+  checked[0].set([0.2, 0.4, 0.9])
+  checked[1].set([0.8, 0.6, 0.1])
+  const ranges = [new Float64Array(COMBOS), new Float64Array(COMBOS)] as const
+  ranges[0].set([1, 1, 2])
+  ranges[1].set([1, 0, 1])
+
+  it("sees each bucket's mean checked-down value after the usual inputs", () => {
+    const inputs = bucketInputs(layout, ranges, 300, 100, checked)
+    expect(inputs).toHaveLength(5 * 2 + 1)
+    expect([...inputs.subarray(0, 7)]).toEqual([...bucketInputs(layout, ranges, 300, 100)])
+    expect(inputs[7]).toBeCloseTo(0.3, 6)
+    expect(inputs[8]).toBeCloseTo(0.9, 6)
+    expect(inputs[9]).toBeCloseTo(0.7, 6)
+    expect(inputs[10]).toBeCloseTo(0.1, 6)
+  })
+
+  it('adds each holding its own checked-down value, and refuses to run without one', () => {
+    // One layer: bucket outputs 0.05 and -0.05 for the first player, 0 and 0.1 for the second.
+    const network: RiverValueNetwork = {
+      buckets: 2,
+      layers: [
+        {
+          weight: new Float32Array(4 * 7),
+          bias: Float32Array.from([0.05, -0.05, 0, 0.1]),
+          rows: 4,
+          columns: 7,
+          slope: null,
+        },
+      ],
+      checked: { inputs: false },
+    }
+    const inputs = bucketInputs(layout, ranges, 300, 100)
+    expect(() => holdingValues(network, layout, inputs)).toThrow()
+    const values = holdingValues(network, layout, inputs, checked)
+    expect([...values[0].subarray(0, 3)].map((v) => Number(v.toFixed(6)))).toEqual([
+      0.25, 0.45, 0.85,
+    ])
+    expect([...values[1].subarray(0, 3)].map((v) => Number(v.toFixed(6)))).toEqual([0.8, 0.6, 0.2])
   })
 })

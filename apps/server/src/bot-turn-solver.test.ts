@@ -10,8 +10,12 @@ import {
   terminal,
 } from './bot-river-solver.js'
 import { turnRivers } from './bot-turn-end-data.js'
-import { allInShowdown, solveTurn } from './bot-turn-solver.js'
-import { type ValueNetworkDescription, valueNetworkFrom } from './bot-value-network.js'
+import { allInShowdown, solveTurn, turnShowdown } from './bot-turn-solver.js'
+import {
+  type RiverValueNetwork,
+  type ValueNetworkDescription,
+  valueNetworkFrom,
+} from './bot-value-network.js'
 
 const cards = (text: string) => text.split(' ').map(parseCard)
 const combo = (text: string, weight = 1): RangeCombo => ({
@@ -153,6 +157,54 @@ describe('a turn solved against an opponent with known habits', () => {
         for (let a = 0; a < width; a += 1) sum += table[h * width + a] as number
         expect(sum).toBeCloseTo(1, 9)
       }
+    }
+  })
+})
+
+describe('a turn-end network that learns what betting adds', () => {
+  it('values a closed turn with chips behind as the hand checked down when it adds nothing', () => {
+    const board = cards('Ah Kd 7s 4c')
+    const ranges: [RangeCombo[], RangeCombo[]] = [
+      [combo('8s 8h'), combo('Qc Jc', 2), combo('5d 6d')],
+      [combo('7c 7d'), combo('Kc Qh', 3), combo('8c 9c')],
+    ]
+    const spot: RiverSpot = {
+      board,
+      pot: 100,
+      stack: 400,
+      ranges,
+      betSizes: [0.66],
+      allIn: true,
+      maxRaises: 1,
+    }
+    const buckets = 8
+    // A network whose every output is nought: each holding is worth its checked-down value.
+    const network: RiverValueNetwork = {
+      buckets,
+      layers: [
+        {
+          weight: new Float32Array(2 * buckets * (3 * buckets + 1)),
+          bias: new Float32Array(2 * buckets),
+          rows: 2 * buckets,
+          columns: 3 * buckets + 1,
+          slope: null,
+        },
+      ],
+      checked: { inputs: false },
+    }
+    const hands = [prepare(ranges[0], board), prepare(ranges[1], board)] as const
+    const leaf = turnShowdown(spot, network)
+    const checkedDown = allInShowdown(turnRivers(board), hands)
+    const node = { kind: 'showdown', paid: [100, 100] } as const
+    for (const traverser of [0, 1] as const) {
+      const other = traverser === 0 ? 1 : 0
+      const out = new Float64Array(hands[traverser].combos.length)
+      const expected = new Float64Array(hands[traverser].combos.length)
+      leaf(node, traverser, hands, hands[traverser].weights, hands[other].weights, out)
+      checkedDown(traverser, hands[other].weights, 300, 100, expected)
+      expected.forEach((value, h) => {
+        expect(out[h]).toBeCloseTo(value, 3)
+      })
     }
   })
 })

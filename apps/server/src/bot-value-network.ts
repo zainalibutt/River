@@ -26,11 +26,20 @@ export interface RiverValueNetwork {
   readonly layers: readonly ValueNetworkLayer[]
   /** For a turn-end network trained on two-dimensional buckets, their slices. */
   readonly turnBuckets?: { readonly strength: number; readonly potential: number }
+  /**
+   * For a turn-end network that learns what betting adds to each holding's
+   * checked-down value, its value if nobody bets again: a holding is worth its
+   * bucket's output plus its own checked-down value. With `inputs`, the network
+   * also sees each bucket's mean checked-down value, for both players.
+   */
+  readonly checked?: { readonly inputs: boolean }
 }
 
 export interface ValueNetworkDescription {
   readonly buckets: number
   readonly turnBuckets?: { readonly strength: number; readonly potential: number }
+  readonly checked?: boolean
+  readonly checkedInputs?: boolean
   readonly tensors: readonly {
     readonly name: string
     readonly shape: readonly number[]
@@ -70,9 +79,14 @@ export function valueNetworkFrom(
     })
   }
   if (layers.length === 0) throw new Error('value network has no layers')
-  return description.turnBuckets === undefined
-    ? { buckets: description.buckets, layers }
-    : { buckets: description.buckets, layers, turnBuckets: description.turnBuckets }
+  return {
+    buckets: description.buckets,
+    layers,
+    ...(description.turnBuckets === undefined ? {} : { turnBuckets: description.turnBuckets }),
+    ...(description.checked === true
+      ? { checked: { inputs: description.checkedInputs === true } }
+      : {}),
+  }
 }
 
 /** The network's output for one input. */
@@ -153,20 +167,22 @@ export function bucketsFromIds(ids: Uint8Array, buckets: number): BucketLayout {
 }
 
 /**
- * What the network sees: the log of stack over pot/**
  * What the network sees: the log of stack over pot, each player's range mass
  * in each bucket (scaled by the bucket count), and each bucket's share of the
  * live holdings, also scaled. `ranges` are weights by holding, by
- * `comboIndex52`; they need not sum to one.
+ * `comboIndex52`; they need not sum to one. With `checked`, every holding's
+ * checked-down value for both players, it also sees each bucket's mean of
+ * them over the bucket's live holdings, the first player's buckets first.
  */
 export function bucketInputs(
   layout: BucketLayout,
   ranges: readonly [ArrayLike<number>, ArrayLike<number>],
   stack: number,
   pot: number,
+  checked?: readonly [ArrayLike<number>, ArrayLike<number>],
 ): Float32Array {
   const buckets = layout.held.length
-  const inputs = new Float32Array(3 * buckets + 1)
+  const inputs = new Float32Array((checked === undefined ? 3 : 5) * buckets + 1)
   inputs[0] = Math.log(stack / pot)
   ranges.forEach((range, player) => {
     let total = 0
@@ -184,6 +200,16 @@ export function bucketInputs(
   for (let bucket = 0; bucket < buckets; bucket += 1) {
     inputs[1 + 2 * buckets + bucket] = ((layout.held[bucket] as number) / layout.live) * buckets
   }
+  checked?.forEach((values, player) => {
+    const start = 1 + (3 + player) * buckets
+    for (let index = 0; index < COMBOS; index += 1) {
+      const bucket = layout.bucketOf[index] as number
+      if (bucket < 0) continue
+      inputs[start + bucket] =
+        (inputs[start + bucket] as number) +
+        (values[index] as number) / (layout.held[bucket] as number)
+    }
+  })
   return inputs
 }
 
@@ -215,19 +241,31 @@ export function riverBucketInputs(
   }
 }
 
-/** Every holding's value for both players, in pots, by `comboIndex52`, from bucket inputs. */
+/**
+ * Every holding's value for both players, in pots, by `comboIndex52`, from
+ * bucket inputs. A network that learns what betting adds needs `checked`, each
+ * holding's checked-down value, which it adds to its bucket's output.
+ */
 export function holdingValues(
   network: RiverValueNetwork,
   layout: BucketLayout,
   inputs: Float32Array,
+  checked?: readonly [ArrayLike<number>, ArrayLike<number>],
 ): readonly [Float32Array, Float32Array] {
+  if (network.checked !== undefined && checked === undefined) {
+    throw new Error('this network needs the checked-down value of every holding')
+  }
+  const added = network.checked === undefined ? undefined : checked
   const out = forward(network, inputs)
   const values = [new Float32Array(COMBOS), new Float32Array(COMBOS)] as const
   for (let index = 0; index < COMBOS; index += 1) {
     const bucket = layout.bucketOf[index] as number
     if (bucket < 0) continue
-    values[0][index] = out[bucket] as number
-    values[1][index] = out[network.buckets + bucket] as number
+    values[0][index] =
+      (out[bucket] as number) + (added === undefined ? 0 : (added[0][index] as number))
+    values[1][index] =
+      (out[network.buckets + bucket] as number) +
+      (added === undefined ? 0 : (added[1][index] as number))
   }
   return values
 }

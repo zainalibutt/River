@@ -8,7 +8,7 @@ import {
   type RiverRecord,
   sampleTurnEndSpot,
 } from './bot-river-value-data.js'
-import { turnEndValues, turnLayout, turnRivers } from './bot-turn-end-data.js'
+import { checkedDownValues, turnEndValues, turnLayout, turnRivers } from './bot-turn-end-data.js'
 import {
   bucketInputs,
   holdingValues,
@@ -73,6 +73,7 @@ const comparisons = [
   'river network averaged vs truth',
   'turn-end network vs truth',
   'turn-end network vs averaged',
+  'checked down vs truth',
 ]
 const totals = tally(comparisons)
 const started = Date.now()
@@ -86,10 +87,18 @@ for (const record of records) {
     riverHoldingValues(river, riverSpot, ranks),
   )
   const layout = turnLayout(rivers, turnEnd)
+  const checked = checkedDownValues(spot, rivers)
   const predicted = holdingValues(
     turnEnd,
     layout,
-    bucketInputs(layout, rangeWeights(spot), spot.stack, spot.pot),
+    bucketInputs(
+      layout,
+      rangeWeights(spot),
+      spot.stack,
+      spot.pot,
+      turnEnd.checked?.inputs === true ? checked : undefined,
+    ),
+    checked,
   )
   const sets: [
     string,
@@ -99,6 +108,7 @@ for (const record of records) {
     [comparisons[0] as string, averaged, record.values],
     [comparisons[1] as string, predicted, record.values],
     [comparisons[2] as string, predicted, averaged],
+    [comparisons[3] as string, checked, record.values],
   ]
   const depth = spot.stack / spot.pot
   for (const [name, values, truth] of sets) {

@@ -24,15 +24,25 @@ import numpy as np
 import torch
 from torch import nn
 
-from river_value_data import COMBOS, check_manifest, load_bucket_ids, load_records
+from river_value_data import COMBOS, check_manifest, load_bucket_ids, load_checked, load_records
 
 BANDS = [("under 1 pot behind", 0.0, 1.0), ("1 to 10 pots", 1.0, 10.0), ("over 10 pots", 10.0, 1e9)]
 
 
-def bucket_features(records: np.ndarray, buckets: int, ids: np.ndarray | None = None) -> dict[str, np.ndarray]:
+def bucket_features(
+    records: np.ndarray,
+    buckets: int,
+    ids: np.ndarray | None = None,
+    checked: np.ndarray | None = None,
+    checked_inputs: bool = False,
+) -> dict[str, np.ndarray]:
     """Inputs, bucket targets, bucket masks and each holding's bucket, for a batch of records.
     With `ids` (one row of 1,326 per record, 255 where blocked), holdings take those buckets,
-    as the turn's two-dimensional ones; otherwise buckets are slices of the strength rank."""
+    as the turn's two-dimensional ones; otherwise buckets are slices of the strength rank.
+    With `checked` (each holding's value if nobody bets again, shape (n, 2, 1326)), the targets
+    are the values less the checked-down ones: the network learns only what betting adds, while
+    each holding keeps its own exact checked-down value. With `checked_inputs` as well, it is
+    also given each bucket's mean checked-down value over its live holdings, for both players."""
     n = len(records)
     if ids is not None:
         bucket = ids.astype(np.int64)
@@ -62,11 +72,17 @@ def bucket_features(records: np.ndarray, buckets: int, ids: np.ndarray | None = 
     for player in (0, 1):
         weight = records["ranges"][:, player, :][live].astype(np.float64)
         value = records["values"][:, player, :][live].astype(np.float64)
+        if checked is not None:
+            value = value - checked[:, player, :][live].astype(np.float64)
         mass = np.bincount(flat, weights=weight, minlength=size).reshape(n, buckets)
         weighted = np.bincount(flat, weights=weight * value, minlength=size).reshape(n, buckets)
         x.append((mass * buckets).astype(np.float32))
         y.append(np.where(mass > 0, weighted / np.maximum(mass, 1e-300), 0).astype(np.float32))
     x.append((held / live_count[:, None] * buckets).astype(np.float32))
+    if checked is not None and checked_inputs:
+        for player in (0, 1):
+            total = np.bincount(flat, weights=checked[:, player, :][live].astype(np.float64), minlength=size)
+            x.append(np.where(held > 0, total.reshape(n, buckets) / np.maximum(held, 1), 0).astype(np.float32))
     mask = (held > 0).astype(np.float32)
     return {
         "x": np.concatenate(x, axis=1),
@@ -86,27 +102,51 @@ def mlp(inputs: int, outputs: int, width: int, depth: int) -> nn.Sequential:
     return nn.Sequential(*layers)
 
 
-def build(records: np.ndarray, buckets: int, ids: np.ndarray | None = None) -> dict[str, np.ndarray]:
+def build(
+    records: np.ndarray,
+    buckets: int,
+    ids: np.ndarray | None = None,
+    checked: np.ndarray | None = None,
+    checked_inputs: bool = False,
+) -> dict[str, np.ndarray]:
     parts = [
-        bucket_features(records[start : start + 4096], buckets, None if ids is None else ids[start : start + 4096])
+        bucket_features(
+            records[start : start + 4096],
+            buckets,
+            None if ids is None else ids[start : start + 4096],
+            None if checked is None else checked[start : start + 4096],
+            checked_inputs,
+        )
         for start in range(0, len(records), 4096)
     ]
     return {key: np.concatenate([part[key] for part in parts]) for key in parts[0]}
 
 
-def holding_errors(predicted: np.ndarray, records: np.ndarray, bucket: np.ndarray, buckets: int) -> dict[str, np.ndarray]:
-    """Each holding's error in pots when it takes its bucket's predicted value."""
+def holding_errors(
+    predicted: np.ndarray, records: np.ndarray, bucket: np.ndarray, buckets: int, checked: np.ndarray | None = None
+) -> dict[str, np.ndarray]:
+    """Each holding's error in pots when it takes its bucket's predicted value, plus its own
+    checked-down value when the network learns what betting adds."""
     n = len(records)
     out = {}
     for player in (0, 1):
         safe = np.where(bucket >= 0, bucket, 0).astype(np.int64)
         value = np.take_along_axis(predicted[:, player * buckets : (player + 1) * buckets], safe, 1)
+        if checked is not None:
+            value = value + checked[:, player, :]
         out[f"error{player}"] = np.where(bucket >= 0, np.abs(value - records["values"][:, player, :]), 0)
     return out
 
 
-def report(name: str, predicted: np.ndarray, records: np.ndarray, bucket: np.ndarray, buckets: int) -> None:
-    errors = holding_errors(predicted, records, bucket, buckets)
+def report(
+    name: str,
+    predicted: np.ndarray,
+    records: np.ndarray,
+    bucket: np.ndarray,
+    buckets: int,
+    checked: np.ndarray | None = None,
+) -> None:
+    errors = holding_errors(predicted, records, bucket, buckets, checked)
     live = (bucket >= 0).astype(np.float64)
     depth = records["stack"] / records["pot"]
     print(name)
@@ -128,6 +168,16 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--turn-buckets", default=None, help="e.g. 32x4: use the two-dimensional turn buckets' side files")
+    parser.add_argument(
+        "--checked",
+        action="store_true",
+        help="learn what betting adds to each holding's checked-down value (side files from bot-turn-checked-run.ts)",
+    )
+    parser.add_argument(
+        "--checked-inputs",
+        action="store_true",
+        help="with --checked, also give the network each bucket's mean checked-down value",
+    )
     args = parser.parse_args()
 
     *folders, args.out = args.data
@@ -149,7 +199,10 @@ def main() -> None:
             raise SystemExit(f"{args.turn_buckets} turn buckets do not make {args.buckets}")
         ids = load_bucket_ids(folders, f"buckets{args.turn_buckets}")
         turn_buckets = {"strength": strength, "potential": potential}
-    data = build(records, args.buckets, ids)
+    if args.checked_inputs and not args.checked:
+        raise SystemExit("--checked-inputs needs --checked")
+    checked = load_checked(folders) if args.checked else None
+    data = build(records, args.buckets, ids, checked, args.checked_inputs)
     print(f"bucketed {len(records)} spots into {args.buckets} buckets in {time.time() - started:.0f} s", flush=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tensors = {key: torch.from_numpy(data[key]).to(device) for key in ("x", "y", "mask")}
@@ -189,8 +242,16 @@ def main() -> None:
         predicted = model(tensors["x"][valid]).cpu().numpy()
     validation = records[validation_index]
     bucket = data["bucket"][validation_index]
-    report("held-out error of the network, holding by holding:", predicted, validation, bucket, args.buckets)
-    report("the floor, if every bucket's value were exact:", data["y"][validation_index], validation, bucket, args.buckets)
+    held_checked = None if checked is None else checked[validation_index]
+    report("held-out error of the network, holding by holding:", predicted, validation, bucket, args.buckets, held_checked)
+    report(
+        "the floor, if every bucket's value were exact:",
+        data["y"][validation_index],
+        validation,
+        bucket,
+        args.buckets,
+        held_checked,
+    )
 
     args.out.mkdir(parents=True, exist_ok=True)
     stem = args.out / f"river-buckets-{args.buckets}"
@@ -210,6 +271,7 @@ def main() -> None:
                 "outputs": outputs,
                 "buckets": args.buckets,
                 **({} if turn_buckets is None else {"turnBuckets": turn_buckets}),
+                **({} if checked is None else {"checked": True, "checkedInputs": args.checked_inputs}),
                 "width": args.width,
                 "depth": args.depth,
                 "validationBucketError": best[0],

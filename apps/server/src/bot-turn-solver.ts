@@ -85,23 +85,32 @@ function massesFor(
 
 /**
  * How the turn's closed betting is valued: by the turn-end network while chips
- * remain behind, and by the exact average showdown once a player is all in.
+ * remain behind, and by the exact average showdown once a player is all in. A
+ * network that learns what betting adds gets each holding's checked-down
+ * value from the same showdown table the all-ins use.
  */
 export function turnShowdown(spot: RiverSpot, network: RiverValueNetwork): ShowdownValues {
+  if (network.checked?.inputs === true) {
+    throw new Error('the turn solver cannot yet give a network checked-down inputs')
+  }
   const rivers = turnRivers(spot.board)
   const layout = turnLayout(rivers, network)
   const reach = [new Float64Array(COMBOS), new Float64Array(COMBOS)] as const
+  const checked = [new Float64Array(COMBOS), new Float64Array(COMBOS)] as const
   let indices: readonly [Int32Array, Int32Array] | undefined
+  let table: ShowdownTable | undefined
   let allIn: AllInShowdown | undefined
   let masses: ReturnType<typeof massesFor> | undefined
   const met = new Float64Array(COMBOS)
+  const won = new Float64Array(COMBOS)
   return (node, traverser, hands, self, opponent, out) => {
     const other = traverser === 0 ? 1 : 0
     const total = spot.pot + node.paid[0] + node.paid[1]
     const mine = node.paid[traverser]
     const behind = spot.stack - Math.max(node.paid[0], node.paid[1])
     if (behind <= 0) {
-      allIn ??= allInShowdown(rivers, hands)
+      table ??= showdownTable(rivers, hands)
+      allIn ??= allInShowdown(rivers, hands, table)
       allIn(traverser, opponent, total, mine, out)
       return
     }
@@ -121,13 +130,24 @@ export function turnShowdown(spot: RiverSpot, network: RiverValueNetwork): Showd
     for (let o = 0; o < theirs.length; o += 1) {
       reach[other][theirs[o] as number] = opponent[o] as number
     }
+    masses ??= massesFor(hands)
+    masses(traverser, opponent, met)
+    if (network.checked !== undefined) {
+      // Only the traverser's holdings are read back, so only its row is filled.
+      table ??= showdownTable(rivers, hands)
+      table.won(traverser, opponent, won)
+      checked[traverser].fill(0)
+      for (let h = 0; h < own.length; h += 1) {
+        const meets = met[h] as number
+        checked[traverser][own[h] as number] = meets > 0 ? (won[h] as number) / meets : 0
+      }
+    }
     const values = holdingValues(
       network,
       layout,
       bucketInputs(layout, [reach[0], reach[1]], behind, total),
+      network.checked === undefined ? undefined : checked,
     )[traverser]
-    masses ??= massesFor(hands)
-    masses(traverser, opponent, met)
     for (let h = 0; h < own.length; h += 1) {
       out[h] = (met[h] as number) * ((values[own[h] as number] as number) * total - mine)
     }
@@ -143,15 +163,46 @@ type AllInShowdown = (
 ) => void
 
 /**
- * The showdown after an all-in on the turn, averaged over every river card.
- * Every pairing of two holdings that share no card leaves 44 river cards, and
- * what each pairing wins on average is worked out once, by comparing the two
- * holdings' ranks on each of those rivers. Each call is then one pass over
- * that table, weighted by the opponent's reach: a holding's value is the pot
- * times the share it wins, less what it put in, for every opponent holding it
- * can meet.
+ * The showdown after an all-in on the turn, averaged over every river card:
+ * a holding's value is the pot times the share it wins, less what it put in,
+ * for every opponent holding it can meet. `table` lets a solve that has built
+ * the showdown table already share it.
  */
-export function allInShowdown(rivers: TurnRivers, hands: readonly [Hands, Hands]): AllInShowdown {
+export function allInShowdown(
+  rivers: TurnRivers,
+  hands: readonly [Hands, Hands],
+  table: ShowdownTable = showdownTable(rivers, hands),
+): AllInShowdown {
+  const masses = massesFor(hands)
+  const count = Math.max(hands[0].combos.length, hands[1].combos.length)
+  const met = new Float64Array(count)
+  const won = new Float64Array(count)
+  return (traverser, opponent, total, mine, out) => {
+    masses(traverser, opponent, met)
+    table.won(traverser, opponent, won)
+    for (let h = 0; h < out.length; h += 1) {
+      out[h] = (won[h] as number) * total - (met[h] as number) * mine
+    }
+  }
+}
+
+/**
+ * What each holding wins at a showdown averaged over every river card, against
+ * an opponent's reach: `won(traverser, opponent, out)` puts in `out` each of
+ * the traverser's holdings' share of the pot, summed over the opponent
+ * holdings it can meet, each weighted by its reach.
+ */
+export interface ShowdownTable {
+  readonly won: (traverser: 0 | 1, opponent: Float64Array, out: Float64Array) => Float64Array
+}
+
+/**
+ * The showdown table for a solve's holdings. Every pairing of two holdings
+ * that share no card leaves 44 river cards, and what each pairing wins on
+ * average is worked out once, by comparing the two holdings' ranks on each of
+ * those rivers. Each call is then one pass over that table.
+ */
+export function showdownTable(rivers: TurnRivers, hands: readonly [Hands, Hands]): ShowdownTable {
   const [first, second] = holdingIndices(hands)
   const n = first.length
   const m = second.length
@@ -206,17 +257,20 @@ export function allInShowdown(rivers: TurnRivers, hands: readonly [Hands, Hands]
     }
   }
   const tables = [share, back] as const
-  const masses = massesFor(hands)
-  const met = new Float64Array(Math.max(n, m))
-  return (traverser, opponent, total, mine, out) => {
-    const table = tables[traverser]
-    const width = traverser === 0 ? m : n
-    masses(traverser, opponent, met)
-    for (let h = 0; h < out.length; h += 1) {
-      let won = 0
-      const row = h * width
-      for (let o = 0; o < width; o += 1) won += (opponent[o] as number) * (table[row + o] as number)
-      out[h] = won * total - (met[h] as number) * mine
-    }
+  return {
+    won(traverser, opponent, out) {
+      const table = tables[traverser]
+      const width = traverser === 0 ? m : n
+      const height = traverser === 0 ? n : m
+      for (let h = 0; h < height; h += 1) {
+        let won = 0
+        const row = h * width
+        for (let o = 0; o < width; o += 1) {
+          won += (opponent[o] as number) * (table[row + o] as number)
+        }
+        out[h] = won
+      }
+      return out
+    },
   }
 }
