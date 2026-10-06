@@ -2,9 +2,13 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { clusteredEstimate } from './bot-session-evaluation.js'
 
-// Usage: tsx bot-compare-pool.ts <directory> <file prefix> [table lower bound, default -2]
-const [directory, prefix, boundText] = process.argv.slice(2)
-if (!directory || !prefix) throw new Error('usage: <directory> <file prefix> [lower bound]')
+// Usage: tsx bot-compare-pool.ts <directory> <file prefix> [table lower bound, default -2] [raw|adjusted]
+// `adjusted` pools the differences with all-in hands valued at their showdown share, from pieces
+// that report them.
+const [directory, prefix, boundText, valueText = 'raw'] = process.argv.slice(2)
+if (!directory || !prefix || (valueText !== 'raw' && valueText !== 'adjusted')) {
+  throw new Error('usage: <directory> <file prefix> [lower bound] [raw|adjusted]')
+}
 const tableBound = boundText === undefined ? -2 : Number(boundText)
 const files = readdirSync(directory).filter(
   (name) => name.startsWith(prefix) && name.endsWith('.json'),
@@ -14,7 +18,8 @@ interface TableResult {
   readonly first?: number
   readonly sessions: number
   readonly perSession: [number, number][]
-  readonly estimate: { bigBlindsPer100: number; interval95: [number, number] }
+  readonly estimate: { bigBlindsPer100: number; interval95: readonly [number, number] }
+  readonly perSessionAdjusted?: [number, number][]
 }
 /** Rows that give the clustered estimator each session's own sum and hand count. */
 function rowsOf(perSession: readonly [number, number][], offset: number) {
@@ -29,7 +34,17 @@ function rowsOf(perSession: readonly [number, number][], offset: number) {
 // Pieces of one table, run as separate processes, are joined in session order first.
 const pieces = new Map<string, TableResult[]>()
 for (const name of files) {
-  const result = JSON.parse(readFileSync(join(directory, name), 'utf8')) as TableResult
+  const read = JSON.parse(readFileSync(join(directory, name), 'utf8')) as TableResult
+  let result = read
+  if (valueText === 'adjusted') {
+    const adjusted = read.perSessionAdjusted
+    if (adjusted === undefined) throw new Error(`${name} reports no all-in valued differences`)
+    result = {
+      ...read,
+      perSession: adjusted,
+      estimate: clusteredEstimate(rowsOf(adjusted, 0), adjusted.length),
+    }
+  }
   pieces.set(result.table, [...(pieces.get(result.table) ?? []), result])
 }
 const tables = [...pieces.entries()].map(([table, parts]) => {

@@ -1,4 +1,5 @@
-import { writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { type BotPolicy, championPersonality } from '@river/engine'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import {
@@ -12,7 +13,7 @@ import {
   RIVER_READS_V8X_TUNING,
   riverSolverPolicy,
 } from './bot-river-policy.js'
-import { runSessions } from './bot-session-benchmark.js'
+import { runSessions, type SessionHandResult } from './bot-session-benchmark.js'
 import {
   campaignSize,
   developmentTables,
@@ -80,8 +81,16 @@ export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
 // so a long table can be split across processes; bot-compare-pool.ts joins the pieces.
 // A policy name ending in -forget plays that policy with no memory of its opponents
 // (see forgetOpponents), from its own instance so no cache is shared with the other run.
+// A baseline written <name>@<directory> is not played again: its hands come from the piece in
+// that directory that played the same baseline on the same deals (table, seed prefix, cast,
+// sessions), so a fixed practice deck pays for its baseline once. A change to the baseline's
+// code makes such a cache stale; the deals themselves are checked hand by hand when paired.
+// Each piece reports the paired difference twice: in chips as they fell, and with an all-in
+// before the river valued at its showdown share, which removes the luck of the cards to come.
 const [tableName, prefix, sessionsText, baselineName, candidateName, out, firstText, castName] =
   process.argv.slice(2)
+const [baselinePolicyName, baselineCache] = (baselineName ?? '').split('@')
+const castLabel = castName ?? 'rotation'
 
 function comparable(name: string | undefined): { policy: BotPolicy; forget: boolean } | undefined {
   if (name === 'v9a' || name === 'v9a-reads') {
@@ -105,7 +114,7 @@ function comparable(name: string | undefined): { policy: BotPolicy; forget: bool
 const table = [...developmentTables(), ...heldOutTables(), ...ordinaryTables()].find(
   (entry) => entry.name === tableName,
 )
-const baseline = comparable(baselineName)
+const baseline = comparable(baselinePolicyName)
 const candidate = comparable(candidateName)
 const cast =
   castName === undefined || castName === 'rotation'
@@ -135,13 +144,44 @@ const common = {
   plugin: opponentStatsPlugin(),
   table,
   focalPersonalities: cast,
+  allInAdjustment: true,
+}
+interface ComparePiece {
+  readonly table: string
+  readonly prefix?: string
+  readonly cast?: string
+  readonly baseline?: string
+  readonly first: number
+  readonly sessions: number
+  readonly baselineHands?: SessionHandResult[]
+}
+/** The baseline's hands from the piece in `directory` that played it on these deals. */
+function cachedBaseline(directory: string, tableName: string) {
+  for (const name of readdirSync(directory).filter((file) => file.endsWith('.json'))) {
+    const piece = JSON.parse(readFileSync(join(directory, name), 'utf8')) as ComparePiece
+    if (
+      piece.table === tableName &&
+      piece.prefix === prefix &&
+      piece.cast === castLabel &&
+      piece.baseline === baselinePolicyName &&
+      piece.first === first &&
+      piece.sessions === sessions &&
+      piece.baselineHands !== undefined
+    ) {
+      return { hands: piece.baselineHands, from: join(directory, name) }
+    }
+  }
+  throw new Error(`no ${baselinePolicyName} hands for ${tableName} from ${first} in ${directory}`)
 }
 const started = Date.now()
-const base = runSessions({
-  ...common,
-  focalPolicy: baseline.policy,
-  forgetOpponents: baseline.forget,
-})
+const cached = baselineCache === undefined ? undefined : cachedBaseline(baselineCache, table.name)
+const baseHands =
+  cached?.hands ??
+  runSessions({
+    ...common,
+    focalPolicy: baseline.policy,
+    forgetOpponents: baseline.forget,
+  }).hands
 const baseMs = Date.now() - started
 const next = runSessions({
   ...common,
@@ -149,21 +189,51 @@ const next = runSessions({
   forgetOpponents: candidate.forget,
 })
 const nextMs = Date.now() - started - baseMs
-const pairs = pairRuns(base.hands, next.hands)
-const perSession = Array.from({ length: sessions }, () => [0, 0])
-for (const pair of pairs) {
-  const entry = perSession[pair.session - first] as number[]
-  entry[0] = (entry[0] ?? 0) + pair.deltaChips
-  entry[1] = (entry[1] ?? 0) + 1
+const pairs = pairRuns(baseHands, next.hands)
+/** Each session's summed difference and hand count, and the estimate over the sessions. */
+function summarise(deltas: readonly number[]) {
+  const perSession = Array.from({ length: sessions }, () => [0, 0])
+  pairs.forEach((pair, index) => {
+    const entry = perSession[pair.session - first] as number[]
+    entry[0] = (entry[0] ?? 0) + (deltas[index] as number)
+    entry[1] = (entry[1] ?? 0) + 1
+  })
+  const estimate = clusteredEstimate(
+    pairs.map((pair, index) => ({ session: pair.session - first, value: deltas[index] as number })),
+    sessions,
+  )
+  return { perSession, estimate }
 }
-const estimate = clusteredEstimate(
-  pairs.map((pair) => ({ session: pair.session - first, value: pair.deltaChips })),
-  sessions,
+const raw = summarise(pairs.map((pair) => pair.deltaChips))
+const adjusted = summarise(
+  pairs.map((_, index) => {
+    const before = baseHands[index] as SessionHandResult
+    const after = next.hands[index] as SessionHandResult
+    return (after.adjustedChips ?? after.focalChips) - (before.adjustedChips ?? before.focalChips)
+  }),
 )
 writeFileSync(
   out,
-  JSON.stringify({ table: table.name, first, sessions, perSession, estimate, baseMs, nextMs }),
+  JSON.stringify({
+    table: table.name,
+    prefix,
+    cast: castLabel,
+    baseline: baselinePolicyName,
+    candidate: candidateName,
+    first,
+    sessions,
+    perSession: raw.perSession,
+    estimate: raw.estimate,
+    perSessionAdjusted: adjusted.perSession,
+    estimateAdjusted: adjusted.estimate,
+    baseMs,
+    nextMs,
+    ...(cached === undefined ? {} : { baselineFrom: cached.from }),
+    baselineHands: baseHands,
+  }),
 )
+const shown = (estimate: typeof raw.estimate) =>
+  `${estimate.bigBlindsPer100.toFixed(1)} (${estimate.interval95.map((v) => v.toFixed(1)).join(' to ')})`
 process.stdout.write(
-  `${table.name}: ${estimate.bigBlindsPer100.toFixed(1)} (${estimate.interval95.map((v) => v.toFixed(1)).join(' to ')}), ${Math.round(nextMs / 1000)} s\n`,
+  `${table.name}: ${shown(raw.estimate)}, all-in valued ${shown(adjusted.estimate)}, ${Math.round(nextMs / 1000)} s\n`,
 )
