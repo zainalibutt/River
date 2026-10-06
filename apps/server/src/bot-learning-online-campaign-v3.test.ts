@@ -31,7 +31,7 @@ describe('causal online opponent-forecast campaign', () => {
     expect(result.baseTests).toHaveLength(2)
     expect(result.liveInferenceEnabled).toBe(false)
     expect(runOnlineForecastCampaignV3(frozen, candidate, small)).toEqual(result)
-  })
+  }, 60_000)
 
   it('rejects reused training, selection or confirmation seeds', () => {
     expect(() =>

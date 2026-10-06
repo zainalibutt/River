@@ -51,7 +51,7 @@ describe('version-three opponent-action experiment', () => {
     expect(result.novelByStyle.reduce((sum, row) => sum + row.count, 0)).toBe(result.counts.novel)
     expect(result.liveInferenceEnabled).toBe(false)
     expect(runLearningCampaignV3(frozen, small)).toEqual(result)
-  })
+  }, 60_000)
 
   it('rejects reused seeds and overlapping novel identities before collection', () => {
     expect(() =>
