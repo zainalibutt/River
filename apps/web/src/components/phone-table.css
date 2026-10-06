@@ -230,6 +230,18 @@
   padding: 18px;
   pointer-events: none;
   background: radial-gradient(ellipse, #0a110df0, #0a110dc4 55%, transparent 72%);
+  animation: phone-peek-reveal 140ms var(--ease-out);
+}
+
+@keyframes phone-peek-reveal {
+  from {
+    opacity: 0.6;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .phone-peek-display > div {
   display: flex;
@@ -588,6 +600,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .phone-peek-display {
+    animation: none;
+  }
   .phone-hold.holding {
     animation: none;
     background-size: 100% 100%;

@@ -14,6 +14,7 @@ import { censorProfanity, type Preferences } from '@/lib/preferences'
 import { formatAmount } from '@/lib/presentation'
 import { PRESET_LABELS, type PresetKind } from '@/lib/preset'
 import { CHAT_MAX_LENGTH, type SocialFeedEntry } from '@/lib/social'
+import { tableSound } from '@/lib/table-sound'
 import { usePhoneSheetFocus } from '@/lib/use-phone-sheet-focus'
 import { useVisibleViewport } from '@/lib/use-visible-viewport'
 import './phone-table.css'
@@ -124,6 +125,12 @@ export function PhoneTable(props: PhoneTableProps) {
   const min = legal?.raiseTo.min ?? 0
   const max = legal?.allIn.amount ?? min
   const amount = Math.min(max, Math.max(min, props.raiseTo))
+  const sizeRaise = (value: number) => {
+    if (Math.min(max, Math.max(min, value)) !== amount) {
+      tableSound.play('wheel_tick')
+    }
+    props.onRaiseTo(value)
+  }
   const sizes =
     legal === null
       ? []
@@ -466,7 +473,7 @@ export function PhoneTable(props: PhoneTableProps) {
                     max={max}
                     step={1}
                     value={amount}
-                    onChange={(event) => props.onRaiseTo(Number(event.target.value))}
+                    onChange={(event) => sizeRaise(Number(event.target.value))}
                   />
                 </label>
                 <div className="phone-sizing">
@@ -475,7 +482,7 @@ export function PhoneTable(props: PhoneTableProps) {
                       type="button"
                       key={size.id}
                       aria-pressed={amount === size.amount}
-                      onClick={() => props.onRaiseTo(size.amount)}
+                      onClick={() => sizeRaise(size.amount)}
                     >
                       {size.label}
                     </button>

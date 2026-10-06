@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, test, type WebSocketRoute } from '@pla
 import type { TurnAction } from '@river/engine'
 import type { RoomView } from '@river/server'
 import { overlaps } from '../src/lib/table-2d-geometry'
+import { installSoundProbe } from './sound-probe'
 
 async function phoneFixture(page: Page, seatCount = 9) {
   const actions: TurnAction[] = []
@@ -222,6 +223,91 @@ async function targets(page: Page, scope = '.phone-table') {
     for (const other of boxes.slice(index + 1))
       expect(overlaps(box, other), `${box.label} / ${other.label}`).toBe(false)
 }
+
+test.describe('phone card and sizing feedback', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+    test(`peek conceals immediately with ${reducedMotion} motion`, async ({ page }) => {
+      const fixture = await phoneFixture(page)
+      await page.emulateMedia({ reducedMotion })
+      await page.goto('/table?new=1')
+      await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
+      const peek = page.getByRole('button', { name: 'Press and hold to look at your cards' })
+      await peek.focus()
+      await page.keyboard.down('Space')
+      const display = page.getByRole('region', { name: 'Your enlarged cards' })
+      await expect(display.locator('.playing-card')).toHaveCount(2)
+      await expect(display).toContainText('A')
+      await expect(display).toContainText('K')
+      expect(await display.evaluate((element) => getComputedStyle(element).animationName)).toBe(
+        reducedMotion === 'reduce' ? 'none' : 'phone-peek-reveal',
+      )
+      expect(await display.evaluate((element) => getComputedStyle(element).animationDuration)).toBe(
+        reducedMotion === 'reduce' ? '0s' : '0.14s',
+      )
+      await page.keyboard.up('Space')
+      expect(await display.count()).toBe(0)
+      expect(fixture.actions).toEqual([])
+      await page.keyboard.down('Space')
+      await expect(display).toBeVisible()
+      await peek.dispatchEvent('pointercancel')
+      expect(await display.count()).toBe(0)
+      await page.keyboard.up('Space')
+      await page.keyboard.down('Space')
+      await expect(display).toBeVisible()
+      await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+      expect(await display.count()).toBe(0)
+      await page.keyboard.up('Space')
+    })
+  }
+
+  test('ticks changed sizing only, keeps mute and sends nothing before confirmation', async ({
+    page,
+  }) => {
+    const fixture = await phoneFixture(page)
+    const sound = await installSoundProbe(page)
+    await page.goto('/table?new=1')
+    await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
+    await expect.poll(sound.decoded).toBe(14)
+    const peek = page.getByRole('button', { name: 'Press and hold to look at your cards' })
+    await peek.focus()
+    await page.keyboard.down('Space')
+    await expect.poll(() => sound.count('card_peek')).toBe(1)
+    await page.keyboard.up('Space')
+    await page.getByRole('button', { name: 'Raise', exact: true }).tap()
+    const slider = page.getByRole('slider', { name: 'Raise amount' })
+    await expect(slider).toBeVisible()
+    expect(await sound.count('wheel_tick')).toBe(0)
+    await slider.fill('2000')
+    await expect.poll(() => sound.count('wheel_tick')).toBe(1)
+    await expect(slider).toHaveValue('2000')
+    await page.getByRole('button', { name: 'MIN', exact: true }).tap()
+    await expect.poll(() => sound.count('wheel_tick')).toBe(2)
+    await page.getByRole('button', { name: 'MIN', exact: true }).tap()
+    await expect(slider).toHaveValue('1000')
+    expect(await sound.count('wheel_tick')).toBe(2)
+    await slider.press('ArrowLeft')
+    expect(await sound.count('wheel_tick')).toBe(2)
+    await page.getByRole('button', { name: 'Close panel' }).tap()
+    await page.getByRole('button', { name: 'Raise', exact: true }).tap()
+    await expect(slider).toHaveValue('1000')
+    expect(await sound.count('wheel_tick')).toBe(2)
+    expect(fixture.actions).toEqual([])
+    await page.getByRole('button', { name: 'Close panel' }).tap()
+    await page.getByRole('button', { name: 'Table menu' }).tap()
+    await page.getByRole('button', { name: 'Settings', exact: true }).tap()
+    await page.getByRole('button', { name: 'Sound', exact: true }).click()
+    await page.getByRole('button', { name: 'Close panel' }).tap()
+    await page.getByRole('button', { name: 'Raise', exact: true }).tap()
+    await slider.fill('2500')
+    await expect(slider).toHaveValue('2500')
+    expect(await sound.count('wheel_tick')).toBe(2)
+    expect(fixture.actions).toEqual([])
+    await page.getByRole('button', { name: 'Confirm 2,500', exact: true }).tap()
+    await expect.poll(() => fixture.actions).toEqual([{ kind: 'raiseTo', to: 2500 }])
+  })
+})
 
 for (const viewport of [
   { width: 390, height: 844 },

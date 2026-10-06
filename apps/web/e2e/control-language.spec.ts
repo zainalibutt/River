@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 import type { TurnAction } from '@river/engine'
 import type { RoomView } from '@river/server'
+import { installSoundProbe } from './sound-probe'
 
 async function offlineTableFixture(page: Page) {
   const commands: string[] = []
@@ -140,6 +141,70 @@ async function offlineTableFixture(page: Page) {
 
 test.describe('the desktop control language baseline', () => {
   test.use({ viewport: { width: 1920, height: 1080 } })
+
+  for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+    test(`card reveal and wheel feedback preserve control behaviour with ${reducedMotion}`, async ({
+      page,
+    }) => {
+      const fixture = await offlineTableFixture(page)
+      const sound = await installSoundProbe(page)
+      await page.emulateMedia({ reducedMotion })
+      await page.goto('/table?new=1')
+      await page.getByRole('button', { name: 'DEAL', exact: true }).click()
+      await expect.poll(sound.decoded).toBe(14)
+      await page.keyboard.down('Space')
+      const faces = page.locator('.hero-cards .playing-card')
+      await expect(faces).toHaveCount(2)
+      expect(
+        await faces.first().evaluate((element) => getComputedStyle(element).animationName),
+      ).toBe(reducedMotion === 'reduce' ? 'none' : 'hero-peek-reveal')
+      await expect.poll(() => sound.count('card_peek')).toBe(1)
+      await page.keyboard.up('Space')
+      expect(await faces.count()).toBe(0)
+      await expect(page.locator('.hero-cards .card-back')).toHaveCount(2)
+      const wheel = page.locator('.action-menu')
+      const wheelBox = await wheel.boundingBox()
+      expect(wheelBox).toMatchObject({ width: 244, height: 244 })
+      await page.keyboard.press('r')
+      const arc = page.getByRole('slider', { name: 'Raise to' })
+      await expect(arc).toBeVisible()
+      const before = await arc.boundingBox()
+      const knob = page.locator('.raise-knob')
+      const knobBefore = await knob.boundingBox()
+      expect(await sound.count('wheel_tick')).toBe(0)
+      await arc.press('ArrowRight')
+      await expect(arc).toHaveAttribute('aria-valuenow', '1500')
+      await expect.poll(() => sound.count('wheel_tick')).toBe(1)
+      const position = await knob.getAttribute('transform')
+      await page.keyboard.press('ArrowLeft')
+      await expect(arc).toHaveAttribute('aria-valuenow', '1000')
+      await expect.poll(() => sound.count('wheel_tick')).toBe(2)
+      expect(await knob.getAttribute('transform')).not.toBe(position)
+      await page.keyboard.press('ArrowLeft')
+      await expect(arc).toHaveAttribute('aria-valuenow', '1000')
+      expect(await sound.count('wheel_tick')).toBe(2)
+      expect(await arc.boundingBox()).toEqual(before)
+      expect(await knob.boundingBox()).toMatchObject({
+        width: knobBefore?.width,
+        height: knobBefore?.height,
+      })
+      const well = page.locator('.raise-knob-well')
+      await expect
+        .poll(() => well.evaluate((element) => getComputedStyle(element).stroke))
+        .toBe('rgba(255, 236, 196, 0.85)')
+      expect(await well.evaluate((element) => getComputedStyle(element).transitionDuration)).toBe(
+        reducedMotion === 'reduce' ? '0s' : '0.12s',
+      )
+      expect(fixture.commands.filter((kind) => kind === 'act')).toEqual([])
+      await page.keyboard.press('Escape')
+      expect(await wheel.boundingBox()).toEqual(wheelBox)
+      await page.keyboard.press('r')
+      await expect(arc).toHaveAttribute('aria-valuenow', '1000')
+      expect(await sound.count('wheel_tick')).toBe(2)
+      await page.keyboard.press('Enter')
+      await expect.poll(() => fixture.commands.filter((kind) => kind === 'act')).toHaveLength(1)
+    })
+  }
 
   test('keeps the wheel labels and interactions intact while recording style baselines', async ({
     page,

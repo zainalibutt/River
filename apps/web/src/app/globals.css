@@ -3978,6 +3978,12 @@ button.verify-pill.verify-mismatch {
   opacity: 0.32;
 }
 
+.action-button:active:not(:disabled),
+.raise-step:active:not(:disabled),
+.raise-action:active:not(:disabled) {
+  filter: brightness(0.9);
+}
+
 .action-slot.call .action-button {
   color: #62a6f2;
 }
@@ -4154,6 +4160,12 @@ button.verify-pill.verify-mismatch {
   stroke: rgb(255 236 196 / 35%);
   stroke-dasharray: 2 2.7;
   stroke-width: 1.5;
+  transition: stroke 120ms var(--ease-out);
+}
+
+.raise-arc:active .raise-knob-well,
+.raise-arc:focus-visible .raise-knob-well {
+  stroke: rgb(255 236 196 / 85%);
 }
 
 .raise-readout {
@@ -4542,6 +4554,31 @@ button.verify-pill.verify-mismatch {
     0 0 0 1px rgb(255 214 150 / 70%),
     0 10px 22px rgb(0 0 0 / 55%);
   transform: translateY(-4px);
+  animation: hero-peek-reveal 140ms var(--ease-out);
+}
+
+@keyframes hero-peek-reveal {
+  from {
+    opacity: 0.6;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-cards.peeking .playing-card {
+    animation: none;
+    transform: none;
+  }
+  .raise-knob .raise-knob-well,
+  .action-button,
+  .raise-step,
+  .raise-action {
+    transition: none;
+  }
 }
 
 /* Folded: the faces, greyed, under a red cross. */
