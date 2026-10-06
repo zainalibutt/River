@@ -1,4 +1,4 @@
-import { type Card, cardKey, parseCard } from '@river/engine'
+import { type Card, cardKey, mulberry32, parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import { type RangeCombo, type RiverSpot, riverValues, solveRiver } from './bot-river-solver.js'
 import {
@@ -6,13 +6,17 @@ import {
   comboIndex52,
   RIVER_DATA_SETTINGS,
   solveTurnTruthRecord,
+  strengthRanks,
 } from './bot-river-value-data.js'
 import {
+  checkedDownValues,
   expectedStrengthRanks,
+  showdownShares,
   turnBucketIds,
   turnEndValues,
   turnRivers,
 } from './bot-turn-end-data.js'
+import { rangeWeights } from './bot-value-network.js'
 
 const cards = (text: string) => text.split(' ').map(parseCard)
 const combo = (text: string, weight = 1): RangeCombo => ({
@@ -85,6 +89,83 @@ describe('two-dimensional turn buckets', () => {
         if (Math.floor(id / 4) === strength) counts[id % 4] = (counts[id % 4] as number) + 1
       }
       expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1)
+    }
+  })
+})
+
+describe('values if the hand is checked down', () => {
+  /** The two card keys of a holding, by `comboIndex52`. */
+  const holdingCards = (() => {
+    const out: [number, number][] = []
+    for (let a = 0; a < 52; a += 1) for (let b = a + 1; b < 52; b += 1) out.push([a, b])
+    return out
+  })()
+  const clash = (x: number, y: number) => {
+    const [a, b] = holdingCards[x] as [number, number]
+    const [c, d] = holdingCards[y] as [number, number]
+    return a === c || a === d || b === c || b === d
+  }
+
+  it('share the pot card by card on a river, as a brute force does', () => {
+    const ranks = strengthRanks(cards('Ah Kd 7s 4c 7h'))
+    const random = mulberry32(7)
+    const opponent = new Float64Array(COMBOS)
+    for (let i = 0; i < COMBOS; i += 1) {
+      if ((ranks[i] as number) > 0 && random() < 0.6) opponent[i] = random()
+    }
+    const shares = showdownShares(ranks, opponent)
+    for (let h = 0; h < COMBOS; h += 1) {
+      if ((ranks[h] as number) === 0) continue
+      let won = 0
+      let met = 0
+      for (let o = 0; o < COMBOS; o += 1) {
+        const weight = opponent[o] as number
+        if (weight === 0 || (ranks[o] as number) === 0 || clash(h, o)) continue
+        met += weight
+        const mine = ranks[h] as number
+        const theirs = ranks[o] as number
+        won += mine > theirs ? weight : mine === theirs ? weight / 2 : 0
+      }
+      expect(shares[h]).toBeCloseTo(met > 0 ? won / met : 0, 12)
+    }
+  })
+
+  it('average those shares over every river as the deal falls', () => {
+    const spot: RiverSpot = {
+      board: cards('Ah Kd 7s 4c'),
+      pot: 100,
+      stack: 300,
+      ranges: [
+        [combo('Ac Qc', 1), combo('7c 7d', 2), combo('Qs Js', 1), combo('5c 6c', 3)],
+        [combo('As Qd', 2), combo('Kc Qc', 1), combo('8h 8d', 1), combo('6h 5h', 2)],
+      ],
+      betSizes: [1],
+      allIn: true,
+      maxRaises: 1,
+    }
+    const rivers = turnRivers(spot.board)
+    const values = checkedDownValues(spot, rivers)
+    const weights = rangeWeights(spot)
+    for (const player of [0, 1] as const) {
+      const mine = weights[player]
+      const theirs = weights[player === 0 ? 1 : 0]
+      for (let h = 0; h < COMBOS; h += 1) {
+        if ((mine[h] as number) === 0) continue
+        let won = 0
+        let met = 0
+        for (const river of rivers.rivers) {
+          if ((river.ranks[h] as number) === 0) continue
+          for (let o = 0; o < COMBOS; o += 1) {
+            const weight = theirs[o] as number
+            if (weight === 0 || (river.ranks[o] as number) === 0 || clash(h, o)) continue
+            met += weight
+            const a = river.ranks[h] as number
+            const b = river.ranks[o] as number
+            won += a > b ? weight : a === b ? weight / 2 : 0
+          }
+        }
+        expect(values[player][h]).toBeCloseTo(won / met, 12)
+      }
     }
   })
 })

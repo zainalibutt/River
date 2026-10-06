@@ -162,6 +162,92 @@ export function turnEndValues(
 }
 
 /**
+ * Each holding's showdown share on a river against the opponent's weights, in
+ * pots: the weight it beats and half the weight it ties, over the opponent
+ * weight it does not clash with. By `comboIndex52`, like `ranks`; 0 where the
+ * board blocks the holding or it meets nothing.
+ */
+export function showdownShares(ranks: Uint16Array, opponent: ArrayLike<number>): Float64Array {
+  const order: number[] = []
+  for (let index = 0; index < COMBOS; index += 1) {
+    if ((ranks[index] as number) > 0) order.push(index)
+  }
+  order.sort((x, y) => (ranks[x] as number) - (ranks[y] as number))
+  const totalByCard = new Float64Array(52)
+  let total = 0
+  for (const index of order) {
+    const weight = opponent[index] as number
+    if (weight === 0) continue
+    const [a, b] = HOLDING_CARDS[index] as readonly [number, number]
+    total += weight
+    totalByCard[a] = (totalByCard[a] as number) + weight
+    totalByCard[b] = (totalByCard[b] as number) + weight
+  }
+  const belowByCard = new Float64Array(52)
+  const tiedByCard = new Float64Array(52)
+  const out = new Float64Array(COMBOS)
+  let below = 0
+  for (let start = 0; start < order.length; ) {
+    const rank = ranks[order[start] as number] as number
+    let end = start
+    let tied = 0
+    while (end < order.length && ranks[order[end] as number] === rank) {
+      const index = order[end] as number
+      const weight = opponent[index] as number
+      if (weight !== 0) {
+        const [a, b] = HOLDING_CARDS[index] as readonly [number, number]
+        tied += weight
+        tiedByCard[a] = (tiedByCard[a] as number) + weight
+        tiedByCard[b] = (tiedByCard[b] as number) + weight
+      }
+      end += 1
+    }
+    for (let k = start; k < end; k += 1) {
+      const index = order[k] as number
+      const [a, b] = HOLDING_CARDS[index] as readonly [number, number]
+      // A holding clashes with every opponent holding sharing a card; its own
+      // two cards are counted out twice by the per-card sums, so once back.
+      const own = opponent[index] as number
+      const meets = total - (totalByCard[a] as number) - (totalByCard[b] as number) + own
+      if (meets <= 0) continue
+      const beats = below - (belowByCard[a] as number) - (belowByCard[b] as number)
+      const ties = tied - (tiedByCard[a] as number) - (tiedByCard[b] as number) + own
+      out[index] = (beats + ties / 2) / meets
+    }
+    for (let k = start; k < end; k += 1) {
+      const index = order[k] as number
+      const weight = opponent[index] as number
+      if (weight === 0) continue
+      const [a, b] = HOLDING_CARDS[index] as readonly [number, number]
+      belowByCard[a] = (belowByCard[a] as number) + weight
+      belowByCard[b] = (belowByCard[b] as number) + weight
+      tiedByCard[a] = 0
+      tiedByCard[b] = 0
+    }
+    below += tied
+    start = end
+  }
+  return out
+}
+
+/**
+ * Each holding's value where the turn's betting ends if nobody bets again, in
+ * pots, for both players: its showdown share on every river that can come,
+ * weighted as `turnEndValues` weights them. This is the exact part of a
+ * turn-end value, where the cards meet card by card; betting adds the rest.
+ */
+export function checkedDownValues(
+  turn: RiverSpot,
+  rivers: TurnRivers,
+): readonly [Float64Array, Float64Array] {
+  const weights = rangeWeights(turn)
+  return turnEndValues(turn, rivers, (_spot, ranks) => [
+    showdownShares(ranks, weights[1]),
+    showdownShares(ranks, weights[0]),
+  ])
+}
+
+/**
  * A training record for the turn-end network: a turn spot, its answers from
  * the river network, and each holding's rank by expected strength in the
  * rank row. The fifth board card is 255, for none.
