@@ -2439,7 +2439,9 @@ function ShowdownStage({
     seats.find((entry) => entry.seat === seat)?.name ?? `Seat ${seat + 1}`
   const first = plan.show.steps[0]
   const deciding = plan.show.steps.find((step) => step.deciding)
+  // A run-out turned every hand face up before the board; there is no held breath left.
   const tension =
+    !plan.tabled &&
     deciding !== undefined &&
     atMs < deciding.revealAtMs &&
     atMs >= deciding.revealAtMs - SHOWDOWN_TENSION_MS
@@ -2479,7 +2481,7 @@ function ShowdownStage({
         <span className="showdown-who">{nameOf(step.seat)}</span>
         <span className="showdown-cards">
           {cards.map((card, index) =>
-            atMs >= (index === 0 ? step.revealAtMs : step.secondCardAtMs) ? (
+            plan.tabled || atMs >= (index === 0 ? step.revealAtMs : step.secondCardAtMs) ? (
               <PlayingCard key={`face-${card.rank}${card.suit}`} card={card} />
             ) : (
               <CardBack key={`back-${card.rank}${card.suit}`} />

@@ -191,3 +191,11 @@ describe('beforeAwards', () => {
     ])
   })
 })
+
+describe('a showdown after a run-out', () => {
+  it('is told face up when the hands were tabled before the board was finished', () => {
+    const runout: RoomEvent[] = [{ kind: 'street', street: 'river', cards: hand('2c') }]
+    expect(showdownPlanFor(ended(), [...runout, ...settled([])], new Set())?.tabled).toBe(true)
+    expect(showdownPlanFor(ended(), settled([]), new Set())?.tabled).toBe(false)
+  })
+})

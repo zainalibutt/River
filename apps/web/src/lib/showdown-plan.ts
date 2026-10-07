@@ -13,6 +13,12 @@ export interface ShowdownPlan {
   names: ReadonlyMap<number, string>
   awards: readonly { seat: number; amount: number }[]
   pot: number
+  /**
+   * Whether the hands were turned face up before the board was finished: betting closed with
+   * players all in, so the felt shows every hand first and runs the board out. Telling one of
+   * those hands again from its back would be turning over a card the table has already seen.
+   */
+  tabled: boolean
 }
 
 /**
@@ -59,6 +65,7 @@ export function showdownPlanFor(
     ),
     awards,
     pot: awards.reduce((total, award) => total + award.amount, 0),
+    tabled: events.some((event) => event.kind === 'street'),
   }
 }
 
