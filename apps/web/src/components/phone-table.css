@@ -608,3 +608,44 @@
     background-size: 100% 100%;
   }
 }
+
+/* The showdown on a phone. The board is the middle of the felt and is what
+   everyone reads while hands are turned over, so the caption sits below it,
+   between the board and your own seat, and everything in it is smaller. */
+.phone-felt .showdown-card {
+  top: auto;
+  bottom: 20%;
+  min-width: 0;
+  max-width: calc(100% - 32px);
+  padding: 8px 18px;
+  border-radius: 12px;
+}
+.phone-felt .showdown-kicker {
+  font-size: 12px;
+}
+.phone-felt .showdown-who {
+  font-size: 11px;
+}
+.phone-felt .showdown-hand,
+.phone-felt .showdown-win {
+  font-size: 19px;
+}
+.phone-felt .showdown-cards {
+  gap: 6px;
+  margin-top: 4px;
+}
+.phone-felt .showdown-cards .playing-card,
+.phone-felt .showdown-cards .card-back {
+  width: 36px;
+  height: 50px;
+  border-radius: 5px;
+  font-size: 15px;
+}
+.phone-felt .showdown-cards .playing-card > span:first-child {
+  top: 3px;
+  left: 4px;
+  font-size: 13px;
+}
+.phone-felt .showdown-cards .playing-card > b {
+  font-size: 19px;
+}

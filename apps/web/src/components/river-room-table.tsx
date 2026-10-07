@@ -1401,6 +1401,16 @@ export function RiverRoomTable() {
             </>
           }
           onAccount={() => setUpgradeState('editing')}
+          showdownStage={
+            showdown === null || showdownAtMs < 0 ? null : (
+              <ShowdownStage
+                plan={showdown}
+                atMs={showdownAtMs}
+                seats={view.seats}
+                bigBlind={bigBlind}
+              />
+            )
+          }
           accountContent={(close) => (
             <UpgradePanel
               state={upgradeState}

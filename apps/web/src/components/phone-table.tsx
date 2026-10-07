@@ -54,6 +54,8 @@ export interface PhoneTableProps {
   verifyContent: ReactNode
   accountContent: (onClose: () => void) => ReactNode
   onAccount: () => void
+  /** The showdown as it is told, over the felt; null between showdowns. */
+  showdownStage: ReactNode
 }
 
 export function PhoneTable(props: PhoneTableProps) {
@@ -198,6 +200,7 @@ export function PhoneTable(props: PhoneTableProps) {
           phone
           onSelect={setInspected}
         />
+        {props.showdownStage}
         {inspectedSeat?.playerId ? (
           <button className="phone-inspected" type="button" onClick={() => setInspected(null)}>
             {inspectedSeat.name} · {formatAmount(inspectedSeat.stack, false, bigBlind)} · Close
