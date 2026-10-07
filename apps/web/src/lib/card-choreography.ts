@@ -58,6 +58,12 @@ export interface CardChoreography {
   closed: boolean
   /** The showdown already applied, by when it started. */
   showdownAt: number | null
+  /**
+   * When the showdown is actually told: after the board has finished, all-in run-out
+   * included. Captions, payouts and hand names start from this, never from the message
+   * that ended the hand, or they give the ending away while the river is still coming.
+   */
+  showdownStartsAt: number | null
 }
 
 export interface ChoreographyInput {
@@ -82,7 +88,28 @@ export function emptyChoreography(): CardChoreography {
     mucked: new Set(),
     closed: true,
     showdownAt: null,
+    showdownStartsAt: null,
   }
+}
+
+/**
+ * How many board cards are face up at `now`, counting from the first. The board in the
+ * room view runs ahead of the felt; anything that names a hand reads this instead.
+ */
+export function boardShown(state: CardChoreography, now: number): number {
+  let shown = 0
+  for (let index = 0; index < 5; index += 1) {
+    const sprite = state.sprites.find(
+      (entry) =>
+        entry.kind === 'board' &&
+        entry.index === index &&
+        (entry.hideAt === null || entry.hideAt > now),
+    )
+    if (sprite === undefined || sprite.flipAt === null || now < sprite.flipAt + DEAL_TEMPO.flip / 2)
+      break
+    shown += 1
+  }
+  return shown
 }
 
 const SHOE: CardPlace = { kind: 'shoe' }
@@ -234,6 +261,7 @@ export function advanceChoreography(
       ),
       closed: false,
       showdownAt: null,
+      showdownStartsAt: null,
     }
   } else if (firstSight) {
     next = { ...state, hand: input.handNumber, cursor: now, closed: input.phase !== 'hand' }
@@ -260,8 +288,39 @@ export function advanceChoreography(
         })
       })
     } else {
-      streets(next.boardDealt, input.board.length).forEach((street, streetIndex) => {
-        const start = cursor + (streetIndex === 0 && input.swept ? DEAL_TEMPO.sweep : 0)
+      // An all-in run-out: the hand ended in the same message that dealt these streets.
+      // Every live hand is turned face up first, in the order the showdown will tell them,
+      // and the board then runs out a street at a time with a beat of its own and a breath
+      // before the river - the same timings the server waits for, in runoutMs.
+      const runout = input.showdown !== null && input.phase !== 'hand'
+      const order = streets(next.boardDealt, input.board.length)
+      if (runout && input.showdown !== null) {
+        const tableAt = cursor + (input.swept ? DEAL_TEMPO.sweep : 0)
+        const steps = input.showdown.plan.show.steps
+        steps.forEach((step, position) => {
+          const cards = input.showdown?.plan.cards.get(step.seat)
+          for (let index = 0; index < sprites.length; index += 1) {
+            const sprite = sprites[index] as CardSprite
+            if (sprite.kind !== 'hole' || sprite.seat !== step.seat) continue
+            const card = cards?.[sprite.index]
+            if (card === undefined) continue
+            const flipAt = Math.max(tableAt + position * DEAL_TEMPO.tableStagger, landsAt(sprite))
+            sprites[index] = { ...sprite, card, flipAt }
+          }
+        })
+        cursor =
+          tableAt +
+          Math.max(0, steps.length - 1) * DEAL_TEMPO.tableStagger +
+          DEAL_TEMPO.flip +
+          DEAL_TEMPO.tableHold
+      }
+      order.forEach((street, streetIndex) => {
+        const last = streetIndex === order.length - 1
+        const start = runout
+          ? cursor +
+            (streetIndex > 0 ? DEAL_TEMPO.runoutBeat : 0) +
+            (last && order.length > 1 ? DEAL_TEMPO.riverBreath : 0)
+          : cursor + (streetIndex === 0 && input.swept ? DEAL_TEMPO.sweep : 0)
         sprites.push({
           id: `h${input.handNumber}-x${street[0] ?? 0}`,
           kind: 'burn',
@@ -334,6 +393,8 @@ export function advanceChoreography(
     const offset = Math.max(0, next.cursor - showdown.startedAt)
     const sprites = next.sprites.map((sprite) => {
       if (sprite.kind !== 'hole' || sprite.seat === null) return sprite
+      // Tabled for an all-in run-out: already face up, and not turned a second time.
+      if (sprite.flipAt !== null && sprite.card !== null) return sprite
       const step = showdown.plan.show.steps.find((entry) => entry.seat === sprite.seat)
       const cards = showdown.plan.cards.get(sprite.seat)
       const card = cards?.[sprite.index]
@@ -347,6 +408,7 @@ export function advanceChoreography(
       ...next,
       sprites: collect(sprites, collectAt),
       showdownAt: showdown.startedAt,
+      showdownStartsAt: showdown.startedAt + offset,
       closed: true,
       cursor: collectAt + DEAL_TEMPO.collect,
     }

@@ -2,6 +2,7 @@ import type { Card } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
   advanceChoreography,
+  boardShown,
   type CardChoreography,
   type ChoreographyInput,
   choreographyBusy,
@@ -9,7 +10,8 @@ import {
   emptyChoreography,
   spriteFrame,
 } from './card-choreography'
-import { DEAL_TEMPO } from './deal-tempo'
+import { DEAL_TEMPO, runoutMs } from './deal-tempo'
+import type { ShowdownPlan } from './showdown-plan'
 
 const card = (rank: Card['rank'], suit: Card['suit']): Card => ({ rank, suit })
 const BOARD = [card('A', 's'), card('K', 'h'), card('T', 'd'), card('4', 'c'), card('9', 's')]
@@ -151,5 +153,80 @@ describe('the dealer', () => {
     expect(seen.sprites.some((sprite) => sprite.seat === 2)).toBe(false)
     expect(seen.sprites.filter((sprite) => sprite.kind === 'board')).toHaveLength(3)
     expect(choreographyBusy(seen, 9_000)).toBe(false)
+  })
+})
+
+describe('an all-in run-out', () => {
+  const plan = {
+    show: {
+      steps: [
+        { seat: 3, revealAtMs: 0, secondCardAtMs: 300, nameAtMs: 700, deciding: false },
+        { seat: 0, revealAtMs: 1_200, secondCardAtMs: 1_500, nameAtMs: 1_900, deciding: true },
+      ],
+      awardAtMs: 2_600,
+      totalMs: 3_400,
+    },
+    cards: new Map([
+      [3, [card('Q', 'h'), card('Q', 'c')]],
+      [0, [card('A', 'd'), card('K', 'd')]],
+    ]),
+    names: new Map(),
+    awards: [{ seat: 3, amount: 2_000 }],
+    pot: 2_000,
+  } as unknown as ShowdownPlan
+
+  function runout(at: number) {
+    const dealt = advanceChoreography(warm(), input({ seats: seats(2, [0, 3]) }), 0)
+    const flopped = advanceChoreography(
+      dealt,
+      input({ seats: seats(2, [0, 3]), board: BOARD.slice(0, 3) }),
+      4_000,
+    )
+    return advanceChoreography(
+      flopped,
+      input({
+        seats: seats(2, [0, 3]),
+        board: BOARD,
+        phase: 'between',
+        revealed: true,
+        swept: true,
+        showdown: { plan, startedAt: at },
+      }),
+      at,
+    )
+  }
+
+  it('turns the hands face up before the turn is burned', () => {
+    const state = runout(9_000)
+    const tabled = state.sprites.filter((sprite) => sprite.kind === 'hole')
+    const turnBurn = state.sprites.find((sprite) => sprite.id.endsWith('x3'))
+    for (const sprite of tabled) {
+      expect(sprite.card).not.toBeNull()
+      expect(sprite.flipAt ?? Number.POSITIVE_INFINITY).toBeLessThan(
+        turnBurn?.moves[0]?.startAt ?? 0,
+      )
+    }
+  })
+
+  it('runs out exactly as long as the server waits for it', () => {
+    const at = 9_000
+    const state = runout(at)
+    const riverFlip = state.sprites.find((sprite) => sprite.kind === 'board' && sprite.index === 4)
+    const runoutEnds = (riverFlip?.flipAt ?? 0) + DEAL_TEMPO.flip
+    expect(runoutEnds - at).toBe(runoutMs([1, 1], 2, true))
+  })
+
+  it('tells the showdown only once the river is face up', () => {
+    const state = runout(9_000)
+    const riverFlip = state.sprites.find((sprite) => sprite.kind === 'board' && sprite.index === 4)
+    expect(state.showdownStartsAt).toBe((riverFlip?.flipAt ?? 0) + DEAL_TEMPO.flip)
+  })
+
+  it('counts only the board cards that are visibly face up', () => {
+    const state = runout(9_000)
+    const turnFlip = state.sprites.find((sprite) => sprite.kind === 'board' && sprite.index === 3)
+    const at = (turnFlip?.flipAt ?? 0) - 1
+    expect(boardShown(state, at)).toBe(3)
+    expect(boardShown(state, (turnFlip?.flipAt ?? 0) + DEAL_TEMPO.flip)).toBe(4)
   })
 })
