@@ -76,7 +76,7 @@ import {
   type OwnedEntry,
   shopRows,
 } from '@/lib/shop'
-import { cardsTurned, type ShowdownPlan, showdownPlanFor } from '@/lib/showdown-plan'
+import { beforeAwards, cardsTurned, type ShowdownPlan, showdownPlanFor } from '@/lib/showdown-plan'
 import {
   appendSocialEvent,
   applySpeaking,
@@ -1075,6 +1075,19 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     return () => window.clearInterval(tick)
   }, [showdown, showdownStartsAt])
 
+  // What the felt, your hand and the phone show: until the showdown reaches its award, the
+  // stacks as they were before the pot was paid, so a grown stack or a seat marked out does
+  // not tell the table who won while the board is still being turned.
+  const paid = showdown === null || showdownAtMs >= showdown.show.awardAtMs
+  const shownView = useMemo(
+    () => (paid || showdown === null ? view : beforeAwards(view, showdown, { stacks: true })),
+    [paid, showdown, view],
+  )
+  const feltView = useMemo(
+    () => (paid || showdown === null ? view : beforeAwards(view, showdown, { stacks: false })),
+    [paid, showdown, view],
+  )
+
   const seats = useMemo(() => orderedSeats(view), [view])
 
   const _seatIds = useMemo(() => seats.map((seat) => seat.playerId ?? `seat-${seat.seat}`), [seats])
@@ -1306,7 +1319,8 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     return (
       <main className="river-app phone-app river-controls-2d">
         <PhoneTable
-          view={view}
+          view={feltView}
+          heroStack={shownView.seats.find((seat) => seat.playerId === view.selfId)?.stack ?? null}
           viewport={viewport}
           table={{
             chipMoments,
@@ -1495,7 +1509,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             />
           ) : (
             <Table2D
-              view={view}
+              view={feltView}
               geometry={LANDSCAPE}
               chipMoments={chipMoments}
               showdown={showdown}
@@ -1929,7 +1943,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               />
             )}
             <TableCluster
-              view={view}
+              view={shownView}
               peek={peek}
               onPeek={setPeek}
               compact={activeGraphicsMode === 'two'}

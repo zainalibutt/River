@@ -69,3 +69,39 @@ export function cardsTurned(plan: ShowdownPlan, seat: number, atMs: number): num
   if (atMs >= step.secondCardAtMs) return 2
   return atMs >= step.revealAtMs ? 1 : 0
 }
+
+/**
+ * The table as it stood before the pot was paid: every winner's stack without what the
+ * showdown gave them, and nobody who showed a hand out yet. The message that ends a hand
+ * already carries the settled stacks, so until the showdown reaches its award a stack that
+ * had grown, or a seat marked out, would tell the table who won before the board was turned.
+ *
+ * The felt holds a winner's stack back itself, until the chips paid to it land, so it asks
+ * for the seats only; a plain readout of a stack asks for both.
+ */
+export function beforeAwards(
+  view: RoomView,
+  plan: ShowdownPlan,
+  { stacks }: { stacks: boolean },
+): RoomView {
+  return {
+    ...view,
+    seats: view.seats.map((seat) => {
+      const won = !stacks
+        ? 0
+        : plan.awards
+            .filter((award) => award.seat === seat.seat)
+            .reduce((total, award) => total + award.amount, 0)
+      // A hand that lost everything is out, and sitting out, only once the pot is paid.
+      const showed = plan.cards.has(seat.seat)
+      return won === 0 && !(showed && seat.busted)
+        ? seat
+        : {
+            ...seat,
+            stack: seat.stack - won,
+            busted: showed ? false : seat.busted,
+            sittingOut: showed ? false : seat.sittingOut,
+          }
+    }),
+  }
+}

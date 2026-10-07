@@ -1,7 +1,7 @@
 import { type Card, type HandRecord, SHOWDOWN_SECOND_CARD_MS } from '@river/engine'
 import type { RoomEvent, RoomSeatView, RoomView } from '@river/server'
 import { describe, expect, it } from 'vitest'
-import { cardsTurned, showdownPlanFor } from './showdown-plan'
+import { beforeAwards, cardsTurned, showdownPlanFor } from './showdown-plan'
 
 const card = (text: string): Card => ({
   rank: text.slice(0, -1) as Card['rank'],
@@ -164,5 +164,29 @@ describe('cardsTurned', () => {
     expect(cardsTurned(plan, first.seat, first.revealAtMs)).toBe(1)
     expect(cardsTurned(plan, first.seat, first.revealAtMs + SHOWDOWN_SECOND_CARD_MS)).toBe(2)
     expect(cardsTurned(plan, 3, plan.show.totalMs)).toBe(0)
+  })
+})
+
+describe('beforeAwards', () => {
+  it('takes the pot back off the winner and keeps the loser in until it is paid', () => {
+    const view = ended([
+      seat(0, { dealer: true, stack: 0, busted: true, sittingOut: true, hole: hand('2s 2d') }),
+      seat(1, { stack: 21_200, hole: hand('Ks Kh') }),
+    ])
+    const plan = showdownPlanFor(view, settled([]), new Set())
+    expect(plan).not.toBeNull()
+    if (plan === null) return
+    const before = beforeAwards(view, plan, { stacks: true })
+    expect(before.seats.map((entry) => [entry.stack, entry.busted, entry.sittingOut])).toEqual([
+      [0, false, false],
+      [20_000, false, false],
+    ])
+    // Seats the showdown does not touch are passed through untouched.
+    const table = ended()
+    expect(beforeAwards(table, plan, { stacks: true }).seats[3]).toBe(table.seats[3])
+    // The felt pays the winner itself; it only needs the loser kept in.
+    expect(beforeAwards(view, plan, { stacks: false }).seats.map((entry) => entry.stack)).toEqual([
+      0, 21_200,
+    ])
   })
 })

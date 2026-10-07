@@ -24,6 +24,8 @@ type Panel = 'menu' | 'chat' | 'history' | 'settings' | 'verify' | 'invite' | 'r
 
 export interface PhoneTableProps {
   view: RoomView
+  /** Your stack as it should read now: until a showdown pays, without what it will pay you. */
+  heroStack: number | null
   viewport: { width: number; height: number }
   table: Omit<Table2DProps, 'view' | 'geometry'>
   peek: boolean
@@ -214,7 +216,11 @@ export function PhoneTable(props: PhoneTableProps) {
         <div className="phone-hand">
           <div>
             <span>{hero?.name ?? 'Take your place'}</span>
-            <strong>{hero ? formatAmount(hero.stack, false, bigBlind) : 'Joining table…'}</strong>
+            <strong>
+              {hero
+                ? formatAmount(props.heroStack ?? hero.stack, false, bigBlind)
+                : 'Joining table…'}
+            </strong>
             <small>
               {hero?.dealer && view.seats.length === 2 ? 'DEALER · ' : ''}
               In {formatAmount(hero?.betStreet ?? 0, true, bigBlind)}
