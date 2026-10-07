@@ -55,6 +55,8 @@ export interface TurnPolicyTuning {
   readonly ranges: RiverPolicyTuning
   /** Bend the turn's solution towards what the reads say about the opponent. */
   readonly reads: boolean
+  /** Play the base policy's turn once the reads' trust in what they know about the opponent reaches this; null always solves. */
+  readonly predictableTrust: number | null
 }
 
 export const TURN_POLICY_TUNING: TurnPolicyTuning = {
@@ -64,6 +66,7 @@ export const TURN_POLICY_TUNING: TurnPolicyTuning = {
   cacheSize: 64,
   ranges: { ...RIVER_POLICY_TUNING, ...RIVER_CANDIDATE_TUNING },
   reads: false,
+  predictableTrust: null,
 }
 
 export interface TurnPolicyStats {
@@ -155,6 +158,14 @@ function turnDecision(
   const opponentId = live.find((seat) => seat.playerId !== observation.actor.playerId)?.playerId
   const read = observation.opponents.find((summary) => summary.playerId === opponentId)
   const doubt = cardBlindShare(read, 'aggressive', tuning.ranges)
+  if (tuning.predictableTrust !== null) {
+    const predictable = riverReads(
+      observation.opponentStats?.find((entry) => entry.playerId === opponentId),
+      read,
+      tuning.ranges,
+    )
+    if (predictable !== null && predictable.trust >= tuning.predictableTrust) return 'predictable'
+  }
   const reads = tuning.reads
     ? riverReads(
         observation.opponentStats?.find((entry) => entry.playerId === opponentId),

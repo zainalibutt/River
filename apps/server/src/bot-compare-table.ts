@@ -76,7 +76,7 @@ export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
   ).policy,
 }
 
-// Usage: tsx bot-compare-table.ts <table> <seed prefix> <sessions> <baseline> <candidate> <out.json> [first session] [rotation|champion]
+// Usage: tsx bot-compare-table.ts <table> <seed prefix> <sessions> <baseline> <candidate: v9a|v9a-reads|v9h35|v9h50|...> <out.json> [first session] [rotation|champion]
 // With a first session, the run covers sessions first to first + sessions - 1 of the table,
 // so a long table can be split across processes; bot-compare-pool.ts joins the pieces.
 // A policy name ending in -forget plays that policy with no memory of its opponents
@@ -93,11 +93,12 @@ const [baselinePolicyName, baselineCache] = (baselineName ?? '').split('@')
 const castLabel = castName ?? 'rotation'
 
 function comparable(name: string | undefined): { policy: BotPolicy; forget: boolean } | undefined {
-  if (name === 'v9a' || name === 'v9a-reads') {
+  if (name === 'v9a' || name === 'v9a-reads' || name === 'v9h35' || name === 'v9h50') {
     const base = riverSolverPolicy(pokerGuardPolicy, 'river-solver', 1, RIVER_CANDIDATE_TUNING)
     return {
       policy: turnSolverPolicy(base.policy, turnNetworkFromEnvironment(), 'turn-solver', 1, {
         reads: name === 'v9a-reads',
+        predictableTrust: name === 'v9h35' ? 0.35 : name === 'v9h50' ? 0.5 : null,
       }).policy,
       forget: false,
     }
@@ -132,7 +133,7 @@ if (
   !out
 ) {
   throw new Error(
-    'usage: <table> <seed prefix> <sessions> <baseline> <candidate> <out.json> [first session] [rotation|champion]',
+    'usage: <table> <seed prefix> <sessions> <baseline> <candidate: v9a|v9a-reads|v9h35|v9h50|...> <out.json> [first session] [rotation|champion]',
   )
 }
 const common = {

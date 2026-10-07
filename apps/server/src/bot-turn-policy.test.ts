@@ -8,6 +8,7 @@ import {
   personalityPool,
 } from '@river/engine'
 import { describe, expect, it } from 'vitest'
+import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import { legacyGuardPolicy } from './bot-poker-guard.js'
 import { riverSolverPolicy } from './bot-river-policy.js'
 import { profileFor } from './bot-service.js'
@@ -27,6 +28,27 @@ const fixture = JSON.parse(
   readFileSync(new URL('../models/river-value-parity.fixture.json', import.meta.url), 'utf8'),
 ) as ValueNetworkDescription & { weights: number[] }
 const network = valueNetworkFrom(fixture, Float32Array.from(fixture.weights))
+
+function runWithTrust(predictableTrust: number | null) {
+  const base = riverSolverPolicy(legacyGuardPolicy, 'river-solver-test', 1, { iterations: 10 })
+  const solver = turnSolverPolicy(base.policy, network, 'turn-solver-test', 1, {
+    iterations: 10,
+    predictableTrust,
+  })
+  runSessions({
+    seed: 'turn-policy-trust',
+    sessions: 2,
+    handsPerSession: 12,
+    table: {
+      name: 'heads-up',
+      style: 'plain',
+      entrants: [{ personality: person(10) }, { personality: person(0) }],
+    },
+    focalPolicy: solver.policy,
+    plugin: opponentStatsPlugin(),
+  })
+  return solver.stats
+}
 
 describe('the turn-solving OG', () => {
   it('plays exactly the base policy away from the turn', () => {
@@ -140,5 +162,18 @@ describe('the turn-solving OG', () => {
         expect(decision.to).toBeLessThan(legal.raiseTo.max)
       }
     }
+  }, 300_000)
+
+  it('hands trusted opponents to the base policy instead of solving their turns', () => {
+    const alwaysSolve = runWithTrust(null)
+    const handOff = runWithTrust(0)
+    expect(handOff.fallbacks.predictable).toBeGreaterThan(0)
+    expect(handOff.solved).toBeLessThan(alwaysSolve.solved)
+  }, 300_000)
+
+  it('keeps solving turns when the trust threshold is unreachable', () => {
+    const stats = runWithTrust(1)
+    expect(stats.solved).toBeGreaterThan(0)
+    expect(stats.fallbacks.predictable ?? 0).toBe(0)
   }, 300_000)
 })

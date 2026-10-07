@@ -23,7 +23,7 @@ import { turnSolverPolicy } from './bot-turn-policy.js'
 import { learnedValuePolicy, type ValueModel } from './bot-value-model.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
+// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
 // Plays one focal policy heads-up against a local best response to it. What
 // the probe wins is a lower bound on how exploitable that policy is. Runs with
 // the same seed deal the same cards, stacks and chairs to every focal policy,
@@ -49,7 +49,7 @@ if (
   focalCast === undefined
 ) {
   throw new Error(
-    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
+    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
   )
 }
 let riverStats: RiverPolicyStats | undefined
@@ -101,6 +101,22 @@ const focals: Record<string, () => BotPolicy> = {
         reads: true,
       },
     ).policy,
+  v9h35: () =>
+    turnSolverPolicy(
+      river(RIVER_CANDIDATE_TUNING),
+      turnNetworkFromEnvironment(),
+      'turn-solver',
+      1,
+      { predictableTrust: 0.35 },
+    ).policy,
+  v9h50: () =>
+    turnSolverPolicy(
+      river(RIVER_CANDIDATE_TUNING),
+      turnNetworkFromEnvironment(),
+      'turn-solver',
+      1,
+      { predictableTrust: 0.5 },
+    ).policy,
   'v8z-hu20': () => river(RIVER_CANDIDATE_TUNING, headsUpButtonGuardPolicy(0.2)),
   'v8z-hu12': () => river(RIVER_CANDIDATE_TUNING, headsUpButtonGuardPolicy(0.12)),
   call: () => alwaysCallPolicy,
@@ -142,7 +158,9 @@ const run = runSessions({
   onFocalDecision: probe.watch,
   allInAdjustment: true,
   // Only the focal policies that exploit reads look at these statistics.
-  ...(['v8x', 'v8y', 'v8z', 'v8z-hu20', 'v8z-hu12', 'v9a', 'v9a-reads'].includes(focalName)
+  ...(['v8x', 'v8y', 'v8z', 'v8z-hu20', 'v8z-hu12', 'v9a', 'v9a-reads', 'v9h35', 'v9h50'].includes(
+    focalName,
+  )
     ? { plugin: opponentStatsPlugin() }
     : {}),
   onFocalHand: (session, hand) => {
