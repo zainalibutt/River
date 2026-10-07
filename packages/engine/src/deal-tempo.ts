@@ -37,7 +37,38 @@ export const DEAL_TEMPO = {
   collectDelay: 1400,
   /** How long it holds after a showdown has been told. */
   showdownHold: 500,
+  /** Between one all-in hand being turned face up and the next. */
+  tableStagger: 140,
+  /** Once every all-in hand is face up, before the run-out begins: the table reads them. */
+  tableHold: 1_100,
+  /** Between the streets of an all-in run-out: each one lands as its own moment. */
+  runoutBeat: 1_100,
+  /** Before the river of a run-out, on top of the beat: the held breath. */
+  riverBreath: 500,
 } as const
+
+/** How long turning every all-in hand face up takes, before the run-out begins. */
+export function tablingMs(hands: number): number {
+  if (hands <= 0) return 0
+  return (hands - 1) * DEAL_TEMPO.tableStagger + DEAL_TEMPO.flip + DEAL_TEMPO.tableHold
+}
+
+/**
+ * How long an all-in run-out takes to present: the hands turned face up, then each street
+ * betting never reached dealt with a beat of its own, and a breath before the river.
+ * `streets` holds the card count of each street still to come, flop first.
+ */
+export function runoutMs(streets: readonly number[], hands: number, swept: boolean): number {
+  let total = tablingMs(hands)
+  streets.forEach((cards, index) => {
+    const last = index === streets.length - 1
+    total +=
+      (index > 0 ? DEAL_TEMPO.runoutBeat : 0) +
+      (last && streets.length > 1 ? DEAL_TEMPO.riverBreath : 0) +
+      streetDealMs(cards, index === 0 && swept)
+  })
+  return total
+}
 
 /** How long a street takes from the burn to its last card face up, bets swept first or not. */
 export function streetDealMs(cards: number, swept: boolean): number {

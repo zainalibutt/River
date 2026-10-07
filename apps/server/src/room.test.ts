@@ -1,5 +1,11 @@
 import type { Card, TurnAction } from '@river/engine'
-import { holeDealMs, parseCard, streetDealMs } from '@river/engine'
+import {
+  holeDealMs,
+  parseCard,
+  runoutMs,
+  showdownPresentationMs,
+  streetDealMs,
+} from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import type { RoomEvent, RoomHandle, RoomView } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
@@ -508,6 +514,22 @@ describe('leaving in the middle of a hand', () => {
     expect(room.viewFor('alice').seats[0]).toMatchObject({
       playerId: 'alice',
       stack: 2 * TEST_STACK,
+    })
+  })
+
+  it('holds the next hand for an all-in run-out as well as the showdown', () => {
+    // Called all in before the flop, the hand ends in one message with the whole board
+    // dealt. The table turns both hands over and deals the board a street at a time; a
+    // next hand that only waited for the showdown would start while the river was coming.
+    const room = makeRoom('all-in-run-out', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'allIn' } })
+    const called = room.submit({ kind: 'act', playerId: 'bob', action: { kind: 'call' } })
+    const between = called.events.find((event) => event.kind === 'between')
+    expect(between).toMatchObject({
+      countdownMs:
+        room.config.countdownMs + showdownPresentationMs(2) + runoutMs([3, 1, 1], 2, true),
     })
   })
 

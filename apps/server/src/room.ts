@@ -23,6 +23,7 @@ import {
   levelTable,
   type MetricTally,
   makeDeck,
+  runoutMs,
   SEATS_PER_SHAPE,
   type StakeConfig,
   showdownPresentationMs,
@@ -1120,6 +1121,11 @@ export class Room implements RoomHandle {
     }
     const winners = new Set<string>()
     this.advanceBoard(betting.street, events)
+    // An all-in run-out: the streets betting never reached are dealt in the message that
+    // ends the hand, some before this point and some by advanceBoard above. The table turns
+    // the hands face up and deals those streets one beat at a time, so the next hand waits
+    // for that as well as for the showdown.
+    const runout = events.flatMap((event) => (event.kind === 'street' ? [event.cards.length] : []))
     const potTotal = betting.pot()
     const winnerId = betting.uncontestedWinnerId
     if (winnerId !== undefined) {
@@ -1183,7 +1189,12 @@ export class Room implements RoomHandle {
     this.turnDeadlineMs = null
     this.phase = 'between'
     this.betweenSince = this.now()
-    this.betweenMs = this.config.countdownMs + showdownPresentationMs(this.revealedPlayerIds.size)
+    this.betweenMs =
+      this.config.countdownMs +
+      showdownPresentationMs(this.revealedPlayerIds.size) +
+      (winnerId === undefined && runout.length > 0
+        ? runoutMs(runout, this.revealedPlayerIds.size, true)
+        : 0)
     events.push({
       kind: 'between',
       handNumber: this.handNumber,
