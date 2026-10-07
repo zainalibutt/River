@@ -13,6 +13,7 @@ import {
 } from '@/components/table-pieces'
 import {
   advanceChoreography,
+  boardShown,
   type CardChoreography,
   type CardPlace,
   type CardSprite,
@@ -62,6 +63,15 @@ import './table-2d.css'
  * your own hand) is shared with the 3D room and unchanged.
  */
 
+/**
+ * How far the felt has got through the hand: the board cards face up, and when the
+ * showdown starts being told, on the page's performance clock.
+ */
+export interface TablePresentation {
+  boardShown: number
+  showdownStartsAt: number | null
+}
+
 export interface Table2DProps {
   view: RoomView
   geometry: TableGeometry
@@ -74,6 +84,8 @@ export interface Table2DProps {
   onSelect: (seat: number) => void
   /** Tells the HUD when your two cards have landed, so the cluster shows them as they arrive. */
   onHeroDealt?: (landed: boolean) => void
+  /** How much of the hand the felt has shown, as it changes. */
+  onPresentation?: (presentation: TablePresentation) => void
   /** Lines said at the table, up for a moment over the speaker's placard. */
   bubbles?: readonly SeatBubble[]
   /**
@@ -212,13 +224,27 @@ export function Table2D(props: Table2DProps) {
           setAllIn({ seat: shove.seat, id: moment.serial })
         }
       }
-      next = applyMoment(next, moment, seconds)
+      // A pot goes to its winner once the showdown that decides it has been told, and the
+      // showdown waits for the board: the payout is timed from the felt, not the message.
+      const startsAt = choreography.current.showdownStartsAt
+      const plan = props.showdown
+      const paid =
+        moment.awards.length > 0 && startsAt !== null && plan !== null
+          ? {
+              ...moment,
+              awardDelaySeconds: Math.max(
+                moment.awardDelaySeconds ?? 0,
+                (startsAt + plan.show.awardAtMs - seconds * 1000) / 1000,
+              ),
+            }
+          : moment
+      next = applyMoment(next, paid, seconds)
     }
     if (next !== flow.current) {
       flow.current = next
       setSchedule((count) => count + 1)
     }
-  }, [props.chipMoments])
+  }, [props.chipMoments, props.showdown])
   useEffect(() => {
     if (allIn === null) return
     const timer = window.setTimeout(() => setAllIn(null), ALL_IN_MS)
@@ -254,6 +280,15 @@ export function Table2D(props: Table2DProps) {
   useEffect(() => {
     onHeroDealt?.(heroLanded)
   }, [heroLanded, onHeroDealt])
+
+  // What the felt has shown so far, for everything outside it that could give the hand away:
+  // the hand named in the cluster, the showdown's captions and the payout.
+  const shown = boardShown(choreography.current, now)
+  const showdownStartsAt = choreography.current.showdownStartsAt
+  const onPresentation = props.onPresentation
+  useEffect(() => {
+    onPresentation?.({ boardShown: shown, showdownStartsAt })
+  }, [shown, showdownStartsAt, onPresentation])
 
   const seconds = now / 1000
   const chips = flow.current

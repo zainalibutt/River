@@ -31,7 +31,7 @@ import { RiverLobby } from '@/components/river-lobby'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
 import type { HoleSeat } from '@/components/river-venue-scene'
-import { Table2D } from '@/components/table-2d/table-2d'
+import { Table2D, type TablePresentation } from '@/components/table-2d/table-2d'
 import {
   ActionPin,
   CardBack,
@@ -385,7 +385,14 @@ export function RiverRoomTable() {
   )
   // The showdown being told, one hand at a time, and how far into it the table is.
   const [showdown, setShowdown] = useState<ShowdownPlan | null>(null)
-  const [showdownAtMs, setShowdownAtMs] = useState(0)
+  const [showdownAtMs, setShowdownAtMs] = useState(-1)
+  const showdownSetAt = useRef<number | null>(null)
+  // How far the felt has got through the hand, and what waits for the showdown to be told.
+  const [presentation, setPresentation] = useState<TablePresentation>({
+    boardShown: 0,
+    showdownStartsAt: null,
+  })
+  const afterShowdown = useRef<(() => void)[]>([])
   // Seats whose player is holding their cards up - yours, and everybody else's.
   const [heldPeeks, setHeldPeeks] = useState<readonly number[]>([])
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
@@ -731,10 +738,24 @@ export function RiverRoomTable() {
             plan === null ? moment : { ...moment, awardDelaySeconds: plan.show.awardAtMs / 1000 }
           setChipMoments((current) => [...current, timed].slice(-CHIP_HISTORY))
           if (plan !== null) {
+            // Not yet: the showdown is told once the felt has finished the board, which an
+            // all-in run-out can take several seconds to do. Below zero means waiting.
+            showdownSetAt.current = performance.now()
             setShowdown(plan)
-            setShowdownAtMs(0)
+            setShowdownAtMs(-1)
           }
-          if (message.events.some((event) => event.kind === 'handStarted')) setHeldPeeks([])
+          if (message.events.some((event) => event.kind === 'handStarted')) {
+            setHeldPeeks([])
+            // A showdown still being told when the next hand is dealt is over: what it held
+            // back is told now, not left waiting for an ending that will never come.
+            if (plan === null && afterShowdown.current.length > 0) {
+              const waiting = afterShowdown.current
+              afterShowdown.current = []
+              for (const apply of waiting) apply()
+              setShowdown(null)
+              setShowdownAtMs(-1)
+            }
+          }
           if (foldedThisHand.current.hand !== message.view.handNumber) {
             foldedThisHand.current = { hand: message.view.handNumber, seats: new Set() }
           }
@@ -813,13 +834,19 @@ export function RiverRoomTable() {
           const settled = message.events.flatMap((event) =>
             event.kind === 'handRecorded' ? [event.record] : [],
           )
+          // The record and the REP both know who won. After a showdown they wait for it to be
+          // told, or the panel and the flash would give the ending away during the run-out.
+          const afterTheHand = (apply: () => void) => {
+            if (plan === null) apply()
+            else afterShowdown.current.push(apply)
+          }
           if (settled.length > 0) {
             // Newest first, so the panel reads the way a player thinks about
             // the night: the hand that just happened is the one at the top.
-            setHands((previous) => withSettledHands(previous, settled))
+            afterTheHand(() => setHands((previous) => withSettledHands(previous, settled)))
           }
           const flash = repFlashFor(message.events, message.view.selfId)
-          if (flash !== null) setRepFlash(flash)
+          if (flash !== null) afterTheHand(() => setRepFlash(flash))
           const nextNotice = eventNotice(message.events, message.view.selfId)
           if (nextNotice !== null) setNotice(nextNotice)
           if (
@@ -1002,22 +1029,31 @@ export function RiverRoomTable() {
     }
   }, [command, view.legal])
 
+  // The showdown is told from the moment the felt has finished the board - an all-in
+  // run-out included - and not from the message that ended the hand. The engine produced the
+  // schedule; this is the only place that turns it into elapsed time. Without the 2D felt
+  // (the developer's 3D room) it is told from the message, as before.
+  const showdownStartsAt =
+    activeGraphicsMode === 'two' ? presentation.showdownStartsAt : showdownSetAt.current
   useEffect(() => {
-    if (showdown === null) return
-    // The engine produced the schedule; this is the only place that turns it into elapsed
-    // time, so nothing in the engine ever had to read a clock.
-    const started = Date.now()
+    if (showdown === null || showdownStartsAt === null) return
+    const finish = () => {
+      setShowdown(null)
+      setShowdownAtMs(-1)
+      const waiting = afterShowdown.current
+      afterShowdown.current = []
+      for (const apply of waiting) apply()
+    }
     const tick = window.setInterval(() => {
-      const elapsed = Date.now() - started
+      const elapsed = performance.now() - showdownStartsAt
       if (elapsed >= showdown.show.totalMs) {
-        setShowdown(null)
-        setShowdownAtMs(0)
+        finish()
         return
       }
-      setShowdownAtMs(elapsed)
+      setShowdownAtMs(elapsed < 0 ? -1 : elapsed)
     }, 50)
     return () => window.clearInterval(tick)
-  }, [showdown])
+  }, [showdown, showdownStartsAt])
 
   const seats = useMemo(() => orderedSeats(view), [view])
 
@@ -1259,6 +1295,7 @@ export function RiverRoomTable() {
             turnKey: `${view.handNumber}:${view.street}:${view.currentActor?.playerId ?? ''}:${view.turnDeadlineMs ?? ''}`,
             onSelect: setSelectedSeat,
             onHeroDealt: setHeroDealt,
+            onPresentation: setPresentation,
             bubbles,
             heldPeeks,
             bigBlind,
@@ -1436,6 +1473,7 @@ export function RiverRoomTable() {
               turnKey={`${view.handNumber}:${view.street}:${view.currentActor?.playerId ?? ''}:${view.turnDeadlineMs ?? ''}`}
               onSelect={setSelectedSeat}
               onHeroDealt={setHeroDealt}
+              onPresentation={setPresentation}
               bubbles={bubbles}
               heldPeeks={heldPeeks}
               platesHeld={platesHeld}
@@ -1851,7 +1889,7 @@ export function RiverRoomTable() {
                 </button>
               )}
             </div>
-            {showdown === null ? null : (
+            {showdown === null || showdownAtMs < 0 ? null : (
               <ShowdownStage
                 plan={showdown}
                 atMs={showdownAtMs}
@@ -1868,6 +1906,7 @@ export function RiverRoomTable() {
               // the clock for the dealer, a turn can open before your cards have landed, and
               // nobody should act on a hand they cannot see.
               dealt={activeGraphicsMode !== 'two' || heroDealt || localTurn}
+              boardShown={activeGraphicsMode === 'two' ? presentation.boardShown : null}
               bigBlind={bigBlind}
             />
             {/* `populated` is what paints the glass, so it has to follow the
@@ -2123,6 +2162,7 @@ function TableCluster({
   onPeek,
   compact,
   dealt,
+  boardShown,
   bigBlind,
 }: {
   view: RoomView
@@ -2132,13 +2172,18 @@ function TableCluster({
   compact: boolean
   /** Whether your cards have landed; the cluster shows them as they arrive, not before. */
   dealt: boolean
+  /** Board cards the felt has turned face up, or null to read the whole board (3D). */
+  boardShown: number | null
   /** Amounts in this many chips to the big blind, or in chips when null. */
   bigBlind: number | null
 }) {
   const hero = view.seats.find((seat) => seat.playerId === view.selfId)
   const holding = hero?.hasHole && hero.hole !== null && dealt
   const showFaces = holding && (peek || hero?.folded === true)
-  const readout = holding && showFaces ? readoutFor(hero?.hole ?? [], view.board) : null
+  // Named against the board the felt has turned over, never the board the server has dealt:
+  // the view runs ahead of the felt, and a pair named early is the river given away.
+  const visibleBoard = boardShown === null ? view.board : view.board.slice(0, boardShown)
+  const readout = holding && showFaces ? readoutFor(hero?.hole ?? [], visibleBoard) : null
   return (
     <section
       className={`table-cluster${compact ? ' compact' : ''}`}
