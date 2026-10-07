@@ -2443,6 +2443,9 @@ function RoomSeat({
  * pot go to the winner. The schedule is the engine's, so the server holds the next deal
  * for exactly as long as this takes.
  */
+/** Past this many letters a hand name is set a size smaller where the caption is narrow. */
+const LONG_HAND_NAME = 18
+
 function ShowdownStage({
   plan,
   atMs,
@@ -2508,7 +2511,11 @@ function ShowdownStage({
           )}
         </span>
         {atMs >= step.nameAtMs ? (
-          <strong className="showdown-hand">{plan.names.get(step.seat)}</strong>
+          <strong
+            className={`showdown-hand${(plan.names.get(step.seat) ?? '').length > LONG_HAND_NAME ? ' long' : ''}`}
+          >
+            {plan.names.get(step.seat)}
+          </strong>
         ) : null}
       </>
     )

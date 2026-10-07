@@ -619,12 +619,14 @@
   display: flex;
   align-items: baseline;
   justify-content: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 2px 8px;
   min-width: 0;
-  max-width: calc(100% - 48px);
+  /* Narrow enough to stay between the side seats; a long hand name wraps under the
+     player's name rather than reaching over a seat. */
+  max-width: min(66%, 250px);
   padding: 5px 14px;
   border-radius: 10px;
-  white-space: nowrap;
 }
 .phone-felt .showdown-cards {
   display: none;
@@ -638,9 +640,11 @@
 }
 .phone-felt .showdown-hand,
 .phone-felt .showdown-win {
-  overflow: hidden;
   font-size: 14px;
-  text-overflow: ellipsis;
+  text-align: center;
+}
+.phone-felt .showdown-hand.long {
+  font-size: 12px;
 }
 .phone-felt .showdown-award {
   display: flex;
