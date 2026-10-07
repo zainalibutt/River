@@ -87,7 +87,12 @@ import {
   type SocialFeedEntry,
   withBubble,
 } from '@/lib/social'
-import { defaultRiverSocketUrl, RiverSocket, type RiverSocketState } from '@/lib/socket'
+import {
+  defaultRiverSocketUrl,
+  RiverSocket,
+  type RiverSocketState,
+  type SocketLike,
+} from '@/lib/socket'
 import { LANDSCAPE } from '@/lib/table-2d-geometry'
 import { tableSound } from '@/lib/table-sound'
 import {
@@ -346,7 +351,12 @@ function useTurnRemaining(deadline: number | null): number | null {
   return deadline === null ? null : Math.max(0, deadline - now)
 }
 
-export function RiverRoomTable() {
+/** A scripted table: a socket that replays recorded hands, and no account behind it. */
+export interface TableLab {
+  createSocket: (url: string) => SocketLike
+}
+
+export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   const [
     {
       roomId,
@@ -594,13 +604,22 @@ export function RiverRoomTable() {
     const connect = async (): Promise<void> => {
       setConnection((previous) => (previous === 'connected' ? 'reconnecting' : 'connecting'))
       try {
-        const config = await loadBrowserAuthConfig()
-        if (disposed) return
-        const auth = createRiverAuthClient(config)
-        authRef.current = auth
-        const session = await ensureRiverSession(auth)
-        if (disposed) return
-        const socket = new RiverSocket({ url: defaultRiverSocketUrl(window.location) })
+        // The motion lab replays recorded hands over a socket of its own and signs nobody in,
+        // so it never creates a guest.
+        let accessToken = 'motion-lab'
+        if (lab === undefined) {
+          const config = await loadBrowserAuthConfig()
+          if (disposed) return
+          const auth = createRiverAuthClient(config)
+          authRef.current = auth
+          const session = await ensureRiverSession(auth)
+          if (disposed) return
+          accessToken = session.access_token
+        }
+        const url = defaultRiverSocketUrl(window.location)
+        const socket = new RiverSocket(
+          lab === undefined ? { url } : { url, createSocket: lab.createSocket },
+        )
         socketRef.current = socket
         // Whatever moved while the socket was down moved without us; the first view after a
         // reconnect says where things are and moves nothing.
@@ -871,7 +890,7 @@ export function RiverRoomTable() {
           setNotice('Reconnecting…')
           reconnect(RECONNECT_FIRST_MS)
         })
-        await socket.connect(session.access_token)
+        await socket.connect(accessToken)
         if (disposed) return
         socket.enter(
           roomId,
@@ -914,6 +933,7 @@ export function RiverRoomTable() {
     requestedBotPreset,
     flushSeatRequest,
     pushCues,
+    lab,
   ])
 
   useEffect(() => {
@@ -1258,10 +1278,11 @@ export function RiverRoomTable() {
    * invite code, because a table remembered without its code rejoins a table
    * you are then refused entry to.
    */
+  // A replayed table is nowhere to come back to.
   useEffect(() => {
-    if (typeof window === 'undefined' || view.inviteCode.length === 0) return
+    if (typeof window === 'undefined' || view.inviteCode.length === 0 || lab !== undefined) return
     rememberTable({ roomId, inviteCode: view.inviteCode, venueId })
-  }, [roomId, venueId, view.inviteCode])
+  }, [roomId, venueId, view.inviteCode, lab])
 
   const share = async () => {
     const url = shortTableLink(view.inviteCode, window.location.origin)

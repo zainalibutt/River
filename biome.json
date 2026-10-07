@@ -24,6 +24,12 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/apps/web/public/assets", "!**/art/out", "!**/docs/board"]
+    "includes": [
+      "**",
+      "!**/apps/web/public/assets",
+      "!**/art/out",
+      "!**/docs/board",
+      "!**/apps/web/src/lib/motion-scenes.json"
+    ]
   }
 }

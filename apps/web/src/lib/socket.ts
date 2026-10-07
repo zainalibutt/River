@@ -8,7 +8,7 @@ interface SocketEventMap {
   error: Event
 }
 
-interface SocketLike {
+export interface SocketLike {
   readonly readyState: number
   send(data: string): void
   close(code?: number, reason?: string): void

@@ -1,0 +1,23 @@
+/* The motion lab's scene picker: small and out of the way of the table it is reviewing. */
+.motion-lab {
+  position: fixed;
+  z-index: 100;
+  bottom: 6px;
+  left: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0.75;
+}
+.motion-lab button {
+  padding: 3px 8px;
+  border: 1px solid rgb(232 169 60 / 35%);
+  border-radius: 999px;
+  background: rgb(10 13 12 / 85%);
+  color: var(--river-cream-dim);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.motion-lab button[aria-pressed="true"] {
+  border-color: var(--river-amber-bright);
+  color: var(--river-cream);
+}
