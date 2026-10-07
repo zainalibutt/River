@@ -606,7 +606,9 @@
  * did stay up; name and stack come back while the key is down. The medallion
  * stands at the middle of the placard's box, which is the seat's own place.
  */
-.t2d:not(.t2d-plates-held) .t2d-placard {
+/* A plate opens on its own while the showdown tells that seat's hand, and for the winner
+   at the award: the light lands on a name, not on a pair of initials. */
+.t2d:not(.t2d-plates-held) .t2d-placard:not(.showing, .winning) {
   justify-content: center;
   padding: 0;
   border-color: transparent;
@@ -614,14 +616,14 @@
   box-shadow: none;
 }
 
-.t2d:not(.t2d-plates-held) .t2d-plate-text {
+.t2d:not(.t2d-plates-held) .t2d-placard:not(.showing, .winning) .t2d-plate-text {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
 
-.t2d:not(.t2d-plates-held) .t2d-select {
-  inset: 6px 76px;
+.t2d:not(.t2d-plates-held) .t2d-placard:not(.showing, .winning) .t2d-select {
+  inset: 6px 65px;
   border-radius: 50%;
 }
 
