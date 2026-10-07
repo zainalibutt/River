@@ -1,7 +1,12 @@
-import { type Card, type HandRecord, SHOWDOWN_SECOND_CARD_MS } from '@river/engine'
+import {
+  type Card,
+  type HandRecord,
+  SHOWDOWN_SECOND_CARD_MS,
+  SHOWDOWN_TENSION_MS,
+} from '@river/engine'
 import type { RoomEvent, RoomSeatView, RoomView } from '@river/server'
 import { describe, expect, it } from 'vitest'
-import { beforeAwards, cardsTurned, showdownPlanFor } from './showdown-plan'
+import { beforeAwards, cardsTurned, showdownPlanFor, showingSeat } from './showdown-plan'
 
 const card = (text: string): Card => ({
   rank: text.slice(0, -1) as Card['rank'],
@@ -197,5 +202,27 @@ describe('a showdown after a run-out', () => {
     const runout: RoomEvent[] = [{ kind: 'street', street: 'river', cards: hand('2c') }]
     expect(showdownPlanFor(ended(), [...runout, ...settled([])], new Set())?.tabled).toBe(true)
     expect(showdownPlanFor(ended(), settled([]), new Set())?.tabled).toBe(false)
+  })
+})
+
+describe('showingSeat', () => {
+  it('follows each hand in turn and hands over to the award', () => {
+    const plan = showdownPlanFor(ended(), settled([]), new Set())
+    if (plan === null) throw new Error('expected a showdown')
+    const [first, second] = plan.show.steps
+    if (first === undefined || second === undefined) throw new Error('expected two hands')
+    expect(showingSeat(plan, -1)).toBeNull()
+    expect(showingSeat(plan, first.revealAtMs - 1)).toBeNull()
+    expect(showingSeat(plan, first.revealAtMs)).toBe(first.seat)
+    expect(showingSeat(plan, second.revealAtMs)).toBe(second.seat)
+    expect(showingSeat(plan, plan.show.awardAtMs)).toBeNull()
+  })
+
+  it('looks at the deciding hand from the held breath before it', () => {
+    const plan = showdownPlanFor(ended(), settled([]), new Set())
+    if (plan === null) throw new Error('expected a showdown')
+    const deciding = plan.show.steps.find((step) => step.deciding)
+    if (deciding === undefined) throw new Error('expected a deciding hand')
+    expect(showingSeat(plan, deciding.revealAtMs - SHOWDOWN_TENSION_MS)).toBe(deciding.seat)
   })
 })

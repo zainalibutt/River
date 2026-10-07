@@ -103,6 +103,8 @@ export interface Table2DProps {
   platesHeld?: boolean
   /** Amounts in this many chips to the big blind, as Settings can ask, or in chips when null. */
   bigBlind?: number | null
+  /** The seat whose hand the showdown is telling right now, lit until the next one. */
+  showingSeat?: number | null
   phone?: boolean
 }
 
@@ -475,6 +477,7 @@ export function Table2D(props: Table2DProps) {
               flag={seat.playerId === null ? null : (props.seatActions.get(seat.playerId) ?? null)}
               stack={seat.stack + stackAdjustmentAt(chips, seat.seat, seconds)}
               winning={payees.has(seat.seat)}
+              showing={props.showingSeat === seat.seat}
               beat={allIn?.seat === seat.seat}
               onSelect={() => props.onSelect(seat.seat)}
               bigBlind={bigBlind}
@@ -646,6 +649,7 @@ function Placard({
   flag,
   stack,
   winning,
+  showing,
   beat,
   onSelect,
   bigBlind,
@@ -662,6 +666,8 @@ function Placard({
   flag: SeatActionFlag | null
   stack: number
   winning: boolean
+  /** Whether the showdown is telling this player's hand right now. */
+  showing: boolean
   /** Whether this player has just gone all in: the placard lifts for the moment. */
   beat: boolean
   onSelect: () => void
@@ -696,7 +702,7 @@ function Placard({
         : null
   return (
     <article
-      className={`t2d-placard${acting ? ' acting' : ''}${seat.folded ? ' folded' : ''}${seat.allIn ? ' all-in' : ''}${winning ? ' winning' : ''}${beat ? ' beat' : ''}${note === null ? '' : ' muted'}`}
+      className={`t2d-placard${acting ? ' acting' : ''}${seat.folded ? ' folded' : ''}${seat.allIn ? ' all-in' : ''}${winning ? ' winning' : ''}${showing ? ' showing' : ''}${beat ? ' beat' : ''}${note === null ? '' : ' muted'}`}
       style={{ ...position, ...accentStyle(seat.seat, heroSeat) }}
     >
       <button

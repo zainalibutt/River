@@ -15,6 +15,8 @@
   --river-amber-bright: #ffc96b;
   --river-copper: #b87333;
   --river-win: #6fbf8b;
+  /* Whose hand the showdown is telling: cool, never read as acting (brass) or winning (green). */
+  --river-spotlight: #7fd3ff;
   --river-danger: #e67d63;
   --river-danger-deep: #c4553d;
   --river-card-face: #f7f3ec;
@@ -3208,6 +3210,24 @@ button.verify-pill.verify-mismatch {
   border-color: var(--river-amber-bright);
   box-shadow: 0 0 42px rgb(232 169 60 / 40%);
   animation: showdown-award 640ms var(--ease-out) both;
+}
+
+/* Whose hand is being told: the caption takes the spotlight its seat is lit in. */
+.showdown-stage.spotlit .showdown-card {
+  border-color: var(--river-spotlight);
+  box-shadow: 0 0 34px rgb(127 211 255 / 24%);
+}
+
+.showdown-stage.spotlit .showdown-who {
+  color: var(--river-spotlight);
+}
+
+/* Your own hand, while the showdown tells it. */
+.table-cluster.showing .hero-cards {
+  border-radius: 10px;
+  box-shadow: 0 0 22px rgb(127 211 255 / 34%);
+  outline: 2px solid var(--river-spotlight);
+  outline-offset: 4px;
 }
 
 .showdown-kicker {

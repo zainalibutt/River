@@ -1,4 +1,10 @@
-import { type Card, type ShowdownShow, showdownOrder, showdownShow } from '@river/engine'
+import {
+  type Card,
+  SHOWDOWN_TENSION_MS,
+  type ShowdownShow,
+  showdownOrder,
+  showdownShow,
+} from '@river/engine'
 import type { RoomEvent, RoomView } from '@river/server'
 import { readoutFor } from './hand-readout'
 
@@ -113,4 +119,20 @@ export function beforeAwards(
           }
     }),
   }
+}
+
+/**
+ * Whose hand the showdown is telling at atMs: the seat the table should look at, from the
+ * moment its turn begins (the held breath before the deciding hand included) until the next
+ * hand's turn. Null before the first hand and from the award on, when the winner has it.
+ */
+export function showingSeat(plan: ShowdownPlan, atMs: number): number | null {
+  if (atMs < 0 || atMs >= plan.show.awardAtMs) return null
+  let seat: number | null = null
+  for (const step of plan.show.steps) {
+    const from =
+      step.deciding && !plan.tabled ? step.revealAtMs - SHOWDOWN_TENSION_MS : step.revealAtMs
+    if (atMs >= from) seat = step.seat
+  }
+  return seat
 }

@@ -474,6 +474,10 @@
   border-color: var(--river-win);
 }
 
+.river-controls-2d .t2d-placard.showing {
+  border-color: var(--river-spotlight);
+}
+
 .river-controls-2d .t2d-stack {
   color: var(--river-brass-hi);
 }

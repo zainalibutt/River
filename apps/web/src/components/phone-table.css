@@ -647,3 +647,8 @@
   align-items: baseline;
   gap: 8px;
 }
+/* Your hand, while the showdown tells it: the same spotlight its caption carries. */
+.phone-hand.showing .phone-peek {
+  border-color: var(--river-spotlight);
+  box-shadow: 0 0 22px rgb(127 211 255 / 30%);
+}

@@ -26,6 +26,8 @@ export interface PhoneTableProps {
   view: RoomView
   /** Your stack as it should read now: until a showdown pays, without what it will pay you. */
   heroStack: number | null
+  /** Whether the showdown is telling your hand right now. */
+  heroShowing: boolean
   viewport: { width: number; height: number }
   table: Omit<Table2DProps, 'view' | 'geometry'>
   peek: boolean
@@ -213,7 +215,7 @@ export function PhoneTable(props: PhoneTableProps) {
         {props.status}
       </p>
       <footer className="phone-dock" data-phone-region="dock">
-        <div className="phone-hand">
+        <div className={`phone-hand${props.heroShowing ? ' showing' : ''}`}>
           <div>
             <span>{hero?.name ?? 'Take your place'}</span>
             <strong>

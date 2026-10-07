@@ -845,3 +845,24 @@
     opacity: 0;
   }
 }
+
+/*
+ * The hand the showdown is telling. One cool colour, shared with the caption and,
+ * for your own hand, with your cards, so the table can see whose cards it is reading
+ * without matching names. Cool so it never reads as acting (brass) or winning (green).
+ */
+.t2d-placard.showing {
+  border-color: var(--river-spotlight);
+  box-shadow:
+    var(--river-lift-2),
+    0 0 0 1px var(--river-spotlight),
+    0 0 26px rgb(127 211 255 / 34%);
+}
+
+.t2d-placard.showing .t2d-medallion {
+  box-shadow:
+    0 0 0 2px var(--river-spotlight),
+    0 0 0 3px rgb(0 0 0 / 55%),
+    0 0 18px rgb(127 211 255 / 45%),
+    inset 0 1px 6px rgb(0 0 0 / 70%);
+}

@@ -76,7 +76,13 @@ import {
   type OwnedEntry,
   shopRows,
 } from '@/lib/shop'
-import { beforeAwards, cardsTurned, type ShowdownPlan, showdownPlanFor } from '@/lib/showdown-plan'
+import {
+  beforeAwards,
+  cardsTurned,
+  type ShowdownPlan,
+  showdownPlanFor,
+  showingSeat,
+} from '@/lib/showdown-plan'
 import {
   appendSocialEvent,
   applySpeaking,
@@ -1079,6 +1085,12 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   // award, the stacks as they were before the pot was paid, so a grown stack or a seat marked out
   // does not tell the table who won while the board is still being turned.
   const paid = showdown === null || showdownAtMs >= showdown.show.awardAtMs
+  // Whose hand is being told: their seat, the caption and, for your own, your hand share one
+  // colour while it is.
+  const showing = showdown === null ? null : showingSeat(showdown, showdownAtMs)
+  const heroShowing =
+    showing !== null &&
+    view.seats.some((seat) => seat.seat === showing && seat.playerId === view.selfId)
   const shownView = useMemo(
     () => (paid || showdown === null ? view : beforeAwards(view, showdown, { stacks: true })),
     [paid, showdown, view],
@@ -1320,6 +1332,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
       <main className="river-app phone-app river-controls-2d">
         <PhoneTable
           view={feltView}
+          heroShowing={heroShowing}
           heroStack={shownView.seats.find((seat) => seat.playerId === view.selfId)?.stack ?? null}
           viewport={viewport}
           table={{
@@ -1331,6 +1344,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             onSelect: setSelectedSeat,
             onHeroDealt: setHeroDealt,
             onPresentation: setPresentation,
+            showingSeat: showing,
             bubbles,
             heldPeeks,
             bigBlind,
@@ -1519,6 +1533,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               onSelect={setSelectedSeat}
               onHeroDealt={setHeroDealt}
               onPresentation={setPresentation}
+              showingSeat={showing}
               bubbles={bubbles}
               heldPeeks={heldPeeks}
               platesHeld={platesHeld}
@@ -1952,6 +1967,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               // nobody should act on a hand they cannot see.
               dealt={activeGraphicsMode !== 'two' || heroDealt || localTurn}
               boardShown={activeGraphicsMode === 'two' ? presentation.boardShown : null}
+              showing={heroShowing}
               bigBlind={bigBlind}
             />
             {/* `populated` is what paints the glass, so it has to follow the
@@ -2208,6 +2224,7 @@ function TableCluster({
   compact,
   dealt,
   boardShown,
+  showing,
   bigBlind,
 }: {
   view: RoomView
@@ -2219,6 +2236,8 @@ function TableCluster({
   dealt: boolean
   /** Board cards the felt has turned face up, or null to read the whole board (3D). */
   boardShown: number | null
+  /** Whether the showdown is telling your hand right now. */
+  showing: boolean
   /** Amounts in this many chips to the big blind, or in chips when null. */
   bigBlind: number | null
 }) {
@@ -2231,7 +2250,7 @@ function TableCluster({
   const readout = holding && showFaces ? readoutFor(hero?.hole ?? [], visibleBoard) : null
   return (
     <section
-      className={`table-cluster${compact ? ' compact' : ''}`}
+      className={`table-cluster${compact ? ' compact' : ''}${showing ? ' showing' : ''}`}
       aria-label={compact ? 'Your hand and chips' : 'Your hand, chips, board and pot'}
     >
       {hero?.hasHole && dealt ? (
@@ -2496,7 +2515,7 @@ function ShowdownStage({
   }
   return (
     <div
-      className={`showdown-stage${tension ? ' tension' : ''}${awarding ? ' awarding' : ''}`}
+      className={`showdown-stage${tension ? ' tension' : ''}${awarding ? ' awarding' : ''}${showingSeat(plan, atMs) === null ? '' : ' spotlit'}`}
       role="status"
       aria-live="polite"
     >
