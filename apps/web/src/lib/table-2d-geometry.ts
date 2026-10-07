@@ -64,7 +64,7 @@ export interface Box {
   height: number
 }
 
-export const PLACARD = { width: 204, height: 64 } as const
+export const PLACARD = { width: 172, height: 54 } as const
 
 export const LANDSCAPE: TableGeometry = {
   orientation: 'landscape',
@@ -331,7 +331,7 @@ export function tableLayout(
       facing,
     })
   }
-  const boardCard = geometry.boardCard ?? { width: 92, height: 128 }
+  const boardCard = geometry.boardCard ?? { width: 100, height: 139 }
   const holeCard = geometry.holeCard ?? { width: 58, height: 81 }
   const gap = geometry.boardGap ?? 12
   const boardSpan = boardCard.width * 5 + gap * 4
@@ -350,7 +350,7 @@ export function tableLayout(
       geometry.orientation === 'portrait'
         ? {
             u: -boardSpan / 2 + boardCard.width,
-            v: boardV - (boardCard.height + holeCard.height) / 2 - 16,
+            v: boardV - (boardCard.height + holeCard.height) / 2 - 14,
           }
         : { u: -geometry.a * 0.2, v: -inner.b * 0.8 },
     board,

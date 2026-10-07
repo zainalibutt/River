@@ -512,9 +512,9 @@
 }
 
 .phone-felt .t2d-placard {
-  width: 100px;
-  height: 52px;
-  padding: 5px 6px;
+  width: 84px;
+  height: 44px;
+  padding: 4px 6px;
   border-radius: 9px;
 }
 .phone-felt .t2d-plate-text {
@@ -522,14 +522,14 @@
   gap: 3px;
 }
 .phone-felt .t2d-name {
-  max-width: 88px;
-  font-size: 14px;
+  max-width: 72px;
+  font-size: 12px;
   font-family: var(--font-inter), sans-serif;
   font-style: normal;
   text-overflow: ellipsis;
 }
 .phone-felt .t2d-stack {
-  font-size: 14px;
+  font-size: 12px;
 }
 .phone-felt .t2d-medallion {
   display: none;
@@ -537,7 +537,7 @@
 .phone-felt .t2d-select {
   width: 100%;
   height: 100%;
-  min-height: 52px;
+  min-height: 44px;
   border: none;
   border-radius: 9px;
   background: transparent;
@@ -646,6 +646,14 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
+}
+.phone-felt .t2d-seat-mark {
+  width: 24px;
+  height: 24px;
+}
+.phone-felt .t2d-seat-mark::after {
+  width: 4px;
+  height: 4px;
 }
 /* Your hand, while the showdown tells it: the same spotlight its caption carries. */
 .phone-hand.showing .phone-peek {

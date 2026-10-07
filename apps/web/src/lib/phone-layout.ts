@@ -32,8 +32,9 @@ export function phoneGeometry(width: number, height: number): TableGeometry {
     tilt: 12,
     perspective: 2600,
     eye: { x: width / 2, y: tableHeight / 3 },
-    placard: { width: 100, height: 52 },
-    boardCard: { width: 32, height: 45 },
+    // As small as a name and a stack can be read, and no smaller than a fingertip.
+    placard: { width: 84, height: 44 },
+    boardCard: { width: 36, height: 50 },
     boardGap: 4,
     holeCard: { width: 18, height: 25 },
   }

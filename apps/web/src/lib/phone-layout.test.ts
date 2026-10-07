@@ -23,7 +23,7 @@ describe('phone table composition', () => {
       expect(seat).toBeDefined()
       if (seat === undefined) continue
       expect(seat.foot).toBe(true)
-      expect(seat.placard.x).toBeCloseTo(seat.placardBox.x + 50)
+      expect(seat.placard.x).toBeCloseTo(seat.placardBox.x + seat.placardBox.width / 2)
     }
   })
 

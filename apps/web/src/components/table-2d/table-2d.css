@@ -369,10 +369,10 @@
   position: absolute;
   z-index: 8;
   display: flex;
-  width: 204px;
-  height: 64px;
+  width: 172px;
+  height: 54px;
   align-items: center;
-  padding: 0 16px 0 6px;
+  padding: 0 14px 0 6px;
   border: 1px solid rgb(206 166 100 / 24%);
   border-radius: 34px;
   background: var(--river-grain), linear-gradient(180deg, rgb(26 35 31 / 94%), rgb(9 13 11 / 96%));
@@ -380,7 +380,7 @@
   box-shadow: var(--river-lift-1);
   color: var(--river-cream);
   font: inherit;
-  gap: 12px;
+  gap: 10px;
   pointer-events: auto;
   text-align: left;
   transition:
@@ -402,9 +402,9 @@
 .t2d-medallion {
   position: relative;
   display: grid;
-  width: 52px;
-  height: 52px;
-  flex: 0 0 52px;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
   border-radius: 50%;
   background: radial-gradient(circle at 50% 34%, #27322d, #0b100e 76%);
   box-shadow:
@@ -417,7 +417,7 @@
 .t2d-monogram {
   color: var(--river-brass-hi);
   font-family: var(--font-fraunces), Georgia, serif;
-  font-size: 23px;
+  font-size: 19px;
   font-style: italic;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -429,8 +429,8 @@
   bottom: auto;
   left: -4px;
   top: -4px;
-  width: 60px;
-  height: 60px;
+  width: 50px;
+  height: 50px;
   transform: none;
 }
 
@@ -447,7 +447,7 @@
 .t2d-name {
   overflow: hidden;
   font-family: var(--font-inter), system-ui, sans-serif;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
   text-overflow: ellipsis;
@@ -459,7 +459,7 @@
   align-items: center;
   color: var(--river-amber-bright);
   font-family: var(--font-inter), system-ui, sans-serif;
-  font-size: 15px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   gap: 6px;
@@ -567,26 +567,34 @@
 }
 
 /*
- * An empty seat: a ring where somebody could sit, and nothing else.
+ * An empty seat: a mark inlaid in the felt by the rail, and nothing round the rail.
  *
- * It was a placard with the words taken out - a dashed box the width of a name
- * with its medallion at the left end - and a medallion at the left end of a box
- * centred on the seat is not on the seat. Every empty place on the right of the
- * table sat half a placard in from where its mirror on the left did, which read
- * as a table laid out crooked. The ring now stands on the seat's own place.
+ * Empty places used to keep a placard each, and at the table's dark control finish
+ * those read as a ring of empty frames - clutter, and a button to press for a seat
+ * the table hands you anyway. The mark lies on the felt where that seat's cards
+ * would land, so the table still shows how many can sit and where.
  */
-.t2d-open {
-  justify-content: center;
-  padding: 0;
-  border-color: transparent;
-  background: none;
-  box-shadow: none;
-  opacity: 0.6;
+.t2d-seat-mark {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 1.5px rgb(206 166 100 / 26%),
+    inset 0 0 0 7px rgb(0 0 0 / 7%);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
-.t2d-medallion-open {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px rgb(206 166 100 / 30%);
+.t2d-seat-mark::after {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(206 166 100 / 30%);
+  content: "";
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
 }
 
 /*
@@ -598,7 +606,7 @@
  * did stay up; name and stack come back while the key is down. The medallion
  * stands at the middle of the placard's box, which is the seat's own place.
  */
-.t2d:not(.t2d-plates-held) .t2d-placard:not(.t2d-open) {
+.t2d:not(.t2d-plates-held) .t2d-placard {
   justify-content: center;
   padding: 0;
   border-color: transparent;

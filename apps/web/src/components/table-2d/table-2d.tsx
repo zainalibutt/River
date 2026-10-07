@@ -363,6 +363,21 @@ export function Table2D(props: Table2DProps) {
           <div className="t2d-felt" style={{ inset: px(geometry.rail) }} />
           <div className="t2d-inlay" style={{ inset: px(geometry.rail + 10) }} />
           <div className="t2d-betline" style={ellipseStyle(geometry, 0.71, 0.59)} />
+          {view.seats.map((seat) => {
+            // Where somebody could sit, inlaid in the felt by the rail.
+            const spot = spots.get(seat.seat)
+            if (seat.playerId !== null || spot === undefined) return null
+            const [first, second] = spot.cards
+            const at = { u: (first.u + second.u) / 2, v: (first.v + second.v) / 2 }
+            return (
+              <div
+                key={`seat-mark-${seat.seat}`}
+                className="t2d-seat-mark"
+                aria-hidden="true"
+                style={offsetStyle(at, geometry)}
+              />
+            )
+          })}
           <div className="t2d-mark" style={offsetStyle(layout.mark, geometry)}>
             River
           </div>
@@ -677,15 +692,10 @@ function Placard({
 }) {
   const box = spot.placardBox
   const position: CSSProperties = { left: px(box.x), top: px(box.y) }
-  if (seat.playerId === null) {
-    // An empty place, and nothing to press: the table seats you when you arrive,
-    // so a plate reading SIT is an instruction for a thing that already happened.
-    return (
-      <div className="t2d-placard t2d-open" style={position} aria-hidden="true">
-        <span className="t2d-medallion t2d-medallion-open" />
-      </div>
-    )
-  }
+  // An empty place has no plate: an empty frame round the rail read as clutter, and as a
+  // button to press for a seat the table hands you when you arrive. The felt marks the
+  // place instead - see the seat marks in Table2D.
+  if (seat.playerId === null) return null
   const shown = phone
     ? seat.betStreet > 0
       ? seat.betStreet
