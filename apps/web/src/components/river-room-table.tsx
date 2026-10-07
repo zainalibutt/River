@@ -1075,9 +1075,9 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     return () => window.clearInterval(tick)
   }, [showdown, showdownStartsAt])
 
-  // What the felt, your hand and the phone show: until the showdown reaches its award, the
-  // stacks as they were before the pot was paid, so a grown stack or a seat marked out does
-  // not tell the table who won while the board is still being turned.
+  // What the felt, your hand, the phone and the action menu show: until the showdown reaches its
+  // award, the stacks as they were before the pot was paid, so a grown stack or a seat marked out
+  // does not tell the table who won while the board is still being turned.
   const paid = showdown === null || showdownAtMs >= showdown.show.awardAtMs
   const shownView = useMemo(
     () => (paid || showdown === null ? view : beforeAwards(view, showdown, { stacks: true })),
@@ -1346,7 +1346,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
           }
           waitingActions={
             <ActionMenu
-              view={view}
+              view={shownView}
               localTurn={false}
               raiseTo={raiseTo}
               onRaiseTo={setRaiseTo}
@@ -2077,7 +2077,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               </div>
             )}
             <ActionMenu
-              view={view}
+              view={shownView}
               localTurn={localTurn}
               raiseTo={raiseTo}
               onRaiseTo={setRaiseTo}
