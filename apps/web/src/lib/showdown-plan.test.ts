@@ -177,6 +177,7 @@ describe('beforeAwards', () => {
     expect(plan).not.toBeNull()
     if (plan === null) return
     const before = beforeAwards(view, plan, { stacks: true })
+    expect(before.pot).toBe(plan.pot)
     expect(before.seats.map((entry) => [entry.stack, entry.busted, entry.sittingOut])).toEqual([
       [0, false, false],
       [20_000, false, false],

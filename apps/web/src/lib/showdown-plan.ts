@@ -86,6 +86,8 @@ export function beforeAwards(
 ): RoomView {
   return {
     ...view,
+    // The pot is still in the middle until it is paid, whatever the settled view says.
+    pot: Math.max(view.pot, plan.pot),
     seats: view.seats.map((seat) => {
       const won = !stacks
         ? 0
