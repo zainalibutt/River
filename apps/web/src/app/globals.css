@@ -3182,7 +3182,8 @@ button.verify-pill.verify-mismatch {
 
 .showdown-card {
   position: absolute;
-  top: 300px;
+  /* Above the pot, not on it: the pot is what the caption is about to pay out. */
+  top: 262px;
   left: 50%;
   display: grid;
   gap: 2px;
@@ -3329,15 +3330,15 @@ button.verify-pill.verify-mismatch {
 
 /* A card is turned over, not swapped: it swings in from edge-on. */
 .showdown-cards .playing-card {
-  width: 58px;
-  height: 81px;
+  width: 50px;
+  height: 70px;
   border-radius: 7px;
   animation: showdown-flip 380ms var(--ease-out) both;
 }
 
 .showdown-cards .card-back {
-  width: 58px;
-  height: 81px;
+  width: 50px;
+  height: 70px;
   border-radius: 7px;
   font-size: 22px;
 }
