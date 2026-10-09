@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="River">
+  <defs>
+    <linearGradient id="brass" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#f7e0a8"/>
+      <stop offset="0.38" stop-color="#d7a85f"/>
+      <stop offset="0.62" stop-color="#a8742f"/>
+      <stop offset="1" stop-color="#e6bf7a"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#brass)">
+    <!-- The spade's two lobes, drawn as brush strokes: full at the shoulder, fine at the point and the foot. -->
+    <path d="M100 12C79 52 22 78 25 122c2 31 36 45 64 29-23 7-48-5-48-31 0-33 44-58 59-90z"/>
+    <path d="M100 12c21 40 78 66 75 110-2 31-36 45-64 29 23 7 48-5 48-31 0-33-44-58-59-90z"/>
+    <!-- The river: two currents running through the foot of the spade. -->
+    <path d="M52 131c20-24 52-22 68-6 13 13 33 12 44-2-9 25-38 30-55 15-14-12-36-14-57-7z"/>
+    <path d="M70 155c17-14 37-10 47 0 11 11 26 10 34 1-7 18-28 21-41 10-10-8-24-12-40-11z"/>
+  </g>
+</svg>
