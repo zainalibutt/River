@@ -683,3 +683,20 @@
     transform: none;
   }
 }
+/* A guest with chips worth keeping, in the status line: save, or not now. */
+.phone-table .phone-save,
+.phone-table .phone-save-dismiss {
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+}
+.phone-table .phone-save {
+  color: var(--river-brass-hi);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.phone-table .phone-save-dismiss {
+  color: var(--river-cream-faint);
+}

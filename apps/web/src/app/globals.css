@@ -4832,3 +4832,51 @@ button.verify-pill.verify-mismatch {
   border-color: var(--club-brass);
   color: var(--club-brass);
 }
+
+/* A guest with something to lose: one line, the log-in lit, and a way to say not now. */
+.hud-save {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  max-width: 340px;
+  color: var(--club-ivory-dim);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.hud-save-dismiss {
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--club-hairline-strong);
+  background: transparent;
+  color: var(--club-ivory-faint);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.hud-login.nudge {
+  border-color: var(--club-brass);
+  color: var(--club-brass);
+  animation: hud-login-nudge 2.4s var(--ease-out) 2;
+}
+
+@keyframes hud-login-nudge {
+  0%,
+  100% {
+    box-shadow: var(--river-lift-1);
+  }
+  50% {
+    box-shadow:
+      var(--river-lift-1),
+      0 0 22px rgb(232 169 60 / 35%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-login.nudge {
+    animation: none;
+  }
+}

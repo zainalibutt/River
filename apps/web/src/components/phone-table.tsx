@@ -59,6 +59,9 @@ export interface PhoneTableProps {
   verifyContent: ReactNode
   accountContent: (onClose: () => void) => ReactNode
   onAccount: () => void
+  /** A guest with chips worth keeping: offer to save them, once, in the status line. */
+  askToSave: boolean
+  onNotNowSave: () => void
   /** The showdown as it is told, over the felt; null between showdowns. */
   showdownStage: ReactNode
 }
@@ -216,7 +219,18 @@ export function PhoneTable(props: PhoneTableProps) {
         ) : null}
       </div>
       <p className="phone-status" aria-live="polite" data-phone-region="status">
-        {props.status}
+        {props.askToSave && !props.status ? (
+          <>
+            <button type="button" className="phone-save" onClick={() => open('account')}>
+              Save your progress
+            </button>
+            <button type="button" className="phone-save-dismiss" onClick={props.onNotNowSave}>
+              Not now
+            </button>
+          </>
+        ) : (
+          props.status
+        )}
       </p>
       <footer className="phone-dock" data-phone-region="dock">
         <div className={`phone-hand${props.heroShowing ? ' showing' : ''}`}>

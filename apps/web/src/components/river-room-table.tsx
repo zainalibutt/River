@@ -63,6 +63,7 @@ import {
   shouldClearPreset,
 } from '@/lib/preset'
 import { type RepFlash, repFlashFor, shouldShowRate } from '@/lib/rep-feedback'
+import { dismissSavePrompt, savePromptDue } from '@/lib/save-prompt'
 import {
   type PendingSeatRequest,
   requeueSeatRequest,
@@ -513,6 +514,21 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   // Anyone standing for an all-in sits back down when a hand finishes, and the scene needs
   // to be told each time rather than once.
   const [handsFinished, setHandsFinished] = useState(0)
+  const [saveDismissed, setSaveDismissed] = useState(false)
+  const guest = !signedIn && upgradeState !== 'complete'
+  const askToSave =
+    !saveDismissed &&
+    lab === undefined &&
+    savePromptDue({
+      guest,
+      handsFinished,
+      storage: typeof window === 'undefined' ? null : window.localStorage,
+      nowMs: Date.now(),
+    })
+  const notNowSave = () => {
+    dismissSavePrompt(window.localStorage, Date.now())
+    setSaveDismissed(true)
+  }
   const [hands, setHands] = useState<readonly SessionHand[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [tables, setTables] = useState<readonly TableSummary[]>([])
@@ -1463,6 +1479,8 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             </>
           }
           onAccount={() => setUpgradeState('editing')}
+          askToSave={askToSave}
+          onNotNowSave={notNowSave}
           showdownStage={
             showdown === null || showdownAtMs < 0 ? null : (
               <ShowdownStage
@@ -1950,10 +1968,18 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               <span className="hud-identity-name">
                 {signedIn || upgradeState === 'complete' ? 'SIGNED IN' : 'GUEST'}
               </span>
+              {askToSave ? (
+                <span className="hud-save">
+                  Save your progress: keep your chips on any device.
+                  <button type="button" className="hud-save-dismiss" onClick={notNowSave}>
+                    Not now
+                  </button>
+                </span>
+              ) : null}
               {signedIn || upgradeState === 'complete' ? null : (
                 <button
                   type="button"
-                  className="hud-login"
+                  className={`hud-login${askToSave ? ' nudge' : ''}`}
                   onClick={() =>
                     setUpgradeState((state) => (state === 'editing' ? 'idle' : 'editing'))
                   }
