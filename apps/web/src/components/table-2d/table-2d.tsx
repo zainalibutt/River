@@ -48,6 +48,7 @@ import {
   type TableGeometry,
   tableLayout,
 } from '@/lib/table-2d-geometry'
+import { tableNow, tableRate } from '@/lib/table-clock'
 import { type SoundEffect, tableSound } from '@/lib/table-sound'
 import { ChipPile } from './chip-pile'
 import { Dealer, Shoe } from './dealer'
@@ -175,10 +176,10 @@ export function Table2D(props: Table2DProps) {
   // Chips, moved on by each moment the room table works out; the same schedule the 3D room plays.
   const flow = useRef<ChipFlow>(emptyChipFlow())
   const [schedule, setSchedule] = useState(0)
-  const [now, setNow] = useState(() => (typeof performance === 'undefined' ? 0 : performance.now()))
+  const [now, setNow] = useState(() => tableNow())
 
   useEffect(() => {
-    const at = performance.now()
+    const at = tableNow()
     if (props.showdown === null) {
       showdownStart.current = null
     } else if (showdownStart.current?.plan !== props.showdown) {
@@ -216,7 +217,7 @@ export function Table2D(props: Table2DProps) {
   const allInHand = useRef(-1)
   const [allIn, setAllIn] = useState<{ seat: number; id: number } | null>(null)
   useEffect(() => {
-    const seconds = performance.now() / 1000
+    const seconds = tableNow() / 1000
     let next = flow.current
     for (const moment of props.chipMoments) {
       if (moment.serial > next.lastSerial && allInHand.current !== moment.handNumber) {
@@ -249,7 +250,8 @@ export function Table2D(props: Table2DProps) {
   }, [props.chipMoments, props.showdown])
   useEffect(() => {
     if (allIn === null) return
-    const timer = window.setTimeout(() => setAllIn(null), ALL_IN_MS)
+    // On the table's clock, so a slowed lab holds the moment as long as it plays.
+    const timer = window.setTimeout(() => setAllIn(null), ALL_IN_MS / Math.max(tableRate(), 0.05))
     return () => window.clearTimeout(timer)
   }, [allIn])
 
@@ -260,7 +262,7 @@ export function Table2D(props: Table2DProps) {
     if (schedule === 0) return
     let frame = 0
     const tick = () => {
-      const at = performance.now()
+      const at = tableNow()
       for (const effect of soundsBetween(choreography.current, flow.current, heard.current, at)) {
         tableSound.play(effect)
       }

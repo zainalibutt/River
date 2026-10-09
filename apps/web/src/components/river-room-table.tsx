@@ -100,6 +100,7 @@ import {
   type SocketLike,
 } from '@/lib/socket'
 import { LANDSCAPE } from '@/lib/table-2d-geometry'
+import { tableNow } from '@/lib/table-clock'
 import { tableSound } from '@/lib/table-sound'
 import {
   initialRoomTarget,
@@ -765,7 +766,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
           if (plan !== null) {
             // Not yet: the showdown is told once the felt has finished the board, which an
             // all-in run-out can take several seconds to do. Below zero means waiting.
-            showdownSetAt.current = performance.now()
+            showdownSetAt.current = tableNow()
             setShowdown(plan)
             setShowdownAtMs(-1)
           }
@@ -1071,7 +1072,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
       for (const apply of waiting) apply()
     }
     const tick = window.setInterval(() => {
-      const elapsed = performance.now() - showdownStartsAt
+      const elapsed = tableNow() - showdownStartsAt
       if (elapsed >= showdown.show.totalMs) {
         finish()
         return

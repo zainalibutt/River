@@ -1,12 +1,17 @@
-/* The motion lab's scene picker: small and out of the way of the table it is reviewing. */
+/* The motion lab's controls: small and out of the way of the table they are reviewing. */
 .motion-lab {
   position: fixed;
   z-index: 100;
   bottom: 6px;
   left: 6px;
-  display: flex;
+  display: grid;
   gap: 4px;
-  opacity: 0.75;
+  opacity: 0.8;
+}
+.motion-lab-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .motion-lab button {
   padding: 3px 8px;
@@ -20,4 +25,14 @@
 .motion-lab button[aria-pressed="true"] {
   border-color: var(--river-amber-bright);
   color: var(--river-cream);
+}
+.motion-lab input[type="range"] {
+  width: 160px;
+  accent-color: var(--river-amber);
+}
+.motion-lab output {
+  min-width: 40px;
+  color: var(--river-cream-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
