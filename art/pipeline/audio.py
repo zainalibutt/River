@@ -286,6 +286,26 @@ def turn_alert(rand):
     return normalise(at(mix(first), second, 0.11), 0.5)
 
 
+
+def showdown_hush(rand):
+    """The breath before the hand that decides it. A low swell with air in it, felt
+    more than heard, and gone before the cards turn."""
+    body = envelope(ping(0.95, 98.0, 1.2), 0.32, 0.22)
+    upper = envelope(ping(0.95, 147.0, 1.6), 0.36, 0.2)
+    air = envelope(lowpass(noise(0.95, rand), 900), 0.4, 0.2)
+    return normalise(mix(body, [value * 0.5 for value in upper], [value * 0.25 for value in air]), 0.32)
+
+
+def win_chime(rand):
+    """The pot going to its winner. Three warm notes rising, close together, under the
+    chips: a confirmation, not a jackpot."""
+    out = silence(0.95)
+    for index, frequency in enumerate((523.25, 659.25, 783.99)):
+        note = envelope(ping(0.8, frequency, 4.5), 0.004, 0.32)
+        overtone = envelope(ping(0.5, frequency * 2.0, 9.0), 0.003, 0.12)
+        out = at(out, mix(note, [value * 0.25 for value in overtone] + silence(0.3)), 0.06 * index)
+    return normalise(out, 0.42)
+
 EFFECTS = {
     'chip_place': (chip_place, 'A single chip onto the felt'),
     'chip_push': (chip_push, 'A bet going in'),
@@ -301,6 +321,8 @@ EFFECTS = {
     'wheel_tick': (wheel_tick, 'One notch of the raise wheel'),
     'card_peek': (card_peek, 'A look at your own cards'),
     'turn_alert': (turn_alert, 'Your turn to act'),
+    'showdown_hush': (showdown_hush, 'The breath before the deciding hand'),
+    'win_chime': (win_chime, 'The pot going to its winner'),
 }
 
 # The music slot. Empty on purpose - v1 fills it with public-domain
@@ -319,10 +341,25 @@ MUSIC = [
 ]
 
 
+
+# Each effect's noise comes from a seed of its own. Seeds used to follow the effect's
+# place in the sorted list, so adding an effect quietly re-rolled every effect after it.
+# The first fourteen keep the seeds they were published with; later ones are seeded by name.
+_PUBLISHED_ORDER = [
+    'card_deal', 'card_flip', 'card_peek', 'card_slide', 'check_tap', 'chip_bet', 'chip_place',
+    'chip_push', 'chip_stack', 'pot_push', 'turn_alert', 'ui_click', 'ui_hover', 'wheel_tick',
+]
+
+
+def seed_for(name):
+    if name in _PUBLISHED_ORDER:
+        return 0x51E7 + _PUBLISHED_ORDER.index(name) * 7919
+    return 0x51E7 + sum(ord(character) * (index + 1) for index, character in enumerate(name)) * 104729
+
 def build():
     manifest = {'rate': RATE, 'effects': [], 'music': MUSIC, 'voice': []}
-    for index, (name, (make, description)) in enumerate(sorted(EFFECTS.items())):
-        rand = _lcg(0x51E7 + index * 7919)
+    for name, (make, description) in sorted(EFFECTS.items()):
+        rand = _lcg(seed_for(name))
         samples = fade_edges(make(rand))
         path = write_wav(name, samples)
         manifest['effects'].append({

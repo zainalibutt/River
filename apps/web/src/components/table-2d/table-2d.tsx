@@ -1,5 +1,6 @@
 'use client'
 
+import { SHOWDOWN_TENSION_MS } from '@river/engine'
 import type { RoomSeatView, RoomView } from '@river/server'
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { RollingAmount } from '@/components/rolling-amount'
@@ -268,7 +269,13 @@ export function Table2D(props: Table2DProps) {
     let frame = 0
     const tick = () => {
       const at = tableNow()
-      for (const effect of soundsBetween(choreography.current, flow.current, heard.current, at)) {
+      for (const effect of soundsBetween(
+        choreography.current,
+        flow.current,
+        props.showdown,
+        heard.current,
+        at,
+      )) {
         tableSound.play(effect)
       }
       heard.current = at
@@ -568,11 +575,22 @@ export function Table2D(props: Table2DProps) {
 function soundsBetween(
   cards: CardChoreography,
   chips: ChipFlow,
+  showdown: ShowdownPlan | null,
   from: number,
   to: number,
 ): SoundEffect[] {
   const out: SoundEffect[] = []
   const began = (at: number) => at > from && at <= to
+  // The showdown's own sounds: a hush as the room waits on the deciding hand, and a chime
+  // under the chips as the pot goes. Told from the felt, so neither runs ahead of the cards.
+  const startsAt = cards.showdownStartsAt
+  if (showdown !== null && startsAt !== null) {
+    const deciding = showdown.show.steps.find((step) => step.deciding)
+    if (deciding !== undefined && !showdown.tabled) {
+      if (began(startsAt + deciding.revealAtMs - SHOWDOWN_TENSION_MS)) out.push('showdown_hush')
+    }
+    if (began(startsAt + showdown.show.awardAtMs)) out.push('win_chime')
+  }
   for (const sprite of cards.sprites) {
     for (const move of sprite.moves) {
       if (!began(move.startAt) || move.startAt === move.endAt) continue

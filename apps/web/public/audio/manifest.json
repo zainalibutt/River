@@ -82,6 +82,14 @@
       "bus": "effects"
     },
     {
+      "id": "showdown_hush",
+      "file": "audio/showdown_hush.wav",
+      "description": "The breath before the deciding hand",
+      "seconds": 0.95,
+      "bytes": 41938,
+      "bus": "effects"
+    },
+    {
       "id": "turn_alert",
       "file": "audio/turn_alert.wav",
       "description": "Your turn to act",
@@ -111,6 +119,14 @@
       "description": "One notch of the raise wheel",
       "seconds": 0.022,
       "bytes": 1014,
+      "bus": "effects"
+    },
+    {
+      "id": "win_chime",
+      "file": "audio/win_chime.wav",
+      "description": "The pot going to its winner",
+      "seconds": 0.95,
+      "bytes": 41938,
       "bus": "effects"
     }
   ],
