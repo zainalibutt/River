@@ -664,3 +664,22 @@
   border-color: var(--river-spotlight);
   box-shadow: 0 0 22px rgb(127 211 255 / 30%);
 }
+/* The thumb's controls give when pressed and spring back when let go. */
+.phone-table :is(.phone-actions, .phone-confirm, .phone-sizing) > button {
+  transition:
+    filter 140ms var(--ease-out),
+    transform 380ms var(--ease-spring);
+}
+.phone-table :is(.phone-actions, .phone-confirm, .phone-sizing) > button:active:not(:disabled) {
+  transform: scale(0.95);
+  transition:
+    filter 80ms var(--ease-out),
+    transform 90ms var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .phone-table :is(.phone-actions, .phone-confirm, .phone-sizing) > button,
+  .phone-table :is(.phone-actions, .phone-confirm, .phone-sizing) > button:active:not(:disabled) {
+    transition: filter 140ms var(--ease-out);
+    transform: none;
+  }
+}
