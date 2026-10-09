@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import { DailyChips } from '@/components/daily-chips'
 import { FriendsSheet } from '@/components/friends-sheet'
+import { RiverIntro } from '@/components/river-intro'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
 import { RollingAmount } from '@/components/rolling-amount'
@@ -351,6 +352,7 @@ export function ClubMenu() {
 
   return (
     <div className="club club-home">
+      <RiverIntro />
       <div className="club-home-art" aria-hidden="true">
         <div className="club-home-world">
           <Image

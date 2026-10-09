@@ -1,0 +1,272 @@
+/*
+ * The way into River. Every beat is a CSS animation on one 3,050ms timeline, so it is
+ * retimed here and nowhere else:
+ *
+ *    0 -  600  the light comes up; the deck falls into it
+ *  650 - 1100  the deck fans
+ * 1050 - 1500  one card rises and spins over: the ace of spades (the one quick beat)
+ * 1450 - 1750  light runs across its face
+ * 1650 - 2150  two chips roll in and settle on it
+ * 2300 - 2850  the room pushes in through the spade; the wordmark comes up
+ * 3050         the curtain lifts on the menu
+ */
+
+.river-intro {
+  --intro-card-w: clamp(118px, 15vmin, 176px);
+  --intro-card-h: calc(var(--intro-card-w) * 1.4);
+  --intro-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --intro-snap: cubic-bezier(0.2, 0.9, 0.25, 1.12);
+
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  overflow: hidden;
+  background: var(--river-void, #0a0d0c);
+  inset: 0;
+  place-items: center;
+  transition: opacity 320ms var(--intro-ease);
+}
+
+.river-intro.leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.intro-light {
+  position: absolute;
+  background: radial-gradient(
+    ellipse 46% 40% at 50% 52%,
+    rgb(232 169 60 / 20%),
+    rgb(42 91 69 / 10%) 55%,
+    transparent 78%
+  );
+  inset: 0;
+  animation: intro-light 600ms var(--intro-ease) both;
+}
+
+.intro-stage {
+  position: relative;
+  width: var(--intro-card-w);
+  height: var(--intro-card-h);
+  perspective: 1100px;
+  transform-origin: 50% 52%;
+  animation: intro-push 550ms cubic-bezier(0.55, 0, 0.75, 0.2) 2300ms both;
+}
+
+.intro-deck,
+.intro-hero,
+.intro-card {
+  position: absolute;
+  inset: 0;
+}
+
+.intro-card,
+.intro-hero-back,
+.intro-hero-face {
+  border-radius: 9px;
+}
+
+.river-intro .playing-card,
+.river-intro .card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 9px;
+  inset: 0;
+}
+
+/* The deck falls in as one, then fans from the bottom edge like a dealer's spread. */
+.intro-deck {
+  animation:
+    intro-drop 500ms var(--intro-ease) 150ms both,
+    intro-clear 450ms var(--intro-ease) 1150ms forwards;
+}
+
+.intro-card {
+  transform-origin: 50% 115%;
+  animation: intro-fan 450ms var(--intro-ease) 650ms both;
+}
+
+.intro-fan-0 {
+  --fan: -30deg;
+}
+
+.intro-fan-1 {
+  --fan: -15deg;
+}
+
+.intro-fan-2 {
+  --fan: 0deg;
+}
+
+.intro-fan-3 {
+  --fan: 15deg;
+}
+
+.intro-fan-4 {
+  --fan: 30deg;
+}
+
+/* The ace: out of the middle of the fan, up, and over in depth, with one snap at the end. */
+.intro-hero {
+  opacity: 0;
+  animation: intro-rise 450ms var(--intro-snap) 1050ms both;
+}
+
+.intro-hero-turn {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  animation: intro-spin 450ms var(--intro-snap) 1100ms both;
+}
+
+.intro-hero-back,
+.intro-hero-face {
+  position: absolute;
+  backface-visibility: hidden;
+  inset: 0;
+}
+
+.intro-hero-face {
+  overflow: hidden;
+  box-shadow: 0 0 60px rgb(232 169 60 / 28%);
+  transform: rotateY(180deg);
+}
+
+.intro-sheen {
+  position: absolute;
+  background: linear-gradient(105deg, transparent 32%, rgb(255 246 226 / 80%) 50%, transparent 68%);
+  background-size: 260% 100%;
+  inset: 0;
+  mix-blend-mode: screen;
+  animation: intro-sheen 300ms linear 1450ms both;
+}
+
+/* Two chips: brass and wine, rolled in from either side and settled on the card's foot. */
+.intro-chip {
+  position: absolute;
+  bottom: 6%;
+  width: calc(var(--intro-card-w) * 0.34);
+  height: calc(var(--intro-card-w) * 0.34);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 calc(var(--intro-card-w) * 0.035) rgb(255 255 255 / 75%),
+    inset 0 0 0 calc(var(--intro-card-w) * 0.06) currentColor,
+    0 6px 14px rgb(0 0 0 / 50%);
+  background: repeating-conic-gradient(currentColor 0 22.5deg, #f2eadf 22.5deg 30deg), currentColor;
+  opacity: 0;
+}
+
+.intro-chip-left {
+  left: -6%;
+  color: #a87c42;
+  --from: -48vw;
+  animation: intro-roll 500ms var(--intro-ease) 1650ms both;
+}
+
+.intro-chip-right {
+  right: -6%;
+  color: #7a2a35;
+  --from: 48vw;
+  animation: intro-roll 500ms var(--intro-ease) 1870ms both;
+}
+
+.intro-mark {
+  position: absolute;
+  margin: 0;
+  color: var(--river-cream, #f2eadf);
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: clamp(56px, 12vmin, 132px);
+  font-weight: 400;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
+  animation: intro-mark 600ms var(--intro-ease) 2450ms both;
+}
+
+@keyframes intro-light {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes intro-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-38vh) rotate(-8deg);
+  }
+}
+
+@keyframes intro-fan {
+  to {
+    transform: rotate(var(--fan));
+  }
+}
+
+@keyframes intro-clear {
+  to {
+    opacity: 0;
+    transform: translateY(6%) scale(0.92);
+  }
+}
+
+@keyframes intro-rise {
+  /* Hidden until the fan is open: it comes out of the middle of it, not before. */
+  from {
+    opacity: 0;
+    transform: translateY(0) scale(1);
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-6%) scale(1.12);
+  }
+}
+
+@keyframes intro-spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(540deg);
+  }
+}
+
+@keyframes intro-sheen {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+
+@keyframes intro-roll {
+  from {
+    opacity: 1;
+    transform: translateX(var(--from)) rotate(-540deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) rotate(0deg);
+  }
+}
+
+@keyframes intro-push {
+  to {
+    opacity: 0;
+    transform: scale(9);
+  }
+}
+
+@keyframes intro-mark {
+  from {
+    opacity: 0;
+    transform: scale(1.3);
+    letter-spacing: 0.6em;
+  }
+  to {
+    opacity: 1;
+  }
+}
