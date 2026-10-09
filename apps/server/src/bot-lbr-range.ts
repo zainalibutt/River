@@ -108,7 +108,8 @@ export function moveFrequency(
  * Reweights a range by one observed move; holdings clashing with the board
  * drop out. `cardBlind` is the chance the move had nothing to do with the
  * cards, for a player who may not play as `policy` does: every holding then
- * keeps at least that share of its weight.
+ * keeps at least that share of its weight. `known` replaces sampling `policy`
+ * with the exact share of each holding that makes the move, where it is known.
  */
 export function updateRange(
   range: WeightedHolding[],
@@ -118,6 +119,7 @@ export function updateRange(
   taken: MoveClass,
   seed: string,
   cardBlind = 0,
+  known?: (hole: readonly [Card, Card]) => number,
 ): void {
   const board = new Set(observation.board.map(cardKey))
   const { samplesPerHolding, smoothing } = LBR_RANGE_TUNING
@@ -127,7 +129,9 @@ export function updateRange(
       continue
     }
     if (holding.weight === 0) continue
-    const frequency = moveFrequency(policy, personality, observation, holding.hole, taken, seed)
+    const frequency =
+      known?.(holding.hole) ??
+      moveFrequency(policy, personality, observation, holding.hole, taken, seed)
     const likely = (frequency * samplesPerHolding + smoothing) / (samplesPerHolding + 2 * smoothing)
     holding.weight *= cardBlind === 0 ? likely : (1 - cardBlind) * likely + cardBlind
   }

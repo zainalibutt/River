@@ -22,7 +22,7 @@ import {
   ordinaryTables,
 } from './bot-session-campaign.js'
 import { clusteredEstimate, pairRuns } from './bot-session-evaluation.js'
-import { turnSolverPolicy } from './bot-turn-policy.js'
+import { solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
 /** Named focal policies that comparisons can refer to from the command line. */
@@ -76,7 +76,7 @@ export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
   ).policy,
 }
 
-// Usage: tsx bot-compare-table.ts <table> <seed prefix> <sessions> <baseline> <candidate: v9a|v9a-reads|v9h35|v9h50|...> <out.json> [first session] [rotation|champion]
+// Usage: tsx bot-compare-table.ts <table> <seed prefix> <sessions> <baseline> <candidate: v9a|v9a-reads|v9b|v9h35|v9h50|...> <out.json> [first session] [rotation|champion]
 // With a first session, the run covers sessions first to first + sessions - 1 of the table,
 // so a long table can be split across processes; bot-compare-pool.ts joins the pieces.
 // A policy name ending in -forget plays that policy with no memory of its opponents
@@ -100,6 +100,12 @@ function comparable(name: string | undefined): { policy: BotPolicy; forget: bool
         reads: name === 'v9a-reads',
         predictableTrust: name === 'v9h35' ? 0.35 : name === 'v9h50' ? 0.5 : null,
       }).policy,
+      forget: false,
+    }
+  }
+  if (name === 'v9b') {
+    return {
+      policy: solvedTurnPolicy(turnNetworkFromEnvironment(), {}, true).policy,
       forget: false,
     }
   }
@@ -133,7 +139,7 @@ if (
   !out
 ) {
   throw new Error(
-    'usage: <table> <seed prefix> <sessions> <baseline> <candidate: v9a|v9a-reads|v9h35|v9h50|...> <out.json> [first session] [rotation|champion]',
+    'usage: <table> <seed prefix> <sessions> <baseline> <candidate: v9a|v9a-reads|v9b|v9h35|v9h50|...> <out.json> [first session] [rotation|champion]',
   )
 }
 const common = {

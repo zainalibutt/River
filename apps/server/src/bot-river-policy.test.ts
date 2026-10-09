@@ -157,6 +157,34 @@ describe('ranges from the blueprint', () => {
     expect(pairs / total).toBeGreaterThan(0.9)
     expect(other.every((holding) => holding.weight === 1)).toBe(true)
   })
+
+  it('uses the shares another policy reports for the moves it chose', () => {
+    const opening = view({
+      street: 'preflop',
+      pot: 150,
+      currentBet: 100,
+      betStreet: 50,
+      stack: 9950,
+    })
+    // The move was chosen by a policy that raises suited hands, not by the blueprint.
+    const [raiser] = trackRanges(
+      board,
+      [move(opening, { kind: 'raiseTo', to: 300 })],
+      ['a', 'b'],
+      legacyGuardPolicy,
+      person(10),
+      'pairs',
+      undefined,
+      undefined,
+      (_decision, taken) =>
+        taken === 'aggressive' ? (hole) => (hole[0].suit === hole[1].suit ? 1 : 0) : null,
+    )
+    const total = raiser.reduce((sum, holding) => sum + holding.weight, 0)
+    const suited = raiser
+      .filter((holding) => holding.hole[0].suit === holding.hole[1].suit)
+      .reduce((sum, holding) => sum + holding.weight, 0)
+    expect(suited / total).toBeGreaterThan(0.95)
+  })
 })
 
 describe('air in the opponent range', () => {

@@ -7,6 +7,8 @@ import {
   type Card,
   cardKey,
 } from '@river/engine'
+import { decisionClass, type MoveClass } from './bot-lbr-range.js'
+import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
 import {
   cardBlindShare,
@@ -19,6 +21,7 @@ import {
   type RiverReads,
   readsModel,
   riverReads,
+  riverSolverPolicy,
   trackRanges,
   translate,
 } from './bot-river-policy.js'
@@ -91,7 +94,16 @@ export function turnSolverPolicy(
   id: string,
   version: number,
   overrides: Partial<TurnPolicyTuning> = {},
-): { readonly policy: BotPolicy; readonly stats: TurnPolicyStats } {
+): {
+  readonly policy: BotPolicy
+  readonly stats: TurnPolicyStats
+  /** For one of this policy's past turn moves, the share of each holding that makes it. */
+  readonly ownShares: (
+    decision: PublicDecision,
+    taken: MoveClass,
+    personality: BotPersonality,
+  ) => ((hole: readonly [Card, Card]) => number) | null
+} {
   const tuning: TurnPolicyTuning = { ...TURN_POLICY_TUNING, ...overrides }
   const stats: TurnPolicyStats = { solved: 0, fallbacks: {}, solves: 0, trackMs: 0, solveMs: 0 }
   const cache = new Map<string, SolvedTurn | string>()
@@ -118,7 +130,61 @@ export function turnSolverPolicy(
       }
     },
   }
-  return { policy, stats }
+  const ownShares = (decision: PublicDecision, taken: MoveClass, personality: BotPersonality) => {
+    const { observation } = decision
+    if (observation.street !== 'turn') return null
+    const found = locate(observation, personality, base, network, tuning, cache, stats)
+    if (typeof found === 'string') return null
+    const { solved, node, self } = found
+    const table = solved.strategy.get(node.history)
+    if (table === undefined) return null
+    const width = node.actions.length
+    const matches = node.actions.map(
+      (action) =>
+        decisionClass(decisionFor(node, action, solved.spot, observation), observation) === taken,
+    )
+    const hands = solved.hands[self]
+    return (hole: readonly [Card, Card]) => {
+      const index =
+        comboIndex(hands, hole as [Card, Card]) ?? nearestStrength(hands, hole, observation.board)
+      let share = 0
+      for (let action = 0; action < width; action += 1) {
+        if (matches[action] === true) share += table[index * width + action] as number
+      }
+      return share
+    }
+  }
+  return { policy, stats, ownShares }
+}
+
+/**
+ * v9a and v9b: v8z with two-player turns solved. With `handover`, v9b, the
+ * river is told the range the turn solver played rather than rebuilding it as
+ * if v6 had played the turn, so the two streets agree on what the OG can hold.
+ */
+export function solvedTurnPolicy(
+  network: RiverValueNetwork,
+  overrides: Partial<TurnPolicyTuning> = {},
+  handover = false,
+) {
+  let turn: ReturnType<typeof turnSolverPolicy> | undefined
+  const river = riverSolverPolicy(
+    pokerGuardPolicy,
+    'river-solver',
+    1,
+    RIVER_CANDIDATE_TUNING,
+    handover
+      ? (decision, taken, personality) => turn?.ownShares(decision, taken, personality) ?? null
+      : undefined,
+  )
+  turn = turnSolverPolicy(river.policy, network, 'turn-solver', 1, overrides)
+  return { ...turn, river: river.stats }
+}
+
+interface LocatedTurn {
+  readonly solved: SolvedTurn
+  readonly node: Extract<RiverNode, { kind: 'action' }>
+  readonly self: Player
 }
 
 function turnDecision(
@@ -130,6 +196,40 @@ function turnDecision(
   stats: TurnPolicyStats,
 ): BotDecision | string {
   const { observation, personality } = context
+  const found = locate(observation, personality, base, network, tuning, cache, stats)
+  if (typeof found === 'string') return found
+  const { solved, node, self } = found
+  const table = solved.strategy.get(node.history)
+  const hole = observation.actor.hole
+  if (table === undefined || hole.length !== 2) return 'no strategy'
+  const hands = solved.hands[self]
+  const index =
+    comboIndex(hands, hole as [Card, Card]) ?? nearestStrength(hands, hole, observation.board)
+  const width = node.actions.length
+  const row = table.subarray(index * width, (index + 1) * width)
+  const roll = context.rng()
+  let pick = row.length - 1
+  let cumulative = 0
+  for (let action = 0; action < row.length; action += 1) {
+    cumulative += row[action] as number
+    if (roll < cumulative) {
+      pick = action
+      break
+    }
+  }
+  return decisionFor(node, node.actions[pick] as string, solved.spot, observation)
+}
+
+/** The solved turn and the node this observation's player is to act at, or why there is none. */
+function locate(
+  observation: BotObservationV1,
+  personality: BotPersonality,
+  base: BotPolicy,
+  network: RiverValueNetwork,
+  tuning: TurnPolicyTuning,
+  cache: Map<string, SolvedTurn | string>,
+  stats: TurnPolicyStats,
+): LocatedTurn | string {
   const live = observation.seats.filter((seat) => seat.playerId !== null && !seat.folded)
   if (live.length !== 2) return 'not heads-up'
   if (observation.board.length !== 4) return 'not a turn board'
@@ -205,25 +305,7 @@ function turnDecision(
     node = node.children[index] as RiverNode
   }
   if (node.kind !== 'action' || node.player !== self) return 'off tree'
-  const table = solved.strategy.get(node.history)
-  const hole = observation.actor.hole
-  if (table === undefined || hole.length !== 2) return 'no strategy'
-  const hands = solved.hands[self]
-  const index =
-    comboIndex(hands, hole as [Card, Card]) ?? nearestStrength(hands, hole, observation.board)
-  const width = node.actions.length
-  const row = table.subarray(index * width, (index + 1) * width)
-  const roll = context.rng()
-  let pick = row.length - 1
-  let cumulative = 0
-  for (let action = 0; action < row.length; action += 1) {
-    cumulative += row[action] as number
-    if (roll < cumulative) {
-      pick = action
-      break
-    }
-  }
-  return decisionFor(node, node.actions[pick] as string, solved.spot, observation)
+  return { solved, node, self }
 }
 
 function solveTurnSpot(

@@ -182,6 +182,7 @@ export function riverSolverPolicy(
   id: string,
   version: number,
   overrides: Partial<RiverPolicyTuning> = {},
+  own: KnownShares = () => null,
 ): { readonly policy: BotPolicy; readonly stats: RiverPolicyStats } {
   const tuning: RiverPolicyTuning = { ...RIVER_POLICY_TUNING, ...overrides }
   const stats: RiverPolicyStats = {
@@ -209,7 +210,7 @@ export function riverSolverPolicy(
       if (context.observation.street !== 'river' || context.profile.skill !== 'og') {
         return baseline()
       }
-      const result = solverDecision(context, base, tuning, cache, stats)
+      const result = solverDecision(context, base, tuning, cache, stats, own)
       if (typeof result === 'string') {
         stats.fallbacks[result] = (stats.fallbacks[result] ?? 0) + 1
         return baseline()
@@ -227,6 +228,7 @@ function solverDecision(
   tuning: RiverPolicyTuning,
   cache: Map<string, SolvedRiver | string>,
   stats: RiverPolicyStats,
+  own: KnownShares,
 ): BotDecision | string {
   const { observation, personality } = context
   const live = observation.seats.filter((seat) => seat.playerId !== null && !seat.folded)
@@ -273,7 +275,18 @@ function solverDecision(
   }`
   let solved = cache.get(cacheKey)
   if (solved === undefined) {
-    solved = solveSpot(observation, preRiver, live, base, personality, key, tuning, stats, reads)
+    solved = solveSpot(
+      observation,
+      preRiver,
+      live,
+      base,
+      personality,
+      key,
+      tuning,
+      stats,
+      reads,
+      own,
+    )
     cache.set(cacheKey, solved)
     if (cache.size > tuning.cacheSize) {
       cache.delete(cache.keys().next().value as string)
@@ -322,6 +335,7 @@ function solveSpot(
   tuning: RiverPolicyTuning,
   stats: RiverPolicyStats,
   reads: RiverReads | null = null,
+  own: KnownShares = () => null,
 ): SolvedRiver | string {
   const stacks = live.map((seat) => seat.stack + seat.betStreet)
   const stack = Math.min(...stacks)
@@ -350,6 +364,10 @@ function solveSpot(
       decision.observation.actor.playerId === players[opponent]
         ? cardBlindShare(read, taken, tuning)
         : 0,
+    (decision, taken, player) =>
+      decision.observation.actor.playerId === observation.actor.playerId
+        ? own(decision, taken, player)
+        : null,
   )
   ranges[opponent] = withAir(ranges[opponent], tuning.opponentAir)
   const tracked = performance.now()
@@ -380,9 +398,21 @@ function solveSpot(
 }
 
 /**
+ * For a past move chosen by a policy other than the blueprint, the share of
+ * each holding that makes it, as that policy's own strategy says; null where
+ * the blueprint made the move.
+ */
+export type KnownShares = (
+  decision: PublicDecision,
+  taken: MoveClass,
+  personality: BotPersonality,
+) => ((hole: readonly [Card, Card]) => number) | null
+
+/**
  * Both players' ranges at the start of the river, as the blueprint would have
  * played the hand. Every holding starts equal; each earlier move multiplies a
- * holding's weight by how often the blueprint makes that move with it.
+ * holding's weight by how often the blueprint makes that move with it, or by
+ * the exact share `known` gives for a move another policy chose.
  */
 export function trackRanges(
   board: readonly Card[],
@@ -393,6 +423,7 @@ export function trackRanges(
   seed: string,
   minimumWeightShare = RIVER_POLICY_TUNING.minimumWeightShare,
   doubt: (decision: PublicDecision, taken: MoveClass) => number = () => 0,
+  known: KnownShares = () => null,
 ): [WeightedHolding[], WeightedHolding[]] {
   const blocked = new Set(board.map(cardKey))
   const deck = makeDeck().filter((card) => !blocked.has(cardKey(card)))
@@ -419,6 +450,7 @@ export function trackRanges(
       taken,
       `${seed}:${index}`,
       doubt(decision, taken),
+      known(decision, taken, personality) ?? undefined,
     )
     const heaviest = range.reduce((most, holding) => Math.max(most, holding.weight), 0)
     for (const holding of range) {

@@ -10,19 +10,20 @@ import {
   heldOutTables,
   ordinaryTables,
 } from './bot-session-campaign.js'
-import { turnSolverPolicy } from './bot-turn-policy.js'
+import { solvedTurnPolicy } from './bot-turn-policy.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-turn-diagnose.ts <table> <seed prefix> <sessions> <first session> <out.json>
-// Plays v8z and v9a on the same deals against the champion, as bot-compare-table.ts does, and
+// Usage: tsx bot-turn-diagnose.ts <table> <seed prefix> <sessions> <first session> <out.json> [v9a|v9b]
+// Plays v8z and a turn-solving candidate (v9a by default) on the same deals against the champion, as bot-compare-table.ts does, and
 // tags every hand with what the focal seat did at a two-player turn and whether the turn solver
 // chose it, so bot-turn-diagnose-pool.ts can say where the solver's chips are won and lost.
-const [tableName, prefix, sessionsText, firstText, out] = process.argv.slice(2)
+const [tableName, prefix, sessionsText, firstText, out, candidateName = 'v9a'] =
+  process.argv.slice(2)
 const table = [...developmentTables(), ...heldOutTables(), ...ordinaryTables()].find(
   (entry) => entry.name === tableName,
 )
-if (table === undefined || !prefix || !out) {
-  throw new Error('usage: <table> <seed prefix> <sessions> <first session> <out.json>')
+if (table === undefined || !prefix || !out || !['v9a', 'v9b'].includes(candidateName)) {
+  throw new Error('usage: <table> <seed prefix> <sessions> <first session> <out.json> [v9a|v9b]')
 }
 const sessions = Number(sessionsText)
 const first = Number(firstText)
@@ -101,18 +102,19 @@ function play(policy: BotPolicy, solved: () => number) {
 const started = Date.now()
 const base = riverSolverPolicy(pokerGuardPolicy, 'river-solver', 1, RIVER_CANDIDATE_TUNING)
 const baseline = play(base.policy, () => 0)
-const turn = turnSolverPolicy(base.policy, turnNetworkFromEnvironment(), 'turn-solver', 1)
+const turn = solvedTurnPolicy(turnNetworkFromEnvironment(), {}, candidateName === 'v9b')
 const candidate = play(turn.policy, () => turn.stats.solved)
 writeFileSync(
   out,
   JSON.stringify({
     table: table.name,
     prefix,
+    candidate: candidateName,
     first,
     sessions,
     bigBlind: DEFAULT_STAKE.bigBlind,
     fallbacks: turn.stats.fallbacks,
-    hands: baseline.map((before, index) => ({ v8z: before, v9a: candidate[index] })),
+    hands: baseline.map((before, index) => ({ v8z: before, candidate: candidate[index] })),
   }),
 )
 process.stdout.write(

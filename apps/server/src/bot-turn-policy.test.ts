@@ -3,11 +3,14 @@ import {
   type BotDecision,
   type BotObservationV1,
   type BotPolicy,
+  type Card,
+  type HandAction,
   mulberry32,
   parseCard,
   personalityPool,
 } from '@river/engine'
 import { describe, expect, it } from 'vitest'
+import { decisionClass, type MoveClass } from './bot-lbr-range.js'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import { legacyGuardPolicy } from './bot-poker-guard.js'
 import { riverSolverPolicy } from './bot-river-policy.js'
@@ -169,6 +172,64 @@ describe('the turn-solving OG', () => {
     const handOff = runWithTrust(0)
     expect(handOff.fallbacks.predictable).toBeGreaterThan(0)
     expect(handOff.solved).toBeLessThan(alwaysSolve.solved)
+  }, 300_000)
+
+  it('tells the river the range its turn moves came from', () => {
+    let turn: ReturnType<typeof turnSolverPolicy> | undefined
+    let told = 0
+    const river = riverSolverPolicy(
+      legacyGuardPolicy,
+      'river-solver-test',
+      1,
+      { iterations: 10 },
+      (decision, taken, personality) => {
+        const shares = turn?.ownShares(decision, taken, personality) ?? null
+        if (shares !== null) told += 1
+        return shares
+      },
+    )
+    const solver = turnSolverPolicy(river.policy, network, 'turn-solver-test', 1, {
+      iterations: 10,
+    })
+    turn = solver
+    const played: { observation: BotObservationV1; decision: BotDecision }[] = []
+    const focal: BotPolicy = {
+      id: solver.policy.id,
+      version: solver.policy.version,
+      decide(context) {
+        const before = solver.stats.solved
+        const envelope = solver.policy.decide(context)
+        if (solver.stats.solved > before) {
+          played.push({ observation: context.observation, decision: envelope.decision })
+        }
+        return envelope
+      },
+    }
+    runSessions({
+      seed: 'turn-policy-handover',
+      sessions: 2,
+      handsPerSession: 12,
+      table: {
+        name: 'heads-up',
+        style: 'plain',
+        entrants: [{ personality: person(10) }, { personality: person(0) }],
+      },
+      focalPolicy: focal,
+    })
+    expect(played.length).toBeGreaterThan(0)
+    expect(told).toBeGreaterThan(0)
+    // Every solved move's own holding makes that move with a share above zero, and its shares
+    // over fold, passive and aggressive add to one.
+    for (const { observation, decision } of played) {
+      const asked = { observation, taken: {} as HandAction }
+      const hole = observation.actor.hole as [Card, Card]
+      const shares = (['fold', 'passive', 'aggressive'] as MoveClass[]).map(
+        (taken) => solver.ownShares(asked, taken, person(10))?.(hole) ?? Number.NaN,
+      )
+      expect(shares.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 5)
+      const index = ['fold', 'passive', 'aggressive'].indexOf(decisionClass(decision, observation))
+      expect(shares[index]).toBeGreaterThan(0)
+    }
   }, 300_000)
 
   it('keeps solving turns when the trust threshold is unreachable', () => {

@@ -2,7 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // Usage: tsx bot-turn-diagnose-pool.ts <directory> <file prefix>
-// Joins bot-turn-diagnose.ts pieces per table and shows where v9a's chips differ from v8z's:
+// Joins bot-turn-diagnose.ts pieces per table and shows where the candidate's chips differ from
+// v8z's (the candidate is shown under v9a's name in the move counts):
 // by whether the turn solver acted, by the street the hand ended on, by the pair of first
 // two-player turn moves, and how often each policy makes each turn move. Every share is in
 // big blinds per 100 of all the table's hands, all-in valued, so the parts add to the whole.
@@ -19,7 +20,8 @@ interface Piece {
   readonly table: string
   readonly bigBlind: number
   readonly fallbacks: Record<string, number>
-  readonly hands: readonly { readonly v8z: Side; readonly v9a: Side }[]
+  readonly candidate?: string
+  readonly hands: readonly { readonly v8z: Side; readonly v9a?: Side; readonly candidate?: Side }[]
 }
 
 const byTable = new Map<string, Piece[]>()
@@ -32,7 +34,10 @@ for (const name of readdirSync(directory).filter(
 
 const plain = (move: string) => move.replace('*', '')
 function report(table: string, pieces: readonly Piece[]) {
-  const hands = pieces.flatMap((piece) => piece.hands)
+  const hands = pieces.flatMap((piece) =>
+    piece.hands.map((hand) => ({ v8z: hand.v8z, v9a: (hand.candidate ?? hand.v9a) as Side })),
+  )
+  const name = pieces[0]?.candidate ?? 'v9a'
   const bigBlind = pieces[0]?.bigBlind ?? 1
   const share = (sum: number) => ((sum / bigBlind / hands.length) * 100).toFixed(1)
   const groups = new Map<string, { count: number; sum: number }>()
@@ -75,7 +80,7 @@ function report(table: string, pieces: readonly Piece[]) {
     }
   }
   const lines = [
-    `${table}: ${hands.length} hands, v9a minus v8z ${share(total)} bb/100 all-in valued; fallbacks ${JSON.stringify(fallbacks)}`,
+    `${table}: ${hands.length} hands, ${name} minus v8z ${share(total)} bb/100 all-in valued; fallbacks ${JSON.stringify(fallbacks)}`,
   ]
   const sorted = [...groups.entries()].sort((a, b) => a[1].sum - b[1].sum)
   for (const [key, { count, sum }] of sorted) {
