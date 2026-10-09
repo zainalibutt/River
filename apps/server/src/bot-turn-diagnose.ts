@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs'
-import { type BotPolicy, championPersonality, DEFAULT_STAKE } from '@river/engine'
+import { type BotPolicy, cardToString, championPersonality, DEFAULT_STAKE } from '@river/engine'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
@@ -34,6 +34,14 @@ interface HandTag {
   turn: string[]
   /** The last street the focal seat acted on. */
   last: string
+  /** The hand as the focal seat last saw it, for reading the hands that cost most. */
+  seen?: {
+    readonly seat: number
+    readonly hole: string
+    readonly board: string
+    readonly actions: readonly { seat: number; street: string; action: unknown }[]
+    readonly final: string
+  }
 }
 
 function move(
@@ -63,6 +71,17 @@ function tagged(policy: BotPolicy, solved: () => number) {
         )
       }
       current.last = observation.street
+      current.seen = {
+        seat: observation.actor.seat,
+        hole: observation.actor.hole.map(cardToString).join(' '),
+        board: observation.board.map(cardToString).join(' '),
+        actions: (observation.actions ?? []).map((entry) => ({
+          seat: entry.seat,
+          street: entry.street,
+          action: entry.action,
+        })),
+        final: move(result.decision, observation.pot, observation.amountToCall),
+      }
       return result
     },
   }
