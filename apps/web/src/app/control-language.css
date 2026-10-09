@@ -381,8 +381,18 @@
 }
 
 .river-controls-2d .hud-corner > button {
+  position: relative;
   min-height: 48px;
   padding-inline: 18px;
+}
+
+/* The corner row reads at 48px, and each button answers a press across the full 56px
+   target the interaction contract sets: the extra reach is invisible, above and below.
+   Not while a held button is filling: that fill is drawn in the same place. */
+.river-controls-2d .hud-corner > button:not(.holding)::after {
+  position: absolute;
+  content: "";
+  inset: -4px 0;
 }
 
 .river-controls-2d .hud-corner > .leave-table,

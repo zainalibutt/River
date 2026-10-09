@@ -3215,9 +3215,10 @@ function HoldAction({
     timeout.current = null
     setHolding(false)
   }, [])
-  const begin = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  // Held with a pointer or with Space or Enter: a control that can only be held by a hand
+  // on a mouse is one a keyboard can never reach.
+  const begin = () => {
     if (disabled || timeout.current !== null) return
-    event.currentTarget.setPointerCapture(event.pointerId)
     if (duration === 0) {
       onComplete()
       return
@@ -3237,10 +3238,22 @@ function HoldAction({
       disabled={disabled}
       aria-label={ariaLabel}
       style={{ ...style, '--hold-duration': `${duration}ms` } as CSSProperties}
-      onPointerDown={begin}
+      onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+        if (event.button !== 0) return
+        event.currentTarget.setPointerCapture(event.pointerId)
+        begin()
+      }}
       onPointerUp={cancel}
       onPointerLeave={cancel}
       onPointerCancel={cancel}
+      onKeyDown={(event) => {
+        if (!event.repeat && (event.key === ' ' || event.key === 'Enter')) {
+          event.preventDefault()
+          begin()
+        }
+      }}
+      onKeyUp={cancel}
+      onBlur={cancel}
       onAnimationEnd={onAnimationEnd}
     >
       {children}
