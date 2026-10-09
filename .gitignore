@@ -99,3 +99,6 @@ music/
 *.mov
 *.mkv
 *.webm
+# ...except the intro film, which the menu plays
+!apps/web/public/intro/*.mp4
+!apps/web/public/intro/*.webm
