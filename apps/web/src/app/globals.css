@@ -4880,3 +4880,145 @@ button.verify-pill.verify-mismatch {
     animation: none;
   }
 }
+
+/* Friends: the same modal as the hand history, set out as short lists of people. */
+.friends-modal {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+}
+
+.friends-add {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 18px;
+}
+
+.friends-add label,
+.friends-section h3 {
+  margin: 0;
+  color: var(--river-cream-dim);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.friends-add > div {
+  display: flex;
+  gap: 8px;
+}
+
+.friends-add input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--club-hairline-strong);
+  border-radius: 4px;
+  background: rgb(10 13 12 / 70%);
+  color: var(--river-cream);
+  font: inherit;
+}
+
+.friends-section {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.friends-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--club-hairline);
+}
+
+.friends-row > span {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  color: var(--river-cream);
+}
+
+.friends-row small {
+  color: var(--river-cream-faint);
+  font-size: 12px;
+}
+
+.friends-row button,
+.friends-primary {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--club-hairline-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--river-cream-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.friends-primary {
+  border-color: var(--river-brass);
+  background: rgb(168 124 66 / 18%);
+  color: var(--river-cream);
+}
+
+.friends-note {
+  margin: 0;
+  color: var(--river-cream-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Invite a friend, under the table code: one press per friend. */
+.friend-invites {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  padding: 10px;
+  border: 1px solid var(--club-hairline);
+  border-radius: 4px;
+  background: rgb(10 13 12 / 92%);
+}
+
+.friend-invites p {
+  margin: 0 0 4px;
+  color: var(--river-cream-dim);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.friend-invites button {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--club-hairline);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--river-cream);
+  cursor: pointer;
+  font: inherit;
+  align-items: center;
+}
+
+.friend-invites small {
+  color: var(--river-brass-hi);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.phone-table .friend-invites {
+  position: static;
+  margin-top: 10px;
+}

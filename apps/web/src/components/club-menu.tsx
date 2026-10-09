@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import { DailyChips } from '@/components/daily-chips'
+import { FriendsSheet } from '@/components/friends-sheet'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
 import { RollingAmount } from '@/components/rolling-amount'
@@ -85,6 +86,7 @@ export function ClubMenu() {
   const [inviteError, setInviteError] = useState<string | null>(null)
   const inviteRef = useRef<HTMLInputElement>(null)
   const authRef = useRef<SupabaseClient | null>(null)
+  const [friendsOpen, setFriendsOpen] = useState(false)
   const accessToken = useCallback(async () => {
     const client = authRef.current
     if (client === null) throw new Error('not signed in yet')
@@ -473,6 +475,9 @@ export function ClubMenu() {
               <button type="button" className="club-link" onClick={() => router.push('/record')}>
                 Your record
               </button>
+              <button type="button" className="club-link" onClick={() => setFriendsOpen(true)}>
+                Friends
+              </button>
             </div>
             <DailyChips
               accessToken={accessToken}
@@ -491,6 +496,18 @@ export function ClubMenu() {
               <div className="club-capsule-label">Chips</div>
             </div>
           </footer>
+        ) : null}
+
+        {friendsOpen ? (
+          <FriendsSheet
+            accessToken={accessToken}
+            onClose={() => setFriendsOpen(false)}
+            onJoinTable={(code) => router.push(`/t/${code}`)}
+            onSaveProgress={() => {
+              setFriendsOpen(false)
+              setSignIn('editing')
+            }}
+          />
         ) : null}
 
         <dialog

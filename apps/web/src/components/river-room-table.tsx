@@ -25,6 +25,7 @@ import {
   useState,
 } from 'react'
 import { BETTING_ICON as MENU_ICON } from '@/components/betting-icons'
+import { FriendInvites } from '@/components/friend-invites'
 import { PhoneTable } from '@/components/phone-table'
 import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverLobby } from '@/components/river-lobby'
@@ -1338,6 +1339,17 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     rememberTable({ roomId, inviteCode: view.inviteCode, venueId })
   }, [roomId, venueId, view.inviteCode, lab])
 
+  // A fresh token for the friends route; the motion lab has no account and gets none.
+  const friendsToken = useCallback(async () => {
+    const auth = authRef.current
+    if (auth === null) throw new Error('no account')
+    return (await ensureRiverSession(auth)).access_token
+  }, [])
+  const friendInvites =
+    signedIn && lab === undefined ? (
+      <FriendInvites accessToken={friendsToken} inviteCode={view.inviteCode} />
+    ) : null
+
   const share = async () => {
     const url = shortTableLink(view.inviteCode, window.location.origin)
     await navigator.clipboard?.writeText(url).catch(() => undefined)
@@ -1452,6 +1464,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             if (text !== null) socketRef.current?.social({ kind: 'chat', text })
           }}
           onInvite={share}
+          inviteFriends={friendInvites}
           verifyContent={
             <>
               <h3>{verifyHeadline(verify.status)}</h3>
@@ -1947,6 +1960,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               >
                 {inviteShown && view.inviteCode.length > 0 ? view.inviteCode : 'INVITE'}
               </button>
+              {inviteShown ? friendInvites : null}
               <button
                 type="button"
                 className={`social-toggle${socialOpen ? ' open' : ''}`}

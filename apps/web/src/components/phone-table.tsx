@@ -56,6 +56,8 @@ export interface PhoneTableProps {
   onChatDraft: (value: string) => void
   onSendChat: () => void
   onInvite: () => Promise<void>
+  /** Friends to invite by name, beside the link; null for a guest. */
+  inviteFriends: ReactNode
   verifyContent: ReactNode
   accountContent: (onClose: () => void) => ReactNode
   onAccount: () => void
@@ -514,6 +516,7 @@ export function PhoneTable(props: PhoneTableProps) {
                 >
                   Copy invite link
                 </button>
+                {props.inviteFriends}
               </>
             ) : null}
             {panel === 'verify' ? props.verifyContent : null}
