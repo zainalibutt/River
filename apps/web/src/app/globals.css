@@ -3213,6 +3213,12 @@ button.verify-pill.verify-mismatch {
   animation: showdown-award 640ms var(--ease-out) both;
 }
 
+/* A hand thrown away unseen: said quietly, and nothing turned over. */
+.showdown-hand.showdown-muck {
+  color: var(--river-cream-faint);
+  letter-spacing: 0.24em;
+}
+
 /* Whose hand is being told: the caption takes the spotlight its seat is lit in. */
 .showdown-stage.spotlit .showdown-card {
   border-color: var(--river-spotlight);

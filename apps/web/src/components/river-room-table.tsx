@@ -430,6 +430,17 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   const [feed, setFeed] = useState<readonly SocialFeedEntry[]>([])
   // The same settings the menu keeps, changeable here without leaving the table.
   const [preferences, setPreferences] = usePreferences()
+  // Whether a losing hand is shown at a showdown is the server's to apply, so it is told
+  // once the table has answered and again whenever the setting changes.
+  const answered = view.selfId !== 'pending'
+  useEffect(() => {
+    if (connection !== 'connected' || !answered) return
+    try {
+      socketRef.current?.command({ kind: 'showHands', always: preferences.showLosingHands })
+    } catch {
+      // Sent again on the next connection.
+    }
+  }, [connection, answered, preferences.showLosingHands])
   const [settingsOpen, setSettingsOpen] = useState(false)
   // The socket handler is bound once per table, so it reads the profanity
   // setting through a ref: a setting changed at the table applies to the next
@@ -2494,6 +2505,13 @@ function ShowdownStage({
           <CardBack key="first" />
           <CardBack key="second" />
         </span>
+      </>
+    )
+  } else if (current?.mucked === true) {
+    body = (
+      <>
+        <span className="showdown-who">{nameOf(current.seat)}</span>
+        <strong className="showdown-hand showdown-muck">MUCKS</strong>
       </>
     )
   } else if (current !== undefined) {

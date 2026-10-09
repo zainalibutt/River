@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import { parseCard } from './cards.js'
+import { evaluateBest } from './evaluator.js'
 import type { HandRecord } from './hand-history.js'
 import {
   SHOWDOWN_HUSH_MS,
+  SHOWDOWN_MUCK_MS,
   SHOWDOWN_SECOND_CARD_MS,
   SHOWDOWN_STEP_MS,
+  SHOWDOWN_TABLED_HUSH_MS,
+  SHOWDOWN_TABLED_STEP_MS,
   SHOWDOWN_TENSION_MS,
   showdownOrder,
   showdownPresentationMs,
+  showdownReveals,
   showdownShow,
 } from './showdown-show.js'
 
@@ -108,5 +114,74 @@ describe('showdown schedule', () => {
     expect(showdownPresentationMs(0)).toBe(0)
     expect(showdownPresentationMs(2)).toBe(showdownShow([0, 1]).totalMs)
     expect(showdownPresentationMs(3)).toBeGreaterThan(showdownPresentationMs(2))
+  })
+})
+
+describe('a tabled showdown', () => {
+  it('names hands already face up, with no hush, second card or held breath', () => {
+    const show = showdownShow([4, 1, 6], { tabled: true })
+    expect(show.steps.map((step) => step.revealAtMs)).toEqual([
+      SHOWDOWN_TABLED_HUSH_MS,
+      SHOWDOWN_TABLED_HUSH_MS + SHOWDOWN_TABLED_STEP_MS,
+      SHOWDOWN_TABLED_HUSH_MS + 2 * SHOWDOWN_TABLED_STEP_MS,
+    ])
+    expect(show.steps.every((step) => step.secondCardAtMs === step.revealAtMs)).toBe(true)
+    expect(show.totalMs).toBeLessThan(showdownShow([4, 1, 6]).totalMs)
+    expect(showdownPresentationMs(3, { tabled: true })).toBe(show.totalMs)
+  })
+})
+
+describe('a mucked hand', () => {
+  it('takes a short turn and turns nothing over', () => {
+    const show = showdownShow([4, 1, 6], { mucked: new Set([1]) })
+    const [, mucked, last] = show.steps
+    expect(mucked?.mucked).toBe(true)
+    expect((last?.revealAtMs ?? 0) - (mucked?.revealAtMs ?? 0)).toBe(
+      SHOWDOWN_MUCK_MS + SHOWDOWN_TENSION_MS,
+    )
+    expect(showdownPresentationMs(2, { mucked: 1 })).toBe(show.totalMs)
+  })
+})
+
+describe('who shows at a showdown', () => {
+  const rank = (text: string) => evaluateBest(text.split(' ').map((token) => parseCard(token)))
+  const board = 'Kd 8c 8s 3h 2c'
+  const ranks = new Map([
+    [1, rank(`Ah Qd ${board}`)],
+    [2, rank(`Ks Kh ${board}`)],
+    [4, rank(`9s 9d ${board}`)],
+    [6, rank(`Ac Kc ${board}`)],
+  ])
+
+  it('shows a hand only when it beats or ties the best already shown', () => {
+    // Seat 1 shows first; seat 2's full house beats it; seat 4's nines and seat 6's kings
+    // cannot beat that, so both are thrown away.
+    const shown = showdownReveals({
+      order: [1, 2, 4, 6],
+      ranks,
+      allIn: false,
+      alwaysShow: new Set(),
+    })
+    expect([...shown]).toEqual([1, 2])
+  })
+
+  it('tables every hand when somebody is all in', () => {
+    const shown = showdownReveals({
+      order: [1, 2, 4, 6],
+      ranks,
+      allIn: true,
+      alwaysShow: new Set(),
+    })
+    expect([...shown]).toEqual([1, 2, 4, 6])
+  })
+
+  it('shows a losing hand for a player who always shows', () => {
+    const shown = showdownReveals({
+      order: [1, 2, 4, 6],
+      ranks,
+      allIn: false,
+      alwaysShow: new Set([4]),
+    })
+    expect([...shown]).toEqual([1, 2, 4])
   })
 })

@@ -97,6 +97,8 @@ export type ClientRoomCommand =
   | { kind: 'kick'; targetPlayerId: string; reason: 'host' }
   | { kind: 'act'; action: TurnAction }
   | { kind: 'rebuy'; amount: number }
+  /** Show a losing hand at a showdown rather than throwing it away. */
+  | { kind: 'showHands'; always: boolean }
 
 export type ClientSocialCommand =
   | { kind: 'chat'; text: string }
@@ -455,6 +457,8 @@ function roomCommand(value: unknown): ClientRoomCommand | null {
       return Number.isSafeInteger(value.amount)
         ? { kind: 'rebuy', amount: Number(value.amount) }
         : null
+    case 'showHands':
+      return typeof value.always === 'boolean' ? { kind: 'showHands', always: value.always } : null
     default:
       return null
   }
@@ -1468,6 +1472,8 @@ export class RoomHub {
       case 'act':
         return { ...command, playerId }
       case 'rebuy':
+        return { ...command, playerId }
+      case 'showHands':
         return { ...command, playerId }
     }
   }

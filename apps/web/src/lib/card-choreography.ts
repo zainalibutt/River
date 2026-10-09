@@ -396,6 +396,18 @@ export function advanceChoreography(
       // Tabled for an all-in run-out: already face up, and not turned a second time.
       if (sprite.flipAt !== null && sprite.card !== null) return sprite
       const step = showdown.plan.show.steps.find((entry) => entry.seat === sprite.seat)
+      // A losing hand thrown away unseen goes into the muck at its turn, face down.
+      if (step?.mucked === true) {
+        const start = Math.max(showdown.startedAt + offset + step.revealAtMs, landsAt(sprite))
+        return {
+          ...sprite,
+          moves: [
+            ...sprite.moves,
+            { from: lastPlace(sprite), to: MUCK, startAt: start, endAt: start + DEAL_TEMPO.fold },
+          ],
+          hideAt: start + DEAL_TEMPO.fold,
+        }
+      }
       const cards = showdown.plan.cards.get(sprite.seat)
       const card = cards?.[sprite.index]
       if (step === undefined || card === undefined) return sprite

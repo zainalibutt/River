@@ -43,17 +43,30 @@ export function showdownPlanFor(
   if (showdown?.kind !== 'showdown' || recorded?.kind !== 'handRecorded' || !view.revealed) {
     return null
   }
+  const seatOf = new Map(view.seats.map((seat) => [seat.playerId, seat.seat]))
+  // Hands thrown away unseen take a turn in the order but are never sent: the server names
+  // their players, and nothing else about them.
+  const mucked = new Set(
+    (showdown.mucked ?? []).flatMap((playerId) => {
+      const seat = seatOf.get(playerId)
+      return seat === undefined ? [] : [seat]
+    }),
+  )
   const shown = view.seats.filter(
-    (seat) => seat.hole !== null && seat.hole.length === 2 && !folded.has(seat.seat),
+    (seat) =>
+      seat.hole !== null &&
+      seat.hole.length === 2 &&
+      !folded.has(seat.seat) &&
+      !mucked.has(seat.seat),
   )
   if (shown.length === 0) return null
+  const tabled = events.some((event) => event.kind === 'street')
   const order = showdownOrder({
     record: recorded.record,
-    shownSeats: shown.map((seat) => seat.seat),
+    shownSeats: [...shown.map((seat) => seat.seat), ...mucked],
     dealerSeat: view.seats.find((seat) => seat.dealer)?.seat ?? 0,
     seatCount: view.seats.length,
   })
-  const seatOf = new Map(view.seats.map((seat) => [seat.playerId, seat.seat]))
   // The server awards pot by pot, so a player who takes the main pot and a side pot is
   // named twice. The table hears one total per winner.
   const won = new Map<number, number>()
@@ -64,14 +77,14 @@ export function showdownPlanFor(
   }
   const awards = [...won].map(([seat, amount]) => ({ seat, amount }))
   return {
-    show: showdownShow(order),
+    show: showdownShow(order, { tabled, mucked }),
     cards: new Map(shown.map((seat) => [seat.seat, seat.hole ?? []])),
     names: new Map(
       shown.map((seat) => [seat.seat, readoutFor(seat.hole ?? [], view.board)?.full ?? '']),
     ),
     awards,
     pot: awards.reduce((total, award) => total + award.amount, 0),
-    tabled: events.some((event) => event.kind === 'street'),
+    tabled,
   }
 }
 

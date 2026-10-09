@@ -50,6 +50,19 @@ export function RiverSettings({
       <span className="club-capsule-sub">
         Off by default. Bets, pots and stacks at the table, in its big blinds.
       </span>
+      <button
+        type="button"
+        className="club-setting-toggle"
+        aria-pressed={preferences.showLosingHands}
+        onClick={() => onChange({ ...preferences, showLosingHands: !preferences.showLosingHands })}
+      >
+        <span>Show losing hands</span>
+        <strong>{preferences.showLosingHands ? 'On' : 'Off'}</strong>
+      </button>
+      <span className="club-capsule-sub">
+        Off by default: at a showdown, a hand that cannot win is thrown away unseen. After an all-in
+        every hand is shown.
+      </span>
     </div>
   )
 }

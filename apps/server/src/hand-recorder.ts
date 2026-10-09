@@ -47,6 +47,11 @@ export class HandRecorder {
    * hand that never settled has no result and a record without a result reads
    * as evidence of something that did not happen.
    */
+  /** The actions of the hand being recorded so far, or none between hands. */
+  actions(): readonly HandAction[] {
+    return this.open?.actions ?? []
+  }
+
   begin(opening: HandOpening): void {
     this.open = {
       opening: { ...opening, seats: opening.seats.map((seat) => ({ ...seat })) },
