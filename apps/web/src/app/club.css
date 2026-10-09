@@ -1627,3 +1627,68 @@
     background: linear-gradient(90deg, var(--club-ink), rgb(10 13 12 / 75%) 28%, transparent 80%);
   }
 }
+
+/* Daily chips, on the player capsule between who you are and what you have. */
+.club-daily {
+  display: grid;
+  gap: 0.3rem;
+  padding-left: clamp(0.8rem, 1.4vw, 1.3rem);
+  border-left: 1px solid var(--club-hairline);
+}
+
+.club-daily-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.club-daily-line strong {
+  color: var(--club-brass);
+  font-variant-numeric: tabular-nums;
+}
+
+.club-daily-claim {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--club-brass);
+  background: rgb(168 124 66 / 16%);
+  color: var(--club-ivory);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition:
+    background 160ms var(--ease-out),
+    transform 380ms var(--ease-spring);
+}
+
+.club-daily-claim:hover:not(:disabled) {
+  background: rgb(168 124 66 / 30%);
+}
+
+.club-daily-claim:active:not(:disabled) {
+  transform: scale(0.95);
+  transition: transform 90ms var(--ease-out);
+}
+
+.club-daily-claim:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.club-daily-claim {
+  white-space: nowrap;
+}
+
+/* On a phone the capsule is narrow: the claim and its streak stack rather than wrap. */
+@media (max-width: 560px) {
+  .club-daily-line {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+
+  .club-daily .club-capsule-sub {
+    white-space: nowrap;
+  }
+}

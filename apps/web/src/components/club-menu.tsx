@@ -5,8 +5,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { DailyChips } from '@/components/daily-chips'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
+import { RollingAmount } from '@/components/rolling-amount'
 import {
   createRiverAuthClient,
   ensureRiverSession,
@@ -83,6 +85,11 @@ export function ClubMenu() {
   const [inviteError, setInviteError] = useState<string | null>(null)
   const inviteRef = useRef<HTMLInputElement>(null)
   const authRef = useRef<SupabaseClient | null>(null)
+  const accessToken = useCallback(async () => {
+    const client = authRef.current
+    if (client === null) throw new Error('not signed in yet')
+    return (await ensureRiverSession(client)).access_token
+  }, [])
   const [signIn, setSignIn] = useState<'idle' | 'editing' | 'sent' | 'error'>('idle')
   const [returning, setReturning] = useState(false)
   const [email, setEmail] = useState('')
@@ -464,9 +471,19 @@ export function ClubMenu() {
                 </>
               )}
             </div>
+            <DailyChips
+              accessToken={accessToken}
+              onBalance={(balance) =>
+                setMe((current) => (current === null ? current : { ...current, balance }))
+              }
+            />
             <div className="club-capsule-figure">
               <div className="club-capsule-value">
-                {me.balance === null ? '—' : me.balance.toLocaleString('en-GB')}
+                {me.balance === null ? (
+                  '—'
+                ) : (
+                  <RollingAmount value={me.balance} abbreviated={false} bigBlind={null} />
+                )}
               </div>
               <div className="club-capsule-label">Chips</div>
             </div>

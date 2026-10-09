@@ -1,16 +1,13 @@
 import type { EconomyConfig, EconomyState } from '@river/engine'
-import { claimDaily, claimRescue, utcDay } from '@river/engine'
+import { claimDaily, claimRescue, deriveEconomyState, type LedgerRow, utcDay } from '@river/engine'
 import type { Ledger, LedgerEntry } from './ledger.js'
 
 export type GrantOutcome =
   | { kind: 'granted'; delta: number; balance: number; ref: string }
   | { kind: 'ineligible'; reason: 'already-claimed' | 'not-eligible' | 'capped' }
 
-export interface LedgerRow {
-  ref: string
-  reason: string
-  delta: number
-}
+export type { LedgerRow }
+export { deriveEconomyState }
 
 export interface EconomyDeps {
   readRows(playerId: string): Promise<LedgerRow[]>
@@ -32,80 +29,7 @@ export interface SupabaseEconomyOptions extends EconomyRestClient {
 export type SupabaseEconomy = Omit<EconomyDeps, 'seated'>
 
 const CONFIG_TTL_MS = 60_000
-const PREFIX_DAILY = 'daily:'
-const PREFIX_RESCUE = 'rescue:'
 const configCache = new Map<string, { value: EconomyConfig; loadedAt: number }>()
-
-function dayOfRef(ref: string, prefix: string): string | null {
-  if (!ref.startsWith(prefix)) return null
-  return ref.slice(prefix.length).split(':')[1] ?? null
-}
-
-function refPlayerId(ref: string, prefix: string): string | null {
-  if (!ref.startsWith(prefix)) return null
-  return ref.slice(prefix.length).split(':')[0] ?? null
-}
-
-function previousUtcDay(day: string): string | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day)
-  if (match === null) return null
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
-  date.setUTCDate(date.getUTCDate() - 1)
-  return utcDay(date.getTime())
-}
-
-export function deriveEconomyState(
-  ledgerRows: readonly LedgerRow[],
-  seated: boolean,
-  nowMs: number,
-): EconomyState {
-  const today = utcDay(nowMs)
-  let playerId = ''
-  let balance = 0
-  const dailyDays = new Set<string>()
-  let rescuesToday = 0
-  for (const entry of ledgerRows) {
-    balance += entry.delta
-    const dailyDay = dayOfRef(entry.ref, PREFIX_DAILY)
-    if (dailyDay !== null) {
-      playerId = refPlayerId(entry.ref, PREFIX_DAILY) ?? playerId
-      dailyDays.add(dailyDay)
-      continue
-    }
-    const rescueDay = dayOfRef(entry.ref, PREFIX_RESCUE)
-    if (rescueDay === null) continue
-    playerId = refPlayerId(entry.ref, PREFIX_RESCUE) ?? playerId
-    if (rescueDay === today) rescuesToday += 1
-  }
-  const lastDailyClaimDay = maxOf(dailyDays)
-  let streakDay = 0
-  if (lastDailyClaimDay !== null) {
-    let cursor = lastDailyClaimDay
-    while (streakDay < 7 && dailyDays.has(cursor)) {
-      streakDay += 1
-      const previous = previousUtcDay(cursor)
-      if (previous === null) break
-      cursor = previous
-    }
-  }
-  return {
-    playerId,
-    balance,
-    seated,
-    lastDailyClaimDay,
-    streakDay,
-    rescuesToday,
-    rescueDay: rescuesToday > 0 ? today : null,
-  }
-}
-
-function maxOf(days: ReadonlySet<string>): string | null {
-  let max: string | null = null
-  for (const day of days) {
-    if (max === null || day > max) max = day
-  }
-  return max
-}
 
 export async function claimDailyFor(
   playerId: string,
