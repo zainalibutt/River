@@ -39,7 +39,7 @@ const SCENES = recorded as unknown as MotionScene[]
 const LEAD_MS = 400
 /** An empty moment after the countdown, so one playing is not mistaken for the next. */
 const GAP_MS = 1_200
-const SPEEDS = [0.1, 0.25, 0.5, 1, 2] as const
+const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4] as const
 /** How fast a jump to a moment plays the scene up to it, so every animation is on its way. */
 const SEEK_RATE = 12
 
