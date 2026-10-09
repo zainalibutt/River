@@ -12,6 +12,7 @@ import { readServerConfig } from './config.js'
 import { SupabaseCosmeticStore } from './cosmetic-store.js'
 import { createSupabaseEconomy } from './economy-service.js'
 import { SupabaseLedger } from './ledger.js'
+import { SupabasePlayerHandStore } from './player-hand-store.js'
 import { publicProfileRoute, SupabasePublicProfiles } from './public-profiles.js'
 import { SupabaseTableItemStore } from './table-item-store.js'
 import { tableLinkRoute } from './table-link-route.js'
@@ -85,6 +86,10 @@ async function start(): Promise<void> {
           }),
         }
       : {}),
+    playerHands: new SupabasePlayerHandStore({
+      supabaseUrl: config.supabaseUrl,
+      serviceRoleKey: config.serviceRoleKey,
+    }),
     verifyToken: createSupabaseTokenVerifier({ supabaseUrl: config.supabaseUrl }),
     onError: (context, error) => {
       process.stderr.write(`river: ${context}: ${errorText(error)}

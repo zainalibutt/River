@@ -56,6 +56,7 @@ import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-servi
 import { claimDailyFor, claimRescueFor } from './economy-service.js'
 import { isFairnessSeed } from './fairness.js'
 import type { Ledger, LedgerEntry, Seating, SeatingStore } from './ledger.js'
+import { type PlayerHandStore, playerHandRows } from './player-hand-store.js'
 import type {
   Emote,
   RoomCommand,
@@ -353,6 +354,8 @@ export interface RoomHubOptions {
    */
   botRiverThinker?: BotRiverThinker
   botOpponentStore?: BotOpponentStore
+  /** Where each person's private record of their hands is written; none in tests. */
+  playerHands?: PlayerHandStore
   /** Opt-in, server-only human-action forecast. Never selects a game action. */
   actionShadow?: ActionShadowPort
   /**
@@ -647,6 +650,7 @@ export class RoomHub {
   private readonly botTrace: BotDecisionTraceSink | undefined
   private readonly botRiverThinker: BotRiverThinker | undefined
   private readonly botOpponentStore: BotOpponentStore | undefined
+  private readonly playerHands: PlayerHandStore | undefined
   private readonly actionShadow: ActionShadowPort | undefined
   private readonly pendingOpponentWrites = new Map<string, Promise<void>>()
   private readonly seatingStore: SeatingStore | undefined
@@ -665,6 +669,7 @@ export class RoomHub {
     this.botTrace = options.botTrace
     this.botRiverThinker = options.botRiverThinker
     this.botOpponentStore = options.botOpponentStore
+    this.playerHands = options.playerHands
     this.actionShadow = options.actionShadow
     this.seatingStore = options.seatings
     this.economy = options.economy ?? null
@@ -2137,6 +2142,7 @@ export class RoomHub {
     requester?: ConnectionState,
   ): void {
     this.recordOpponentMemories(state, events)
+    this.recordPlayerHands(state, events)
     this.payLeaversAfterHand(state, events)
     for (const connection of state.connections) {
       this.snapshot(connection, state, connection === requester ? requestId : null, events)
@@ -2178,6 +2184,39 @@ export class RoomHub {
         })
       }
       this.closeSeatingIfGone(state, event.playerId)
+    }
+  }
+
+  /**
+   * Each person's private record: one row per seated person per settled hand. Written after
+   * the hand and never in its way; a failed write is tried once more, then reported.
+   */
+  private recordPlayerHands(state: RoomState, events: readonly RoomEvent[]): void {
+    const store = this.playerHands
+    if (store === undefined) return
+    for (const event of events) {
+      if (event.kind !== 'handRecorded') continue
+      const table = state.room.viewFor('')
+      const names = new Map(
+        table.seats.flatMap((seat) =>
+          seat.playerId === null ? [] : [[seat.playerId, seat.name ?? 'Player'] as const],
+        ),
+      )
+      const rows = playerHandRows({
+        roomId: state.room.id,
+        record: event.record,
+        playedAtMs: Date.now(),
+        roomKind: state.botCast.size > 0 ? 'bots' : 'private',
+        isBot: isBotPlayer,
+        nameOf: (playerId) => names.get(playerId) ?? 'Player',
+        ownHoleOf: (playerId) =>
+          state.room.viewFor(playerId).seats.find((seat) => seat.playerId === playerId)?.hole ??
+          null,
+      })
+      void store
+        .append(rows)
+        .catch(() => store.append(rows))
+        .catch((error: unknown) => this.onError('player hand record failed', error))
     }
   }
 
