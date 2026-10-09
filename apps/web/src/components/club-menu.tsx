@@ -470,6 +470,9 @@ export function ClubMenu() {
                   )}
                 </>
               )}
+              <button type="button" className="club-link" onClick={() => router.push('/record')}>
+                Your record
+              </button>
             </div>
             <DailyChips
               accessToken={accessToken}
