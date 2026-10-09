@@ -264,6 +264,9 @@ export function Table2D(props: Table2DProps) {
   // One clock for the felt, running only while something on it is moving. Each frame also
   // plays whatever was scheduled since the last one, so a card is heard as it leaves the shoe.
   const heard = useRef(0)
+  // Read on each frame rather than restarting the loop when the showdown arrives.
+  const showdownNow = useRef(props.showdown)
+  showdownNow.current = props.showdown
   useEffect(() => {
     if (schedule === 0) return
     let frame = 0
@@ -272,7 +275,7 @@ export function Table2D(props: Table2DProps) {
       for (const effect of soundsBetween(
         choreography.current,
         flow.current,
-        props.showdown,
+        showdownNow.current,
         heard.current,
         at,
       )) {
