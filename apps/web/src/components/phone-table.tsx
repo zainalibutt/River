@@ -6,6 +6,7 @@ import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, use
 import { BETTING_ICON } from '@/components/betting-icons'
 import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverSettings } from '@/components/river-settings'
+import { RollingAmount } from '@/components/rolling-amount'
 import { Table2D, type Table2DProps } from '@/components/table-2d/table-2d'
 import { CardBack, PlayingCard } from '@/components/table-pieces'
 import { sizingPresets } from '@/lib/betting'
@@ -170,7 +171,10 @@ export function PhoneTable(props: PhoneTableProps) {
         </PhoneHold>
         <div className="phone-pot" role="status">
           <span>
-            POT <strong>{formatAmount(view.pot, false, bigBlind)}</strong>
+            POT{' '}
+            <strong>
+              <RollingAmount value={view.pot} abbreviated={false} bigBlind={bigBlind} />
+            </strong>
           </span>
           <small>
             {DEFAULT_STAKE.smallBlind} / {DEFAULT_STAKE.bigBlind} ·{' '}
@@ -219,9 +223,15 @@ export function PhoneTable(props: PhoneTableProps) {
           <div>
             <span>{hero?.name ?? 'Take your place'}</span>
             <strong>
-              {hero
-                ? formatAmount(props.heroStack ?? hero.stack, false, bigBlind)
-                : 'Joining table…'}
+              {hero ? (
+                <RollingAmount
+                  value={props.heroStack ?? hero.stack}
+                  abbreviated={false}
+                  bigBlind={bigBlind}
+                />
+              ) : (
+                'Joining table…'
+              )}
             </strong>
             <small>
               {hero?.dealer && view.seats.length === 2 ? 'DEALER · ' : ''}

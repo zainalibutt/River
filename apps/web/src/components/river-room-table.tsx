@@ -31,6 +31,7 @@ import { RiverLobby } from '@/components/river-lobby'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
 import type { HoleSeat } from '@/components/river-venue-scene'
+import { RollingAmount } from '@/components/rolling-amount'
 import { Table2D, type TablePresentation } from '@/components/table-2d/table-2d'
 import {
   ActionPin,
@@ -2287,7 +2288,7 @@ function TableCluster({
       {hero === undefined ? null : (
         <p className="cluster-chips">
           <i aria-hidden="true" />
-          {formatAmount(hero.stack, true, bigBlind)}
+          <RollingAmount value={hero.stack} abbreviated bigBlind={bigBlind} />
         </p>
       )}
       {compact || view.board.length === 0 ? null : (

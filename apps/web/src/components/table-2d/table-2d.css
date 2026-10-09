@@ -876,3 +876,73 @@
     0 0 18px rgb(127 211 255 / 45%),
     inset 0 1px 6px rgb(0 0 0 / 70%);
 }
+
+/*
+ * Cards in motion. A pitched card rides up off the cloth mid-flight, so its shadow
+ * grows and falls back as it lands; a card turning over catches the light as it
+ * passes edge-on.
+ */
+.t2d-card.moving {
+  filter: drop-shadow(
+    0 calc(2px + var(--card-rise, 0) * 70px) calc(3px + var(--card-rise, 0) * 90px) rgb(0 0 0 / 45%)
+  );
+}
+
+.t2d-sheen {
+  position: absolute;
+  border-radius: 6px;
+  background: linear-gradient(105deg, transparent 30%, rgb(255 246 226 / 75%) 50%, transparent 70%);
+  background-position: var(--sheen-at, 0%) 0;
+  background-size: 260% 100%;
+  inset: 0;
+  mix-blend-mode: screen;
+  opacity: var(--sheen, 0);
+  pointer-events: none;
+}
+
+/*
+ * The showdown's telling: the hand being told rises toward the table in the
+ * spotlight, and every other hand on the felt drops back into the room.
+ */
+.t2d-card.lifted {
+  z-index: 6;
+  filter: drop-shadow(0 10px 14px rgb(0 0 0 / 50%)) drop-shadow(0 0 10px rgb(127 211 255 / 45%));
+  scale: 1.14;
+  transition:
+    scale 280ms var(--ease-out),
+    translate 280ms var(--ease-out),
+    filter 280ms var(--ease-out);
+  translate: 0 -8px;
+}
+
+/* Not while moving: a pitched card's shadow changes every frame and must not trail. */
+.t2d-card-hole:not(.moving) {
+  transition:
+    scale 280ms var(--ease-out),
+    translate 280ms var(--ease-out),
+    filter 360ms var(--ease-out);
+}
+
+.t2d.t2d-telling .t2d-card-hole:not(.lifted) {
+  filter: brightness(0.58) saturate(0.75);
+}
+
+.t2d.t2d-telling .t2d-placard:not(.showing, .winning) {
+  opacity: 0.62;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t2d-card.lifted,
+  .t2d-card-hole:not(.moving) {
+    transition: none;
+  }
+
+  .t2d-card.lifted {
+    translate: none;
+  }
+}
+
+/* The piles that run behind a payout: lighter, so the first pile still reads as the pot. */
+.t2d-pile.trail {
+  opacity: 0.7;
+}
