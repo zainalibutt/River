@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="River">
+  <title>River</title>
   <defs>
     <radialGradient id="felt" cx="0.4" cy="0.3" r="0.8">
       <stop offset="0" stop-color="#1f4a3a"/><stop offset="1" stop-color="#0c241b"/>
