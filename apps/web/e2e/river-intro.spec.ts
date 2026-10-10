@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-/** The way in: once a visit, skippable, film on a wide screen, cards alone on a phone. */
+/** The way in: once a visit, skippable, the film on a wide screen, the mark alone on a phone. */
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/config', (route) => route.fulfill({ status: 503, json: {} }))
@@ -20,20 +20,20 @@ test('plays once a visit, gives way to a press, and stays away on the next load'
   await expect(intro).toHaveCount(0)
 })
 
-test('hands the film over to the cards and ends on its own', async ({ page }) => {
+test('runs the film into the mark and lands it on the menu', async ({ page }) => {
   test.setTimeout(40_000)
   await page.setViewportSize({ width: 1280, height: 720 })
   await page.goto('/')
   await expect(page.locator('.intro-film')).toBeVisible()
-  await expect(page.locator('.intro-ace')).toHaveCount(2, { timeout: 20_000 })
-  await expect(page.locator('.intro-word')).toBeVisible()
-  await expect(page.locator('.river-intro')).toHaveCount(0, { timeout: 8_000 })
+  await expect(page.locator('.intro-lockup')).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('.river-intro.landing')).toHaveCount(1, { timeout: 8_000 })
+  await expect(page.locator('.river-intro')).toHaveCount(0, { timeout: 4_000 })
 })
 
-test('a phone gets the cards alone', async ({ page }) => {
+test('a phone gets the mark alone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
-  await expect(page.locator('.river-intro.dealt .intro-ace')).toHaveCount(2)
+  await expect(page.locator('.intro-lockup')).toBeVisible()
   await expect(page.locator('.intro-film')).toHaveCount(0)
   await expect(page.locator('.river-intro')).toHaveCount(0, { timeout: 8_000 })
 })

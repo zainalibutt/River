@@ -1,42 +1,50 @@
 /*
- * The way into River. The film is a plain video; everything after it is one CSS timeline,
- * so it is retimed here and nowhere else. Times are from the start of the drawn half:
+ * The way into River. The film is a plain video; the mark that follows is one CSS timeline,
+ * so it is retimed here and nowhere else. Times are from the start of the mark:
  *
- *    0 -  600  the aces take over from the film where it ends (or are dealt up from below)
- *              and straighten to the screen into a small fan
- *  600 - 1160  they turn over, one after the other, to the river-spade back
- * 1100 - 1470  they fold into one card
- * 1470 - 1920  the card draws up and away as the mark opens out of its medallion
- * 1950 - 2800  the name and the line under it come up
- * 3500         the curtain lifts on the menu
- *
- * Where the film ends the aces stand at a slant over the felt; the drawn cards start at the
- * same place, size and slant, so the hand-over is a cross-fade of the same two cards.
+ *    0 - 1150  a brass line runs in from the left like a river and draws the spade's outline
+ *  950 - 1450  the spade fills in brass behind the line, and the line lets go
+ * 1250 - 1850  light runs across the mark
+ * 1350 - 2050  the name sets itself, letter by letter
+ * 1750 - 2300  the line under it opens on Premium Poker
+ * 2700         the mark glides up onto the menu's own as the curtain lifts (750ms)
  */
 
 .river-intro {
-  --ace-w: clamp(116px, 22vmin, 230px);
-  --fan-x: calc(var(--ace-w) * 0.3);
-  --mark-w: clamp(104px, 20vmin, 200px);
-  --mark-y: -9vh;
+  --ident-scale: 2;
   --intro-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
-  --intro-snap: cubic-bezier(0.2, 0.9, 0.25, 1.08);
-  --intro-glide: cubic-bezier(0.65, 0, 0.35, 1);
+  --intro-flow: cubic-bezier(0.45, 0, 0.2, 1);
 
   position: fixed;
   z-index: 1000;
   overflow: hidden;
-  background: var(--river-void, #0a0d0c);
   inset: 0;
-  transition: opacity 360ms var(--intro-ease);
+}
+
+.intro-curtain {
+  position: absolute;
+  background:
+    radial-gradient(ellipse 46% 42% at 50% 48%, rgb(232 169 60 / 9%), transparent 72%),
+    var(--river-void, #0a0d0c);
+  inset: 0;
 }
 
 .river-intro.leaving {
   opacity: 0;
   pointer-events: none;
+  transition: opacity 320ms var(--intro-ease);
 }
 
-/* The film fills the screen as a cover; the drawn cards use the same cover box below. */
+/* Landing: the curtain lifts on the menu while the mark settles onto its twin. */
+.river-intro.landing {
+  pointer-events: none;
+}
+
+.river-intro.landing .intro-curtain {
+  opacity: 0;
+  transition: opacity 650ms var(--intro-ease) 100ms;
+}
+
 .intro-film {
   position: absolute;
   width: 100%;
@@ -45,260 +53,123 @@
   object-fit: cover;
 }
 
-.river-intro.cards .intro-film {
-  animation: intro-film-out 420ms var(--intro-ease) 60ms forwards;
-}
-
-.intro-light {
+.intro-ident {
   position: absolute;
-  background: radial-gradient(
-    ellipse 46% 42% at 50% 46%,
-    rgb(232 169 60 / 16%),
-    rgb(42 91 69 / 8%) 55%,
-    transparent 78%
-  );
   inset: 0;
-  animation: intro-fade-in 600ms var(--intro-ease) both;
 }
 
-/* A 16:9 box that covers the screen exactly as the film does, centred on it. */
-.intro-frame {
+.river-intro .intro-lockup {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: max(100vw, 177.78vh);
-  height: max(100vh, 56.25vw);
-  perspective: 2600px;
-  transform: translate(-50%, -50%);
-}
-
-.intro-ace {
-  position: absolute;
-  aspect-ratio: 5 / 7;
-  transform-style: preserve-3d;
-  animation:
-    intro-ace-settle 600ms var(--intro-glide) both,
-    intro-ace-fold 370ms var(--intro-snap) 1100ms forwards,
-    intro-ace-away 450ms var(--intro-glide) 1470ms forwards;
-}
-
-/* Where each ace stands in the film's last frame, and the fan each settles into. */
-.intro-ace-h {
-  --film-x: 37.2%;
-  --film-y: 44%;
-  --film-r: -2deg;
-  --fan-dx: calc(var(--fan-x) * -1);
-  --fan-r: -8deg;
-}
-
-.intro-ace-s {
-  --film-x: 54.6%;
-  --film-y: 45.6%;
-  --film-r: 1deg;
-  --fan-dx: var(--fan-x);
-  --fan-r: 6deg;
-}
-
-.intro-ace-turn {
-  position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
-  animation: intro-ace-turn 460ms var(--intro-snap) 600ms both;
-}
-
-.intro-ace-s .intro-ace-turn {
-  animation-delay: 700ms;
-}
-
-.intro-ace-face,
-.intro-ace-back {
-  position: absolute;
-  backface-visibility: hidden;
-  inset: 0;
-}
-
-.intro-ace-back {
-  transform: rotateY(180deg);
-}
-
-.river-intro .intro-ace-face .playing-card {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  inset: 0;
-}
-
-.intro-ace-back {
-  border-radius: 7% / 5%;
-  background: url("/brand/river-card-back.svg") center / 100% 100% no-repeat;
-  box-shadow: 0 10px 28px rgb(0 0 0 / 50%);
-}
-
-/* The mark and the name: the mark where the folded card drew up to, the name beneath. */
-.intro-lockup {
-  position: absolute;
-  top: calc(50% + var(--mark-y));
-  left: 50%;
   display: grid;
+  width: max-content;
   justify-items: center;
-  gap: 14px;
-  transform: translate(-50%, calc(var(--mark-w) * -0.5));
+  white-space: nowrap;
+  transform: translate(-50%, -50%) scale(var(--ident-scale));
+  transform-origin: 50% 50%;
 }
 
-.intro-mark {
-  width: var(--mark-w);
-  height: var(--mark-w);
+.river-intro.landing .intro-lockup {
+  transform: translate(calc(-50% + var(--land-x, 0px)), calc(-50% + var(--land-y, 0px))) scale(1);
+  transition: transform 750ms cubic-bezier(0.65, 0, 0.25, 1);
+}
+
+/* The mark is three layers in the menu mark's own box: the fill, a sheen, and the line. */
+.river-intro .intro-mark {
+  position: relative;
+  background: none;
+  filter: none;
+}
+
+.intro-mark-fill,
+.intro-mark-sheen {
+  position: absolute;
+  inset: 0;
+}
+
+.intro-mark-fill {
   background: url("/brand/river-mark.svg") center / contain no-repeat;
-  filter: drop-shadow(0 0 22px rgb(232 169 60 / 28%));
-  animation: intro-mark-in 520ms var(--intro-snap) 1720ms both;
+  filter: drop-shadow(0 0 18px rgb(232 169 60 / 30%));
+  animation: intro-fade-in 500ms var(--intro-ease) 950ms both;
 }
 
-.intro-word {
-  margin: 4px 0 0;
+.intro-mark-sheen {
+  background: linear-gradient(105deg, transparent 35%, rgb(255 244 214 / 85%) 50%, transparent 65%);
+  background-size: 300% 100%;
+  mask: url("/brand/river-mark.svg") center / contain no-repeat;
+  mix-blend-mode: screen;
+  animation: intro-sheen 600ms ease-in-out 1250ms both;
+}
+
+.intro-trace {
+  position: absolute;
+  overflow: visible;
+  inset: 0;
+  animation: intro-let-go 450ms var(--intro-ease) 1150ms forwards;
+}
+
+.intro-trace path {
+  fill: none;
+  stroke: #e6bf7a;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  stroke-linecap: round;
+  stroke-width: 3.2;
+  filter: drop-shadow(0 0 4px rgb(240 196 120 / 70%));
+  animation: intro-draw 1150ms var(--intro-flow) forwards;
+}
+
+/* Each letter carries its own brass, so each can arrive on its own beat. */
+.river-intro .intro-lockup .intro-name {
+  background: none;
+  filter: drop-shadow(0 4px 24px rgb(0 0 0 / 55%));
+}
+
+.intro-name span {
+  display: inline-block;
   background: linear-gradient(180deg, #f7e0a8, #c8954c 55%, #e6bf7a);
   background-clip: text;
   color: transparent;
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-size: clamp(40px, 8.5vmin, 88px);
-  font-weight: 500;
-  letter-spacing: 0.42em;
-  line-height: 1;
-  text-indent: 0.42em;
-  text-transform: uppercase;
-  animation: intro-word-in 700ms var(--intro-ease) 1950ms both;
+  animation: intro-letter 520ms var(--intro-ease) both;
+  animation-delay: calc(1350ms + var(--i) * 75ms);
 }
 
 .intro-tag {
-  display: flex;
-  align-items: center;
-  margin: 0;
-  color: #c99a55;
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-size: clamp(12px, 2.2vmin, 19px);
-  gap: 14px;
-  letter-spacing: 0.38em;
-  text-indent: 0.38em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  animation: intro-fade-in 600ms var(--intro-ease) 2200ms both;
+  animation: intro-fade-in 550ms var(--intro-ease) 1750ms both;
 }
 
-.intro-tag::before,
-.intro-tag::after {
-  width: clamp(36px, 7vmin, 64px);
-  height: 1px;
-  background: currentColor;
-  content: "";
-  animation: intro-rule 600ms var(--intro-ease) 2250ms both;
+.river-intro .intro-tag::before,
+.river-intro .intro-tag::after {
+  animation: intro-rule 550ms var(--intro-ease) 1800ms both;
 }
 
-/* After the film: from the film's place, size and slant to a small fan, flat to the screen. */
-@keyframes intro-ace-settle {
-  from {
-    top: var(--film-y);
-    left: var(--film-x);
-    width: 33%;
+@keyframes intro-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes intro-let-go {
+  to {
     opacity: 0;
-    transform: translate(-50%, -50%) rotateX(-44deg) rotateZ(var(--film-r));
-  }
-  30% {
-    top: var(--film-y);
-    left: var(--film-x);
-    width: 33%;
-    opacity: 1;
-    transform: translate(-50%, -50%) rotateX(-44deg) rotateZ(var(--film-r));
-  }
-  to {
-    top: 50%;
-    left: 50%;
-    width: var(--ace-w);
-    transform: translate(calc(-50% + var(--fan-dx)), -50%) rotateZ(var(--fan-r));
   }
 }
 
-/* Without the film: dealt up from below the screen into the same fan. */
-@keyframes intro-ace-deal {
+@keyframes intro-sheen {
   from {
-    top: 50%;
-    left: 50%;
-    width: var(--ace-w);
-    opacity: 0;
-    transform: translate(calc(-50% + var(--fan-dx) * 0.4), 60vh) rotateZ(calc(var(--fan-r) * -2));
+    background-position: 100% 0;
   }
   to {
-    top: 50%;
-    left: 50%;
-    width: var(--ace-w);
-    opacity: 1;
-    transform: translate(calc(-50% + var(--fan-dx)), -50%) rotateZ(var(--fan-r));
+    background-position: 0% 0;
   }
 }
 
-.river-intro.dealt .intro-ace {
-  animation-name: intro-ace-deal, intro-ace-fold, intro-ace-away;
-}
-
-.river-intro.dealt .intro-ace-s {
-  animation-delay: 70ms, 1100ms, 1470ms;
-}
-
-@keyframes intro-ace-turn {
-  to {
-    transform: rotateY(180deg);
-  }
-}
-
-@keyframes intro-ace-fold {
-  from {
-    top: 50%;
-    left: 50%;
-    width: var(--ace-w);
-    transform: translate(calc(-50% + var(--fan-dx)), -50%) rotateZ(var(--fan-r));
-  }
-  to {
-    top: 50%;
-    left: 50%;
-    width: var(--ace-w);
-    transform: translate(-50%, -50%) rotateZ(0deg);
-  }
-}
-
-@keyframes intro-ace-away {
-  from {
-    top: 50%;
-    left: 50%;
-    width: var(--ace-w);
-    opacity: 1;
-    transform: translate(-50%, -50%);
-  }
-  to {
-    top: calc(50% + var(--mark-y));
-    left: 50%;
-    width: var(--ace-w);
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.36);
-  }
-}
-
-@keyframes intro-mark-in {
+@keyframes intro-letter {
   from {
     opacity: 0;
-    transform: scale(0.42);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes intro-word-in {
-  from {
-    opacity: 0;
-    letter-spacing: 0.7em;
-    text-indent: 0.7em;
-  }
-  to {
-    opacity: 1;
+    transform: translateY(0.25em);
+    filter: blur(6px);
   }
 }
 
@@ -314,8 +185,13 @@
   }
 }
 
-@keyframes intro-film-out {
-  to {
-    opacity: 0;
+@media (max-width: 900px) {
+  .river-intro {
+    --ident-scale: 0.94;
   }
+}
+
+/* The menu's own mark waits under the curtain until this one has landed on it. */
+.club-home:has(.river-intro:not(.leaving)) .club-home-header .club-wordmark {
+  visibility: hidden;
 }

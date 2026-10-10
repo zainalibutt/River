@@ -1,21 +1,20 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { PlayingCard } from '@/components/table-pieces'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { tableSound } from '@/lib/table-sound'
 import './river-intro.css'
 
 /**
- * The way into River.
+ * The way into River: the river card, then the mark.
  *
- * On a wide screen it opens on film: the rooftop at night, a pan off the blackjack table
- * to the city, the terrace from above, Gold at the poker table, and over her shoulder as
- * she peeks at pocket aces. Where the film ends the same two aces take over in the table's
- * own drawing: they straighten to the screen, turn over to the river-spade back, fold
- * into one card, and the card gives way to the mark and the name.
+ * On a wide screen it opens on a short macro film, everything close enough to touch: light
+ * comes up on the felt over the name printed in it, a chip drops onto a stack and settles,
+ * and one card slides in face down and lifts a corner on the ace of spades as the light goes.
  *
- * A phone, or a screen that will not play the film in time, gets the drawn half alone:
- * the aces are dealt up from below and the same turn, fold and mark follow.
+ * Out of the dark a brass line runs in like a river, climbs into the outline of the spade and
+ * fills it; the name sets itself beneath; and the whole mark glides up into the menu's own,
+ * landing on it as the curtain lifts, so the intro becomes the page rather than cutting to it.
+ * A phone, or a screen that cannot start the film in time, gets the mark alone.
  *
  * Once a visit, kept in this tab's session. Any press or key skips it, and with reduced
  * motion it never plays.
@@ -24,25 +23,39 @@ import './river-intro.css'
 const SEEN_KEY = 'river:intro-seen'
 /** H.264 for every browser that has it; VP9 for the ones built without it. */
 const FILM_SOURCES = [
-  ['/intro/river-intro.mp4', 'video/mp4'],
-  ['/intro/river-intro.webm', 'video/webm'],
+  ['/intro/river-card.mp4', 'video/mp4'],
+  ['/intro/river-card.webm', 'video/webm'],
 ] as const
 /** Wide enough for a landscape film to be worth its weight. */
 const FILM_QUERY = '(min-width: 900px) and (min-aspect-ratio: 4/3)'
-/** How long the film may take to start before the drawn half plays instead. */
+/** How long the film may take to start before the mark plays alone. */
 const FILM_START_MS = 2_500
-/** The drawn half, from the first frame to the name held in full. */
-const CARDS_MS = 3_500
-/** How long the curtain takes to lift once the intro ends or is skipped. */
-const LEAVE_MS = 360
-/** The sounds under the drawn half; silent until the browser allows sound, as it must. */
-const BEATS: readonly [number, Parameters<typeof tableSound.play>[0]][] = [
-  [640, 'card_flip'],
-  [740, 'card_flip'],
-  [1_180, 'card_slide'],
+/** The film's own sounds, at the moments they happen on screen (seconds into the film). */
+const FILM_BEATS: readonly [number, Parameters<typeof tableSound.play>[0]][] = [
+  [2.2, 'chip_place'],
+  [3.42, 'card_slide'],
+  [4.36, 'card_peek'],
+]
+/** The mark, from the first of the line to the name held in full. */
+const IDENT_MS = 2_700
+/** The glide into the menu's mark while the curtain lifts. */
+const LAND_MS = 750
+/** The fade when the intro is skipped. */
+const LEAVE_MS = 320
+const IDENT_BEATS: readonly [number, Parameters<typeof tableSound.play>[0]][] = [
+  [1_080, 'win_chime'],
 ]
 
-type Phase = 'deciding' | 'film' | 'cards' | 'leaving' | 'gone'
+/**
+ * The river, then the spade: one stroke that comes in from far left, meanders, arrives at the
+ * foot of the left lobe, climbs to the tip, runs down the right lobe and curls back into the
+ * current. In the mark's own 200-unit space, so it lies exactly on the filled mark.
+ */
+const TRACE =
+  'M-1500 150C-1300 95-1120 205-900 150S-560 92-380 140S-20 196 25 122' +
+  'C22 78 79 52 100 12C121 52 178 78 175 122C173 153 139 167 111 151C95 141 75 128 52 131'
+
+type Phase = 'deciding' | 'film' | 'ident' | 'landing' | 'leaving' | 'gone'
 
 function alreadySeen(): boolean {
   try {
@@ -60,11 +73,11 @@ function saveData(): boolean {
 export function RiverIntro() {
   // Drawn by the server too, so the menu never shows for a frame before the intro covers it.
   const [phase, setPhase] = useState<Phase>('deciding')
-  // Whether the drawn half follows the film (and starts where it ends) or plays alone.
-  const [fromFilm, setFromFilm] = useState(false)
+  const [landing, setLanding] = useState<CSSProperties>({})
   // Decided once per mount: the second run of this effect would read its own mark as seen.
   const decided = useRef(false)
   const film = useRef<HTMLVideoElement>(null)
+  const lockup = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (decided.current) return
@@ -79,94 +92,116 @@ export function RiverIntro() {
     } catch {
       // A browser that will not keep it plays the intro again next load.
     }
-    const wide = window.matchMedia(FILM_QUERY).matches && !saveData()
-    setFromFilm(wide)
-    setPhase(wide ? 'film' : 'cards')
+    setPhase(window.matchMedia(FILM_QUERY).matches && !saveData() ? 'film' : 'ident')
   }, [])
 
   useEffect(() => {
-    if (phase !== 'film' && phase !== 'cards') {
-      if (phase === 'leaving') {
-        const gone = window.setTimeout(() => setPhase('gone'), LEAVE_MS)
-        return () => window.clearTimeout(gone)
-      }
-      return
+    if (phase === 'leaving' || phase === 'landing') {
+      const gone = window.setTimeout(
+        () => setPhase('gone'),
+        phase === 'landing' ? LAND_MS : LEAVE_MS,
+      )
+      return () => window.clearTimeout(gone)
     }
+    if (phase !== 'film' && phase !== 'ident') return
     const timers: number[] = []
+    let frame = 0
     if (phase === 'film') {
       const video = film.current
-      // A film that has not begun in time is not waited for: the cards play alone.
+      // A film that has not begun in time is not waited for: the mark plays alone.
       timers.push(
         window.setTimeout(() => {
-          if (!video || video.currentTime === 0) {
-            setFromFilm(false)
-            setPhase('cards')
-          }
+          if (!video || video.currentTime === 0) setPhase('ident')
         }, FILM_START_MS),
       )
-      void video?.play().catch(() => {
-        setFromFilm(false)
-        setPhase('cards')
-      })
+      void video?.play().catch(() => setPhase('ident'))
+      // The film's sounds follow its own clock, so a stall never puts them out of step.
+      let next = 0
+      const listen = () => {
+        for (let beat = FILM_BEATS[next]; video && beat && video.currentTime >= beat[0]; ) {
+          tableSound.play(beat[1])
+          next += 1
+          beat = FILM_BEATS[next]
+        }
+        frame = window.requestAnimationFrame(listen)
+      }
+      frame = window.requestAnimationFrame(listen)
     } else {
-      for (const [at, effect] of BEATS) {
+      for (const [at, effect] of IDENT_BEATS) {
         timers.push(window.setTimeout(() => tableSound.play(effect), at))
       }
-      timers.push(window.setTimeout(() => setPhase('leaving'), CARDS_MS))
+      timers.push(
+        window.setTimeout(() => {
+          // Land on the menu's own mark: the same lockup, measured where it sits.
+          const from = lockup.current?.getBoundingClientRect()
+          const to = document
+            .querySelector('.club-home-header .club-wordmark')
+            ?.getBoundingClientRect()
+          if (from && to && from.width > 0) {
+            setLanding({
+              '--land-x': `${to.left + to.width / 2 - (from.left + from.width / 2)}px`,
+              '--land-y': `${to.top + to.height / 2 - (from.top + from.height / 2)}px`,
+            } as CSSProperties)
+          }
+          setPhase('landing')
+        }, IDENT_MS),
+      )
     }
     const skip = () => setPhase('leaving')
     window.addEventListener('keydown', skip)
     return () => {
       for (const timer of timers) window.clearTimeout(timer)
+      window.cancelAnimationFrame(frame)
       window.removeEventListener('keydown', skip)
     }
   }, [phase])
 
   if (phase === 'gone') return null
-  const playing = phase === 'film' || phase === 'cards'
+  const showIdent = phase === 'ident' || phase === 'landing'
   return (
     <div
-      className={`river-intro ${phase}${fromFilm ? ' from-film' : ' dealt'}`}
+      className={`river-intro ${phase}`}
       aria-hidden="true"
       onPointerDown={() =>
-        setPhase((current) => (current === 'film' || current === 'cards' ? 'leaving' : current))
+        setPhase((current) => (current === 'film' || current === 'ident' ? 'leaving' : current))
       }
     >
-      {fromFilm && playing ? (
+      <div className="intro-curtain" />
+      {phase === 'film' ? (
         <video
           ref={film}
           className="intro-film"
           muted
           playsInline
           preload="auto"
-          onEnded={() => setPhase((current) => (current === 'film' ? 'cards' : current))}
+          onEnded={() => setPhase((current) => (current === 'film' ? 'ident' : current))}
         >
           {FILM_SOURCES.map(([src, type]) => (
             <source key={src} src={src} type={type} />
           ))}
         </video>
       ) : null}
-      {phase === 'cards' ? (
-        <>
-          <div className="intro-light" />
-          <div className="intro-frame">
-            {(['h', 's'] as const).map((suit) => (
-              <div key={suit} className={`intro-ace intro-ace-${suit}`}>
-                <div className="intro-ace-turn">
-                  <div className="intro-ace-face">
-                    <PlayingCard card={{ rank: 'A', suit }} />
-                  </div>
-                  <div className="intro-ace-back" />
-                </div>
-              </div>
-            ))}
+      {showIdent ? (
+        <div className="intro-ident">
+          {/* The menu's own lockup classes, so the mark lands on its twin at every size. */}
+          <div ref={lockup} className="club-wordmark intro-lockup" style={landing}>
+            <span className="club-home-mark intro-mark">
+              <span className="intro-mark-fill" />
+              <span className="intro-mark-sheen" />
+              <svg className="intro-trace" viewBox="0 0 200 200" aria-hidden="true">
+                <path d={TRACE} pathLength={1} />
+              </svg>
+            </span>
+            <p className="club-wordmark-name intro-name">
+              {[...'River'].map((letter, index) => (
+                <span key={letter + String(index)} style={{ '--i': index } as CSSProperties}>
+                  {letter}
+                </span>
+              ))}
+            </p>
+            <p className="club-home-tagline intro-tag">Premium poker</p>
           </div>
-          <div className="intro-lockup">
-            <span className="intro-mark" />
-            <p className="intro-word">River</p>
-            <p className="intro-tag">Premium poker</p>
-          </div>
-        </>
+        </div>
       ) : null}
     </div>
   )

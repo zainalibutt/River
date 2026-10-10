@@ -188,7 +188,9 @@ for (const viewport of [
 
     test('primary actions have phone-sized targets and distinct destinations', async ({ page }) => {
       await page.goto('/')
-      await expect(page.getByText('Premium poker', { exact: true })).toBeVisible()
+      await expect(
+        page.locator('.club-home-header').getByText('Premium poker', { exact: true }),
+      ).toBeVisible()
       await expect(page).toHaveTitle('River — Premium poker')
       await expect(page.getByText('Poker after dark.', { exact: true })).toHaveCount(0)
       await expect(page.getByText('A seat for you. A table for your friends.')).toHaveCount(0)
