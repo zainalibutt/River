@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { RiverWordmark } from '@/components/river-wordmark'
 import { loadProfile, memberSinceLabel, type ProfileOutcome } from '@/lib/profile'
 
 /**
@@ -29,12 +30,7 @@ export function PlayerProfile({ name }: { name: string }) {
   return (
     <div className="club">
       <nav className="club-rail" aria-label="Player profile">
-        <div className="club-wordmark">
-          <h1 className="club-wordmark-name">River</h1>
-          <div className="club-wordmark-rule" aria-hidden="true">
-            <span className="club-wordmark-pips">&spades;&hearts;&diams;&clubs;</span>
-          </div>
-        </div>
+        <RiverWordmark />
 
         <div className="club-nav">
           <button type="button" className="club-nav-item" onClick={() => router.push('/')}>

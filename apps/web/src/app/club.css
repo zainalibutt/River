@@ -154,17 +154,29 @@
   margin-bottom: clamp(2.4rem, 6vh, 4.6rem);
 }
 
+/* The river spade, set small above the name on the rail. */
+.club-wordmark-mark {
+  display: block;
+  width: clamp(44px, 4vw, 56px);
+  aspect-ratio: 1;
+  margin: 0 auto 0.8rem;
+  background: url("/brand/river-mark.svg") center / contain no-repeat;
+}
+
 .club-wordmark-name {
   margin: 0;
+  background: linear-gradient(180deg, #f7e0a8, #c8954c 55%, #e6bf7a);
+  background-clip: text;
+  color: transparent;
   font-family: var(--font-fraunces), Georgia, serif;
-  font-weight: 300;
-  font-size: clamp(2.1rem, 3.1vw, 3.1rem);
+  font-weight: 500;
+  font-size: clamp(1.8rem, 2.6vw, 2.6rem);
   /* Ceremony comes from tracking, not from size. */
-  letter-spacing: 0.34em;
-  text-indent: 0.34em;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
   line-height: 1;
-  color: var(--club-brass);
   text-align: center;
+  text-transform: uppercase;
 }
 
 /* Suit geometry as a monogram rule. Abstract marks, not props. */
@@ -190,9 +202,14 @@
   background: linear-gradient(90deg, var(--club-hairline-strong), transparent);
 }
 
-.club-wordmark-pips {
+.club-wordmark-tag {
+  flex: none;
+  color: var(--club-brass);
+  font-family: var(--font-fraunces), Georgia, serif;
   letter-spacing: 0.34em;
   text-indent: 0.34em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 /* ------------------------------------------------------------------ nav --- */
