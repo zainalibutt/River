@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import { DailyChips } from '@/components/daily-chips'
 import { FriendsSheet } from '@/components/friends-sheet'
+import { MenuDrift } from '@/components/menu-drift'
 import { RiverIntro } from '@/components/river-intro'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
@@ -362,6 +363,7 @@ export function ClubMenu() {
             sizes="(max-width: 900px) and (orientation: portrait) 140vh, 100vw"
             priority
           />
+          <MenuDrift />
         </div>
       </div>
       <header className="club-home-header">
