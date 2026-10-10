@@ -195,3 +195,66 @@
 .club-home:has(.river-intro:not(.leaving)) .club-home-header .club-wordmark {
   visibility: hidden;
 }
+
+/* The gate: the mark on black and an invitation, the press a browser needs before sound. */
+.intro-gate {
+  position: absolute;
+  display: grid;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c99a55;
+  cursor: pointer;
+  gap: 28px;
+  inset: 0;
+  place-content: center;
+  place-items: center;
+}
+
+.intro-gate:focus-visible {
+  outline: none;
+}
+
+.intro-gate:focus-visible .intro-gate-call {
+  outline: 1px solid rgb(201 154 85 / 60%);
+  outline-offset: 10px;
+}
+
+.intro-gate-mark {
+  width: clamp(72px, 11vmin, 112px);
+  aspect-ratio: 1;
+  background: url("/brand/river-mark.svg") center / contain no-repeat;
+  filter: drop-shadow(0 0 22px rgb(232 169 60 / 24%));
+  animation: intro-fade-in 900ms var(--intro-ease) both;
+}
+
+.intro-gate-call {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: clamp(12px, 1.6vmin, 15px);
+  letter-spacing: 0.38em;
+  text-indent: 0.38em;
+  text-transform: uppercase;
+  animation:
+    intro-fade-in 900ms var(--intro-ease) 500ms both,
+    intro-gate-breathe 2.8s ease-in-out 1400ms infinite;
+}
+
+.intro-gate-click {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .intro-gate-tap {
+    display: none;
+  }
+
+  .intro-gate-click {
+    display: inline;
+  }
+}
+
+@keyframes intro-gate-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}

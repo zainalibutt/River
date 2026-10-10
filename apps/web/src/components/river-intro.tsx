@@ -1,6 +1,7 @@
 'use client'
 
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { riverMusic } from '@/lib/river-music'
 import { tableSound } from '@/lib/table-sound'
 import './river-intro.css'
 
@@ -16,8 +17,12 @@ import './river-intro.css'
  * landing on it as the curtain lifts, so the intro becomes the page rather than cutting to it.
  * A phone, or a screen that cannot start the film in time, gets the mark alone.
  *
- * Once a visit, kept in this tab's session. Any press or key skips it, and with reduced
- * motion it never plays.
+ * It opens on a gate, the mark on black and an invitation to enter, because a browser lets
+ * nothing sound until it is pressed: that press starts the film and the music together, a dark
+ * bed under the film and a swell of the theme's own riff, so the riff lands with the mark.
+ *
+ * Once a visit, kept in this tab's session. Any press or key skips it once it is running, and
+ * with reduced motion it never plays.
  */
 
 const SEEN_KEY = 'river:intro-seen'
@@ -55,7 +60,7 @@ const TRACE =
   'M-1500 150C-1300 95-1120 205-900 150S-560 92-380 140S-20 196 25 122' +
   'C22 78 79 52 100 12C121 52 178 78 175 122C173 153 139 167 111 151C95 141 75 128 52 131'
 
-type Phase = 'deciding' | 'film' | 'ident' | 'landing' | 'leaving' | 'gone'
+type Phase = 'deciding' | 'gate' | 'film' | 'ident' | 'landing' | 'leaving' | 'gone'
 
 function alreadySeen(): boolean {
   try {
@@ -78,6 +83,9 @@ export function RiverIntro() {
   const decided = useRef(false)
   const film = useRef<HTMLVideoElement>(null)
   const lockup = useRef<HTMLDivElement>(null)
+  // What the gate opens on: the film on a wide screen, the mark alone otherwise.
+  const opening = useRef<'film' | 'ident'>('ident')
+  const gate = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (decided.current) return
@@ -92,7 +100,21 @@ export function RiverIntro() {
     } catch {
       // A browser that will not keep it plays the intro again next load.
     }
-    setPhase(window.matchMedia(FILM_QUERY).matches && !saveData() ? 'film' : 'ident')
+    opening.current = window.matchMedia(FILM_QUERY).matches && !saveData() ? 'film' : 'ident'
+    riverMusic.holdForIntro()
+    setPhase('gate')
+  }, [])
+
+  // The press on the gate is the one the browser needs before anything may sound.
+  const enter = useCallback(() => {
+    tableSound.unlock()
+    riverMusic.unlock()
+    riverMusic.beginComeUp()
+    setPhase(opening.current)
+  }, [])
+  const skip = useCallback(() => {
+    riverMusic.skipIntro()
+    setPhase('leaving')
   }, [])
 
   useEffect(() => {
@@ -102,6 +124,15 @@ export function RiverIntro() {
         phase === 'landing' ? LAND_MS : LEAVE_MS,
       )
       return () => window.clearTimeout(gone)
+    }
+    if (phase === 'gate') {
+      gate.current?.focus()
+      const key = (event: KeyboardEvent) => {
+        if (event.key === 'Enter' || event.key === ' ') return
+        enter()
+      }
+      window.addEventListener('keydown', key)
+      return () => window.removeEventListener('keydown', key)
     }
     if (phase !== 'film' && phase !== 'ident') return
     const timers: number[] = []
@@ -127,6 +158,8 @@ export function RiverIntro() {
       }
       frame = window.requestAnimationFrame(listen)
     } else {
+      // The theme's first downbeat is cued to the moment the mark settles on the menu.
+      riverMusic.landAt(performance.now() + IDENT_MS + LAND_MS)
       for (const [at, effect] of IDENT_BEATS) {
         timers.push(window.setTimeout(() => tableSound.play(effect), at))
       }
@@ -147,26 +180,34 @@ export function RiverIntro() {
         }, IDENT_MS),
       )
     }
-    const skip = () => setPhase('leaving')
     window.addEventListener('keydown', skip)
     return () => {
       for (const timer of timers) window.clearTimeout(timer)
       window.cancelAnimationFrame(frame)
       window.removeEventListener('keydown', skip)
     }
-  }, [phase])
+  }, [phase, enter, skip])
 
   if (phase === 'gone') return null
   const showIdent = phase === 'ident' || phase === 'landing'
   return (
     <div
       className={`river-intro ${phase}`}
-      aria-hidden="true"
-      onPointerDown={() =>
-        setPhase((current) => (current === 'film' || current === 'ident' ? 'leaving' : current))
-      }
+      aria-hidden={phase === 'gate' ? undefined : true}
+      onPointerDown={() => {
+        if (phase === 'film' || phase === 'ident') skip()
+      }}
     >
       <div className="intro-curtain" />
+      {phase === 'gate' ? (
+        <button ref={gate} type="button" className="intro-gate" onClick={enter}>
+          <span className="intro-gate-mark" aria-hidden="true" />
+          <span className="intro-gate-call">
+            <span className="intro-gate-tap">Tap to enter</span>
+            <span className="intro-gate-click">Click to enter</span>
+          </span>
+        </button>
+      ) : null}
       {phase === 'film' ? (
         <video
           ref={film}
