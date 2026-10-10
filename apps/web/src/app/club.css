@@ -1200,6 +1200,40 @@
   letter-spacing: 0;
 }
 
+/* The account strip wraps once: who you are, the day's chips and your bankroll on top,
+   and the places of your own as a single line of type under a hairline. */
+.club-home-account.club-capsule-player {
+  flex-wrap: wrap;
+  width: min(100%, 470px);
+  row-gap: 6px;
+}
+
+.club-capsule-links {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 22px;
+  border-top: 1px solid var(--club-hairline);
+}
+
+.club-home-account .club-capsule-links .club-link {
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--club-ivory-dim);
+  font-family: var(--control-type, inherit);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+
+.club-home-account .club-capsule-links .club-link:hover,
+.club-home-account .club-capsule-links .club-link:focus-visible {
+  color: var(--club-brass-bright);
+}
+
 .club-home-dialog {
   --home-exit-ms: 180;
   width: min(440px, calc(100% - 32px));

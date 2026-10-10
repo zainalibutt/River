@@ -463,23 +463,9 @@ export function ClubMenu() {
                     <button type="button" className="club-link" onClick={openNaming}>
                       Choose your name
                     </button>
-                  ) : profile === null ? null : (
-                    <button
-                      type="button"
-                      className="club-link"
-                      onClick={() => router.push(profile)}
-                    >
-                      Your profile
-                    </button>
-                  )}
+                  ) : null}
                 </>
               )}
-              <button type="button" className="club-link" onClick={() => router.push('/record')}>
-                Your record
-              </button>
-              <button type="button" className="club-link" onClick={() => setFriendsOpen(true)}>
-                Friends
-              </button>
             </div>
             <DailyChips
               accessToken={accessToken}
@@ -497,6 +483,21 @@ export function ClubMenu() {
               </div>
               <div className="club-capsule-label">Chips</div>
             </div>
+            {/* Places of your own, read as one line of type under the strip rather than a
+                stack of buttons: the strip's actions are the claim and the name above. */}
+            <nav className="club-capsule-links" aria-label="Your account">
+              {!me.anonymous && memberName?.chosen !== false && profile !== null ? (
+                <button type="button" className="club-link" onClick={() => router.push(profile)}>
+                  Your profile
+                </button>
+              ) : null}
+              <button type="button" className="club-link" onClick={() => router.push('/record')}>
+                Your record
+              </button>
+              <button type="button" className="club-link" onClick={() => setFriendsOpen(true)}>
+                Friends
+              </button>
+            </nav>
           </footer>
         ) : null}
 
