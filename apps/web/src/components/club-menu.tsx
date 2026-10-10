@@ -9,6 +9,7 @@ import { DailyChips } from '@/components/daily-chips'
 import { FriendsSheet } from '@/components/friends-sheet'
 import { MenuDrift } from '@/components/menu-drift'
 import { RiverIntro } from '@/components/river-intro'
+import { RiverMusicControl } from '@/components/river-music-control'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
 import { RollingAmount } from '@/components/rolling-amount'
@@ -26,6 +27,7 @@ import {
   nameProblem,
 } from '@/lib/player-name'
 import { profilePath } from '@/lib/profile'
+import { riverMusic } from '@/lib/river-music'
 import { startTableHref } from '@/lib/start-table'
 import { inviteDestination } from '@/lib/table-target'
 import { useInterfaceSound } from '@/lib/use-interface-sound'
@@ -72,6 +74,11 @@ type NameCheck =
 export function ClubMenu() {
   const router = useRouter()
   useInterfaceSound()
+  // The theme belongs to the menu: in when it shows, out on the way to a table.
+  useEffect(() => {
+    riverMusic.enterHome()
+    return () => riverMusic.leaveHome()
+  }, [])
   const dialogRef = useRef<HTMLDialogElement>(null)
   const closingMotion = useRef<Animation | null>(null)
   const visibleViewport = useVisibleViewport()
@@ -377,6 +384,7 @@ export function ClubMenu() {
 
         <nav className="club-home-tools" aria-label="Settings">
           <RiverSoundControl />
+          <RiverMusicControl />
           <button type="button" className="club-home-tool" onClick={() => setSettingsOpen(true)}>
             Settings
           </button>
