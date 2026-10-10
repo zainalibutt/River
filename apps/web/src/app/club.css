@@ -921,26 +921,55 @@
   margin: 0;
 }
 
+/* The river spade, brass on the night, with the name in spaced capitals under it. */
+.club-home-mark {
+  --mark-size: 76px;
+
+  display: block;
+  width: var(--mark-size);
+  height: var(--mark-size);
+  margin: 0 auto 14px;
+  background: url("/brand/river-mark.svg") center / contain no-repeat;
+  filter: drop-shadow(0 4px 18px rgb(0 0 0 / 55%));
+}
+
 .club-home .club-wordmark-name {
   margin: 0;
-  font-size: 112px;
+  background: linear-gradient(180deg, #f7e0a8, #c8954c 55%, #e6bf7a);
+  background-clip: text;
+  color: transparent;
+  font-size: 60px;
+  font-weight: 500;
   line-height: 1;
-  color: var(--club-ivory);
-  letter-spacing: -0.035em;
-  text-indent: 0;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
   text-align: center;
-  text-shadow: 0 4px 32px rgb(0 0 0 / 45%);
+  text-transform: uppercase;
+  filter: drop-shadow(0 4px 24px rgb(0 0 0 / 55%));
 }
 
 .club-home-tagline {
-  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 14px 0 0;
   color: var(--home-brass-lit);
-  font-family: var(--font-home-display), var(--font-inter), sans-serif;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-align: center;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 14px;
+  letter-spacing: 0.38em;
+  text-indent: 0.38em;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.club-home-tagline::before,
+.club-home-tagline::after {
+  width: 56px;
+  height: 1px;
+  background: currentColor;
+  content: "";
+  opacity: 0.7;
 }
 
 .club-home-tools,
@@ -1447,7 +1476,11 @@
 
 @media (min-width: 1920px) {
   .club-home .club-wordmark-name {
-    font-size: 132px;
+    font-size: 72px;
+  }
+
+  .club-home-mark {
+    --mark-size: 90px;
   }
 
   .club-home-content {
@@ -1471,7 +1504,11 @@
   }
 
   .club-home .club-wordmark-name {
-    font-size: 76px;
+    font-size: 46px;
+  }
+
+  .club-home-mark {
+    --mark-size: 58px;
   }
 
   .club-home-header {
@@ -1578,7 +1615,11 @@
   }
 
   .club-home .club-wordmark-name {
-    font-size: 68px;
+    font-size: 40px;
+  }
+
+  .club-home-tagline {
+    font-size: 12px;
   }
 
   .club-home-tool {
@@ -1605,7 +1646,12 @@
   }
 
   .club-home .club-wordmark-name {
-    font-size: 52px;
+    font-size: 34px;
+  }
+
+  .club-home-mark {
+    --mark-size: 36px;
+    margin-bottom: 8px;
   }
 
   .club-home-header {

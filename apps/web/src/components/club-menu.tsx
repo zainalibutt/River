@@ -365,9 +365,12 @@ export function ClubMenu() {
         </div>
       </div>
       <header className="club-home-header">
+        {/* The river spade over the name: the lockup the intro ends on, so the curtain
+            lifts on the same mark it showed. */}
         <div className="club-wordmark">
+          <span className="club-home-mark" aria-hidden="true" />
           <h1 className="club-wordmark-name">River</h1>
-          <p className="club-home-tagline">Premium poker.</p>
+          <p className="club-home-tagline">Premium poker</p>
         </div>
 
         <nav className="club-home-tools" aria-label="Settings">
