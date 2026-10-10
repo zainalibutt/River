@@ -1,28 +1,29 @@
+import { tableSound } from '@/lib/table-sound'
+
 /**
- * River's music: the homepage theme, and the intro's come-up into it.
+ * River's music: the homepage theme, and the intro's sound into it.
  *
- * The theme is a six-minute noir lounge piece that opens on its guitar riff, so the intro is
- * built to arrive on that riff. Under the film plays a dark bed cut from the theme's own
- * opening (slowed an octave down, filtered, given room), and a swell of the riff played
- * backwards rushes in over it; the swell ends where the theme begins, and the theme's first
- * downbeat lands on the moment the mark settles on the menu. Same key and the same guitar
- * throughout, so the come-up and the riff are one gesture rather than two cues.
+ * The theme is a six-minute noir lounge piece that opens on its guitar riff. The intro does not
+ * borrow from it: it is scored like an advert, every sound cut to a motion on screen (the air as
+ * the light comes up, the chip's clack, the felt under the sliding card, the flick of the aces,
+ * the shimmer of the brass line, the letters setting), and its last gesture, a rush into a low
+ * hit as the mark settles on the menu, lands on the theme's first downbeat.
  *
  * The theme plays on the menu alone, fades out on the way to a table and back in on return,
- * pauses with a hidden tab, and has its own mute beside the sound effects'. Nothing sounds
- * before the browser allows it: the intro's gate, or a first press on the menu, unlocks it.
+ * pauses with a hidden tab, and has its own mute; the intro's sounds follow the sound effects'
+ * mute instead. Nothing sounds before the browser allows it: the intro's gate, or a first press
+ * on the menu, unlocks it.
  */
 
 const MUTED_KEY = 'river:music-muted'
 /** Where the theme's first downbeat falls, in seconds from its start. */
 const THEME_DOWNBEAT_S = 0.16
 const THEME_LEVEL = 0.5
-const BED_LEVEL = 0.75
-const SWELL_LEVEL = 0.85
+const CUE_LEVEL = 0.9
 const FADE_IN_S = 1.6
 const FADE_OUT_S = 0.6
 
-type Clip = 'intro-bed' | 'intro-swell'
+type Cue = 'intro-film' | 'intro-mark'
 
 function readMuted(): boolean {
   try {
@@ -37,8 +38,9 @@ class RiverMusic {
   private master: GainNode | null = null
   private themeGain: GainNode | null = null
   private theme: HTMLAudioElement | null = null
-  private readonly clips = new Map<Clip, AudioBuffer>()
-  private bed: { source: AudioBufferSourceNode; gain: GainNode } | null = null
+  private cueGain: GainNode | null = null
+  private readonly cues = new Map<Cue, AudioBuffer>()
+  private readonly playing = new Set<AudioBufferSourceNode>()
   private muted: boolean | null = null
   private readonly listeners = new Set<(muted: boolean) => void>()
   /** The menu is on screen, so the theme belongs. */
@@ -93,90 +95,60 @@ class RiverMusic {
       this.themeGain.gain.value = 0
       context.createMediaElementSource(theme).connect(this.themeGain)
       this.themeGain.connect(this.master)
-      for (const clip of ['intro-bed', 'intro-swell'] as const)
-        void this.loadClip(context, clip, aac)
+      // The intro's sounds sit apart from the music's mute, under the sound effects' instead.
+      this.cueGain = context.createGain()
+      this.cueGain.gain.value = CUE_LEVEL
+      this.cueGain.connect(context.destination)
+      for (const cue of ['intro-film', 'intro-mark'] as const) void this.loadCue(context, cue, aac)
       document.addEventListener('visibilitychange', this.onVisibility)
     }
     if (this.context.state === 'suspended') void this.context.resume()
   }
 
-  /** The intro has begun: the dark bed comes up under it, and the theme waits for its cue. */
-  beginComeUp(): void {
-    this.introHeld = true
+  /** Play one of the intro's scored cues, from `offset` seconds in so it keeps to its picture. */
+  playCue(cue: Cue, offset = 0): void {
     const context = this.context
-    const buffer = this.clips.get('intro-bed')
-    if (context === null || this.master === null) return
-    if (buffer === undefined) {
-      // Still loading on the press that started everything: keep trying for a few seconds.
-      let tries = 0
-      const retry = () => {
-        tries += 1
-        if (!this.introHeld || this.bed !== null) return
-        if (this.clips.has('intro-bed')) this.startBed()
-        else if (tries < 12) this.timers.push(window.setTimeout(retry, 250))
-      }
-      this.timers.push(window.setTimeout(retry, 250))
-      return
-    }
-    this.startBed()
+    const buffer = this.cues.get(cue)
+    if (context === null || this.cueGain === null || buffer === undefined) return
+    if (tableSound.isMuted() || offset >= buffer.duration) return
+    const source = context.createBufferSource()
+    source.buffer = buffer
+    source.connect(this.cueGain)
+    source.onended = () => this.playing.delete(source)
+    this.playing.add(source)
+    source.start(context.currentTime, offset)
   }
 
-  /**
-   * The mark will settle on the menu at `atMs` (performance.now() time): run the swell into
-   * it and put the theme's first downbeat exactly there.
-   */
+  /** The mark will settle on the menu at `atMs` (performance.now() time): the riff lands there. */
   landAt(atMs: number): void {
     const context = this.context
-    if (context === null || this.master === null) return
-    const toContext = (ms: number) =>
-      context.currentTime + Math.max(0, ms - performance.now()) / 1000
-    const themeStartMs = atMs - THEME_DOWNBEAT_S * 1000
-    const swell = this.clips.get('intro-swell')
-    if (swell !== undefined) {
-      const source = context.createBufferSource()
-      source.buffer = swell
-      const gain = context.createGain()
-      gain.gain.value = SWELL_LEVEL
-      source.connect(gain)
-      gain.connect(this.master)
-      source.start(toContext(themeStartMs - swell.duration * 1000))
-    }
-    if (this.bed !== null) {
-      const from = toContext(themeStartMs - (swell?.duration ?? 1) * 1000)
-      this.bed.gain.gain.setValueAtTime(BED_LEVEL, from)
-      this.bed.gain.gain.linearRampToValueAtTime(0, toContext(themeStartMs))
-      this.bed.source.stop(toContext(themeStartMs) + 0.1)
-      this.bed = null
-    }
+    if (context === null) return
     this.timers.push(
       window.setTimeout(
         () => {
           this.introHeld = false
-          if (!this.home || this.theme === null || this.themeGain === null) return
+          if (!this.home || this.theme === null || this.themeGain === null || this.isMuted()) return
           this.theme.currentTime = 0
           this.themeGain.gain.cancelScheduledValues(context.currentTime)
           this.themeGain.gain.setValueAtTime(THEME_LEVEL, context.currentTime)
           void this.theme.play().catch(() => {})
         },
-        Math.max(0, themeStartMs - performance.now()),
+        Math.max(0, atMs - THEME_DOWNBEAT_S * 1000 - performance.now()),
       ),
     )
   }
 
-  /** The intro was skipped: let the bed go and bring the theme in softly. */
+  /** The intro was skipped: cut its sounds short and bring the theme in softly. */
   skipIntro(): void {
     this.introHeld = false
     for (const timer of this.timers) window.clearTimeout(timer)
     this.timers = []
-    if (this.bed !== null && this.context !== null) {
-      this.bed.gain.gain.setTargetAtTime(0, this.context.currentTime, 0.1)
-      this.bed.source.stop(this.context.currentTime + 0.6)
-      this.bed = null
-    }
+    for (const source of this.playing) source.stop()
+    this.playing.clear()
     if (this.home) this.fadeInTheme()
   }
 
-  /** The intro is showing its gate: the press on it starts the come-up, not the theme. */
+  /** The intro is showing its gate: the press on it starts the intro, not the theme. */
   holdForIntro(): void {
     this.introHeld = true
   }
@@ -225,29 +197,12 @@ class RiverMusic {
     void theme.play().catch(() => {})
   }
 
-  private startBed(): void {
-    const context = this.context
-    const buffer = this.clips.get('intro-bed')
-    if (context === null || this.master === null || buffer === undefined || this.bed !== null)
-      return
-    const source = context.createBufferSource()
-    source.buffer = buffer
-    source.loop = true
-    const gain = context.createGain()
-    gain.gain.setValueAtTime(0, context.currentTime)
-    gain.gain.linearRampToValueAtTime(BED_LEVEL, context.currentTime + 1.2)
-    source.connect(gain)
-    gain.connect(this.master)
-    source.start()
-    this.bed = { source, gain }
-  }
-
-  private async loadClip(context: AudioContext, clip: Clip, aac: boolean): Promise<void> {
+  private async loadCue(context: AudioContext, cue: Cue, aac: boolean): Promise<void> {
     for (const extension of aac ? ['m4a', 'ogg'] : ['ogg', 'm4a']) {
       try {
-        const response = await fetch(`/audio/theme/${clip}.${extension}`)
+        const response = await fetch(`/audio/intro/${cue}.${extension}`)
         if (!response.ok) continue
-        this.clips.set(clip, await context.decodeAudioData(await response.arrayBuffer()))
+        this.cues.set(cue, await context.decodeAudioData(await response.arrayBuffer()))
         return
       } catch {
         // This format would not decode here: try the other.

@@ -18,8 +18,8 @@ import './river-intro.css'
  * A phone, or a screen that cannot start the film in time, gets the mark alone.
  *
  * It opens on a gate, the mark on black and an invitation to enter, because a browser lets
- * nothing sound until it is pressed: that press starts the film and the music together, a dark
- * bed under the film and a swell of the theme's own riff, so the riff lands with the mark.
+ * nothing sound until it is pressed. Every sound after it is cut to a motion on screen, and the
+ * last, a rush into a low hit as the mark settles, lands on the first beat of the menu's theme.
  *
  * Once a visit, kept in this tab's session. Any press or key skips it once it is running, and
  * with reduced motion it never plays.
@@ -35,22 +35,12 @@ const FILM_SOURCES = [
 const FILM_QUERY = '(min-width: 900px) and (min-aspect-ratio: 4/3)'
 /** How long the film may take to start before the mark plays alone. */
 const FILM_START_MS = 2_500
-/** The film's own sounds, at the moments they happen on screen (seconds into the film). */
-const FILM_BEATS: readonly [number, Parameters<typeof tableSound.play>[0]][] = [
-  [2.2, 'chip_place'],
-  [3.42, 'card_slide'],
-  [4.36, 'card_peek'],
-]
 /** The mark, from the first of the line to the name held in full. */
 const IDENT_MS = 2_700
 /** The glide into the menu's mark while the curtain lifts. */
 const LAND_MS = 750
 /** The fade when the intro is skipped. */
 const LEAVE_MS = 320
-const IDENT_BEATS: readonly [number, Parameters<typeof tableSound.play>[0]][] = [
-  [1_080, 'win_chime'],
-]
-
 /**
  * The river, then the spade: one stroke that comes in from far left, meanders, arrives at the
  * foot of the left lobe, climbs to the tip, runs down the right lobe and curls back into the
@@ -109,7 +99,6 @@ export function RiverIntro() {
   const enter = useCallback(() => {
     tableSound.unlock()
     riverMusic.unlock()
-    riverMusic.beginComeUp()
     setPhase(opening.current)
   }, [])
   const skip = useCallback(() => {
@@ -146,23 +135,19 @@ export function RiverIntro() {
         }, FILM_START_MS),
       )
       void video?.play().catch(() => setPhase('ident'))
-      // The film's sounds follow its own clock, so a stall never puts them out of step.
-      let next = 0
+      // The film's score follows its own clock: it starts where the picture actually is.
       const listen = () => {
-        for (let beat = FILM_BEATS[next]; video && beat && video.currentTime >= beat[0]; ) {
-          tableSound.play(beat[1])
-          next += 1
-          beat = FILM_BEATS[next]
+        if (video && video.currentTime > 0) {
+          riverMusic.playCue('intro-film', video.currentTime)
+          return
         }
         frame = window.requestAnimationFrame(listen)
       }
       frame = window.requestAnimationFrame(listen)
     } else {
-      // The theme's first downbeat is cued to the moment the mark settles on the menu.
+      // The mark's own score, and the theme's first downbeat on the moment it settles.
       riverMusic.landAt(performance.now() + IDENT_MS + LAND_MS)
-      for (const [at, effect] of IDENT_BEATS) {
-        timers.push(window.setTimeout(() => tableSound.play(effect), at))
-      }
+      riverMusic.playCue('intro-mark')
       timers.push(
         window.setTimeout(() => {
           // Land on the menu's own mark: the same lockup, measured where it sits.
