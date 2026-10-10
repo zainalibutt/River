@@ -1754,7 +1754,7 @@
 
 .club-daily-line {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.6rem;
 }
 
@@ -1763,16 +1763,19 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The claim is a present: a brass box that breathes while it waits to be opened. */
 .club-daily-claim {
-  padding: 0.35rem 0.75rem;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  place-items: center;
   border: 1px solid var(--club-brass);
-  background: rgb(168 124 66 / 16%);
-  color: var(--club-ivory);
+  border-radius: 6px;
+  background: rgb(168 124 66 / 14%);
+  color: var(--club-brass-bright);
   cursor: pointer;
-  font: inherit;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  animation: club-gift-breathe 2.4s ease-in-out infinite;
   transition:
     background 160ms var(--ease-out),
     transform 380ms var(--ease-spring);
@@ -1782,18 +1785,63 @@
   background: rgb(168 124 66 / 30%);
 }
 
+.club-daily-claim:hover:not(:disabled) .club-daily-gift-lid {
+  transform: translateY(-2px) rotate(-6deg);
+}
+
 .club-daily-claim:active:not(:disabled) {
-  transform: scale(0.95);
+  transform: scale(0.92);
   transition: transform 90ms var(--ease-out);
 }
 
 .club-daily-claim:disabled {
   opacity: 0.5;
   cursor: progress;
+  animation: none;
 }
 
-.club-daily-claim {
-  white-space: nowrap;
+.club-daily-gift {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.club-daily-gift-lid {
+  transform-box: fill-box;
+  transform-origin: 20% 100%;
+  transition: transform 220ms var(--ease-spring);
+}
+
+/* Today's has been opened: the same box, quiet, beside when the next one comes. */
+.club-daily-waiting {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: var(--club-ivory-faint);
+}
+
+.club-daily-waiting .club-daily-gift {
+  width: 20px;
+  height: 20px;
+}
+
+@keyframes club-gift-breathe {
+  50% {
+    box-shadow:
+      0 0 0 4px rgb(214 170 96 / 14%),
+      0 0 18px rgb(214 170 96 / 28%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .club-daily-claim {
+    animation: none;
+  }
 }
 
 /* On a phone the capsule is narrow: the claim and its streak stack rather than wrap. */
