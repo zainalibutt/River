@@ -6,6 +6,7 @@ import {
   type BotPolicyContextV1,
   type Card,
   cardKey,
+  cardToString,
 } from '@river/engine'
 import { decisionClass, type MoveClass } from './bot-lbr-range.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
@@ -103,6 +104,11 @@ export function turnSolverPolicy(
     taken: MoveClass,
     personality: BotPersonality,
   ) => ((hole: readonly [Card, Card]) => number) | null
+  /** What the solve says at this observation's turn decision, or why there is none. */
+  readonly explain: (
+    observation: BotObservationV1,
+    personality: BotPersonality,
+  ) => TurnExplanation | string
 } {
   const tuning: TurnPolicyTuning = { ...TURN_POLICY_TUNING, ...overrides }
   const stats: TurnPolicyStats = { solved: 0, fallbacks: {}, solves: 0, trackMs: 0, solveMs: 0 }
@@ -154,7 +160,42 @@ export function turnSolverPolicy(
       return share
     }
   }
-  return { policy, stats, ownShares }
+  const explain = (observation: BotObservationV1, personality: BotPersonality) => {
+    const found = locate(observation, personality, base, network, tuning, cache, stats)
+    if (typeof found === 'string') return found
+    const { solved, node, self } = found
+    const hands = solved.hands[self]
+    const hole = observation.actor.hole as [Card, Card]
+    const exact = comboIndex(hands, hole)
+    const index = exact ?? nearestStrength(hands, hole, observation.board)
+    const width = node.actions.length
+    const table = solved.strategy.get(node.history)
+    return {
+      history: node.history,
+      pot: solved.spot.pot,
+      stack: solved.spot.stack,
+      ranges: [solved.hands[0].combos.length, solved.hands[1].combos.length] as const,
+      inRange: exact !== undefined,
+      standIn: hands.combos[index]?.hole.map(cardToString).join(' ') ?? '',
+      actions: node.actions,
+      row:
+        table === undefined ? [] : Array.from(table.subarray(index * width, (index + 1) * width)),
+    }
+  }
+  return { policy, stats, ownShares, explain }
+}
+
+/** What the solve says at one turn decision, for reading a hand by hand. */
+export interface TurnExplanation {
+  readonly history: string
+  readonly pot: number
+  readonly stack: number
+  readonly ranges: readonly [number, number]
+  /** Whether the OG's own holding is in its range, or the row is a stand-in's of nearest strength. */
+  readonly inRange: boolean
+  readonly standIn: string
+  readonly actions: readonly string[]
+  readonly row: readonly number[]
 }
 
 /**
