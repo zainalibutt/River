@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs'
 import { type BotPolicy, cardToString, championPersonality } from '@river/engine'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import { runSessions } from './bot-session-benchmark.js'
@@ -7,7 +8,7 @@ import {
   heldOutTables,
   ordinaryTables,
 } from './bot-session-campaign.js'
-import { solvedTurnPolicy } from './bot-turn-policy.js'
+import { solvedTurnPolicy, TURN_POLICY_TUNING } from './bot-turn-policy.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
 // Usage: tsx bot-turn-explain.ts <table> <seed prefix> <session> <hand> [v9a|v9b]
@@ -22,7 +23,13 @@ if (table === undefined || !prefix) {
   throw new Error('usage: <table> <seed prefix> <session> <hand> [v9a|v9b]')
 }
 const target = { session: Number(sessionText), hand: Number(handText) }
-const turn = solvedTurnPolicy(turnNetworkFromEnvironment(), {}, candidateName === 'v9b')
+const parsed = /^v9(a|b)(\d\d)?$/.exec(candidateName)
+const doubtText = parsed?.[2]
+const doubt =
+  doubtText === undefined
+    ? {}
+    : { ranges: { ...TURN_POLICY_TUNING.ranges, cardBlindPrior: Number(doubtText) / 100 } }
+const turn = solvedTurnPolicy(turnNetworkFromEnvironment(), doubt, parsed?.[1] === 'b')
 let at = { session: -1, hand: -1 }
 const focal: BotPolicy = {
   id: turn.policy.id,
@@ -37,9 +44,20 @@ const focal: BotPolicy = {
         `${observation.street}: OG ${cards(observation.actor.hole)}, board ${cards(observation.board)}, pot ${observation.pot}, to call ${observation.amountToCall} -> ${JSON.stringify(result.decision)}\n`,
       )
       if (observation.street === 'turn') {
+        const said = turn.explain(observation, context.personality)
         process.stdout.write(
-          `  solve: ${JSON.stringify(turn.explain(observation, context.personality))}\n`,
+          `  solve: ${JSON.stringify(said, (key, value) => (key === 'spot' ? undefined : value))}\n`,
         )
+        // With RIVER_TURN_SPOT set, the last turn spot is written there, cards as text.
+        const dump = process.env.RIVER_TURN_SPOT
+        if (dump !== undefined && typeof said !== 'string') {
+          writeFileSync(
+            dump,
+            JSON.stringify(said.spot, (key, value) =>
+              key === 'board' || key === 'hole' ? value.map(cardToString) : value,
+            ),
+          )
+        }
       }
     }
     return result

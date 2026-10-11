@@ -180,6 +180,7 @@ export function turnSolverPolicy(
       actions: node.actions,
       row:
         table === undefined ? [] : Array.from(table.subarray(index * width, (index + 1) * width)),
+      spot: solved.spot,
     }
   }
   return { policy, stats, ownShares, explain }
@@ -196,6 +197,8 @@ export interface TurnExplanation {
   readonly standIn: string
   readonly actions: readonly string[]
   readonly row: readonly number[]
+  /** The solved spot itself, ranges and all. */
+  readonly spot: RiverSpot
 }
 
 /**
