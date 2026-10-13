@@ -89,6 +89,27 @@ def load_records(directory: Path | list[Path], limit: int | None = None) -> np.n
     return records
 
 
+def checked_for(path: Path, count: int) -> np.ndarray:
+    """One shard's checked-down values from its side file: shape (count, 2, 1326)."""
+    side = path.with_suffix(".checked")
+    if not side.exists():
+        raise FileNotFoundError(f"{side}: checked-down values not written yet")
+    if side.stat().st_size != count * 2 * COMBOS * 4:
+        raise ValueError(f"{side}: wrong size for a shard of {count} records")
+    return np.fromfile(side, dtype="<f4").reshape(count, 2, COMBOS)
+
+
+def bucket_ids_for(path: Path, suffix: str, count: int) -> np.ndarray:
+    """One shard's bucket ids from its side file: shape (count, 1326), 255 where blocked."""
+    side = path.with_suffix(f".{suffix}")
+    if not side.exists():
+        raise FileNotFoundError(f"{side}: bucket ids not written yet")
+    ids = np.fromfile(side, dtype=np.uint8).reshape(-1, COMBOS)
+    if len(ids) != count:
+        raise ValueError(f"{side}: {len(ids)} rows for a shard of {count}")
+    return ids
+
+
 def load_checked(directory: Path | list[Path]) -> np.ndarray:
     """Each record's checked-down values from the side files beside its shards (X.bin, X.checked,
     written by bot-turn-checked-run.ts), in load_records order: shape (n, 2, 1326), in pots,
