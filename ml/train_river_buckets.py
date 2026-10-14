@@ -176,6 +176,7 @@ def main() -> None:
     parser.add_argument("--batch", type=int, default=512)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--data-in-memory", action="store_true", help="keep the data in main memory even when it fits on the graphics card")
     parser.add_argument(
         "--held-out",
         type=int,
@@ -251,8 +252,25 @@ def main() -> None:
     held_checked = np.concatenate(kept["checked"]) if args.checked else None
     print(f"bucketed {total} spots into {args.buckets} buckets in {time.time() - started:.0f} s", flush=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    tensors = {key: torch.from_numpy(data[key]).to(device) for key in ("x", "y", "mask")}
-    tensors["mask"] = tensors["mask"].float()
+    # The data stays on the graphics card when it fits with a gigabyte to spare; otherwise it
+    # stays in main memory and each batch is copied over. The mask stays bytes either way and
+    # is widened batch by batch, so the numbers trained on are the same.
+    needed = sum(data[key].nbytes for key in ("x", "y", "mask"))
+    home = device
+    if device.type == "cuda" and (args.data_in_memory or needed > torch.cuda.mem_get_info()[0] - 2**30):
+        home = torch.device("cpu")
+        print(f"{needed / 2**30:.1f} GB of data: kept in main memory, copied batch by batch", flush=True)
+    tensors = {key: torch.from_numpy(data[key]) for key in ("x", "y", "mask")}
+    if home.type == "cuda":
+        tensors = {key: value.to(home) for key, value in tensors.items()}
+    elif device.type == "cuda":
+        tensors = {key: value.pin_memory() for key, value in tensors.items()}
+
+    def batch(index: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        rows = index.to(home)
+        x, y, m = (tensors[key][rows].to(device, non_blocking=True) for key in ("x", "y", "mask"))
+        return x, y, m.float()
+
     train = torch.from_numpy(training_index).to(device)
     valid = torch.from_numpy(validation_index).to(device)
     inputs, outputs = data["x"].shape[1], data["y"].shape[1]
@@ -268,7 +286,7 @@ def main() -> None:
         shuffled = train[torch.randperm(len(train), device=device)]
         for start in range(0, len(shuffled) - args.batch + 1, args.batch):
             index = shuffled[start : start + args.batch]
-            x, y, m = tensors["x"][index], tensors["y"][index], tensors["mask"][index]
+            x, y, m = batch(index)
             loss = (huber(model(x), y) * m).sum() / m.sum()
             optimiser.zero_grad()
             loss.backward()
@@ -276,7 +294,7 @@ def main() -> None:
             schedule.step()
         model.eval()
         with torch.no_grad():
-            x, y, m = tensors["x"][valid], tensors["y"][valid], tensors["mask"][valid]
+            x, y, m = batch(valid)
             error = (((model(x) - y).abs() * m).sum() / m.sum()).item()
         if error < best[0]:
             best = (error, {k: v.detach().clone() for k, v in model.state_dict().items()})
@@ -286,7 +304,7 @@ def main() -> None:
     model.load_state_dict(best[1])
     model.eval()
     with torch.no_grad():
-        predicted = model(tensors["x"][valid]).cpu().numpy()
+        predicted = model(batch(valid)[0]).cpu().numpy()
     report(
         "held-out error of the network, holding by holding:",
         predicted,
