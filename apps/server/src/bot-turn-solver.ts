@@ -270,26 +270,36 @@ export function showdownTable(rivers: TurnRivers, hands: readonly [Hands, Hands]
     }
   }
   for (let at = 0; at < share.length; at += 1) share[at] = (share[at] as number) / 44
-  // The same table seen from player 1, row by row.
-  const back = new Float32Array(m * n)
+  // Stored by opponent holding, so a call walks only the opponent holdings with
+  // weight: a solve's reaches are often exactly zero, about half of them in a
+  // full-range turn. Each holding's sum still adds its terms in the order of the
+  // opponent's holdings, so the answers are the same to the last bit.
+  // byOpponent[0][o * n + h]: what player 0's holding h wins against player 1's o;
+  // byOpponent[1][h * m + o]: what player 1's holding o wins against player 0's h.
+  const forFirst = new Float32Array(m * n)
+  const forSecond = new Float32Array(n * m)
   for (let h = 0; h < n; h += 1) {
     for (let o = 0; o < m; o += 1) {
-      if (clash[h * m + o] === 0) back[o * n + h] = 1 - (share[h * m + o] as number)
+      if (clash[h * m + o] === 1) continue
+      const won = share[h * m + o] as number
+      forFirst[o * n + h] = won
+      forSecond[h * m + o] = 1 - won
     }
   }
-  const tables = [share, back] as const
+  const byOpponent = [forFirst, forSecond] as const
   return {
     won(traverser, opponent, out) {
-      const table = tables[traverser]
-      const width = traverser === 0 ? m : n
+      const table = byOpponent[traverser]
       const height = traverser === 0 ? n : m
-      for (let h = 0; h < height; h += 1) {
-        let won = 0
-        const row = h * width
-        for (let o = 0; o < width; o += 1) {
-          won += (opponent[o] as number) * (table[row + o] as number)
+      const width = traverser === 0 ? m : n
+      for (let h = 0; h < height; h += 1) out[h] = 0
+      for (let o = 0; o < width; o += 1) {
+        const weight = opponent[o] as number
+        if (weight === 0) continue
+        const row = o * height
+        for (let h = 0; h < height; h += 1) {
+          out[h] = (out[h] as number) + weight * (table[row + h] as number)
         }
-        out[h] = won
       }
       return out
     },
