@@ -76,6 +76,12 @@ export interface RiverSolution {
    */
   readonly strategy: ReadonlyMap<string, Float64Array>
   readonly spot: RiverSpot
+  /**
+   * How the solve valued closed betting when the hand goes on (a turn or flop
+   * solve's network and exact all-ins); absent on the river, where a showdown
+   * is settled on the board. Values read from the solution use the same rule.
+   */
+  readonly showdown?: ShowdownValues
 }
 
 /** The betting tree for a spot: checks, bets and raises by the spot's sizes, capped. */
@@ -415,9 +421,9 @@ export function solveRiver(
     node.children.forEach(collect)
   }
   collect(root)
-  return followShareOut === undefined
-    ? { tree, strategy, spot }
-    : { tree, strategy, spot, followShare: followShareOut }
+  const solved =
+    showdown === undefined ? { tree, strategy, spot } : { tree, strategy, spot, showdown }
+  return followShareOut === undefined ? solved : { ...solved, followShare: followShareOut }
 }
 
 /** A decision's strategy as one row per combo (views into its table), found by its history. */
@@ -456,15 +462,27 @@ function counterfactualValues(
   traverser: Player,
   best: boolean,
 ): Float64Array {
-  const { spot, tree, strategy } = solution
-  const walk = (node: RiverNode, opponent: Float64Array): Float64Array => {
-    if (node.kind !== 'action') return terminal(node, traverser, hands, opponent, spot.pot)
+  const { spot, tree, strategy, showdown } = solution
+  // The traverser's own reach is carried too: a solve that values closed
+  // betting by a network needs both ranges where the betting closes. A best
+  // counter is valued at those nodes as if it reached them as the solution does.
+  const walk = (node: RiverNode, self: Float64Array, opponent: Float64Array): Float64Array => {
+    if (node.kind !== 'action') {
+      if (showdown === undefined || node.kind !== 'showdown') {
+        return terminal(node, traverser, hands, opponent, spot.pot)
+      }
+      const out = new Float64Array(hands[traverser].combos.length)
+      showdown(node, traverser, hands, self, opponent, out)
+      return out
+    }
     const width = node.actions.length
     const mix =
       strategy.get(node.history) ??
       new Float64Array(hands[node.player].combos.length * width).fill(1 / width)
     if (node.player === traverser) {
-      const values = node.children.map((child) => walk(child, opponent))
+      const values = node.children.map((child, action) =>
+        walk(child, scaled(self, mix, width, action), opponent),
+      )
       return Float64Array.from(hands[traverser].weights, (_, h) =>
         best
           ? Math.max(...values.map((v) => v[h] as number))
@@ -476,14 +494,14 @@ function counterfactualValues(
     }
     const value = new Float64Array(hands[traverser].combos.length)
     node.children.forEach((child, action) => {
-      const part = walk(child, scaled(opponent, mix, width, action))
+      const part = walk(child, self, scaled(opponent, mix, width, action))
       for (let h = 0; h < value.length; h += 1)
         value[h] = (value[h] as number) + (part[h] as number)
     })
     return value
   }
   const other: Player = traverser === 0 ? 1 : 0
-  return walk(tree, hands[other].weights)
+  return walk(tree, hands[traverser].weights, hands[other].weights)
 }
 
 /**

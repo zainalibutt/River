@@ -7,6 +7,7 @@ import {
   type RangeCombo,
   type RiverOpponentModel,
   type RiverSpot,
+  riverValues,
   solveRiver,
   terminal,
 } from './bot-river-solver.js'
@@ -277,5 +278,43 @@ describe('a turn-end network that sees the buckets’ checked-down values by ran
         expect(value).toBeCloseTo(expected, 3)
       })
     }
+  })
+})
+
+describe("a turn solve's values", () => {
+  it('value closed betting as the solve does, over the rivers, not settled on the turn board', () => {
+    const fixture = JSON.parse(
+      readFileSync(new URL('../models/river-value-parity.fixture.json', import.meta.url), 'utf8'),
+    ) as ValueNetworkDescription & { weights: number[] }
+    const network = valueNetworkFrom(fixture, Float32Array.from(fixture.weights))
+    // A network that adds nothing to the checked-down value: a holding is worth
+    // exactly its showdown share averaged over the rivers.
+    const last = network.layers.length - 1
+    const neutral: RiverValueNetwork = {
+      ...network,
+      checked: { inputs: false },
+      layers: network.layers.map((layer, index) =>
+        index === last
+          ? {
+              ...layer,
+              weight: new Float32Array(layer.weight.length),
+              bias: new Float32Array(layer.bias.length),
+            }
+          : layer,
+      ),
+    }
+    const spot: RiverSpot = {
+      board: cards('Ah Kd 7s 4c'),
+      pot: 100,
+      stack: 300,
+      ranges: [[combo('8s 8h')], [combo('7c 7d')]],
+      betSizes: [],
+      allIn: false,
+      maxRaises: 0,
+    }
+    // Only checks: the eights win on the two eights left among 44 rivers.
+    const { values } = riverValues(solveTurn(spot, 10, neutral))
+    expect(values[0][0]).toBeCloseTo((100 * 2) / 44, 4)
+    expect(values[1][0]).toBeCloseTo((100 * 42) / 44, 4)
   })
 })
