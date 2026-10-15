@@ -13,7 +13,7 @@ import { turnNetworkFromEnvironment } from './bot-value-network.js'
 // twice, once with A in the first seat and once with the policies swapped, so each gets the
 // cards the other had. Both play as the champion, with the same public reads of each other.
 // A hand's score for A is half of (A's chips in the first run minus B's chips in the second),
-// all-in valued; the estimate clusters by session. Policies: v8z, v9a, v9b.
+// all-in valued; the estimate clusters by session. Policies: v8z, v9a, v9b, v9c.
 const [nameA, nameB, prefix, sessionsText, out, firstText = '0', handsText = '100'] =
   process.argv.slice(2)
 
@@ -24,6 +24,7 @@ export function headToHeadPolicy(name: string): BotPolicy | undefined {
   if (name === 'v8z') return v8z()
   if (name === 'v9a') return solvedTurnPolicy(turnNetworkFromEnvironment(), {}, false).policy
   if (name === 'v9b') return solvedTurnPolicy(turnNetworkFromEnvironment(), {}, true).policy
+  if (name === 'v9c') return solvedTurnPolicy(turnNetworkFromEnvironment(), {}, true, true).policy
   return undefined
 }
 
@@ -90,7 +91,7 @@ if (process.argv[1]?.endsWith('bot-head-to-head.ts')) {
   const hands = Number(handsText)
   if (!a || !b || !mirrorA || !mirrorB || !prefix || !out || !Number.isSafeInteger(sessions)) {
     throw new Error(
-      'usage: <A> <B> <seed prefix> <sessions> <out.json> [first session] [hands a session]; policies v8z, v9a, v9b',
+      'usage: <A> <B> <seed prefix> <sessions> <out.json> [first session] [hands a session]; policies v8z, v9a, v9b, v9c',
     )
   }
   const seed = `${prefix}-h2h`

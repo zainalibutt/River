@@ -183,6 +183,7 @@ export function riverSolverPolicy(
   version: number,
   overrides: Partial<RiverPolicyTuning> = {},
   own: KnownShares = () => null,
+  theirs: KnownShares = () => null,
 ): { readonly policy: BotPolicy; readonly stats: RiverPolicyStats } {
   const tuning: RiverPolicyTuning = { ...RIVER_POLICY_TUNING, ...overrides }
   const stats: RiverPolicyStats = {
@@ -210,7 +211,7 @@ export function riverSolverPolicy(
       if (context.observation.street !== 'river' || context.profile.skill !== 'og') {
         return baseline()
       }
-      const result = solverDecision(context, base, tuning, cache, stats, own)
+      const result = solverDecision(context, base, tuning, cache, stats, own, theirs)
       if (typeof result === 'string') {
         stats.fallbacks[result] = (stats.fallbacks[result] ?? 0) + 1
         return baseline()
@@ -229,6 +230,7 @@ function solverDecision(
   cache: Map<string, SolvedRiver | string>,
   stats: RiverPolicyStats,
   own: KnownShares,
+  theirs: KnownShares,
 ): BotDecision | string {
   const { observation, personality } = context
   const live = observation.seats.filter((seat) => seat.playerId !== null && !seat.folded)
@@ -286,6 +288,7 @@ function solverDecision(
       stats,
       reads,
       own,
+      theirs,
     )
     cache.set(cacheKey, solved)
     if (cache.size > tuning.cacheSize) {
@@ -336,6 +339,7 @@ function solveSpot(
   stats: RiverPolicyStats,
   reads: RiverReads | null = null,
   own: KnownShares = () => null,
+  theirs: KnownShares = () => null,
 ): SolvedRiver | string {
   const stacks = live.map((seat) => seat.stack + seat.betStreet)
   const stack = Math.min(...stacks)
@@ -364,10 +368,10 @@ function solveSpot(
       decision.observation.actor.playerId === players[opponent]
         ? cardBlindShare(read, taken, tuning)
         : 0,
-    (decision, taken, player) =>
+    (decision, taken, player, history) =>
       decision.observation.actor.playerId === observation.actor.playerId
-        ? own(decision, taken, player)
-        : null,
+        ? own(decision, taken, player, history)
+        : theirs(decision, taken, player, history),
   )
   ranges[opponent] = withAir(ranges[opponent], tuning.opponentAir)
   const tracked = performance.now()
@@ -406,6 +410,8 @@ export type KnownShares = (
   decision: PublicDecision,
   taken: MoveClass,
   personality: BotPersonality,
+  /** The hand's public decisions up to the river, the one asked about among them. */
+  history: readonly PublicDecision[],
 ) => ((hole: readonly [Card, Card]) => number) | null
 
 /**
@@ -450,7 +456,7 @@ export function trackRanges(
       taken,
       `${seed}:${index}`,
       doubt(decision, taken),
-      known(decision, taken, personality) ?? undefined,
+      known(decision, taken, personality, preRiver) ?? undefined,
     )
     const heaviest = range.reduce((most, holding) => Math.max(most, holding.weight), 0)
     for (const holding of range) {

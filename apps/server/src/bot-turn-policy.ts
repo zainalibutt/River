@@ -104,6 +104,19 @@ export function turnSolverPolicy(
     taken: MoveClass,
     personality: BotPersonality,
   ) => ((hole: readonly [Card, Card]) => number) | null
+  /**
+   * For one of the opponent's past turn moves, the share of each of their
+   * holdings that makes it in this policy's own solve of that turn: the range
+   * the solve's equilibrium hands the river, rather than a guess at how they
+   * play. `history` is the hand's decisions, which include this policy's own
+   * turn move that the solve was made for.
+   */
+  readonly opponentShares: (
+    decision: PublicDecision,
+    taken: MoveClass,
+    personality: BotPersonality,
+    history: readonly PublicDecision[],
+  ) => ((hole: readonly [Card, Card]) => number) | null
   /** What the solve says at this observation's turn decision, or why there is none. */
   readonly explain: (
     observation: BotObservationV1,
@@ -160,6 +173,55 @@ export function turnSolverPolicy(
       return share
     }
   }
+  const opponentShares = (
+    decision: PublicDecision,
+    taken: MoveClass,
+    personality: BotPersonality,
+    history: readonly PublicDecision[],
+  ) => {
+    if (decision.observation.street !== 'turn') return null
+    const theirId = decision.observation.actor.playerId
+    // Any of our own turn moves names the solve: they all share the hand before the turn.
+    const ours = history.find(
+      (entry) =>
+        entry.observation.street === 'turn' && entry.observation.actor.playerId !== theirId,
+    )
+    if (ours === undefined) return null
+    const found = locate(ours.observation, personality, base, network, tuning, cache, stats)
+    if (typeof found === 'string') return null
+    const { solved, self } = found
+    const theirs: Player = self === 0 ? 1 : 0
+    if (solved.players[theirs] !== theirId) return null
+    let node: RiverNode = solved.tree
+    for (const entry of history) {
+      if (entry === decision) break
+      if (entry.observation.street !== 'turn') continue
+      if (node.kind !== 'action') return null
+      const index = node.actions.indexOf(translate(node, entry, solved.spot))
+      if (index === -1) return null
+      node = node.children[index] as RiverNode
+    }
+    if (node.kind !== 'action' || node.player !== theirs) return null
+    const table = solved.strategy.get(node.history)
+    if (table === undefined) return null
+    const width = node.actions.length
+    const observation = decision.observation
+    const matches = node.actions.map(
+      (action) =>
+        decisionClass(decisionFor(node, action, solved.spot, observation), observation) === taken,
+    )
+    const hands = solved.hands[theirs]
+    return (hole: readonly [Card, Card]) => {
+      // A holding the solve left out had no weight when the turn began.
+      const index = comboIndex(hands, hole as [Card, Card])
+      if (index === undefined) return 0
+      let share = 0
+      for (let action = 0; action < width; action += 1) {
+        if (matches[action] === true) share += table[index * width + action] as number
+      }
+      return share
+    }
+  }
   const explain = (observation: BotObservationV1, personality: BotPersonality) => {
     const found = locate(observation, personality, base, network, tuning, cache, stats)
     if (typeof found === 'string') return found
@@ -183,7 +245,7 @@ export function turnSolverPolicy(
       spot: solved.spot,
     }
   }
-  return { policy, stats, ownShares, explain }
+  return { policy, stats, ownShares, opponentShares, explain }
 }
 
 /** What the solve says at one turn decision, for reading a hand by hand. */
@@ -202,14 +264,18 @@ export interface TurnExplanation {
 }
 
 /**
- * v9a and v9b: v8z with two-player turns solved. With `handover`, v9b, the
+ * v9a, v9b and v9c: v8z with two-player turns solved. With `handover`, v9b, the
  * river is told the range the turn solver played rather than rebuilding it as
  * if v6 had played the turn, so the two streets agree on what the OG can hold.
+ * With `opponentHandover` as well, v9c, the opponent's turn moves narrow their
+ * range as the turn solve's equilibrium plays them, not as v6 would: the river
+ * no longer takes a raise for the strength a rule-based player would need.
  */
 export function solvedTurnPolicy(
   network: RiverValueNetwork,
   overrides: Partial<TurnPolicyTuning> = {},
   handover = false,
+  opponentHandover = false,
 ) {
   let turn: ReturnType<typeof turnSolverPolicy> | undefined
   const river = riverSolverPolicy(
@@ -219,6 +285,10 @@ export function solvedTurnPolicy(
     RIVER_CANDIDATE_TUNING,
     handover
       ? (decision, taken, personality) => turn?.ownShares(decision, taken, personality) ?? null
+      : undefined,
+    opponentHandover
+      ? (decision, taken, personality, history) =>
+          turn?.opponentShares(decision, taken, personality, history) ?? null
       : undefined,
   )
   turn = turnSolverPolicy(river.policy, network, 'turn-solver', 1, overrides)
