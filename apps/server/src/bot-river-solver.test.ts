@@ -1,8 +1,10 @@
 import { type Card, makeDeck, mulberry32, parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
+  bestResponseValue,
   prepare,
   type RangeCombo,
+  type RiverSolution,
   type RiverSpot,
   riverReport,
   riverValues,
@@ -219,4 +221,56 @@ describe("every holding's value", () => {
     }
     expect(report.value[0] + report.value[1]).toBeCloseTo(spot.pot, 6)
   }, 60_000)
+})
+
+describe('safe re-solving with promises', () => {
+  const board = cards('Ah Kd 7s 4c 2h')
+  const spot: RiverSpot = {
+    board,
+    pot: 100,
+    stack: 300,
+    ranges: [randomRange(board, 40, 11), randomRange(board, 40, 12)],
+    betSizes: [0.5, 1],
+    allIn: true,
+    maxRaises: 2,
+  }
+  const flat = (range: readonly RangeCombo[]) => range.map((entry) => ({ ...entry, weight: 1 }))
+  // How much the opponent's best counter takes from player 0's play, with the true ranges.
+  const exposed = (solved: RiverSolution) =>
+    bestResponseValue({ tree: solved.tree, strategy: solved.strategy, spot }, 1) / spot.pot
+
+  it('plays as safely as the solve that knew the range, without being told the range', () => {
+    const full = solveRiver(spot, 600)
+    const promises = riverValues(full).values[1]
+    const resolved = solveRiver(
+      { ...spot, ranges: [spot.ranges[0], flat(spot.ranges[1])] },
+      600,
+      undefined,
+      undefined,
+      {
+        player: 1,
+        promises,
+      },
+    )
+    // A confident wrong read: almost all the weight on a quarter of the holdings.
+    const misread = spot.ranges[1].map((entry, index) => ({
+      ...entry,
+      weight: index < 10 ? 1 : 0.01,
+    }))
+    const guessed = solveRiver({ ...spot, ranges: [spot.ranges[0], misread] }, 600)
+    expect(exposed(resolved)).toBeLessThan(exposed(full) + 0.01)
+    expect(exposed(guessed)).toBeGreaterThan(exposed(resolved) + 0.01)
+    expect(resolved.followShare).toHaveLength(spot.ranges[1].length)
+  })
+
+  it('refuses promises together with an opponent model, and promises of the wrong length', () => {
+    const model = { player: 1 as const, weight: 0.5, strategy: () => new Float64Array(0) }
+    const promises = new Float64Array(spot.ranges[1].length)
+    expect(() => solveRiver(spot, 10, model, undefined, { player: 1, promises })).toThrow(
+      /not both/,
+    )
+    expect(() =>
+      solveRiver(spot, 10, undefined, undefined, { player: 1, promises: new Float64Array(3) }),
+    ).toThrow(/one promise per holding/)
+  })
 })

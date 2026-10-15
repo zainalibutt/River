@@ -204,18 +204,49 @@ export type ShowdownValues = (
 ) => void
 
 /**
+ * Safe re-solving (DeepStack's continual re-solving; Burch, Johanson and
+ * Bowling's re-solving gadget): the street is solved without trusting a guess
+ * at the opponent's range. Instead each opponent holding carries a promise,
+ * what it was worth in the solve that brought the hand here, and at the root
+ * the opponent picks, holding by holding, between taking that promise and
+ * playing on. The opponent's range is whatever that choice makes it, so the
+ * new strategy gives no holding more than it was promised: an opponent who
+ * bets wildly cannot make it fold more than the earlier solve would have.
+ */
+export interface RiverGadget {
+  /** The player whose range is replaced by promises. */
+  readonly player: Player
+  /**
+   * Per holding of that player, in the order of its prepared range: its value
+   * in chips from here on, averaged over the other player's holdings it can
+   * meet, as `riverValues` gives values.
+   */
+  readonly promises: Float64Array
+}
+
+/**
  * Runs CFR+ on a river spot for `iterations` and returns the average strategy.
  * With a `model`, the other player's strategy is the restricted Nash response
  * to it. With `showdown`, closed betting is valued by it instead of by a
  * showdown on the board, so the same betting can be solved a street earlier.
+ * With a `gadget`, that player's range is set by the re-solving gadget rather
+ * than by the spot (whose weights for them are then ignored), and
+ * `followShare` reports, per holding, how often it chose to play on.
  */
 export function solveRiver(
   spot: RiverSpot,
   iterations: number,
   model?: RiverOpponentModel,
   showdown?: ShowdownValues,
-): RiverSolution {
+  gadget?: RiverGadget,
+): RiverSolution & { readonly followShare?: Float64Array } {
+  if (gadget !== undefined && model !== undefined) {
+    throw new Error('a re-solve takes promises or an opponent model, not both')
+  }
   const hands = [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)] as const
+  if (gadget !== undefined && gadget.promises.length !== hands[gadget.player].combos.length) {
+    throw new Error('one promise per holding of the re-solved player')
+  }
   const tree = riverTree(spot)
   const scratch = scratchFor(hands)
   const root = compile(tree, hands, model)
@@ -326,9 +357,44 @@ export function solveRiver(
   }
   const [free1, fixed1] = split(1)
   const [free0, fixed0] = split(0)
-  for (let iteration = 1; iteration <= iterations; iteration += 1) {
-    walk(root, 0, hands[0].weights, free1, fixed1, iteration)
-    walk(root, 1, hands[1].weights, free0, fixed0, iteration)
+  let followShareOut: Float64Array | undefined
+  if (gadget === undefined) {
+    for (let iteration = 1; iteration <= iterations; iteration += 1) {
+      walk(root, 0, hands[0].weights, free1, fixed1, iteration)
+      walk(root, 1, hands[1].weights, free0, fixed0, iteration)
+    }
+  } else {
+    // The gadget's choice, per holding of the re-solved player: regrets for
+    // playing on and for taking the promise, and how often it played on.
+    const resolved = gadget.player
+    const other: Player = resolved === 0 ? 1 : 0
+    const count = hands[resolved].combos.length
+    const followRegret = new Float64Array(count)
+    const takeRegret = new Float64Array(count)
+    const followSum = new Float64Array(count)
+    const follow = new Float64Array(count)
+    // A promise is per deal; the solver works in values summed over the other
+    // player's reach, so each is scaled by the reach that holding can meet.
+    const meets = compatibleMasses(hands[resolved], hands[other], hands[other].weights)
+    for (let iteration = 1; iteration <= iterations; iteration += 1) {
+      for (let o = 0; o < count; o += 1) {
+        const up = Math.max(0, followRegret[o] as number)
+        const down = Math.max(0, takeRegret[o] as number)
+        follow[o] = up + down > 0 ? up / (up + down) : 0.5
+      }
+      walk(root, other, hands[other].weights, follow, null, iteration)
+      const played = walk(root, resolved, follow, hands[other].weights, null, iteration)
+      for (let o = 0; o < count; o += 1) {
+        const taken = (gadget.promises[o] as number) * (meets[o] as number)
+        const value =
+          (follow[o] as number) * (played[o] as number) + (1 - (follow[o] as number)) * taken
+        followRegret[o] = Math.max(0, (followRegret[o] as number) + (played[o] as number) - value)
+        takeRegret[o] = Math.max(0, (takeRegret[o] as number) + taken - value)
+        followSum[o] = (followSum[o] as number) + iteration * (follow[o] as number)
+      }
+    }
+    const total = (iterations * (iterations + 1)) / 2
+    followShareOut = Float64Array.from(followSum, (sum) => sum / total)
   }
   // One table per decision, not an array per combo: solutions are cached, and
   // a small array costs several times the numbers it holds.
@@ -349,7 +415,9 @@ export function solveRiver(
     node.children.forEach(collect)
   }
   collect(root)
-  return { tree, strategy, spot }
+  return followShareOut === undefined
+    ? { tree, strategy, spot }
+    : { tree, strategy, spot, followShare: followShareOut }
 }
 
 /** A decision's strategy as one row per combo (views into its table), found by its history. */
@@ -416,6 +484,22 @@ function counterfactualValues(
   }
   const other: Player = traverser === 0 ? 1 : 0
   return walk(tree, hands[other].weights)
+}
+
+/**
+ * What `player` expects per deal, in chips, playing the best counter to the
+ * other player's strategy in the solution, with both ranges as the spot gives
+ * them. Measures how safe the other player's strategy is against that range.
+ */
+export function bestResponseValue(solution: RiverSolution, player: Player): number {
+  const { spot } = solution
+  const hands = [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)] as const
+  const values = counterfactualValues(solution, hands, player, true)
+  let total = 0
+  hands[player].weights.forEach((w, h) => {
+    total += w * (values[h] as number)
+  })
+  return total / compatibleWeight(hands[0], hands[1])
 }
 
 /**
