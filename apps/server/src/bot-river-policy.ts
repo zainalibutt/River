@@ -412,6 +412,8 @@ export type KnownShares = (
   personality: BotPersonality,
   /** The hand's public decisions up to the river, the one asked about among them. */
   history: readonly PublicDecision[],
+  /** The player whose view the ranges are tracked for, when the caller knows it. */
+  viewer?: string,
 ) => ((hole: readonly [Card, Card]) => number) | null
 
 /**

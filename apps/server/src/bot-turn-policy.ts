@@ -8,6 +8,7 @@ import {
   cardKey,
   cardToString,
 } from '@river/engine'
+import { solveFlop } from './bot-flop-solver.js'
 import { decisionClass, type MoveClass } from './bot-lbr-range.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
@@ -15,6 +16,7 @@ import {
   cardBlindShare,
   combosOf,
   decisionFor,
+  type KnownShares,
   nearestStrength,
   RIVER_CANDIDATE_TUNING,
   RIVER_POLICY_TUNING,
@@ -31,10 +33,15 @@ import {
   type Hands,
   type Player,
   prepare,
+  type RiverGadget,
   type RiverNode,
+  type RiverOpponentModel,
+  type RiverSolution,
   type RiverSpot,
+  riverValues,
+  solveRiver,
 } from './bot-river-solver.js'
-import { solveTurn } from './bot-turn-solver.js'
+import { turnShowdown } from './bot-turn-solver.js'
 import type { RiverValueNetwork } from './bot-value-network.js'
 
 /**
@@ -81,6 +88,47 @@ export interface TurnPolicyStats {
   solveMs: number
 }
 
+/**
+ * Which street a solver policy plays, and how. `known` gives the exact share of
+ * each holding behind earlier streets' moves where a solver made them, so the
+ * ranges this street starts from are the ones those solves played. With `safe`,
+ * the street is solved twice: once for the ranges as tracked, which gives each
+ * opponent holding a promise, and again with the re-solving gadget from those
+ * promises, which plays without trusting the opponent's range (`RiverGadget`).
+ */
+export interface StreetSetup {
+  readonly street: 'flop' | 'turn'
+  readonly solve: (
+    spot: RiverSpot,
+    iterations: number,
+    network: RiverValueNetwork,
+    model?: RiverOpponentModel,
+    gadget?: RiverGadget,
+  ) => RiverSolution
+  readonly known: KnownShares
+  readonly safe: boolean
+}
+
+export const TURN_STREET: StreetSetup = {
+  street: 'turn',
+  solve: (spot, iterations, network, model, gadget) =>
+    solveRiver(spot, iterations, model, turnShowdown(spot, network), gadget),
+  known: () => null,
+  safe: false,
+}
+
+export const FLOP_STREET: StreetSetup = {
+  street: 'flop',
+  solve: (spot, iterations, network, model, gadget) => {
+    if (model !== undefined) throw new Error('the flop solver takes no opponent model')
+    return solveFlop(spot, iterations, network, gadget)
+  },
+  known: () => null,
+  safe: false,
+}
+
+const BOARD_CARDS = { flop: 3, turn: 4 } as const
+
 interface SolvedTurn {
   readonly spot: RiverSpot
   readonly tree: RiverNode
@@ -95,6 +143,7 @@ export function turnSolverPolicy(
   id: string,
   version: number,
   overrides: Partial<TurnPolicyTuning> = {},
+  street: StreetSetup = TURN_STREET,
 ): {
   readonly policy: BotPolicy
   readonly stats: TurnPolicyStats
@@ -131,10 +180,10 @@ export function turnSolverPolicy(
     version,
     decide(context) {
       const baseline = () => ({ ...base.decide(context), policyId: id, policyVersion: version })
-      if (context.observation.street !== 'turn' || context.profile.skill !== 'og') {
+      if (context.observation.street !== street.street || context.profile.skill !== 'og') {
         return baseline()
       }
-      const result = turnDecision(context, base, network, tuning, cache, stats)
+      const result = turnDecision(context, base, network, tuning, cache, stats, street)
       if (typeof result === 'string') {
         stats.fallbacks[result] = (stats.fallbacks[result] ?? 0) + 1
         return baseline()
@@ -151,8 +200,8 @@ export function turnSolverPolicy(
   }
   const ownShares = (decision: PublicDecision, taken: MoveClass, personality: BotPersonality) => {
     const { observation } = decision
-    if (observation.street !== 'turn') return null
-    const found = locate(observation, personality, base, network, tuning, cache, stats)
+    if (observation.street !== street.street) return null
+    const found = locate(observation, personality, base, network, tuning, cache, stats, street)
     if (typeof found === 'string') return null
     const { solved, node, self } = found
     const table = solved.strategy.get(node.history)
@@ -179,15 +228,15 @@ export function turnSolverPolicy(
     personality: BotPersonality,
     history: readonly PublicDecision[],
   ) => {
-    if (decision.observation.street !== 'turn') return null
+    if (decision.observation.street !== street.street) return null
     const theirId = decision.observation.actor.playerId
     // Any of our own turn moves names the solve: they all share the hand before the turn.
     const ours = history.find(
       (entry) =>
-        entry.observation.street === 'turn' && entry.observation.actor.playerId !== theirId,
+        entry.observation.street === street.street && entry.observation.actor.playerId !== theirId,
     )
     if (ours === undefined) return null
-    const found = locate(ours.observation, personality, base, network, tuning, cache, stats)
+    const found = locate(ours.observation, personality, base, network, tuning, cache, stats, street)
     if (typeof found === 'string') return null
     const { solved, self } = found
     const theirs: Player = self === 0 ? 1 : 0
@@ -195,7 +244,7 @@ export function turnSolverPolicy(
     let node: RiverNode = solved.tree
     for (const entry of history) {
       if (entry === decision) break
-      if (entry.observation.street !== 'turn') continue
+      if (entry.observation.street !== street.street) continue
       if (node.kind !== 'action') return null
       const index = node.actions.indexOf(translate(node, entry, solved.spot))
       if (index === -1) return null
@@ -223,7 +272,7 @@ export function turnSolverPolicy(
     }
   }
   const explain = (observation: BotObservationV1, personality: BotPersonality) => {
-    const found = locate(observation, personality, base, network, tuning, cache, stats)
+    const found = locate(observation, personality, base, network, tuning, cache, stats, street)
     if (typeof found === 'string') return found
     const { solved, node, self } = found
     const hands = solved.hands[self]
@@ -308,9 +357,10 @@ function turnDecision(
   tuning: TurnPolicyTuning,
   cache: Map<string, SolvedTurn | string>,
   stats: TurnPolicyStats,
+  street: StreetSetup,
 ): BotDecision | string {
   const { observation, personality } = context
-  const found = locate(observation, personality, base, network, tuning, cache, stats)
+  const found = locate(observation, personality, base, network, tuning, cache, stats, street)
   if (typeof found === 'string') return found
   const { solved, node, self } = found
   const table = solved.strategy.get(node.history)
@@ -343,10 +393,11 @@ function locate(
   tuning: TurnPolicyTuning,
   cache: Map<string, SolvedTurn | string>,
   stats: TurnPolicyStats,
+  street: StreetSetup,
 ): LocatedTurn | string {
   const live = observation.seats.filter((seat) => seat.playerId !== null && !seat.folded)
   if (live.length !== 2) return 'not heads-up'
-  if (observation.board.length !== 4) return 'not a turn board'
+  if (observation.board.length !== BOARD_CARDS[street.street]) return `not a ${street.street} board`
   const decisions = publicDecisions(observation, (playerId) =>
     playerId === observation.actor.playerId
       ? {
@@ -359,7 +410,7 @@ function locate(
       : {},
   )
   if (decisions === null) return 'replay failed'
-  const turnStart = decisions.findIndex((decision) => decision.taken.street === 'turn')
+  const turnStart = decisions.findIndex((decision) => decision.taken.street === street.street)
   const preTurn = turnStart === -1 ? decisions : decisions.slice(0, turnStart)
   const key = [
     personality.id,
@@ -403,6 +454,7 @@ function locate(
       tuning,
       stats,
       reads,
+      street,
     )
     cache.set(cacheKey, solved)
     if (cache.size > tuning.cacheSize) cache.delete(cache.keys().next().value as string)
@@ -433,6 +485,7 @@ function solveTurnSpot(
   tuning: TurnPolicyTuning,
   stats: TurnPolicyStats,
   reads: RiverReads | null,
+  street: StreetSetup,
 ): SolvedTurn | string {
   const stack = Math.min(...live.map((seat) => seat.stack + seat.betStreet))
   if (stack <= 0) return 'all-in'
@@ -460,6 +513,8 @@ function solveTurnSpot(
       decision.observation.actor.playerId === players[opponent]
         ? cardBlindShare(read, taken, tuning.ranges)
         : 0,
+    (decision, taken, player, history) =>
+      street.known(decision, taken, player, history, observation.actor.playerId),
   )
   const tracked = performance.now()
   stats.trackMs += tracked - started
@@ -474,7 +529,18 @@ function solveTurnSpot(
   }
   if (spot.ranges[0].length === 0 || spot.ranges[1].length === 0) return 'empty range'
   const model = reads === null || reads.trust <= 0 ? undefined : readsModel(reads, spot, opponent)
-  const solution = solveTurn(spot, tuning.iterations, network, model)
+  let solution = street.solve(spot, tuning.iterations, network, model)
+  if (street.safe && model === undefined) {
+    // What each opponent holding is worth against the tracked ranges is its
+    // promise; the re-solve then plays without trusting their range at all.
+    const promises = riverValues(solution).values[opponent]
+    const ranges = [...spot.ranges] as [RiverSpot['ranges'][0], RiverSpot['ranges'][1]]
+    ranges[opponent] = ranges[opponent].map((entry) => ({ ...entry, weight: 1 }))
+    solution = street.solve({ ...spot, ranges }, tuning.iterations, network, undefined, {
+      player: opponent,
+      promises,
+    })
+  }
   stats.solveMs += performance.now() - tracked
   stats.solves += 1
   return {
@@ -484,4 +550,51 @@ function solveTurnSpot(
     hands: [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)],
     players,
   }
+}
+
+/**
+ * v9d, lane B's first chained bot: two-player flops solved with the flop-end
+ * network, then the turn re-solved safely from the flop solve's ranges (the
+ * opponent's flop moves read as the flop's equilibrium plays them, and the turn
+ * played from promises rather than trusting that range), then the river told
+ * both ranges as the solved streets played them. Preflop is still v6's, and
+ * the river still v8z's solver with its reads.
+ */
+export function solvedFlopPolicy(turnNetwork: RiverValueNetwork, flopNetwork: RiverValueNetwork) {
+  let flop: ReturnType<typeof turnSolverPolicy> | undefined
+  let turn: ReturnType<typeof turnSolverPolicy> | undefined
+  const fromFlop: KnownShares = (decision, taken, personality, history, viewer) => {
+    if (flop === undefined || decision.observation.street !== 'flop') return null
+    return decision.observation.actor.playerId === viewer
+      ? flop.ownShares(decision, taken, personality)
+      : flop.opponentShares(decision, taken, personality, history)
+  }
+  const river = riverSolverPolicy(
+    pokerGuardPolicy,
+    'river-solver',
+    1,
+    RIVER_CANDIDATE_TUNING,
+    (decision, taken, personality) =>
+      turn?.ownShares(decision, taken, personality) ??
+      flop?.ownShares(decision, taken, personality) ??
+      null,
+    (decision, taken, personality, history) =>
+      turn?.opponentShares(decision, taken, personality, history) ??
+      flop?.opponentShares(decision, taken, personality, history) ??
+      null,
+  )
+  turn = turnSolverPolicy(
+    river.policy,
+    turnNetwork,
+    'turn-solver',
+    1,
+    {},
+    {
+      ...TURN_STREET,
+      known: fromFlop,
+      safe: true,
+    },
+  )
+  flop = turnSolverPolicy(turn.policy, flopNetwork, 'flop-solver', 1, {}, FLOP_STREET)
+  return { ...flop, turn: turn.stats, river: river.stats }
 }

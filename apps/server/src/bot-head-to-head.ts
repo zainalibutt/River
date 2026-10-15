@@ -5,15 +5,16 @@ import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
 import { runSessions, type SessionHandResult } from './bot-session-benchmark.js'
 import { clusteredEstimate } from './bot-session-evaluation.js'
-import { solvedTurnPolicy } from './bot-turn-policy.js'
-import { turnNetworkFromEnvironment } from './bot-value-network.js'
+import { solvedFlopPolicy, solvedTurnPolicy } from './bot-turn-policy.js'
+import { loadValueNetwork, turnNetworkFromEnvironment } from './bot-value-network.js'
 
 // Usage: tsx bot-head-to-head.ts <A> <B> <seed prefix> <sessions> <out.json> [first session] [hands a session]
 // Two policies play each other heads-up as duplicate poker: every session's deals are played
 // twice, once with A in the first seat and once with the policies swapped, so each gets the
 // cards the other had. Both play as the champion, with the same public reads of each other.
 // A hand's score for A is half of (A's chips in the first run minus B's chips in the second),
-// all-in valued; the estimate clusters by session. Policies: v8z, v9a, v9b, v9c.
+// all-in valued; the estimate clusters by session. Policies: v8z, v9a, v9b, v9c, and v9d,
+// which also needs RIVER_FLOP_NETWORK, the flop-end network's export without .bin.
 const [nameA, nameB, prefix, sessionsText, out, firstText = '0', handsText = '100'] =
   process.argv.slice(2)
 
@@ -25,6 +26,11 @@ export function headToHeadPolicy(name: string): BotPolicy | undefined {
   if (name === 'v9a') return solvedTurnPolicy(turnNetworkFromEnvironment(), {}, false).policy
   if (name === 'v9b') return solvedTurnPolicy(turnNetworkFromEnvironment(), {}, true).policy
   if (name === 'v9c') return solvedTurnPolicy(turnNetworkFromEnvironment(), {}, true, true).policy
+  if (name === 'v9d') {
+    const flop = process.env.RIVER_FLOP_NETWORK
+    if (flop === undefined || flop === '') throw new Error('v9d needs RIVER_FLOP_NETWORK')
+    return solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flop)).policy
+  }
   return undefined
 }
 
@@ -91,7 +97,7 @@ if (process.argv[1]?.endsWith('bot-head-to-head.ts')) {
   const hands = Number(handsText)
   if (!a || !b || !mirrorA || !mirrorB || !prefix || !out || !Number.isSafeInteger(sessions)) {
     throw new Error(
-      'usage: <A> <B> <seed prefix> <sessions> <out.json> [first session] [hands a session]; policies v8z, v9a, v9b, v9c',
+      'usage: <A> <B> <seed prefix> <sessions> <out.json> [first session] [hands a session]; policies v8z, v9a, v9b, v9c, v9d',
     )
   }
   const seed = `${prefix}-h2h`
