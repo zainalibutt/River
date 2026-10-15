@@ -28,7 +28,7 @@ export function solveTurn(
 }
 
 /** Every prepared holding's place among the 1,326, by player. */
-function holdingIndices(hands: readonly [Hands, Hands]): readonly [Int32Array, Int32Array] {
+export function holdingIndices(hands: readonly [Hands, Hands]): readonly [Int32Array, Int32Array] {
   const of = (held: Hands) =>
     Int32Array.from(held.combos, (_, h) =>
       comboIndex52(held.cards[2 * h] as number, held.cards[2 * h + 1] as number),
@@ -41,7 +41,7 @@ function holdingIndices(hands: readonly [Hands, Hands]): readonly [Int32Array, I
  * share no card with it, built once for a solve's holdings and reused, since
  * the solver asks at every closed node of every round.
  */
-function massesFor(
+export function massesFor(
   hands: readonly [Hands, Hands],
 ): (traverser: 0 | 1, opponent: Float64Array, out: Float64Array) => Float64Array {
   const side = (held: Hands, other: Hands) => {
@@ -194,6 +194,14 @@ export function allInShowdown(
   hands: readonly [Hands, Hands],
   table: ShowdownTable = showdownTable(rivers, hands),
 ): AllInShowdown {
+  return allInFromTable(hands, table)
+}
+
+/** The all-in showdown for a solve's holdings from a showdown table already built. */
+export function allInFromTable(
+  hands: readonly [Hands, Hands],
+  table: ShowdownTable,
+): AllInShowdown {
   const masses = massesFor(hands)
   const count = Math.max(hands[0].combos.length, hands[1].combos.length)
   const met = new Float64Array(count)
@@ -225,33 +233,11 @@ export interface ShowdownTable {
  */
 export function showdownTable(rivers: TurnRivers, hands: readonly [Hands, Hands]): ShowdownTable {
   const [first, second] = holdingIndices(hands)
-  const n = first.length
-  const m = second.length
-  const cardsOf = (held: Hands, count: number) => {
-    const a = new Int32Array(count)
-    const b = new Int32Array(count)
-    for (let h = 0; h < count; h += 1) {
-      a[h] = held.cards[2 * h] as number
-      b[h] = held.cards[2 * h + 1] as number
-    }
-    return [a, b] as const
-  }
-  const [a0, b0] = cardsOf(hands[0], n)
-  const [a1, b1] = cardsOf(hands[1], m)
+  const { n, m, a0, b0, a1, b1, clash } = pairings(hands)
   // share[h * m + o]: what holding h of player 0 wins against holding o of
   // player 1, a half for a tie, over the rivers they leave; 0 when they clash,
   // since a clashing pairing is never dealt.
   const share = new Float32Array(n * m)
-  const clash = new Uint8Array(n * m)
-  for (let h = 0; h < n; h += 1) {
-    const a = a0[h] as number
-    const b = b0[h] as number
-    for (let o = 0; o < m; o += 1) {
-      const c = a1[o] as number
-      const d = b1[o] as number
-      if (a === c || a === d || b === c || b === d) clash[h * m + o] = 1
-    }
-  }
   const theirRank = new Int32Array(m)
   for (const { key, ranks } of rivers.rivers) {
     for (let o = 0; o < m; o += 1) {
@@ -270,6 +256,81 @@ export function showdownTable(rivers: TurnRivers, hands: readonly [Hands, Hands]
     }
   }
   for (let at = 0; at < share.length; at += 1) share[at] = (share[at] as number) / 44
+  return tableFromShares(share, clash, n, m)
+}
+
+/** Both players' holdings' cards, and which pairings of them share a card. */
+function pairings(hands: readonly [Hands, Hands]) {
+  const n = hands[0].combos.length
+  const m = hands[1].combos.length
+  const cardsOf = (held: Hands, count: number) => {
+    const a = new Int32Array(count)
+    const b = new Int32Array(count)
+    for (let h = 0; h < count; h += 1) {
+      a[h] = held.cards[2 * h] as number
+      b[h] = held.cards[2 * h + 1] as number
+    }
+    return [a, b] as const
+  }
+  const [a0, b0] = cardsOf(hands[0], n)
+  const [a1, b1] = cardsOf(hands[1], m)
+  const clash = new Uint8Array(n * m)
+  for (let h = 0; h < n; h += 1) {
+    const a = a0[h] as number
+    const b = b0[h] as number
+    for (let o = 0; o < m; o += 1) {
+      const c = a1[o] as number
+      const d = b1[o] as number
+      if (a === c || a === d || b === c || b === d) clash[h * m + o] = 1
+    }
+  }
+  return { n, m, a0, b0, a1, b1, clash }
+}
+
+/**
+ * The showdown table for a flop's holdings, over a set of turn and river
+ * runouts: each pairing's share is averaged over the runouts that leave both
+ * holdings' cards out. `ranks` are each runout's showdown ranks by
+ * `comboIndex52`, with 0 for holdings its cards block.
+ */
+export function runoutShowdownTable(
+  runouts: readonly { readonly ranks: Uint16Array }[],
+  hands: readonly [Hands, Hands],
+): ShowdownTable {
+  const [first, second] = holdingIndices(hands)
+  const { n, m, clash } = pairings(hands)
+  const share = new Float32Array(n * m)
+  const count = new Uint16Array(n * m)
+  const theirRank = new Int32Array(m)
+  for (const { ranks } of runouts) {
+    for (let o = 0; o < m; o += 1) theirRank[o] = ranks[second[o] as number] as number
+    for (let h = 0; h < n; h += 1) {
+      const mine = ranks[first[h] as number] as number
+      if (mine === 0) continue
+      const row = h * m
+      for (let o = 0; o < m; o += 1) {
+        const theirs = theirRank[o] as number
+        if (theirs === 0 || clash[row + o] === 1) continue
+        share[row + o] =
+          (share[row + o] as number) + (mine > theirs ? 1 : mine === theirs ? 0.5 : 0)
+        count[row + o] = (count[row + o] as number) + 1
+      }
+    }
+  }
+  for (let at = 0; at < share.length; at += 1) {
+    const seen = count[at] as number
+    // A pairing no sampled runout leaves open splits the pot.
+    share[at] = seen > 0 ? (share[at] as number) / seen : 0.5
+  }
+  return tableFromShares(share, clash, n, m)
+}
+
+function tableFromShares(
+  share: Float32Array,
+  clash: Uint8Array,
+  n: number,
+  m: number,
+): ShowdownTable {
   // Stored by opponent holding, so a call walks only the opponent holdings with
   // weight: a solve's reaches are often exactly zero, about half of them in a
   // full-range turn. Each holding's sum still adds its terms in the order of the
