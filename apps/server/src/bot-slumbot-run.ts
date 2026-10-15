@@ -73,20 +73,26 @@ interface SlumbotResponse {
   readonly error_msg?: string
 }
 
-async function post(path: string, body: object): Promise<SlumbotResponse> {
+// A move is not sent twice: when Slumbot is slow, a request can time out after
+// Slumbot has applied it, and the same move sent again is refused against the
+// hand as it now stands ("Illegal call", "Unexpected action"), which costs the
+// whole hand. So a move waits longer and is never retried; only dealing a new
+// hand is, since a lost deal just leaves that hand unplayed.
+async function post(path: 'new_hand' | 'act', body: object): Promise<SlumbotResponse> {
+  const attempts = path === 'act' ? 1 : 3
   for (let attempt = 1; ; attempt += 1) {
     try {
       const response = await fetch(`https://slumbot.com/slumbot/api/${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(60_000),
       })
       const parsed = (await response.json()) as SlumbotResponse
       if (parsed.error_msg !== undefined) throw new Error(`Slumbot: ${parsed.error_msg}`)
       return parsed
     } catch (error) {
-      if (attempt >= 3 || String(error).includes('Slumbot:')) throw error
+      if (attempt >= attempts || String(error).includes('Slumbot:')) throw error
       await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt))
     }
   }
