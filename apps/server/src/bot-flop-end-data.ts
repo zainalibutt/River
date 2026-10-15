@@ -57,6 +57,8 @@ export function flopEndRecord(
   network: RiverValueNetwork,
   turnCards: number,
   meta: { readonly seed: string; readonly spot: number; readonly worker: number },
+  /** The turn's tree; tests replace it to check the records against answers worked out by hand. */
+  turnTree: Pick<RiverSpot, 'betSizes' | 'maxRaises' | 'allIn'> = FLOP_DATA_TURN,
 ): RiverRecord {
   if (flop.board.length !== 3) throw new Error('a flop-end spot has three board cards')
   if (turnCards !== 0 && turnCards < 3) {
@@ -65,9 +67,9 @@ export function flopEndRecord(
   const started = performance.now()
   const spot: RiverSpot = {
     ...flop,
-    betSizes: FLOP_DATA_TURN.betSizes,
-    maxRaises: FLOP_DATA_TURN.maxRaises,
-    allIn: FLOP_DATA_TURN.allIn,
+    betSizes: turnTree.betSizes,
+    maxRaises: turnTree.maxRaises,
+    allIn: turnTree.allIn,
   }
   const every = turnRivers(flop.board)
   let turns = every
