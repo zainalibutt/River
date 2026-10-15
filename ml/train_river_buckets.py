@@ -253,8 +253,9 @@ def main() -> None:
     print(f"bucketed {total} spots into {args.buckets} buckets in {time.time() - started:.0f} s", flush=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # The data stays on the graphics card when it fits with a gigabyte to spare; otherwise it
-    # stays in main memory and each batch is copied over. The mask stays bytes either way and
-    # is widened batch by batch, so the numbers trained on are the same.
+    # stays in main memory, shared with the arrays rather than copied, and each batch is copied
+    # over. The mask stays bytes either way and is widened batch by batch, so the numbers
+    # trained on are the same.
     needed = sum(data[key].nbytes for key in ("x", "y", "mask"))
     home = device
     if device.type == "cuda" and (args.data_in_memory or needed > torch.cuda.mem_get_info()[0] - 2**30):
@@ -263,12 +264,10 @@ def main() -> None:
     tensors = {key: torch.from_numpy(data[key]) for key in ("x", "y", "mask")}
     if home.type == "cuda":
         tensors = {key: value.to(home) for key, value in tensors.items()}
-    elif device.type == "cuda":
-        tensors = {key: value.pin_memory() for key, value in tensors.items()}
 
     def batch(index: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         rows = index.to(home)
-        x, y, m = (tensors[key][rows].to(device, non_blocking=True) for key in ("x", "y", "mask"))
+        x, y, m = (tensors[key][rows].to(device) for key in ("x", "y", "mask"))
         return x, y, m.float()
 
     train = torch.from_numpy(training_index).to(device)
