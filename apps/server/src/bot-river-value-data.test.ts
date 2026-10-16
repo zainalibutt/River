@@ -159,6 +159,35 @@ describe('river records', () => {
   }, 60_000)
 })
 
+describe('river records checked against poker theory', () => {
+  it("value a bluff-catcher at what the polarised river's equilibrium gives it", () => {
+    // Out of position: 8s 8h only. In position: two sets of sevens and two air hands,
+    // betting the pot. At equilibrium the sets bet, one air hand in three bets with them,
+    // the other air hand checks, and the eights call half the time, so they are indifferent
+    // between calling and folding. They win the pot only when the air hand checks behind:
+    // a quarter of the time, worth a quarter of the pot. The four in-position hands share
+    // no card with the eights, so each meets them equally.
+    const spot: RiverSpot = {
+      board: cards('Ah Kd 7s 4c 2h'),
+      pot: 100,
+      stack: 1_000,
+      ranges: [[combo('8s 8h')], [combo('7c 7d'), combo('7h 7d'), combo('5c 6d'), combo('5d 6c')]],
+      betSizes: [1],
+      allIn: false,
+      maxRaises: 0,
+    }
+    const record = solveRiverRecord(spot, 3_000, { spot: 0, worker: 0, measure: false })
+    const eights = comboIndex52(cardKey(parseCard('8s')), cardKey(parseCard('8h')))
+    expect(record.values[0][eights]).toBeCloseTo(0.25, 2)
+    let opponent = 0
+    for (let index = 0; index < COMBOS; index += 1) {
+      opponent += (record.ranges[1][index] as number) * (record.values[1][index] as number)
+    }
+    // On every deal the two players share the pot, so their values add up to one pot.
+    expect((record.values[0][eights] as number) + opponent).toBeCloseTo(1, 2)
+  }, 60_000)
+})
+
 describe('the turn truth set', () => {
   it('samples turns with ranges over every holding the turn leaves possible', () => {
     const turn = sampleTurnEndSpot('test:0:5', RIVER_DATA_SETTINGS)
