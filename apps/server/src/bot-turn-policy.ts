@@ -15,6 +15,7 @@ import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
 import {
   cardBlindShare,
   combosOf,
+  combosWithFloor,
   decisionFor,
   type KnownShares,
   nearestStrength,
@@ -128,6 +129,9 @@ export const FLOP_STREET: StreetSetup = {
 }
 
 const BOARD_CARDS = { flop: 3, turn: 4 } as const
+
+/** In a safe re-solve, a holding the tracking pruned keeps this share of the heaviest weight. */
+export const FULL_SUPPORT_SHARE = 1e-4
 
 interface SolvedTurn {
   readonly spot: RiverSpot
@@ -518,11 +522,17 @@ function solveTurnSpot(
   )
   const tracked = performance.now()
   stats.trackMs += tracked - started
+  const safe = street.safe && (reads === null || reads.trust <= 0)
   const spot: RiverSpot = {
     board: observation.board,
     pot,
     stack,
-    ranges: [combosOf(ranges[0]), combosOf(ranges[1])],
+    // A safe re-solve keeps every opponent holding, so each gets a promise.
+    ranges: ([0, 1] as const).map((player) =>
+      safe && player === opponent
+        ? combosWithFloor(ranges[player], FULL_SUPPORT_SHARE)
+        : combosOf(ranges[player]),
+    ) as unknown as RiverSpot['ranges'],
     betSizes: tuning.betSizes,
     allIn: true,
     maxRaises: tuning.maxRaises,
@@ -530,7 +540,7 @@ function solveTurnSpot(
   if (spot.ranges[0].length === 0 || spot.ranges[1].length === 0) return 'empty range'
   const model = reads === null || reads.trust <= 0 ? undefined : readsModel(reads, spot, opponent)
   let solution = street.solve(spot, tuning.iterations, network, model)
-  if (street.safe && model === undefined) {
+  if (safe) {
     // What each opponent holding is worth against the tracked ranges is its
     // promise; the re-solve then plays without trusting their range at all.
     const promises = riverValues(solution).values[opponent]

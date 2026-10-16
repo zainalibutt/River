@@ -671,6 +671,23 @@ export function combosOf(range: readonly WeightedHolding[]) {
 }
 
 /**
+ * Every holding of a tracked range, none left out: a holding the tracking
+ * pruned to nothing keeps `share` of the heaviest holding's weight. A safe
+ * re-solve gives each opponent holding a promise, and only a holding in the
+ * solve can have one, so the opponent can't bring a hand the guess ruled out.
+ */
+export function combosWithFloor(range: readonly WeightedHolding[], share: number) {
+  const heaviest = range.reduce((most, holding) => Math.max(most, holding.weight), 0)
+  const floor = heaviest * share
+  return range
+    .filter((holding) => heaviest > 0 && holding.weight >= 0)
+    .map((holding) => ({
+      hole: holding.hole as [Card, Card],
+      weight: Math.max(holding.weight, floor),
+    }))
+}
+
+/**
  * The solver's action for a move made at the table. A bet or raise maps to
  * the offered size nearest to it as a share of the pot, and an all-in to
  * all-in; an all-in that only matches the bet is a call.
