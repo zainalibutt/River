@@ -31,6 +31,7 @@ import {
   type RiverOpponentModel,
   type RiverSpot,
   riverReport,
+  riverValues,
   solveRiver,
 } from './bot-river-solver.js'
 
@@ -46,6 +47,12 @@ import {
  * and raising more than a typical player gets more of that doubt.
  */
 export interface RiverPolicyTuning {
+  /**
+   * Re-solve the river safely (lane B): both ranges carried exactly from the
+   * solved streets, every opponent holding promised its value in that game, and
+   * the river played from the re-solving gadget. Reads and added air are off.
+   */
+  readonly safe?: boolean
   readonly betSizes: readonly number[]
   readonly maxRaises: number
   readonly iterations: number
@@ -356,6 +363,11 @@ function solveSpot(
   const started = performance.now()
   const opponent = players[0] === observation.actor.playerId ? 1 : 0
   const read = observation.opponents.find((summary) => summary.playerId === players[opponent])
+  const safe = tuning.safe === true
+  const known: KnownShares = (decision, taken, player, history) =>
+    decision.observation.actor.playerId === observation.actor.playerId
+      ? own(decision, taken, player, history)
+      : theirs(decision, taken, player, history)
   const ranges = trackRanges(
     observation.board,
     preRiver,
@@ -363,34 +375,49 @@ function solveSpot(
     base,
     personality,
     key,
-    tuning.minimumWeightShare,
+    safe ? 0 : tuning.minimumWeightShare,
     (decision, taken) =>
-      decision.observation.actor.playerId === players[opponent]
-        ? cardBlindShare(read, taken, tuning)
-        : 0,
-    (decision, taken, player, history) =>
-      decision.observation.actor.playerId === observation.actor.playerId
-        ? own(decision, taken, player, history)
-        : theirs(decision, taken, player, history),
+      decision.observation.actor.playerId !== players[opponent] ||
+      (safe && known(decision, taken, personality, preRiver) !== null)
+        ? 0
+        : cardBlindShare(read, taken, tuning),
+    known,
   )
-  ranges[opponent] = withAir(ranges[opponent], tuning.opponentAir)
+  if (!safe) ranges[opponent] = withAir(ranges[opponent], tuning.opponentAir)
   const tracked = performance.now()
   stats.trackMs += tracked - started
   const spot: RiverSpot = {
     board: observation.board,
     pot,
     stack,
-    ranges: [combosOf(ranges[0]), combosOf(ranges[1])],
+    ranges: ([0, 1] as const).map((player) =>
+      safe && player === opponent
+        ? combosWithFloor(ranges[player], FULL_SUPPORT_SHARE)
+        : combosOf(ranges[player]),
+    ) as unknown as RiverSpot['ranges'],
     betSizes: tuning.betSizes,
     allIn: true,
     maxRaises: tuning.maxRaises,
   }
   if (spot.ranges[0].length === 0 || spot.ranges[1].length === 0) return 'empty range'
-  const model = reads === null || reads.trust <= 0 ? undefined : readsModel(reads, spot, opponent)
-  const solution = solveRiver(spot, tuning.iterations, model)
+  const model =
+    safe || reads === null || reads.trust <= 0 ? undefined : readsModel(reads, spot, opponent)
+  const guessed = solveRiver(spot, tuning.iterations, model)
+  let solution = guessed
+  if (safe) {
+    // Each opponent holding is promised its value in the carried game; the re-solve
+    // then plays without trusting their range at all.
+    const promises = riverValues(guessed).values[opponent]
+    const flat = [...spot.ranges] as [RiverSpot['ranges'][0], RiverSpot['ranges'][1]]
+    flat[opponent] = flat[opponent].map((entry) => ({ ...entry, weight: 1 }))
+    solution = solveRiver({ ...spot, ranges: flat }, tuning.iterations, undefined, undefined, {
+      player: opponent,
+      promises,
+    })
+  }
   stats.solveMs += performance.now() - tracked
   stats.solves += 1
-  stats.exploitability += riverReport(solution).exploitability
+  stats.exploitability += riverReport(guessed).exploitability
   stats.combos += spot.ranges[0].length + spot.ranges[1].length
   return {
     spot,
@@ -676,6 +703,9 @@ export function combosOf(range: readonly WeightedHolding[]) {
  * re-solve gives each opponent holding a promise, and only a holding in the
  * solve can have one, so the opponent can't bring a hand the guess ruled out.
  */
+/** In a safe re-solve, a holding the tracking pruned keeps this share of the heaviest weight. */
+export const FULL_SUPPORT_SHARE = 1e-4
+
 export function combosWithFloor(range: readonly WeightedHolding[], share: number) {
   const heaviest = range.reduce((most, holding) => Math.max(most, holding.weight), 0)
   const floor = heaviest * share

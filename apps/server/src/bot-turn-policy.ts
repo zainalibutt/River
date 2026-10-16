@@ -17,6 +17,7 @@ import {
   combosOf,
   combosWithFloor,
   decisionFor,
+  FULL_SUPPORT_SHARE,
   type KnownShares,
   nearestStrength,
   RIVER_CANDIDATE_TUNING,
@@ -129,9 +130,6 @@ export const FLOP_STREET: StreetSetup = {
 }
 
 const BOARD_CARDS = { flop: 3, turn: 4 } as const
-
-/** In a safe re-solve, a holding the tracking pruned keeps this share of the heaviest weight. */
-export const FULL_SUPPORT_SHARE = 1e-4
 
 interface SolvedTurn {
   readonly spot: RiverSpot
@@ -588,7 +586,7 @@ export function solvedFlopPolicy(turnNetwork: RiverValueNetwork, flopNetwork: Ri
     pokerGuardPolicy,
     'river-solver',
     1,
-    RIVER_CANDIDATE_TUNING,
+    { ...RIVER_CANDIDATE_TUNING, safe: true },
     (decision, taken, personality) =>
       turn?.ownShares(decision, taken, personality) ??
       flop?.ownShares(decision, taken, personality) ??
