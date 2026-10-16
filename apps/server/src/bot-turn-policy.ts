@@ -505,6 +505,11 @@ function solveTurnSpot(
   const started = performance.now()
   const opponent = players[0] === observation.actor.playerId ? 1 : 0
   const read = observation.opponents.find((summary) => summary.playerId === players[opponent])
+  const known: KnownShares = (decision, taken, player, history) =>
+    street.known(decision, taken, player, history, observation.actor.playerId)
+  // A safe re-solve carries the earlier solves' reaches exactly: a move a solver made
+  // narrows the range by that solver's own shares, with no doubt mixed in and nothing
+  // pruned. Doubt and pruning stay for moves no solver made (v8z's preflop).
   const ranges = trackRanges(
     observation.board,
     preTurn,
@@ -512,13 +517,13 @@ function solveTurnSpot(
     base,
     personality,
     key,
-    tuning.ranges.minimumWeightShare,
+    street.safe ? 0 : tuning.ranges.minimumWeightShare,
     (decision, taken) =>
-      decision.observation.actor.playerId === players[opponent]
-        ? cardBlindShare(read, taken, tuning.ranges)
-        : 0,
-    (decision, taken, player, history) =>
-      street.known(decision, taken, player, history, observation.actor.playerId),
+      decision.observation.actor.playerId !== players[opponent] ||
+      (street.safe && known(decision, taken, personality, preTurn) !== null)
+        ? 0
+        : cardBlindShare(read, taken, tuning.ranges),
+    known,
   )
   const tracked = performance.now()
   stats.trackMs += tracked - started
