@@ -65,27 +65,7 @@ export function flopEndRecord(
     throw new Error('solve at least three turn cards, so every holding meets one, or 0 for all')
   }
   const started = performance.now()
-  const spot: RiverSpot = {
-    ...flop,
-    betSizes: turnTree.betSizes,
-    maxRaises: turnTree.maxRaises,
-    allIn: turnTree.allIn,
-  }
-  const every = turnRivers(flop.board)
-  let turns = every
-  if (turnCards !== 0 && turnCards < every.rivers.length) {
-    const rng = mulberry32(seedFromString(`${meta.seed}:turns`))
-    const order = every.rivers.map((_, at) => at)
-    for (let i = order.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(rng() * (i + 1))
-      const swap = order[i] as number
-      order[i] = order[j] as number
-      order[j] = swap
-    }
-    const chosen = new Set(order.slice(0, turnCards))
-    turns = { board: every.board, rivers: every.rivers.filter((_, at) => chosen.has(at)) }
-  }
-  const values = turnEndValues(spot, turns, (turn) => turnStartValues(turn, network))
+  const values = flopEndValues(flop, network, turnCards, meta.seed, turnTree)
   const weights = rangeWeights(flop)
   const ranges = [new Float32Array(COMBOS), new Float32Array(COMBOS)] as const
   for (const player of [0, 1] as const) {
@@ -105,6 +85,42 @@ export function flopEndRecord(
     solveMs: performance.now() - started,
     ranges,
     values: [Float32Array.from(values[0]), Float32Array.from(values[1])],
-    strengthRank: expectedStrengthRanks(every),
+    strengthRank: expectedStrengthRanks(turnRivers(flop.board)),
   }
+}
+
+/**
+ * Each holding's value where the flop's betting ends, in pots by `comboIndex52`,
+ * for both players: the turn solved for `turnCards` of the turn cards (0 for
+ * all, drawn from `seed`), averaged the way the deal falls. The core of
+ * `flopEndRecord`, and the teacher the flop decision check scores against.
+ */
+export function flopEndValues(
+  flop: RiverSpot,
+  network: RiverValueNetwork,
+  turnCards: number,
+  seed: string,
+  turnTree: Pick<RiverSpot, 'betSizes' | 'maxRaises' | 'allIn'> = FLOP_DATA_TURN,
+): readonly [Float64Array, Float64Array] {
+  const spot: RiverSpot = {
+    ...flop,
+    betSizes: turnTree.betSizes,
+    maxRaises: turnTree.maxRaises,
+    allIn: turnTree.allIn,
+  }
+  const every = turnRivers(flop.board)
+  let turns = every
+  if (turnCards !== 0 && turnCards < every.rivers.length) {
+    const rng = mulberry32(seedFromString(`${seed}:turns`))
+    const order = every.rivers.map((_, at) => at)
+    for (let i = order.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(rng() * (i + 1))
+      const swap = order[i] as number
+      order[i] = order[j] as number
+      order[j] = swap
+    }
+    const chosen = new Set(order.slice(0, turnCards))
+    turns = { board: every.board, rivers: every.rivers.filter((_, at) => chosen.has(at)) }
+  }
+  return turnEndValues(spot, turns, (turn) => turnStartValues(turn, network))
 }
