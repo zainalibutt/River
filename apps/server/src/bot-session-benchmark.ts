@@ -19,6 +19,7 @@ import {
   updateOpponentModel,
 } from '@river/engine'
 import { allInEquityChips } from './bot-allin-equity.js'
+import { type BoardDeal, chanceLuck } from './bot-chance-luck.js'
 import {
   actionFor,
   type BotActionOptions,
@@ -98,6 +99,12 @@ export interface SessionRunOptions {
    * the betting closed before the river with two seats left, as `adjustedChips`.
    */
   readonly allInAdjustment?: boolean
+  /**
+   * Also report each two-seat focal hand with the cards' luck taken out, as
+   * `correctedChips`: `adjustedChips` (or `focalChips`) less `chanceLuck` over
+   * the board cards dealt while the betting was open.
+   */
+  readonly chanceCorrection?: boolean
 }
 
 /**
@@ -140,6 +147,8 @@ export interface SessionHandResult {
   readonly handClass: HandClass
   /** `focalChips`, with an all-in before the river valued at its showdown share. */
   readonly adjustedChips?: number
+  /** `adjustedChips` (or `focalChips`) less the cards' luck; two-seat hands only. */
+  readonly correctedChips?: number
 }
 
 export interface OpponentEvidenceYield {
@@ -273,8 +282,26 @@ function playHand(
   )
 
   let beforeLast: RoomView | undefined
+  // Two-seat hands only: both holdings are then every card dealt.
+  const holes =
+    options.chanceCorrection === true && entrants.length === 2
+      ? ids.map((id) => room.viewFor(id).seats.find((seat) => seat.playerId === id)?.hole ?? null)
+      : null
+  const deals: BoardDeal[] = []
+  let board: readonly Card[] = []
   for (let step = 0; step < MAX_ACTIONS_PER_HAND; step += 1) {
     const publicView = room.viewFor('')
+    if (publicView.board.length > board.length) {
+      const contending = publicView.seats.filter((seat) => seat.playerId !== null && !seat.folded)
+      if (holes !== null && publicView.phase === 'hand' && contending.length === 2) {
+        deals.push({
+          before: board,
+          after: [...publicView.board],
+          pot: publicView.seats.reduce((sum, seat) => sum + seat.betHand, 0),
+        })
+      }
+      board = [...publicView.board]
+    }
     if (publicView.phase === 'between') {
       if (room.totalChips() !== initialChips) throw new Error('session chip conservation failed')
       const record = room.recentHands(1)[0]
@@ -285,6 +312,19 @@ function playHand(
       const othersDepth = Math.max(...buyIns.slice(1))
       const focalChips = focalFinal.stack - (buyIns[0] as number)
       const shown = shownHoles(publicView)
+      const adjustedChips =
+        options.allInAdjustment === true
+          ? adjustedFocalChips(
+              beforeLast,
+              record,
+              shown,
+              ids[0] as string,
+              focalChips,
+              `${key}:all-in`,
+            )
+          : undefined
+      const focalCards = holes?.[0]
+      const otherCards = holes?.[1]
       return {
         result: {
           session,
@@ -295,16 +335,12 @@ function playHand(
           position: positionClass((focalChair - dealerChair + seatCount) % seatCount, seatCount),
           depth: depthClass(Math.min(buyIns[0] as number, othersDepth) / DEFAULT_STAKE.bigBlind),
           handClass: handClassOf(focalHole),
-          ...(options.allInAdjustment === true
+          ...(adjustedChips === undefined ? {} : { adjustedChips }),
+          ...(focalCards?.length === 2 && otherCards?.length === 2
             ? {
-                adjustedChips: adjustedFocalChips(
-                  beforeLast,
-                  record,
-                  shown,
-                  ids[0] as string,
-                  focalChips,
-                  `${key}:all-in`,
-                ),
+                correctedChips:
+                  (adjustedChips ?? focalChips) -
+                  chanceLuck(focalCards, otherCards, deals, `${key}:luck`),
               }
             : {}),
         },

@@ -67,6 +67,7 @@ export function playDeals(
     focalPersonalities: [champion],
     focalPolicy: first,
     allInAdjustment: true,
+    chanceCorrection: true,
   }).hands
 }
 
@@ -74,7 +75,7 @@ export function playDeals(
 export function duplicateScores(
   forward: readonly SessionHandResult[],
   mirrored: readonly SessionHandResult[],
-): { session: number; value: number }[] {
+): { session: number; value: number; corrected?: number }[] {
   if (forward.length !== mirrored.length) throw new Error('the two runs played different hands')
   return forward.map((hand, index) => {
     const other = mirrored[index] as SessionHandResult
@@ -83,7 +84,13 @@ export function duplicateScores(
     }
     const a = hand.adjustedChips ?? hand.focalChips
     const b = other.adjustedChips ?? other.focalChips
-    return { session: hand.session, value: (a - b) / 2 }
+    const ca = hand.correctedChips
+    const cb = other.correctedChips
+    return {
+      session: hand.session,
+      value: (a - b) / 2,
+      ...(ca === undefined || cb === undefined ? {} : { corrected: (ca - cb) / 2 }),
+    }
   })
 }
 
@@ -109,9 +116,23 @@ if (process.argv[1]?.endsWith('bot-head-to-head.ts')) {
     scores.map((row) => ({ session: row.session - first, value: row.value })),
     sessions,
   )
+  const corrected = clusteredEstimate(
+    scores.map((row) => ({ session: row.session - first, value: row.corrected ?? row.value })),
+    sessions,
+  )
   writeFileSync(
     out,
-    JSON.stringify({ a: nameA, b: nameB, prefix, first, sessions, hands, estimate, scores }),
+    JSON.stringify({
+      a: nameA,
+      b: nameB,
+      prefix,
+      first,
+      sessions,
+      hands,
+      estimate,
+      corrected,
+      scores,
+    }),
   )
   process.stdout.write(
     `${nameA} vs ${nameB}, sessions ${first}-${first + sessions - 1}: ${estimate.bigBlindsPer100.toFixed(1)} bb/100 (${estimate.interval95.map((v) => v.toFixed(1)).join(' to ')}), ${Math.round((Date.now() - started) / 1000)} s\n`,
