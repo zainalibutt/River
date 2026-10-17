@@ -154,6 +154,8 @@ export function turnSolverPolicy(
     decision: PublicDecision,
     taken: MoveClass,
     personality: BotPersonality,
+    /** The share of the very action played, not of every action of its class. */
+    exact?: boolean,
   ) => ((hole: readonly [Card, Card]) => number) | null
   /**
    * For one of the opponent's past turn moves, the share of each of their
@@ -167,6 +169,7 @@ export function turnSolverPolicy(
     taken: MoveClass,
     personality: BotPersonality,
     history: readonly PublicDecision[],
+    exact?: boolean,
   ) => ((hole: readonly [Card, Card]) => number) | null
   /** What the solve says at this observation's turn decision, or why there is none. */
   readonly explain: (
@@ -200,7 +203,35 @@ export function turnSolverPolicy(
       }
     },
   }
-  const ownShares = (decision: PublicDecision, taken: MoveClass, personality: BotPersonality) => {
+  // Which of a node's actions a past move counts as: the one it translates to when
+  // `exact` (a 0.66-pot bet and an all-in are different evidence), else every action of
+  // its class, as the blueprint's tracking does.
+  const matchesFor = (
+    node: Extract<RiverNode, { kind: 'action' }>,
+    decision: PublicDecision,
+    taken: MoveClass,
+    spot: RiverSpot,
+    exact: boolean,
+  ): boolean[] | null => {
+    if (exact) {
+      const played = translate(node, decision, spot)
+      if (!node.actions.includes(played)) return null
+      return node.actions.map((action) => action === played)
+    }
+    return node.actions.map(
+      (action) =>
+        decisionClass(
+          decisionFor(node, action, spot, decision.observation),
+          decision.observation,
+        ) === taken,
+    )
+  }
+  const ownShares = (
+    decision: PublicDecision,
+    taken: MoveClass,
+    personality: BotPersonality,
+    exact = false,
+  ) => {
     const { observation } = decision
     if (observation.street !== street.street) return null
     const found = locate(observation, personality, base, network, tuning, cache, stats, street)
@@ -209,10 +240,8 @@ export function turnSolverPolicy(
     const table = solved.strategy.get(node.history)
     if (table === undefined) return null
     const width = node.actions.length
-    const matches = node.actions.map(
-      (action) =>
-        decisionClass(decisionFor(node, action, solved.spot, observation), observation) === taken,
-    )
+    const matches = matchesFor(node, decision, taken, solved.spot, exact)
+    if (matches === null) return null
     const hands = solved.hands[self]
     return (hole: readonly [Card, Card]) => {
       const index =
@@ -229,6 +258,7 @@ export function turnSolverPolicy(
     taken: MoveClass,
     personality: BotPersonality,
     history: readonly PublicDecision[],
+    exact = false,
   ) => {
     if (decision.observation.street !== street.street) return null
     const theirId = decision.observation.actor.playerId
@@ -256,11 +286,8 @@ export function turnSolverPolicy(
     const table = solved.strategy.get(node.history)
     if (table === undefined) return null
     const width = node.actions.length
-    const observation = decision.observation
-    const matches = node.actions.map(
-      (action) =>
-        decisionClass(decisionFor(node, action, solved.spot, observation), observation) === taken,
-    )
+    const matches = matchesFor(node, decision, taken, solved.spot, exact)
+    if (matches === null) return null
     const hands = solved.hands[theirs]
     return (hole: readonly [Card, Card]) => {
       // A holding the solve left out had no weight when the turn began.
@@ -522,6 +549,7 @@ function solveTurnSpot(
         ? 0
         : cardBlindShare(read, taken, tuning.ranges),
     known,
+    street.safe,
   )
   const tracked = performance.now()
   stats.trackMs += tracked - started
@@ -579,8 +607,8 @@ export function solvedFlopPolicy(turnNetwork: RiverValueNetwork, flopNetwork: Ri
   const fromFlop: KnownShares = (decision, taken, personality, history, viewer) => {
     if (flop === undefined || decision.observation.street !== 'flop') return null
     return decision.observation.actor.playerId === viewer
-      ? flop.ownShares(decision, taken, personality)
-      : flop.opponentShares(decision, taken, personality, history)
+      ? flop.ownShares(decision, taken, personality, true)
+      : flop.opponentShares(decision, taken, personality, history, true)
   }
   const river = riverSolverPolicy(
     pokerGuardPolicy,
@@ -588,12 +616,12 @@ export function solvedFlopPolicy(turnNetwork: RiverValueNetwork, flopNetwork: Ri
     1,
     { ...RIVER_CANDIDATE_TUNING, safe: true },
     (decision, taken, personality) =>
-      turn?.ownShares(decision, taken, personality) ??
-      flop?.ownShares(decision, taken, personality) ??
+      turn?.ownShares(decision, taken, personality, true) ??
+      flop?.ownShares(decision, taken, personality, true) ??
       null,
     (decision, taken, personality, history) =>
-      turn?.opponentShares(decision, taken, personality, history) ??
-      flop?.opponentShares(decision, taken, personality, history) ??
+      turn?.opponentShares(decision, taken, personality, history, true) ??
+      flop?.opponentShares(decision, taken, personality, history, true) ??
       null,
   )
   turn = turnSolverPolicy(

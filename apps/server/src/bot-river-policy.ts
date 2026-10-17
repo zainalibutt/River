@@ -382,6 +382,7 @@ function solveSpot(
         ? 0
         : cardBlindShare(read, taken, tuning),
     known,
+    safe,
   )
   if (!safe) ranges[opponent] = withAir(ranges[opponent], tuning.opponentAir)
   const tracked = performance.now()
@@ -459,6 +460,8 @@ export function trackRanges(
   minimumWeightShare = RIVER_POLICY_TUNING.minimumWeightShare,
   doubt: (decision: PublicDecision, taken: MoveClass) => number = () => 0,
   known: KnownShares = () => null,
+  /** Apply known shares exactly, unsmoothed, as a safe re-solve carries a solver's reaches. */
+  exact = false,
 ): [WeightedHolding[], WeightedHolding[]] {
   const blocked = new Set(board.map(cardKey))
   const deck = makeDeck().filter((card) => !blocked.has(cardKey(card)))
@@ -486,6 +489,7 @@ export function trackRanges(
       `${seed}:${index}`,
       doubt(decision, taken),
       known(decision, taken, personality, preRiver) ?? undefined,
+      exact,
     )
     const heaviest = range.reduce((most, holding) => Math.max(most, holding.weight), 0)
     for (const holding of range) {

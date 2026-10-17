@@ -1,6 +1,7 @@
 import {
   type BotObservationV1,
   type BotPolicy,
+  type Card,
   DEFAULT_STAKE,
   makeDeck,
   personalityPool,
@@ -136,6 +137,33 @@ describe('range tracking', () => {
       const pair = holding.hole[0].rank === holding.hole[1].rank
       expect(holding.weight).toBeCloseTo(pair ? kept : dropped, 10)
     }
+  })
+
+  it('takes a known share exactly when asked, so a hand the solver never plays this way drops out', () => {
+    const point = firstPreflopPoint()
+    const range = candidateHoldings(point.observation.board, 'range')
+    const shares = range.map((_, at) => [0, 1, 0.37][at % 3] as number)
+    const byHole = new Map(range.map((holding, at) => [holding.hole, shares[at] as number]))
+    const known = (hole: readonly [Card, Card]) => byHole.get(hole) ?? Number.NaN
+    const exact = range.map((holding) => ({ ...holding, weight: 2 }))
+    updateRange(
+      exact,
+      pairRaiser,
+      person(10),
+      point.observation,
+      'aggressive',
+      'move',
+      0,
+      known,
+      true,
+    )
+    exact.forEach((holding, at) => {
+      expect(holding.weight).toBeCloseTo(2 * (shares[at] as number), 12)
+    })
+    // Without `exact`, the same shares are smoothed: a zero keeps a sliver of weight.
+    const smoothed = range.map((holding) => ({ ...holding, weight: 2 }))
+    updateRange(smoothed, pairRaiser, person(10), point.observation, 'aggressive', 'move', 0, known)
+    expect(smoothed[0]?.weight).toBeGreaterThan(0)
   })
 
   it('classes decisions and recorded moves as the table treats them', () => {
