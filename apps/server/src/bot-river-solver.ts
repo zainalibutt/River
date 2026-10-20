@@ -251,6 +251,8 @@ export function solveRiver(
   model?: RiverOpponentModel,
   showdown?: ShowdownValues,
   gadget?: RiverGadget,
+  /** Optional extensive-form tree; terminal values still use the production CFR/gadget. */
+  tree: RiverNode = riverTree(spot),
 ): RiverSolution & { readonly followShare?: Float64Array } {
   if (gadget !== undefined && model !== undefined) {
     throw new Error('a re-solve takes promises or an opponent model, not both')
@@ -259,7 +261,6 @@ export function solveRiver(
   if (gadget !== undefined && gadget.promises.length !== hands[gadget.player].combos.length) {
     throw new Error('one promise per holding of the re-solved player')
   }
-  const tree = riverTree(spot)
   const scratch = scratchFor(hands)
   const root = compile(tree, hands, model)
   const combined = new Float64Array(Math.max(hands[0].combos.length, hands[1].combos.length))

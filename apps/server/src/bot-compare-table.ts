@@ -22,11 +22,25 @@ import {
   ordinaryTables,
 } from './bot-session-campaign.js'
 import { clusteredEstimate, pairRuns } from './bot-session-evaluation.js'
-import { solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
-import { turnNetworkFromEnvironment } from './bot-value-network.js'
+import { solvedFlopPolicy, solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
+import {
+  loadValueNetwork,
+  riverNetworkFromEnvironment,
+  turnNetworkFromEnvironment,
+} from './bot-value-network.js'
 
 /** Named focal policies that comparisons can refer to from the command line. */
 export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
+  /** v9d chain with opt-in inherited per-river turn promises. Loaded only when selected. */
+  get v9e() {
+    const flop = process.env.RIVER_FLOP_NETWORK
+    if (!flop)
+      throw new Error('v9e needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
+    return solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flop), {
+      carry: 'per-river',
+      riverNetwork: riverNetworkFromEnvironment(),
+    }).policy
+  },
   v4: legacyGuardPolicy,
   v5: v5GuardPolicy,
   v6: pokerGuardPolicy,

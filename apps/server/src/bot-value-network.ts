@@ -349,3 +349,14 @@ export function turnNetworkFromEnvironment(): RiverValueNetwork {
   }
   return loadValueNetwork(stem)
 }
+
+/** River network export stem for opt-in per-river turn leaves. */
+export function riverNetworkFromEnvironment(): RiverValueNetwork {
+  const stem = process.env.RIVER_RIVER_NETWORK
+  if (stem === undefined || stem === '') {
+    throw new Error(
+      'per-river carry needs RIVER_RIVER_NETWORK: the river network export, without .bin',
+    )
+  }
+  return loadValueNetwork(stem)
+}

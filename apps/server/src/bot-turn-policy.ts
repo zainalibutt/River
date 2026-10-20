@@ -12,6 +12,7 @@ import { solveFlop } from './bot-flop-solver.js'
 import { decisionClass, type MoveClass } from './bot-lbr-range.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
+import { exactTurnAction, type RiverCarrySource, riverCarryFromRecord } from './bot-river-carry.js'
 import {
   cardBlindShare,
   combosOf,
@@ -43,6 +44,11 @@ import {
   riverValues,
   solveRiver,
 } from './bot-river-solver.js'
+import {
+  createRiverPromiseRecord,
+  perRiverShowdown,
+  type RiverPromiseRecord,
+} from './bot-turn-river-leaves.js'
 import { turnShowdown } from './bot-turn-solver.js'
 import type { RiverValueNetwork } from './bot-value-network.js'
 
@@ -59,6 +65,8 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  * response, so a wrong read costs little.
  */
 export interface TurnPolicyTuning {
+  readonly carry?: 'per-river'
+  readonly riverNetwork?: RiverValueNetwork
   /** Bet and raise sizes as shares of the pot, beside all-in. */
   readonly betSizes: readonly number[]
   readonly maxRaises: number
@@ -137,6 +145,7 @@ interface SolvedTurn {
   readonly strategy: ReadonlyMap<string, Float64Array>
   readonly hands: readonly [Hands, Hands]
   readonly players: readonly [string, string]
+  readonly record?: RiverPromiseRecord
 }
 
 export function turnSolverPolicy(
@@ -149,6 +158,7 @@ export function turnSolverPolicy(
 ): {
   readonly policy: BotPolicy
   readonly stats: TurnPolicyStats
+  readonly carried: RiverCarrySource
   /** For one of this policy's past turn moves, the share of each holding that makes it. */
   readonly ownShares: (
     decision: PublicDecision,
@@ -323,7 +333,60 @@ export function turnSolverPolicy(
       spot: solved.spot,
     }
   }
-  return { policy, stats, ownShares, opponentShares, explain }
+  const carried: RiverCarrySource = (observation, personality, history, players) => {
+    if (tuning.carry !== 'per-river' || street.street !== 'turn') return null
+    const turns = history.filter((entry) => entry.observation.street === 'turn')
+    const ours = turns.find(
+      (entry) => entry.observation.actor.playerId === observation.actor.playerId,
+    )
+    if (ours === undefined) return null
+    const found = locate(
+      ours.observation,
+      personality,
+      base,
+      network,
+      tuning,
+      cache,
+      stats,
+      street,
+      true,
+    )
+    if (typeof found === 'string') return null
+    const { solved, self } = found
+    if (solved.record === undefined || solved.players.some((id, p) => id !== players[p]))
+      return null
+    if (solved.spot.board.some((c, i) => cardKey(c) !== cardKey(observation.board[i] as Card)))
+      return null
+    let node = solved.tree
+    let leafHistory = ''
+    for (const entry of turns) {
+      if (
+        node.kind !== 'action' ||
+        solved.players[node.player] !== entry.observation.actor.playerId
+      )
+        return null
+      const action = exactTurnAction(node, entry, solved.spot)
+      if (action === undefined) return null
+      leafHistory += action
+      node = node.children[node.actions.indexOf(action)] as RiverNode
+    }
+    if (node.kind !== 'showdown') return null
+    const pot = solved.spot.pot + node.paid[0] + node.paid[1]
+    const actualPot =
+      observation.pot - observation.seats.reduce((sum, seat) => sum + seat.betStreet, 0)
+    if (pot !== actualPot || !solved.record.leaves.has(leafHistory)) return null
+    const card = cardKey(observation.board[4] as Card)
+    // All-ins and unrecorded cards cannot provide a next-root promise.
+    if (!solved.record.leaves.get(leafHistory)?.cards.has(card)) return null
+    const carried = riverCarryFromRecord(solved.record, leafHistory, card, self, {
+      ...solved.spot,
+      board: observation.board,
+      pot,
+      stack: solved.spot.stack - Math.max(...node.paid),
+    })
+    return carried.ranges.some((range) => range.length === 0) ? null : carried
+  }
+  return { policy, stats, ownShares, opponentShares, explain, carried }
 }
 
 /** What the solve says at one turn decision, for reading a hand by hand. */
@@ -360,7 +423,9 @@ export function solvedTurnPolicy(
     pokerGuardPolicy,
     'river-solver',
     1,
-    RIVER_CANDIDATE_TUNING,
+    overrides.carry === 'per-river'
+      ? { ...RIVER_CANDIDATE_TUNING, safe: true, carry: overrides.carry }
+      : RIVER_CANDIDATE_TUNING,
     handover
       ? (decision, taken, personality) => turn?.ownShares(decision, taken, personality) ?? null
       : undefined,
@@ -368,6 +433,8 @@ export function solvedTurnPolicy(
       ? (decision, taken, personality, history) =>
           turn?.opponentShares(decision, taken, personality, history) ?? null
       : undefined,
+    (observation, personality, history, players) =>
+      turn?.carried(observation, personality, history, players) ?? null,
   )
   turn = turnSolverPolicy(river.policy, network, 'turn-solver', 1, overrides)
   return { ...turn, river: river.stats }
@@ -423,6 +490,7 @@ function locate(
   cache: Map<string, SolvedTurn | string>,
   stats: TurnPolicyStats,
   street: StreetSetup,
+  cachedOnly = false,
 ): LocatedTurn | string {
   const live = observation.seats.filter((seat) => seat.playerId !== null && !seat.folded)
   if (live.length !== 2) return 'not heads-up'
@@ -472,6 +540,7 @@ function locate(
   }`
   let solved = cache.get(cacheKey)
   if (solved === undefined) {
+    if (cachedOnly) return 'missing cached turn'
     solved = solveTurnSpot(
       observation,
       preTurn,
@@ -495,6 +564,7 @@ function locate(
   let node = solved.tree
   for (const decision of turnStart === -1 ? [] : decisions.slice(turnStart)) {
     if (node.kind !== 'action') return 'off tree'
+    // Play translates an off-tree size; only the carry demands the exact line.
     const index = node.actions.indexOf(translate(node, decision, solved.spot))
     if (index === -1) return 'off tree'
     node = node.children[index] as RiverNode
@@ -570,14 +640,29 @@ function solveTurnSpot(
   }
   if (spot.ranges[0].length === 0 || spot.ranges[1].length === 0) return 'empty range'
   const model = reads === null || reads.trust <= 0 ? undefined : readsModel(reads, spot, opponent)
-  let solution = street.solve(spot, tuning.iterations, network, model)
+  let record: RiverPromiseRecord | undefined
+  const solve = (target: RiverSpot, opponentModel?: RiverOpponentModel, gadget?: RiverGadget) => {
+    if (tuning.carry !== 'per-river' || street.street !== 'turn') {
+      return street.solve(target, tuning.iterations, network, opponentModel, gadget)
+    }
+    if (tuning.riverNetwork === undefined) throw new Error('per-river carry needs a river network')
+    record = createRiverPromiseRecord()
+    return solveRiver(
+      target,
+      tuning.iterations,
+      opponentModel,
+      perRiverShowdown(target, tuning.riverNetwork, record),
+      gadget,
+    )
+  }
+  let solution = solve(spot, model)
   if (safe) {
     // What each opponent holding is worth against the tracked ranges is its
     // promise; the re-solve then plays without trusting their range at all.
     const promises = riverValues(solution).values[opponent]
     const ranges = [...spot.ranges] as [RiverSpot['ranges'][0], RiverSpot['ranges'][1]]
     ranges[opponent] = ranges[opponent].map((entry) => ({ ...entry, weight: 1 }))
-    solution = street.solve({ ...spot, ranges }, tuning.iterations, network, undefined, {
+    solution = solve({ ...spot, ranges }, undefined, {
       player: opponent,
       promises,
     })
@@ -590,6 +675,7 @@ function solveTurnSpot(
     strategy: solution.strategy,
     hands: [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)],
     players,
+    ...(record === undefined ? {} : { record }),
   }
 }
 
@@ -601,7 +687,11 @@ function solveTurnSpot(
  * both ranges as the solved streets played them. Preflop is still v6's, and
  * the river still v8z's solver with its reads.
  */
-export function solvedFlopPolicy(turnNetwork: RiverValueNetwork, flopNetwork: RiverValueNetwork) {
+export function solvedFlopPolicy(
+  turnNetwork: RiverValueNetwork,
+  flopNetwork: RiverValueNetwork,
+  overrides: Partial<TurnPolicyTuning> = {},
+) {
   let flop: ReturnType<typeof turnSolverPolicy> | undefined
   let turn: ReturnType<typeof turnSolverPolicy> | undefined
   const fromFlop: KnownShares = (decision, taken, personality, history, viewer) => {
@@ -614,7 +704,11 @@ export function solvedFlopPolicy(turnNetwork: RiverValueNetwork, flopNetwork: Ri
     pokerGuardPolicy,
     'river-solver',
     1,
-    { ...RIVER_CANDIDATE_TUNING, safe: true },
+    {
+      ...RIVER_CANDIDATE_TUNING,
+      safe: true,
+      ...(overrides.carry === undefined ? {} : { carry: overrides.carry }),
+    },
     (decision, taken, personality) =>
       turn?.ownShares(decision, taken, personality, true) ??
       flop?.ownShares(decision, taken, personality, true) ??
@@ -623,19 +717,14 @@ export function solvedFlopPolicy(turnNetwork: RiverValueNetwork, flopNetwork: Ri
       turn?.opponentShares(decision, taken, personality, history, true) ??
       flop?.opponentShares(decision, taken, personality, history, true) ??
       null,
+    (observation, personality, history, players) =>
+      turn?.carried(observation, personality, history, players) ?? null,
   )
-  turn = turnSolverPolicy(
-    river.policy,
-    turnNetwork,
-    'turn-solver',
-    1,
-    {},
-    {
-      ...TURN_STREET,
-      known: fromFlop,
-      safe: true,
-    },
-  )
+  turn = turnSolverPolicy(river.policy, turnNetwork, 'turn-solver', 1, overrides, {
+    ...TURN_STREET,
+    known: fromFlop,
+    safe: true,
+  })
   flop = turnSolverPolicy(turn.policy, flopNetwork, 'flop-solver', 1, {}, FLOP_STREET)
   return { ...flop, turn: turn.stats, river: river.stats }
 }
