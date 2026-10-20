@@ -9,7 +9,7 @@ import {
   type RiverSpot,
 } from './bot-river-solver.js'
 import { comboIndex52 } from './bot-river-value-data.js'
-import { carriedRiverPromises, type RiverPromiseRecord } from './bot-turn-river-leaves.js'
+import { carriedPromises, type PromiseRecord } from './bot-turn-river-leaves.js'
 
 export interface RiverCarry {
   readonly ranges: RiverSpot['ranges']
@@ -61,18 +61,18 @@ export function exactTurnAction(
  * gadget must still protect those deviations. Its opponent weights are ignored;
  * use a positive placeholder for zero reach so prepare does not remove them.
  * The API already restores paid chips to the next-root origin: only multiply
- * its pot fractions by the new river pot, then index in prepared range order.
+ * its pot fractions by the new street pot, then index in prepared range order.
  */
-export function riverCarryFromRecord(
-  record: RiverPromiseRecord,
+export function carryFromRecord(
+  record: PromiseRecord,
   history: string,
   card: number,
   player: Player,
   spot: RiverSpot,
 ): RiverCarry {
   const other = player === 0 ? 1 : 0
-  const ours = carriedRiverPromises(record, history, card, player)
-  const theirs = carriedRiverPromises(record, history, card, other)
+  const ours = carriedPromises(record, history, card, player)
+  const theirs = carriedPromises(record, history, card, other)
   const blocked = new Set(spot.board.map(cardKey))
   const deck = makeDeck().filter((c) => !blocked.has(cardKey(c)))
   const ranges: [RiverSpot['ranges'][0], RiverSpot['ranges'][1]] = [[], []]
@@ -99,3 +99,6 @@ export function riverCarryFromRecord(
   )
   return { ranges, gadget: { player: other, promises } }
 }
+
+/** Backward-compatible name; the same conversion also serves flop-to-turn. */
+export const riverCarryFromRecord = carryFromRecord

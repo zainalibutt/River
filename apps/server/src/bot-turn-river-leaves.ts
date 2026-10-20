@@ -1,3 +1,4 @@
+import type { Card } from '@river/engine'
 import type { Player, RiverSpot, ShowdownValues } from './bot-river-solver.js'
 import { COMBOS } from './bot-river-value-data.js'
 import { HOLDING_CARDS, turnRivers } from './bot-turn-end-data.js'
@@ -26,11 +27,11 @@ interface CarriedLeaf {
 }
 
 /** Use a fresh record for each solve; reading solution values never adds samples. */
-export interface RiverPromiseRecord {
+export interface PromiseRecord {
   readonly leaves: Map<string, CarriedLeaf>
 }
 
-export function createRiverPromiseRecord(): RiverPromiseRecord {
+export function createPromiseRecord(): PromiseRecord {
   return { leaves: new Map() }
 }
 
@@ -43,14 +44,43 @@ export function createRiverPromiseRecord(): RiverPromiseRecord {
 export function perRiverShowdown(
   spot: RiverSpot,
   riverNetwork: RiverValueNetwork | RiverLeafEvaluator,
-  record?: RiverPromiseRecord,
+  record?: PromiseRecord,
 ): ShowdownValues {
   if (spot.board.length !== 4) throw new Error('per-river turn leaves need four board cards')
   if (typeof riverNetwork !== 'function' && riverNetwork.checked !== undefined) {
     throw new Error('per-river leaves need a river network without checked-down additions')
   }
   const rivers = turnRivers(spot.board)
-  const prepared = rivers.rivers.map((river) => ({
+  let allIn: ReturnType<typeof allInShowdown> | undefined
+  return perCardShowdown(
+    spot,
+    riverNetwork,
+    rivers.rivers,
+    44,
+    (...args) => {
+      allIn ??= allInShowdown(rivers, args[2])
+      allIn(
+        args[1],
+        args[4],
+        spot.pot + args[0].paid[0] + args[0].paid[1],
+        args[0].paid[args[1]],
+        args[5],
+      )
+    },
+    record,
+  )
+}
+
+/** Shared exact public-card integration, batching, and linear-CFR recording. */
+export function perCardShowdown(
+  spot: RiverSpot,
+  riverNetwork: RiverValueNetwork | RiverLeafEvaluator,
+  cards: readonly { readonly card: Card; readonly key: number; readonly ranks: Uint16Array }[],
+  chanceCards: number,
+  allIn: ShowdownValues,
+  record?: PromiseRecord,
+): ShowdownValues {
+  const prepared = cards.map((river) => ({
     ...river,
     board: [...spot.board, river.card],
     layout:
@@ -76,14 +106,12 @@ export function perRiverShowdown(
         }
   let indices: ReturnType<typeof holdingIndices> | undefined
   let masses: ReturnType<typeof massesFor> | undefined
-  let allIn: ReturnType<typeof allInShowdown> | undefined
   return (node, traverser, hands, self, opponent, out, visit) => {
     const other = traverser === 0 ? 1 : 0
     const total = spot.pot + node.paid[0] + node.paid[1]
     const behind = spot.stack - Math.max(...node.paid)
     if (behind <= 0) {
-      allIn ??= allInShowdown(rivers, hands)
-      allIn(traverser, opponent, total, node.paid[traverser], out)
+      allIn(node, traverser, hands, self, opponent, out, visit)
       return
     }
     if (indices === undefined) {
@@ -221,7 +249,7 @@ export function perRiverShowdown(
               ] as number)
             : (values[traverser][index] as number)
         const value = (met[h] as number) * (predicted * total - node.paid[traverser])
-        out[h] = (out[h] as number) + value / 44
+        out[h] = (out[h] as number) + value / chanceCards
         if (sums !== undefined && visit !== undefined) {
           sums[traverser][index] = (sums[traverser][index] as number) + visit.weight * value
         }
@@ -233,12 +261,12 @@ export function perRiverShowdown(
 /**
  * `player` is us: return opponent promises and our card-restricted carried
  * reach, all by comboIndex52. CFVs are conditioned on c, without the 1/44
- * chance factor. Zero compatible mass (including blocked/absent holdings)
+ * chance factor (1/45 on the flop). Zero compatible mass (including blocked/absent holdings)
  * has a NaN promise and an explicit marker; zero opponent reach alone does
  * not invalidate a counterfactual promise.
  */
-export function carriedRiverPromises(
-  record: RiverPromiseRecord,
+export function carriedPromises(
+  record: PromiseRecord,
   leafHistory: string,
   riverCard: number,
   player: Player,
@@ -252,7 +280,7 @@ export function carriedRiverPromises(
   const leaf = record.leaves.get(leafHistory)
   const sums = leaf?.cards.get(riverCard)
   if (leaf === undefined || sums === undefined || leaf.weight[0] <= 0 || leaf.weight[1] <= 0) {
-    throw new Error('no two-player CFR record for this leaf and river')
+    throw new Error('no two-player CFR record for this leaf and public card')
   }
   const other = player === 0 ? 1 : 0
   const reach = new Float64Array(COMBOS)
@@ -287,3 +315,8 @@ export function carriedRiverPromises(
   }
   return { promises, reach, masses, cfvs, zeroMass }
 }
+
+// Backward-compatible names for the turn-to-river API.
+export type RiverPromiseRecord = PromiseRecord
+export const createRiverPromiseRecord = createPromiseRecord
+export const carriedRiverPromises = carriedPromises

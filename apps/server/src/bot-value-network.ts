@@ -422,3 +422,14 @@ export function riverNetworkFromEnvironment(): RiverValueNetwork {
   }
   return loadValueNetwork(stem)
 }
+
+/** Turn-start network export stem for opt-in per-turn flop leaves. */
+export function turnStartNetworkFromEnvironment(): RiverValueNetwork {
+  const stem = process.env.RIVER_TURN_START_NETWORK
+  if (stem === undefined || stem === '') {
+    throw new Error(
+      'per-turn carry needs RIVER_TURN_START_NETWORK: the turn-start network export, without .bin',
+    )
+  }
+  return loadValueNetwork(stem)
+}

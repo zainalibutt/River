@@ -27,10 +27,23 @@ import {
   loadValueNetwork,
   riverNetworkFromEnvironment,
   turnNetworkFromEnvironment,
+  turnStartNetworkFromEnvironment,
 } from './bot-value-network.js'
 
 /** Named focal policies that comparisons can refer to from the command line. */
 export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
+  /** Inherited promises at both the flop-to-turn and turn-to-river boundaries. */
+  get v9f() {
+    const turnStartNetwork = turnStartNetworkFromEnvironment()
+    const flop = process.env.RIVER_FLOP_NETWORK
+    if (!flop)
+      throw new Error('v9f needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
+    return solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flop), {
+      carry: 'both',
+      turnStartNetwork,
+      riverNetwork: riverNetworkFromEnvironment(),
+    }).policy
+  },
   /** v9d chain with opt-in inherited per-river turn promises. Loaded only when selected. */
   get v9e() {
     const flop = process.env.RIVER_FLOP_NETWORK
