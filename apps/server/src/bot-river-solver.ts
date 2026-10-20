@@ -143,6 +143,7 @@ type Compiled =
   | {
       readonly kind: 'terminal'
       readonly node: Exclude<RiverNode, { kind: 'action' }>
+      readonly visit: { history: string; weight: number }
       readonly out: readonly [Float64Array, Float64Array]
     }
   | {
@@ -167,12 +168,13 @@ function compile(
   node: RiverNode,
   hands: readonly [Hands, Hands],
   model: RiverOpponentModel | undefined,
+  history = '',
 ): Compiled {
   const out = [
     new Float64Array(hands[0].combos.length),
     new Float64Array(hands[1].combos.length),
   ] as const
-  if (node.kind !== 'action') return { kind: 'terminal', node, out }
+  if (node.kind !== 'action') return { kind: 'terminal', node, out, visit: { history, weight: 0 } }
   const width = node.actions.length
   const count = hands[node.player].combos.length
   const modelled = model !== undefined && model.player === node.player
@@ -188,7 +190,9 @@ function compile(
     reach: node.actions.map(() => new Float64Array(count)),
     values: new Array<Float64Array>(width),
     out,
-    children: node.children.map((child) => compile(child, hands, model)),
+    children: node.children.map((child, action) =>
+      compile(child, hands, model, `${node.history}${node.actions[action] as string}`),
+    ),
     fixed: modelled ? model.strategy(node, hands[node.player]) : null,
     fixedReach: modelled ? node.actions.map(() => new Float64Array(count)) : [],
   }
@@ -207,6 +211,8 @@ export type ShowdownValues = (
   self: Float64Array,
   opponent: Float64Array,
   out: Float64Array,
+  /** Present only during CFR, not when reading values from the average solution. */
+  visit?: { readonly history: string; readonly weight: number },
 ) => void
 
 /**
@@ -277,7 +283,8 @@ export function solveRiver(
         reach = combined
       }
       if (showdown !== undefined && node.node.kind === 'showdown') {
-        showdown(node.node, traverser, hands, self, reach, out)
+        node.visit.weight = weight
+        showdown(node.node, traverser, hands, self, reach, out, node.visit)
       } else {
         terminalInto(node.node, traverser, hands, reach, spot.pot, scratch, out)
       }

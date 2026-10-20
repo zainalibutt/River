@@ -100,13 +100,18 @@ export function valueNetworkFrom(
 }
 
 /** The network's output for one input. */
-export function forward(network: RiverValueNetwork, input: Float32Array): Float32Array {
+export function forward(
+  network: RiverValueNetwork,
+  input: Float32Array,
+  buffers?: readonly Float32Array[],
+): Float32Array {
   let current = input
-  for (const layer of network.layers) {
+  for (let index = 0; index < network.layers.length; index += 1) {
+    const layer = network.layers[index] as ValueNetworkLayer
     if (current.length !== layer.columns) {
       throw new Error(`value network layer wants ${layer.columns} inputs, got ${current.length}`)
     }
-    const out = new Float32Array(layer.rows)
+    const out = buffers?.[index] ?? new Float32Array(layer.rows)
     for (let r = 0; r < layer.rows; r += 1) {
       let sum = layer.bias[r] as number
       const row = r * layer.columns
@@ -193,9 +198,11 @@ export function bucketInputs(
   pot: number,
   checked?: readonly [ArrayLike<number>, ArrayLike<number>],
   weighting: 'live' | 'range' = 'live',
+  buffer?: Float32Array,
 ): Float32Array {
   const buckets = layout.held.length
-  const inputs = new Float32Array((checked === undefined ? 3 : 5) * buckets + 1)
+  const inputs = buffer ?? new Float32Array((checked === undefined ? 3 : 5) * buckets + 1)
+  inputs.fill(0)
   inputs[0] = Math.log(stack / pot)
   ranges.forEach((range, player) => {
     let total = 0
@@ -281,13 +288,19 @@ export function holdingValues(
   layout: BucketLayout,
   inputs: Float32Array,
   checked?: readonly [ArrayLike<number>, ArrayLike<number>],
+  buffers?: {
+    readonly layers: readonly Float32Array[]
+    readonly values: readonly [Float32Array, Float32Array]
+  },
 ): readonly [Float32Array, Float32Array] {
   if (network.checked !== undefined && checked === undefined) {
     throw new Error('this network needs the checked-down value of every holding')
   }
   const added = network.checked === undefined ? undefined : checked
-  const out = forward(network, inputs)
-  const values = [new Float32Array(COMBOS), new Float32Array(COMBOS)] as const
+  const out = forward(network, inputs, buffers?.layers)
+  const values = buffers?.values ?? ([new Float32Array(COMBOS), new Float32Array(COMBOS)] as const)
+  values[0].fill(0)
+  values[1].fill(0)
   for (let index = 0; index < COMBOS; index += 1) {
     const bucket = layout.bucketOf[index] as number
     if (bucket < 0) continue
