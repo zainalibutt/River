@@ -154,6 +154,61 @@ describe('per-river turn leaves', () => {
     }
   })
 
+  it('matches unbatched real-shaped random networks on random and zero reaches', () => {
+    let seed = 8173
+    const random = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      return seed / 4294967296
+    }
+    const network: RiverValueNetwork = {
+      buckets: 128,
+      layers: [385, 512, 512, 512].map((columns, i) => {
+        const rows = i === 3 ? 256 : 512
+        return {
+          columns,
+          rows,
+          weight: Float32Array.from(
+            { length: rows * columns },
+            () => (random() - 0.5) / Math.sqrt(columns),
+          ),
+          bias: Float32Array.from({ length: rows }, () => random() - 0.5),
+          slope: i === 3 ? null : 0.2,
+        }
+      }),
+    }
+    const spot = spotOf()
+    const deck = makeDeck().filter((card) => !spot.board.some((c) => cardKey(c) === cardKey(card)))
+    const range: RangeCombo[] = []
+    for (let i = 0; i < deck.length; i += 1) {
+      for (let j = i + 1; j < deck.length; j += 1) {
+        if (random() < 0.3)
+          range.push({ hole: [deck[i] as Card, deck[j] as Card], weight: random() })
+      }
+    }
+    const fullSpot = { ...spot, ranges: [range, range.slice(5)] as const }
+    const hands = handsOf(fullSpot)
+    const batch = perRiverShowdown(fullSpot, network)
+    const scalar = perRiverShowdown(fullSpot, (river, ranks) =>
+      riverHoldingValues(network, river, ranks),
+    )
+    for (let trial = 0; trial < 3; trial += 1) {
+      for (const player of [0, 1] as const) {
+        const other = player === 0 ? 1 : 0
+        const self = Float64Array.from(hands[player].weights, () => (trial === 1 ? 0 : random()))
+        const opponent = Float64Array.from(hands[other].weights, () => (trial === 2 ? 0 : random()))
+        const a = new Float64Array(self.length)
+        const b = new Float64Array(self.length)
+        const node = { kind: 'showdown' as const, paid: [30, 30] as const }
+        batch(node, player, hands, self, opponent, a)
+        scalar(node, player, hands, self, opponent, b)
+        let difference = 0
+        for (let h = 0; h < a.length; h += 1)
+          difference = Math.max(difference, Math.abs((a[h] as number) - (b[h] as number)) / 160)
+        expect(difference).toBeLessThanOrEqual(1e-5)
+      }
+    }
+  })
+
   it('matches turnEndValues with a solved river on every card, including paid chips', () => {
     const spot = spotOf()
     const hands = handsOf(spot)

@@ -126,6 +126,68 @@ export function forward(
 }
 
 /**
+ * Row-major [batch, columns] inputs and outputs. Four independent dot products
+ * share each weight load, retaining double accumulators until the layer ends,
+ * just like forward. Buffers belong to the caller and can be reused per visit.
+ * With outputRows, final-layer rows marked zero are left untouched; the caller
+ * must only read requested rows. Hidden layers always compute every row.
+ */
+export function forwardBatch(
+  network: RiverValueNetwork,
+  input: Float32Array,
+  batch: number,
+  buffers: readonly Float32Array[],
+  outputRows?: Uint8Array,
+): Float32Array {
+  let current = input
+  for (let index = 0; index < network.layers.length; index += 1) {
+    const { rows, columns, weight, bias, slope } = network.layers[index] as ValueNetworkLayer
+    if (current.length !== batch * columns) {
+      throw new Error(`value network batch wants ${batch * columns} inputs, got ${current.length}`)
+    }
+    const out = buffers[index] as Float32Array
+    for (let b = 0; b < batch; b += 4) {
+      const count = Math.min(4, batch - b)
+      const a = b * columns
+      if (count < 4) {
+        for (let tail = b; tail < batch; tail += 1) {
+          for (let r = 0; r < rows; r += 1) {
+            if (index === network.layers.length - 1 && outputRows?.[r] === 0) continue
+            let sum = bias[r] as number
+            for (let c = 0; c < columns; c += 1) {
+              sum += (weight[r * columns + c] as number) * (current[tail * columns + c] as number)
+            }
+            out[tail * rows + r] = slope === null || sum > 0 ? sum : slope * sum
+          }
+        }
+        break
+      }
+      for (let r = 0; r < rows; r += 1) {
+        if (index === network.layers.length - 1 && outputRows?.[r] === 0) continue
+        let s0 = bias[r] as number
+        let s1 = s0
+        let s2 = s0
+        let s3 = s0
+        const row = r * columns
+        for (let c = 0; c < columns; c += 1) {
+          const w = weight[row + c] as number
+          s0 += w * (current[a + c] as number)
+          s1 += w * (current[a + columns + c] as number)
+          s2 += w * (current[a + 2 * columns + c] as number)
+          s3 += w * (current[a + 3 * columns + c] as number)
+        }
+        out[b * rows + r] = slope === null || s0 > 0 ? s0 : slope * s0
+        if (count > 1) out[(b + 1) * rows + r] = slope === null || s1 > 0 ? s1 : slope * s1
+        if (count > 2) out[(b + 2) * rows + r] = slope === null || s2 > 0 ? s2 : slope * s2
+        if (count > 3) out[(b + 3) * rows + r] = slope === null || s3 > 0 ? s3 : slope * s3
+      }
+    }
+    current = out
+  }
+  return current
+}
+
+/**
  * Where each holding falls among B buckets of strength: a slice of the live
  * holdings by percentile, each holding placed at the middle of its tie group,
  * so equal ranks share a bucket. `ranks` gives every holding's rank, 1 for the

@@ -5,6 +5,7 @@ import {
   bucketInputs,
   bucketsFromIds,
   forward,
+  forwardBatch,
   holdingValues,
   type RiverValueNetwork,
   riverBucketInputs,
@@ -33,6 +34,23 @@ const fixture = JSON.parse(
 const network = valueNetworkFrom(fixture, Float32Array.from(fixture.weights))
 
 describe('the value network in the server', () => {
+  it('batches partial tiles and reuses layer buffers without changing outputs', () => {
+    const columns = network.layers[0]?.columns as number
+    const batch = 5
+    const inputs = new Float32Array(batch * columns)
+    const buffers = network.layers.map((layer) => new Float32Array(batch * layer.rows))
+    for (let visit = 0; visit < 2; visit += 1) {
+      for (let i = 0; i < inputs.length; i += 1) inputs[i] = ((i * 13 + visit * 7) % 23) / 23
+      const actual = forwardBatch(network, inputs, batch, buffers)
+      for (let b = 0; b < batch; b += 1) {
+        const expected = forward(network, inputs.subarray(b * columns, (b + 1) * columns))
+        expect([...actual.subarray(b * expected.length, (b + 1) * expected.length)]).toEqual([
+          ...expected,
+        ])
+      }
+    }
+  })
+
   it('builds the inputs training built, from the spot alone', () => {
     expect(fixture.cases.length).toBeGreaterThan(0)
     for (const example of fixture.cases) {
