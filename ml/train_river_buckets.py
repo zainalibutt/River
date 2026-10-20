@@ -24,7 +24,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from river_value_data import RECORD, COMBOS, bucket_ids_for, check_manifest, checked_for, shards
+from river_value_data import RECORD, COMBOS, bucket_ids_for, check_manifests, checked_for, records_for, shards
 
 BANDS = [("under 1 pot behind", 0.0, 1.0), ("1 to 10 pots", 1.0, 10.0), ("over 10 pots", 10.0, 1e9)]
 
@@ -202,9 +202,8 @@ def main() -> None:
     *folders, args.out = args.data
     if not folders:
         raise SystemExit("give at least one data folder and an output folder")
-    manifest = check_manifest(folders[0])
-    for folder in folders[1:]:
-        check_manifest(folder)
+    # Turn-start targets share the row layout, but must never mix teachers or street endpoints.
+    manifest = check_manifests(folders)
     paths = [path for folder in folders for path in shards(folder)]
     counts = [path.stat().st_size // RECORD.itemsize for path in paths]
     total = sum(counts)
@@ -230,7 +229,7 @@ def main() -> None:
     kept: dict[str, list[np.ndarray]] = {"records": [], "bucket": [], "checked": []}
     offset = 0
     for path, count in zip(paths, counts):
-        records = np.fromfile(path, dtype=RECORD, count=count)
+        records = records_for(path, count)
         ids = None if turn_buckets is None else bucket_ids_for(path, f"buckets{args.turn_buckets}", count)
         checked = checked_for(path, count) if args.checked else None
         part = build(records, args.buckets, ids, checked, args.checked_inputs)
@@ -338,6 +337,7 @@ def main() -> None:
                 "inputs": inputs,
                 "outputs": outputs,
                 "buckets": args.buckets,
+                **({} if manifest.get("kind") != "turn-start" else {"target": manifest["target"]}),
                 **({} if turn_buckets is None else {"turnBuckets": turn_buckets}),
                 **({} if not args.checked else {"checked": True, "checkedInputs": args.checked_inputs or False}),
                 "width": args.width,
