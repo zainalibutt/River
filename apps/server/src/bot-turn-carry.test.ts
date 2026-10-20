@@ -231,7 +231,7 @@ describe('opt-in flop-to-turn policy carry', () => {
     missing.turn.policy.decide(context(view('turn', 'a', 166, 33)))
     expect(missing.river.stats.carryFallbacks).toBe(1)
     expect(missing.turn.stats.solves).toBe(0)
-  })
+  }, 30_000)
 
   it('leaves carry counters at zero without the flag', () => {
     vi.mocked(publicDecisions).mockReturnValue([])

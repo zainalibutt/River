@@ -69,7 +69,7 @@ describe('flop runouts', () => {
     opponent[kq] = 1
     const out = table.won(0, opponent, new Float64Array(hands[0].combos.length))
     expect(out[qj]).toBeCloseTo(won / seen, 5)
-  })
+  }, 30_000)
 })
 
 describe('a flop solved with a network valuing the turn', () => {

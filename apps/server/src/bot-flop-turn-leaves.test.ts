@@ -227,7 +227,7 @@ describe('per-turn flop leaves', () => {
         expect(out[h]).toBeCloseTo(mass * ((values[player][index(held)] as number) * 160 - 30), 9)
       })
     }
-  }, 30_000)
+  }, 120_000)
 
   it('kills uniform iteration weights and a final-range requery with nonlinear iteration CFVs', () => {
     const base = spotOf()

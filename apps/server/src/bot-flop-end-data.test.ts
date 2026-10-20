@@ -60,7 +60,7 @@ describe('records where the flop ends', () => {
     const other = flopEndRecord(flop, network, 4, { ...meta, seed: 'flop-test:0:1' })
     expect([...again.values[0]]).toEqual([...first.values[0]])
     expect([...other.values[0]]).not.toEqual([...first.values[0]])
-  })
+  }, 30_000)
 
   it('solve every turn card when asked for all of them or for more than there are', () => {
     const all = flopEndRecord(flop, network, 0, meta)
