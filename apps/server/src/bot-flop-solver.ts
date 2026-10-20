@@ -1,4 +1,5 @@
 import { cardKey, makeDeck, mulberry32, seedFromString } from '@river/engine'
+import { flopLayout } from './bot-flop-buckets.js'
 import {
   type RiverGadget,
   type RiverSolution,
@@ -15,12 +16,7 @@ import {
   runoutShowdownTable,
   type ShowdownTable,
 } from './bot-turn-solver.js'
-import {
-  bucketInputs,
-  bucketsFromRanks,
-  holdingValues,
-  type RiverValueNetwork,
-} from './bot-value-network.js'
+import { bucketInputs, holdingValues, type RiverValueNetwork } from './bot-value-network.js'
 
 /**
  * Lane B's flop solver (docs/handoff/ml-roadmap.md): CFR+ over the flop's
@@ -77,7 +73,7 @@ export function flopShowdown(
   if (network.checked !== undefined) {
     throw new Error('the flop solver takes a network without checked-down inputs')
   }
-  const layout = bucketsFromRanks(expectedStrengthRanks(turnRivers(spot.board)), network.buckets)
+  const layout = flopLayout(spot.board, expectedStrengthRanks(turnRivers(spot.board)), network)
   const reach = [new Float64Array(COMBOS), new Float64Array(COMBOS)] as const
   const met = new Float64Array(COMBOS)
   let indices: ReturnType<typeof holdingIndices> | undefined

@@ -22,6 +22,11 @@ export interface ValueNetworkLayer {
 }
 
 export interface RiverValueNetwork {
+  readonly flopBuckets?: {
+    readonly version: 1
+    readonly strength: number
+    readonly potential: number
+  }
   readonly buckets: number
   readonly layers: readonly ValueNetworkLayer[]
   /** For a turn-end network trained on two-dimensional buckets, their slices. */
@@ -37,6 +42,11 @@ export interface RiverValueNetwork {
 }
 
 export interface ValueNetworkDescription {
+  readonly flopBuckets?: {
+    readonly version: 1
+    readonly strength: number
+    readonly potential: number
+  }
   readonly buckets: number
   readonly turnBuckets?: { readonly strength: number; readonly potential: number }
   readonly checked?: boolean
@@ -80,7 +90,14 @@ export function valueNetworkFrom(
     })
   }
   if (layers.length === 0) throw new Error('value network has no layers')
+  if (
+    description.flopBuckets !== undefined &&
+    (description.flopBuckets.version !== 1 ||
+      description.flopBuckets.strength * description.flopBuckets.potential !== description.buckets)
+  )
+    throw new Error('invalid flop bucket metadata')
   return {
+    ...(description.flopBuckets === undefined ? {} : { flopBuckets: description.flopBuckets }),
     buckets: description.buckets,
     layers,
     ...(description.turnBuckets === undefined ? {} : { turnBuckets: description.turnBuckets }),

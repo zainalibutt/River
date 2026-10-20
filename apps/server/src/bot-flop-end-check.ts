@@ -1,17 +1,14 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { type Card, makeDeck } from '@river/engine'
+import { flopLayout } from './bot-flop-buckets.js'
 import {
   COMBOS,
   decodeRiverRecord,
   RIVER_RECORD_BYTES,
   type RiverRecord,
 } from './bot-river-value-data.js'
-import {
-  bucketInputs,
-  bucketsFromRanks,
-  holdingValues,
-  loadValueNetwork,
-} from './bot-value-network.js'
+import { bucketInputs, holdingValues, loadValueNetwork } from './bot-value-network.js'
 
 // Usage: tsx bot-flop-end-check.ts <exam dir> <flop-end network> [spots]
 //
@@ -24,6 +21,7 @@ const [examDir, networkStem, limitText] = process.argv.slice(2)
 if (!examDir || !networkStem) throw new Error('usage: <exam dir> <flop-end network> [spots]')
 const limit = limitText === undefined ? Number.POSITIVE_INFINITY : Number(limitText)
 const network = loadValueNetwork(networkStem)
+const deck = makeDeck()
 if (network.checked !== undefined)
   throw new Error('a flop-end network takes no checked-down values')
 
@@ -47,7 +45,11 @@ const totals = new Map(bands.map((band) => [band.name, { every: 0, live: 0, held
 const started = Date.now()
 for (const record of records) {
   if (record.board[3] !== 255) throw new Error(`spot ${record.spot} is not a flop-end record`)
-  const layout = bucketsFromRanks(record.strengthRank, network.buckets)
+  const layout = flopLayout(
+    record.board.slice(0, 3).map((key) => deck[key] as Card),
+    record.strengthRank,
+    network,
+  )
   const predicted = holdingValues(
     network,
     layout,

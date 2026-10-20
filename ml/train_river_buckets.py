@@ -16,6 +16,7 @@ the plain network's is. See docs/bots.md.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -184,6 +185,7 @@ def main() -> None:
         help="spots held out for validation (default a tenth); fewer keeps memory down on a large run",
     )
     parser.add_argument("--turn-buckets", default=None, help="e.g. 32x4: use the two-dimensional turn buckets' side files")
+    parser.add_argument("--flop-buckets", choices=["32x4"], help="D3 v1 next-card spread side files; flop-end only")
     parser.add_argument(
         "--checked",
         action="store_true",
@@ -204,11 +206,17 @@ def main() -> None:
         raise SystemExit("give at least one data folder and an output folder")
     # Turn-start targets share the row layout, but must never mix teachers or street endpoints.
     manifest = check_manifests(folders)
+    if args.flop_buckets and (args.turn_buckets or args.checked or manifest.get("kind") != "flop-end" or args.buckets != 128):
+        raise SystemExit("--flop-buckets requires flop-end, 128 buckets, no turn buckets or checked additions")
     paths = [path for folder in folders for path in shards(folder)]
     counts = [path.stat().st_size // RECORD.itemsize for path in paths]
     total = sum(counts)
+    if total < 20:
+        raise SystemExit("need at least 20 records")
     rng = np.random.default_rng(args.seed)
     torch.manual_seed(args.seed)
+    if args.flop_buckets or manifest.get("d3Snapshot") == 1:
+        torch.use_deterministic_algorithms(True)
     order = rng.permutation(total)
     held = max(10, total // 10) if args.held_out is None else max(10, min(args.held_out, total // 2))
     validation_index, training_index = np.sort(order[:held]), order[held:]
@@ -231,6 +239,16 @@ def main() -> None:
     for path, count in zip(paths, counts):
         records = records_for(path, count)
         ids = None if turn_buckets is None else bucket_ids_for(path, f"buckets{args.turn_buckets}", count)
+        if args.flop_buckets:
+            suffix = "flop-buckets-v1-32x4"
+            side = path.with_suffix(f".{suffix}")
+            meta = json.loads(Path(str(side) + ".json").read_text())
+            if (meta.get("version") != 1 or meta.get("source") != hashlib.sha256(path.read_bytes()).hexdigest()
+                    or meta.get("sha256") != hashlib.sha256(side.read_bytes()).hexdigest()):
+                raise ValueError(f"{side}: stale or corrupt D3 cache")
+            ids = bucket_ids_for(path, suffix, count)
+            if np.any((ids != 255) & (ids >= args.buckets)) or np.any((ids != 255) != (records["strength_rank"] > 0)):
+                raise ValueError(f"{side}: invalid D3 bucket ids or blocked holdings")
         checked = checked_for(path, count) if args.checked else None
         part = build(records, args.buckets, ids, checked, args.checked_inputs)
         for key in ("x", "y", "mask"):
@@ -337,6 +355,12 @@ def main() -> None:
                 "inputs": inputs,
                 "outputs": outputs,
                 "buckets": args.buckets,
+                **({} if not args.flop_buckets else {"flopBuckets": {"version": 1, "strength": 32, "potential": 4}}),
+                "seed": args.seed,
+                "epochs": args.epochs,
+                "trainingSpots": len(training_index),
+                "validationSpots": len(validation_index),
+                "splitSHA256": hashlib.sha256(order.astype("<i8").tobytes()).hexdigest(),
                 **({} if manifest.get("kind") != "turn-start" else {"target": manifest["target"]}),
                 **({} if turn_buckets is None else {"turnBuckets": turn_buckets}),
                 **({} if not args.checked else {"checked": True, "checkedInputs": args.checked_inputs or False}),
