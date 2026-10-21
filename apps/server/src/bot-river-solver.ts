@@ -378,17 +378,22 @@ export function solveRiver(
             regret[at] as number,
             ((values[action] as Float64Array)[h] as number) - (out[h] as number),
           )
-          sum[at] =
-            discount * (sum[at] as number) + weight * (self[h] as number) * (strategy[at] as number)
         }
       }
       return out
     }
+    // For each iteration sample, (strategy sums of p, carried reach of p,
+    // CFVs of the opponent) all use sigma_p^(snapshot) and
+    // sigma_opp^(snapshot) of this same opponent-traversal pass. Alternating
+    // regret updates stay in place; averaging p on its own pass would instead
+    // mix its pre-update reach with the CFVs seen after its regret update.
     out.fill(0)
     for (let action = 0; action < width; action += 1) {
       const next = reach[action] as Float64Array
       for (let o = 0; o < count; o += 1) {
-        next[o] = (opponent[o] as number) * (strategy[o * width + action] as number)
+        const at = o * width + action
+        next[o] = (opponent[o] as number) * (strategy[at] as number)
+        sum[at] = discount * (sum[at] as number) + weight * (next[o] as number)
       }
       let nextFixed: Float64Array | null = null
       if (fixed !== null && node.fixed !== null) {
@@ -440,6 +445,10 @@ export function solveRiver(
         const up = Math.max(0, followRegret[o] as number)
         const down = Math.max(0, takeRegret[o] as number)
         follow[o] = up + down > 0 ? up / (up + down) : 0.5
+        // The other player's pass samples the resolved player's strategy and
+        // reach, including this root choice. Average exactly that follow value,
+        // before either the resolved subtree or the gadget regrets are updated.
+        followSum[o] = discount * (followSum[o] as number) + weight * (follow[o] as number)
       }
       walk(root, other, hands[other].weights, follow, null, weight)
       const played = walk(root, resolved, follow, hands[other].weights, null, weight)
@@ -449,7 +458,6 @@ export function solveRiver(
           (follow[o] as number) * (played[o] as number) + (1 - (follow[o] as number)) * taken
         followRegret[o] = updatedRegret(followRegret[o] as number, (played[o] as number) - value)
         takeRegret[o] = updatedRegret(takeRegret[o] as number, taken - value)
-        followSum[o] = discount * (followSum[o] as number) + weight * (follow[o] as number)
       }
     }
     followShareOut = Float64Array.from(followSum, (sum) => sum / averageWeight)

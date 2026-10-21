@@ -335,8 +335,6 @@ it.each([{}, { alpha: 0.7, beta: -0.4, gamma: 1.2 }])(
       const total = (positive[0] as number) + (positive[1] as number)
       const left = total > 0 ? (positive[0] as number) / total : 0.5
       expectedVisits.push(left)
-      // Closed form after T: the common (T+1)^-gamma cancels.
-      expectedLeft += t ** gamma * left
       normalizer += t ** gamma
       const value = left * (payoffs[0] as number) + (1 - left) * (payoffs[1] as number)
       for (let a = 0; a < 2; a += 1) {
@@ -344,6 +342,13 @@ it.each([{}, { alpha: 0.7, beta: -0.4, gamma: 1.2 }])(
         const power = t ** (accumulated >= 0 ? alpha : beta)
         regrets[a] = (accumulated * power) / (power + 1)
       }
+      // Player 1 sees player 0 after this update. Its traversal samples
+      // player 0's average strategy, while the learning visits remain above.
+      const next = regrets.map((r) => Math.max(0, r))
+      const nextTotal = (next[0] as number) + (next[1] as number)
+      const sampledLeft = nextTotal > 0 ? (next[0] as number) / nextTotal : 0.5
+      // Closed form after T: the common (T+1)^-gamma cancels.
+      expectedLeft += t ** gamma * sampledLeft
     })
     let iteration = -1
     const visits: number[] = []

@@ -122,7 +122,9 @@ describe.each(['cfr+', 'dcfr'] as const)('%s policy carry', (scheme) => {
       1,
       {
         scheme,
-        iterations: 2,
+        // The cache fixture needs a supported check-check line. Sampling the
+        // other traversal can give it zero reach in a two-iteration gadget.
+        iterations: safeTurn ? 8 : 2,
         betSizes: [0.5],
         maxRaises: 0,
         ...(carry ? { carry: 'per-turn' as const, turnStartNetwork: network } : {}),
@@ -209,6 +211,7 @@ describe.each(['cfr+', 'dcfr'] as const)('%s policy carry', (scheme) => {
         turn.policy.decide(context(riverView))
         expect(river.stats.carryUsed).toBe(1) // counters measure solves, not cached decisions
       },
+      30_000,
     )
 
     it('carries an exact called flop bet into the increased turn pot', () => {

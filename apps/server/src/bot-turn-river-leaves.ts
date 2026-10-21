@@ -22,6 +22,7 @@ interface CarriedLeaf {
   readonly paid: readonly [number, number]
   readonly present: readonly [Uint8Array, Uint8Array]
   readonly reach: readonly [Float64Array, Float64Array]
+  /** Sample weights for reach[p] and cards[c][1-p], taken in the same pass. */
   readonly weight: [number, number]
   readonly cards: Map<number, readonly [Float64Array, Float64Array]>
 }
@@ -148,14 +149,15 @@ export function perCardShowdown(
         }
         record.leaves.set(visit.history, leaf)
       }
-      // Same recurrence as solveRiver's strategy sums. DCFR sample s at T
+      // Pair opponent reach with this traverser's CFVs from the same pass,
+      // matching the opponent's strategy sums in solveRiver. DCFR sample s at T
       // weighs (s/(T+1))^gamma; CFR+ weighs s. Never average final queries.
       const discount = visit.discount ?? 1
-      leaf.weight[traverser] = discount * leaf.weight[traverser] + visit.weight
-      for (let h = 0; h < self.length; h += 1) {
-        const index = indices[traverser][h] as number
-        leaf.reach[traverser][index] =
-          discount * (leaf.reach[traverser][index] as number) + visit.weight * (self[h] as number)
+      leaf.weight[other] = discount * leaf.weight[other] + visit.weight
+      for (let h = 0; h < opponent.length; h += 1) {
+        const index = indices[other][h] as number
+        leaf.reach[other][index] =
+          discount * (leaf.reach[other][index] as number) + visit.weight * (opponent[h] as number)
       }
     }
     // A branch the traverser never plays still needs values for its regrets, so,
@@ -306,7 +308,7 @@ export function carriedPromises(
       0,
       total - (perCard[a] as number) - (perCard[b] as number) + (reach[o] as number),
     )
-    const value = (sums[other][o] as number) / leaf.weight[other]
+    const value = (sums[other][o] as number) / leaf.weight[player]
     masses[o] = mass
     cfvs[o] = value
     if (mass <= 0) continue
