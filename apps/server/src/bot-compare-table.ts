@@ -44,6 +44,20 @@ export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
       riverNetwork: riverNetworkFromEnvironment(),
     }).policy
   },
+  /** v9f at live speed: Discounted CFR with 40 rounds on the flop and the turn. */
+  get v9g() {
+    const turnStartNetwork = turnStartNetworkFromEnvironment()
+    const flop = process.env.RIVER_FLOP_NETWORK
+    if (!flop)
+      throw new Error('v9g needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
+    return solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flop), {
+      carry: 'both',
+      turnStartNetwork,
+      riverNetwork: riverNetworkFromEnvironment(),
+      scheme: 'dcfr',
+      iterations: 40,
+    }).policy
+  },
   /** v9d chain with opt-in inherited per-river turn promises. Loaded only when selected. */
   get v9e() {
     const flop = process.env.RIVER_FLOP_NETWORK
