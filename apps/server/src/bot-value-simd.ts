@@ -1,5 +1,10 @@
 import type { RiverValueNetwork, ValueNetworkLayer } from './bot-value-network.js'
 import { VALUE_SIMD_BASE64 } from './bot-value-simd-bytes.js'
+import {
+  requestedValueThreads,
+  ValueWorkerPool,
+  valueWorkerFinalizer,
+} from './bot-value-workers.js'
 
 interface Kernel {
   memory: WebAssembly.Memory
@@ -130,6 +135,19 @@ class SimdNetwork {
 }
 
 const backends = new WeakMap<RiverValueNetwork, SimdNetwork | null>()
+const pools = new WeakMap<RiverValueNetwork, ValueWorkerPool | null>()
+
+/** Actual active participants after the first batch; TS fallback always uses one. */
+export function valueNetworkThreads(network: RiverValueNetwork): number {
+  return pools.get(network)?.threads ?? 1
+}
+
+/** Explicit shutdown for owners that unload models, and bounded test cleanup. */
+export function closeValueNetworkWorkers(network: RiverValueNetwork): void {
+  pools.get(network)?.close()
+  pools.set(network, null)
+  valueWorkerFinalizer.unregister(network)
+}
 
 /** Selection is fixed at first use; forced WASM fails visibly if unavailable. */
 function backend(network: RiverValueNetwork): SimdNetwork | null {
@@ -165,5 +183,24 @@ export function simdForwardBatch(
   buffers: readonly Float32Array[],
   outputRows?: Uint8Array,
 ): Float32Array | undefined {
-  return backend(network)?.forward(input, batch, buffers, outputRows)
+  const selected = backend(network)
+  if (selected === null) return undefined
+  let pool = pools.get(network)
+  if (pool === undefined) {
+    pool = null
+    const threads = requestedValueThreads()
+    if (threads > 1) {
+      try {
+        pool = new ValueWorkerPool(network, module() as WebAssembly.Module, threads)
+        valueWorkerFinalizer.register(network, pool, network)
+      } catch {
+        // Workers are optional, including in runtimes that prohibit their startup.
+      }
+    }
+    pools.set(network, pool)
+  }
+  const parallel = pool?.forward(network, input, batch, buffers, outputRows, (...args) =>
+    selected.forward(...args),
+  )
+  return parallel ?? selected.forward(input, batch, buffers, outputRows)
 }

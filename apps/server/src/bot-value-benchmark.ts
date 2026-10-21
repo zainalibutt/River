@@ -3,20 +3,25 @@ import { perTurnShowdown } from './bot-flop-turn-leaves.js'
 import { type RangeCombo, type RiverNode, type RiverSpot, solveRiver } from './bot-river-solver.js'
 import { perRiverShowdown } from './bot-turn-river-leaves.js'
 import { loadValueNetwork } from './bot-value-network.js'
-import { valueNetworkBackend } from './bot-value-simd.js'
+import {
+  closeValueNetworkWorkers,
+  valueNetworkBackend,
+  valueNetworkThreads,
+} from './bot-value-simd.js'
 
 // Reusable bounded CLI (set RIVER_VALUE_BACKEND=ts or wasm before each process):
 // cmd /c npx tsx apps/server/src/bot-value-benchmark.ts turn <model-stem> 100
 // cmd /c npx tsx apps/server/src/bot-value-benchmark.ts flop <model-stem> 25
-const [street, stem, count] = process.argv.slice(2)
+const [street, stem, count, scheme = 'cfr+'] = process.argv.slice(2)
 const iterations = Number(count)
 if (
   (street !== 'turn' && street !== 'flop') ||
   !stem ||
   !Number.isSafeInteger(iterations) ||
-  iterations < 1
+  iterations < 1 ||
+  (scheme !== 'cfr+' && scheme !== 'dcfr')
 ) {
-  throw new Error('usage: bot-value-benchmark.ts turn|flop <model-stem> <iterations>')
+  throw new Error('usage: bot-value-benchmark.ts turn|flop <model-stem> <iterations> [cfr+|dcfr]')
 }
 const board = (street === 'turn' ? 'Ah Kd 7s 4c' : 'Ah Kd 7s').split(' ').map(parseCard)
 const blocked = new Set(board.map(cardKey))
@@ -41,7 +46,7 @@ const backend = valueNetworkBackend(network)
 const start = performance.now()
 const leaves = street === 'turn' ? perRiverShowdown(spot, network) : perTurnShowdown(spot, network)
 const ready = performance.now()
-const solution = solveRiver(spot, iterations, undefined, leaves)
+const solution = solveRiver(spot, iterations, undefined, leaves, undefined, undefined, { scheme })
 const done = performance.now()
 let actions = 0
 let showdowns = 0
@@ -57,6 +62,9 @@ console.log(
     node: process.version,
     street,
     backend,
+    threads: valueNetworkThreads(network),
+    requestedThreads: process.env.RIVER_VALUE_THREADS ?? '1',
+    scheme,
     stem,
     iterations,
     holdings: range.length,
@@ -73,3 +81,4 @@ console.log(
     rssMiB: process.memoryUsage().rss / 1048576,
   }),
 )
+closeValueNetworkWorkers(network)

@@ -148,7 +148,9 @@ export function forward(
  * share each weight load in the TS fallback. WASM uses f32x4 accumulation.
  * Buffers belong to the caller and can be reused per visit. Backend selection
  * is cached per network on first call (RIVER_VALUE_BACKEND=ts|wasm, auto by default).
- * Network weights must remain immutable thereafter. Single-threaded use only.
+ * Network weights must remain immutable thereafter. Calls are synchronous and
+ * non-reentrant. RIVER_VALUE_THREADS=N opts into N participants (including main)
+ * for row-partitioned WASM inference, with a private WASM instance per worker.
  * With outputRows, final-layer rows marked zero are left untouched; the caller
  * must only read requested rows. Hidden layers always compute every row.
  */
