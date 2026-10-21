@@ -71,7 +71,7 @@ export function perRiverShowdown(
   )
 }
 
-/** Shared exact public-card integration, batching, and linear-CFR recording. */
+/** Shared exact public-card integration, batching, and CFR averaging records. */
 export function perCardShowdown(
   spot: RiverSpot,
   riverNetwork: RiverValueNetwork | RiverLeafEvaluator,
@@ -148,15 +148,14 @@ export function perCardShowdown(
         }
         record.leaves.set(visit.history, leaf)
       }
-      // solveRiver passes t on iteration t, and adds t * self * strategy to
-      // its average-strategy sums. Record CFVs with t too, not final queries.
-      // The weighted mean self reach equals prior times average strategy along
-      // this line (the reach-weighted strategy sums telescope).
-      leaf.weight[traverser] += visit.weight
+      // Same recurrence as solveRiver's strategy sums. DCFR sample s at T
+      // weighs (s/(T+1))^gamma; CFR+ weighs s. Never average final queries.
+      const discount = visit.discount ?? 1
+      leaf.weight[traverser] = discount * leaf.weight[traverser] + visit.weight
       for (let h = 0; h < self.length; h += 1) {
         const index = indices[traverser][h] as number
         leaf.reach[traverser][index] =
-          (leaf.reach[traverser][index] as number) + visit.weight * (self[h] as number)
+          discount * (leaf.reach[traverser][index] as number) + visit.weight * (self[h] as number)
       }
     }
     // A branch the traverser never plays still needs values for its regrets, so,
@@ -251,7 +250,8 @@ export function perCardShowdown(
         const value = (met[h] as number) * (predicted * total - node.paid[traverser])
         out[h] = (out[h] as number) + value / chanceCards
         if (sums !== undefined && visit !== undefined) {
-          sums[traverser][index] = (sums[traverser][index] as number) + visit.weight * value
+          sums[traverser][index] =
+            (visit.discount ?? 1) * (sums[traverser][index] as number) + visit.weight * value
         }
       }
     }

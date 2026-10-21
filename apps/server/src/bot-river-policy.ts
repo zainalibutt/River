@@ -25,6 +25,7 @@ import {
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
 import type { RiverCarrySource } from './bot-river-carry.js'
 import {
+  type CfrOptions,
   comboIndex,
   type Hands,
   prepare,
@@ -47,7 +48,7 @@ import {
  * their cards, and with `readsWidenRanges` an opponent the reads show betting
  * and raising more than a typical player gets more of that doubt.
  */
-export interface RiverPolicyTuning {
+export interface RiverPolicyTuning extends CfrOptions {
   /**
    * Use the per-holding re-solving gadget (lane B), with reads and added air
    * off. Without `carry`, promises retain the historical refreshed-solve path;
@@ -427,18 +428,31 @@ function solveSpot(
   if (spot.ranges[0].length === 0 || spot.ranges[1].length === 0) return 'empty range'
   const model =
     safe || reads === null || reads.trust <= 0 ? undefined : readsModel(reads, spot, opponent)
-  const guessed = carry === null ? solveRiver(spot, tuning.iterations, model) : undefined
-  let solution = guessed ?? solveRiver(spot, tuning.iterations, undefined, undefined, carry?.gadget)
+  const guessed =
+    carry === null
+      ? solveRiver(spot, tuning.iterations, model, undefined, undefined, undefined, tuning)
+      : undefined
+  let solution =
+    guessed ??
+    solveRiver(spot, tuning.iterations, undefined, undefined, carry?.gadget, undefined, tuning)
   if (safe && guessed !== undefined) {
     // Historical fallback: refreshed values, not inherited earlier-street bounds.
     // Preserve this path for existing policies and count opt-in carry misses.
     const promises = riverValues(guessed).values[opponent]
     const flat = [...spot.ranges] as [RiverSpot['ranges'][0], RiverSpot['ranges'][1]]
     flat[opponent] = flat[opponent].map((entry) => ({ ...entry, weight: 1 }))
-    solution = solveRiver({ ...spot, ranges: flat }, tuning.iterations, undefined, undefined, {
-      player: opponent,
-      promises,
-    })
+    solution = solveRiver(
+      { ...spot, ranges: flat },
+      tuning.iterations,
+      undefined,
+      undefined,
+      {
+        player: opponent,
+        promises,
+      },
+      undefined,
+      tuning,
+    )
   }
   stats.solveMs += performance.now() - tracked
   stats.solves += 1

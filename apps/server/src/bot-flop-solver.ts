@@ -1,6 +1,7 @@
 import { cardKey, makeDeck, mulberry32, seedFromString } from '@river/engine'
 import { flopLayout } from './bot-flop-buckets.js'
 import {
+  type CfrOptions,
   type RiverGadget,
   type RiverSolution,
   type RiverSpot,
@@ -33,9 +34,18 @@ export function solveFlop(
   network: RiverValueNetwork,
   gadget?: RiverGadget,
   runouts = FLOP_ALL_IN_RUNOUTS,
+  options?: CfrOptions,
 ): RiverSolution & { readonly followShare?: Float64Array } {
   if (spot.board.length !== 3) throw new Error('a flop solve takes a three-card board')
-  return solveRiver(spot, iterations, undefined, flopShowdown(spot, network, runouts), gadget)
+  return solveRiver(
+    spot,
+    iterations,
+    undefined,
+    flopShowdown(spot, network, runouts),
+    gadget,
+    undefined,
+    options,
+  )
 }
 
 /** Turn and river cards an all-in on the flop is averaged over, of the 1,176 there are. */

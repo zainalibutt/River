@@ -1,4 +1,5 @@
 import {
+  type CfrOptions,
   type Hands,
   type RiverOpponentModel,
   type RiverSolution,
@@ -23,8 +24,17 @@ export function solveTurn(
   iterations: number,
   network: RiverValueNetwork,
   model?: RiverOpponentModel,
+  options?: CfrOptions,
 ): RiverSolution {
-  return solveRiver(spot, iterations, model, turnShowdown(spot, network))
+  return solveRiver(
+    spot,
+    iterations,
+    model,
+    turnShowdown(spot, network),
+    undefined,
+    undefined,
+    options,
+  )
 }
 
 /** Every prepared holding's place among the 1,326, by player. */

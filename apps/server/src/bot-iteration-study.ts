@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url'
 import { cardKey } from '@river/engine'
 import { FLOP_DATA_TURN } from './bot-flop-end-data.js'
 import {
+  type CfrOptions,
   compatibleMasses,
   type RiverNode,
   type RiverSolution,
@@ -82,17 +83,24 @@ export function studySpot(
   spot: RiverSpot,
   network: RiverValueNetwork | RiverLeafEvaluator,
   iterations: readonly number[],
+  scheme: NonNullable<CfrOptions['scheme']> | readonly NonNullable<CfrOptions['scheme']>[] = 'cfr+',
 ) {
-  const counts = [...new Set([...iterations, REFERENCE])]
-  const runs = counts.map((k) => {
+  const counts = [...new Set(iterations)]
+  const schemes = typeof scheme === 'string' ? [scheme] : scheme
+  const configurations = schemes.flatMap((scheme) => counts.map((k) => ({ k, scheme })))
+  if (!configurations.some((run) => run.k === REFERENCE && run.scheme === 'cfr+')) {
+    configurations.push({ k: REFERENCE, scheme: 'cfr+' })
+  }
+  const runs = configurations.map(({ k, scheme }) => {
     const start = performance.now()
     const record = createRiverPromiseRecord()
     const evaluator = perRiverShowdown(spot, network, record)
-    const solution = solveRiver(spot, k, undefined, evaluator)
+    const solution = solveRiver(spot, k, undefined, evaluator, undefined, undefined, { scheme })
     const solveMs = performance.now() - start
     // Reporting queries do not carry a CFR visit and therefore cannot alter the record.
     return {
       k,
+      scheme,
       solution,
       record,
       solveMs,
@@ -100,7 +108,7 @@ export function studySpot(
       exploitabilityPctPot: 200 * riverReport(solution).exploitability,
     }
   })
-  const reference = runs.find((run) => run.k === REFERENCE)
+  const reference = runs.find((run) => run.k === REFERENCE && run.scheme === 'cfr+')
   if (!reference) throw new Error('missing reference')
   const line = closedLine(reference.solution, reference.values)
   const leaf = reference.record.leaves.get(line)
@@ -156,6 +164,7 @@ export function studySpot(
       })
       return {
         k: run.k,
+        scheme: run.scheme,
         solveMs: run.solveMs,
         exploitabilityPctPot: run.exploitabilityPctPot,
         cfvMaePots,
@@ -173,13 +182,23 @@ export interface StudyOptions {
   seed: string
   spots: number
   iterations: number[]
+  scheme?: NonNullable<CfrOptions['scheme']>
+  /** Benchmark both schemes with one shared CFR+ reference per spot. */
+  compare?: boolean
 }
 
 export function parseArgs(args: string[]): StudyOptions {
-  const [network, seed, spotsText = '60', kText = DEFAULT_K.join(','), ...extra] = args
+  const positional = [...args]
+  const compareIndex = positional.indexOf('--compare')
+  const compare = compareIndex >= 0
+  if (compare) positional.splice(compareIndex, 1)
+  const schemeIndex = positional.indexOf('--scheme')
+  const scheme = schemeIndex < 0 ? 'cfr+' : positional.splice(schemeIndex, 2)[1]
+  const [network, seed, spotsText = '60', kText = DEFAULT_K.join(','), ...extra] = positional
   const spots = Number(spotsText)
   const iterations = kText.split(',').map(Number)
   if (
+    (scheme !== 'cfr+' && scheme !== 'dcfr') ||
     !network ||
     !seed ||
     extra.length ||
@@ -189,10 +208,10 @@ export function parseArgs(args: string[]): StudyOptions {
     iterations.some((k) => !Number.isSafeInteger(k) || k < 1)
   ) {
     throw new Error(
-      'usage: bot-iteration-study.ts <river network stem> <seed> [spots=60] [K=25,40,50,100,400]',
+      'usage: bot-iteration-study.ts <river network stem> <seed> [spots=60] [K=25,40,50,100,400] [--scheme cfr+|dcfr] [--compare]',
     )
   }
-  return { network, seed, spots, iterations: [...new Set(iterations)] }
+  return { network, seed, spots, iterations: [...new Set(iterations)], scheme, compare }
 }
 
 export function runStudy(
@@ -207,14 +226,20 @@ export function runStudy(
   const start = performance.now()
   const spots = Array.from({ length: options.spots }, (_, i) => {
     const seed = `${options.seed}:0:${i}`
-    const result = studySpot(sample(seed), network, options.iterations)
+    const result = studySpot(
+      sample(seed),
+      network,
+      options.iterations,
+      options.compare ? ['cfr+', 'dcfr'] : options.scheme,
+    )
     progress(`spot ${i + 1}/${options.spots} complete`)
     return { seed, ...result }
   })
-  const byK = spots[0]?.runs.map(({ k }, index) => {
+  const byK = spots[0]?.runs.map(({ k, scheme }, index) => {
     const rows = spots.map((s) => s.runs[index] as (typeof s.runs)[number])
     return {
       k,
+      scheme,
       exploitabilityPctPot: summarize(rows.map((r) => r.exploitabilityPctPot)),
       cfvMaePots: [0, 1].map((p) => summarize(rows.map((r) => r.cfvMaePots[p] as number))),
       rootTv: summarize(rows.map((r) => r.rootTv)),
@@ -234,6 +259,7 @@ export function runStudy(
     schemaVersion: 1,
     options,
     referenceIterations: REFERENCE,
+    referenceScheme: 'cfr+',
     backend: process.env.RIVER_VALUE_BACKEND ?? 'auto',
     sampling: { settings: RIVER_DATA_SETTINGS, tree: FLOP_DATA_TURN, spotSeed: '<seed>:0:<spot>' },
     definitions: {

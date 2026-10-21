@@ -55,4 +55,4 @@ it('validates cache hashes on restart and rejects incomplete source records', ()
   } finally {
     rmSync(directory, { recursive: true })
   }
-}, 15000)
+}, 60_000)

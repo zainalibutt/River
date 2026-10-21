@@ -33,6 +33,7 @@ import {
   translate,
 } from './bot-river-policy.js'
 import {
+  type CfrOptions,
   comboIndex,
   type Hands,
   type Player,
@@ -65,7 +66,7 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  * trust the evidence earns, and plays freely otherwise, a restricted Nash
  * response, so a wrong read costs little.
  */
-export interface TurnPolicyTuning {
+export interface TurnPolicyTuning extends CfrOptions {
   readonly carry?: 'per-river' | 'per-turn' | 'both'
   readonly riverNetwork?: RiverValueNetwork
   readonly turnStartNetwork?: RiverValueNetwork
@@ -118,6 +119,7 @@ export interface StreetSetup {
     network: RiverValueNetwork,
     model?: RiverOpponentModel,
     gadget?: RiverGadget,
+    options?: CfrOptions,
   ) => RiverSolution
   readonly known: KnownShares
   readonly safe: boolean
@@ -126,17 +128,17 @@ export interface StreetSetup {
 
 export const TURN_STREET: StreetSetup = {
   street: 'turn',
-  solve: (spot, iterations, network, model, gadget) =>
-    solveRiver(spot, iterations, model, turnShowdown(spot, network), gadget),
+  solve: (spot, iterations, network, model, gadget, options) =>
+    solveRiver(spot, iterations, model, turnShowdown(spot, network), gadget, undefined, options),
   known: () => null,
   safe: false,
 }
 
 export const FLOP_STREET: StreetSetup = {
   street: 'flop',
-  solve: (spot, iterations, network, model, gadget) => {
+  solve: (spot, iterations, network, model, gadget, options) => {
     if (model !== undefined) throw new Error('the flop solver takes no opponent model')
-    return solveFlop(spot, iterations, network, gadget)
+    return solveFlop(spot, iterations, network, gadget, undefined, options)
   },
   known: () => null,
   safe: false,
@@ -440,9 +442,16 @@ export function solvedTurnPolicy(
     pokerGuardPolicy,
     'river-solver',
     1,
-    overrides.carry === 'per-river' || overrides.carry === 'both'
-      ? { ...RIVER_CANDIDATE_TUNING, safe: true, carry: 'per-river' }
-      : RIVER_CANDIDATE_TUNING,
+    {
+      ...RIVER_CANDIDATE_TUNING,
+      scheme: overrides.scheme ?? 'cfr+',
+      ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
+      ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),
+      ...(overrides.gamma === undefined ? {} : { gamma: overrides.gamma }),
+      ...(overrides.carry === 'per-river' || overrides.carry === 'both'
+        ? { safe: true, carry: 'per-river' as const }
+        : {}),
+    },
     handover
       ? (decision, taken, personality) => turn?.ownShares(decision, taken, personality) ?? null
       : undefined,
@@ -679,7 +688,7 @@ function solveTurnSpot(
     const perTurn =
       street.street === 'flop' && (tuning.carry === 'per-turn' || tuning.carry === 'both')
     if (!perRiver && !perTurn) {
-      return street.solve(target, tuning.iterations, network, opponentModel, gadget)
+      return street.solve(target, tuning.iterations, network, opponentModel, gadget, tuning)
     }
     const leafNetwork = perRiver ? tuning.riverNetwork : tuning.turnStartNetwork
     if (leafNetwork === undefined)
@@ -697,6 +706,8 @@ function solveTurnSpot(
         ? perRiverShowdown(target, leafNetwork, record)
         : perTurnShowdown(target, leafNetwork, record),
       gadget,
+      undefined,
+      tuning,
     )
   }
   let solution = solve(spot, model, carry?.gadget)
@@ -750,6 +761,10 @@ export function solvedFlopPolicy(
     1,
     {
       ...RIVER_CANDIDATE_TUNING,
+      scheme: overrides.scheme ?? 'cfr+',
+      ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
+      ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),
+      ...(overrides.gamma === undefined ? {} : { gamma: overrides.gamma }),
       safe: true,
       ...(overrides.carry === 'per-river' || overrides.carry === 'both'
         ? { carry: 'per-river' as const }
@@ -778,7 +793,14 @@ export function solvedFlopPolicy(
     flopNetwork,
     'flop-solver',
     1,
-    overrides.carry === 'per-turn' || overrides.carry === 'both' ? overrides : {},
+    overrides.carry === 'per-turn' || overrides.carry === 'both'
+      ? overrides
+      : {
+          scheme: overrides.scheme ?? 'cfr+',
+          ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
+          ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),
+          ...(overrides.gamma === undefined ? {} : { gamma: overrides.gamma }),
+        },
     FLOP_STREET,
   )
   return { ...flop, turn: turn.stats, river: river.stats }

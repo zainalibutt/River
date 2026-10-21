@@ -29,6 +29,22 @@ export interface RiverSpot {
 
 export type Player = 0 | 1
 
+/** Brown & Sandholm (2019); omitted options preserve linear-average CFR+. */
+export interface CfrOptions {
+  readonly scheme?: 'cfr+' | 'dcfr'
+  readonly alpha?: number
+  readonly beta?: number
+  readonly gamma?: number
+}
+
+export interface CfrVisit {
+  readonly history: string
+  /** New sample coefficient after this iteration's discount. */
+  readonly weight: number
+  /** Multiply previous sums by this before adding the new sample. */
+  readonly discount?: number
+}
+
 /**
  * A known way one player plays the river, for exploiting them. With
  * probability `weight` they follow `strategy`; otherwise they play as the
@@ -143,7 +159,7 @@ type Compiled =
   | {
       readonly kind: 'terminal'
       readonly node: Exclude<RiverNode, { kind: 'action' }>
-      readonly visit: { history: string; weight: number }
+      readonly visit: { history: string; weight: number; discount: number }
       readonly out: readonly [Float64Array, Float64Array]
     }
   | {
@@ -174,7 +190,8 @@ function compile(
     new Float64Array(hands[0].combos.length),
     new Float64Array(hands[1].combos.length),
   ] as const
-  if (node.kind !== 'action') return { kind: 'terminal', node, out, visit: { history, weight: 0 } }
+  if (node.kind !== 'action')
+    return { kind: 'terminal', node, out, visit: { history, weight: 0, discount: 1 } }
   const width = node.actions.length
   const count = hands[node.player].combos.length
   const modelled = model !== undefined && model.player === node.player
@@ -212,7 +229,7 @@ export type ShowdownValues = (
   opponent: Float64Array,
   out: Float64Array,
   /** Present only during CFR, not when reading values from the average solution. */
-  visit?: { readonly history: string; readonly weight: number },
+  visit?: CfrVisit,
 ) => void
 
 /**
@@ -237,7 +254,7 @@ export interface RiverGadget {
 }
 
 /**
- * Runs CFR+ on a river spot for `iterations` and returns the average strategy.
+ * Runs CFR+ by default, or DCFR via `options`, returning the average strategy.
  * With a `model`, the other player's strategy is the restricted Nash response
  * to it. With `showdown`, closed betting is valued by it instead of by a
  * showdown on the board, so the same betting can be solved a street earlier.
@@ -253,6 +270,7 @@ export function solveRiver(
   gadget?: RiverGadget,
   /** Optional extensive-form tree; terminal values still use the production CFR/gadget. */
   tree: RiverNode = riverTree(spot),
+  options: CfrOptions = {},
 ): RiverSolution & { readonly followShare?: Float64Array } {
   if (gadget !== undefined && model !== undefined) {
     throw new Error('a re-solve takes promises or an opponent model, not both')
@@ -260,6 +278,31 @@ export function solveRiver(
   const hands = [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)] as const
   if (gadget !== undefined && gadget.promises.length !== hands[gadget.player].combos.length) {
     throw new Error('one promise per holding of the re-solved player')
+  }
+  const dcfr = options.scheme === 'dcfr'
+  const { alpha = 1.5, beta = 0, gamma = 2 } = options
+  if (![alpha, beta, gamma].every(Number.isFinite)) throw new Error('finite CFR exponents required')
+  let discount = 1
+  let positiveDiscount = 1
+  let negativeDiscount = 1
+  let averageWeight = 0
+  // End-of-iteration discount: S_t = d_t (S_(t-1) + x_t).
+  // A sample s has coefficient product_(u=s..T) (u/(u+1))^gamma
+  // = (s/(T+1))^gamma. Use this recurrence for strategy, CFVs, reach,
+  // and gadget follow sums, so their normalized weights are identical.
+  const beginIteration = (t: number) => {
+    discount = dcfr ? (t / (t + 1)) ** gamma : 1
+    const positive = t ** alpha
+    const negative = t ** beta
+    positiveDiscount = positive / (positive + 1)
+    negativeDiscount = negative / (negative + 1)
+    const weight = dcfr ? discount : t
+    averageWeight = discount * averageWeight + weight
+    return weight
+  }
+  const updatedRegret = (previous: number, delta: number) => {
+    const next = previous + delta
+    return dcfr ? next * (next >= 0 ? positiveDiscount : negativeDiscount) : Math.max(0, next)
   }
   const scratch = scratchFor(hands)
   const root = compile(tree, hands, model)
@@ -285,6 +328,7 @@ export function solveRiver(
       }
       if (showdown !== undefined && node.node.kind === 'showdown') {
         node.visit.weight = weight
+        node.visit.discount = discount
         showdown(node.node, traverser, hands, self, reach, out, node.visit)
       } else {
         terminalInto(node.node, traverser, hands, reach, spot.pot, scratch, out)
@@ -330,13 +374,12 @@ export function solveRiver(
       for (let h = 0; h < count; h += 1) {
         for (let action = 0; action < width; action += 1) {
           const at = h * width + action
-          regret[at] = Math.max(
-            0,
-            (regret[at] as number) +
-              ((values[action] as Float64Array)[h] as number) -
-              (out[h] as number),
+          regret[at] = updatedRegret(
+            regret[at] as number,
+            ((values[action] as Float64Array)[h] as number) - (out[h] as number),
           )
-          sum[at] = (sum[at] as number) + weight * (self[h] as number) * (strategy[at] as number)
+          sum[at] =
+            discount * (sum[at] as number) + weight * (self[h] as number) * (strategy[at] as number)
         }
       }
       return out
@@ -374,8 +417,9 @@ export function solveRiver(
   let followShareOut: Float64Array | undefined
   if (gadget === undefined) {
     for (let iteration = 1; iteration <= iterations; iteration += 1) {
-      walk(root, 0, hands[0].weights, free1, fixed1, iteration)
-      walk(root, 1, hands[1].weights, free0, fixed0, iteration)
+      const weight = beginIteration(iteration)
+      walk(root, 0, hands[0].weights, free1, fixed1, weight)
+      walk(root, 1, hands[1].weights, free0, fixed0, weight)
     }
   } else {
     // The gadget's choice, per holding of the re-solved player: regrets for
@@ -391,24 +435,24 @@ export function solveRiver(
     // player's reach, so each is scaled by the reach that holding can meet.
     const meets = compatibleMasses(hands[resolved], hands[other], hands[other].weights)
     for (let iteration = 1; iteration <= iterations; iteration += 1) {
+      const weight = beginIteration(iteration)
       for (let o = 0; o < count; o += 1) {
         const up = Math.max(0, followRegret[o] as number)
         const down = Math.max(0, takeRegret[o] as number)
         follow[o] = up + down > 0 ? up / (up + down) : 0.5
       }
-      walk(root, other, hands[other].weights, follow, null, iteration)
-      const played = walk(root, resolved, follow, hands[other].weights, null, iteration)
+      walk(root, other, hands[other].weights, follow, null, weight)
+      const played = walk(root, resolved, follow, hands[other].weights, null, weight)
       for (let o = 0; o < count; o += 1) {
         const taken = (gadget.promises[o] as number) * (meets[o] as number)
         const value =
           (follow[o] as number) * (played[o] as number) + (1 - (follow[o] as number)) * taken
-        followRegret[o] = Math.max(0, (followRegret[o] as number) + (played[o] as number) - value)
-        takeRegret[o] = Math.max(0, (takeRegret[o] as number) + taken - value)
-        followSum[o] = (followSum[o] as number) + iteration * (follow[o] as number)
+        followRegret[o] = updatedRegret(followRegret[o] as number, (played[o] as number) - value)
+        takeRegret[o] = updatedRegret(takeRegret[o] as number, taken - value)
+        followSum[o] = discount * (followSum[o] as number) + weight * (follow[o] as number)
       }
     }
-    const total = (iterations * (iterations + 1)) / 2
-    followShareOut = Float64Array.from(followSum, (sum) => sum / total)
+    followShareOut = Float64Array.from(followSum, (sum) => sum / averageWeight)
   }
   // One table per decision, not an array per combo: solutions are cached, and
   // a small array costs several times the numbers it holds.
