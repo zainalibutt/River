@@ -44,9 +44,11 @@ describe('the value network in the server', () => {
       const actual = forwardBatch(network, inputs, batch, buffers)
       for (let b = 0; b < batch; b += 1) {
         const expected = forward(network, inputs.subarray(b * columns, (b + 1) * columns))
-        expect([...actual.subarray(b * expected.length, (b + 1) * expected.length)]).toEqual([
-          ...expected,
-        ])
+        expected.forEach((value, r) => {
+          expect(Math.abs((actual[b * expected.length + r] as number) - value)).toBeLessThanOrEqual(
+            1e-5,
+          )
+        })
       }
     }
   })

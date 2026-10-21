@@ -150,7 +150,9 @@ describe('per-river turn leaves', () => {
       const node = { kind: 'showdown' as const, paid: [30, 30] as const }
       networkHook(node, player, hands, hands[player].weights, hands[other].weights, a)
       evaluatorHook(node, player, hands, hands[player].weights, hands[other].weights, b)
-      expect([...a]).toEqual([...b])
+      for (let h = 0; h < a.length; h += 1) {
+        expect(Math.abs((a[h] as number) - (b[h] as number)) / 160).toBeLessThanOrEqual(1e-5)
+      }
     }
   })
 

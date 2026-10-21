@@ -171,7 +171,9 @@ describe('per-turn flop leaves', () => {
         )
         networkHook(node, player, hands, self, opponent, a)
         evaluatorHook(node, player, hands, self, opponent, b)
-        expect([...a]).toEqual([...b])
+        for (let h = 0; h < a.length; h += 1) {
+          expect(Math.abs((a[h] as number) - (b[h] as number)) / 160).toBeLessThanOrEqual(1e-5)
+        }
       }
     }
   }, 20_000)

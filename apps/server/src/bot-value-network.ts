@@ -2,12 +2,13 @@ import { readFileSync } from 'node:fs'
 import { cardKey } from '@river/engine'
 import type { RiverSpot } from './bot-river-solver.js'
 import { COMBOS, comboIndex52, strengthRanks } from './bot-river-value-data.js'
+import { simdForwardBatch } from './bot-value-simd.js'
 
 /**
  * v9's river value network inside the server (docs/bots.md): the weights
  * trained in PyTorch by ml/train_river_buckets.py, read from their float32
- * export, and the network's maths in plain TypeScript, so the server needs no
- * Python and no native library. A spot's ranges are summarised by strength
+ * export, with WASM SIMD batch inference and a TypeScript fallback, so the
+ * server needs no Python or native library. A spot's ranges are summarised by strength
  * exactly as in training, and each holding takes its bucket's value.
  */
 
@@ -144,8 +145,10 @@ export function forward(
 
 /**
  * Row-major [batch, columns] inputs and outputs. Four independent dot products
- * share each weight load, retaining double accumulators until the layer ends,
- * just like forward. Buffers belong to the caller and can be reused per visit.
+ * share each weight load in the TS fallback. WASM uses f32x4 accumulation.
+ * Buffers belong to the caller and can be reused per visit. Backend selection
+ * is cached per network on first call (RIVER_VALUE_BACKEND=ts|wasm, auto by default).
+ * Network weights must remain immutable thereafter. Single-threaded use only.
  * With outputRows, final-layer rows marked zero are left untouched; the caller
  * must only read requested rows. Hidden layers always compute every row.
  */
@@ -156,6 +159,18 @@ export function forwardBatch(
   buffers: readonly Float32Array[],
   outputRows?: Uint8Array,
 ): Float32Array {
+  if (!Number.isSafeInteger(batch) || batch < 0) throw new Error('invalid value network batch')
+  let length = input.length
+  for (let i = 0; i < network.layers.length; i += 1) {
+    const layer = network.layers[i] as ValueNetworkLayer
+    if (length !== batch * layer.columns) {
+      throw new Error(`value network batch wants ${batch * layer.columns} inputs, got ${length}`)
+    }
+    length = batch * layer.rows
+    if (buffers[i]?.length !== length) throw new Error('invalid value network output buffer')
+  }
+  const accelerated = simdForwardBatch(network, input, batch, buffers, outputRows)
+  if (accelerated !== undefined) return accelerated
   let current = input
   for (let index = 0; index < network.layers.length; index += 1) {
     const { rows, columns, weight, bias, slope } = network.layers[index] as ValueNetworkLayer
