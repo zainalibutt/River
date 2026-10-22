@@ -69,6 +69,7 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  * response, so a wrong read costs little.
  */
 export interface TurnPolicyTuning extends CfrOptions {
+  readonly boundedReads?: boolean
   readonly carry?: 'per-river' | 'per-turn' | 'both'
   readonly riverNetwork?: RiverValueNetwork
   readonly turnStartNetwork?: RiverValueNetwork
@@ -464,6 +465,7 @@ export function solvedTurnPolicy(
     1,
     {
       ...RIVER_CANDIDATE_TUNING,
+      ...(overrides.boundedReads === undefined ? {} : { boundedReads: overrides.boundedReads }),
       scheme: overrides.scheme ?? 'cfr+',
       ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
       ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),
@@ -783,6 +785,7 @@ export function solvedFlopPolicy(
     1,
     {
       ...RIVER_CANDIDATE_TUNING,
+      ...(overrides.boundedReads === undefined ? {} : { boundedReads: overrides.boundedReads }),
       scheme: overrides.scheme ?? 'cfr+',
       ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
       ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),

@@ -1,6 +1,8 @@
 import { type Card, cardKey, parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
+import { boundedRiverAdaptation, RIVER_ADAPTATION_ALLOWANCE } from './bot-river-adaptation.js'
 import { carryFromRecord } from './bot-river-carry.js'
+import { RIVER_POLICY_TUNING, type RiverReads, readBasedRiverProposal } from './bot-river-policy.js'
 import {
   type Player,
   prepare,
@@ -823,6 +825,119 @@ describe.each(['cfr+', 'dcfr'] as const)('%s three-street chain oracle', (scheme
     // equilibrium value lies within the blueprint's two-sided BR interval.
     const tolerance = 2 * gap + 1e-6
     expect(chained).toBeLessThanOrEqual((br[1] as number) + tolerance)
+    // The actual opponent can deviate over the ENTIRE original game. The
+    // correct model matches an explicitly enumerated always-fold opponent;
+    // the wrong model predicts calls, and changing alternates those beliefs.
+    // None of those beliefs enter this independent maximization oracle.
+    const correct: RiverReads = {
+      bet: 0,
+      fold: 1,
+      raise: 0,
+      foldSmall: 1,
+      foldMedium: 1,
+      foldLarge: 1,
+      air: 0,
+      size: 0.5,
+      trust: 0.7,
+    }
+    const wrong: RiverReads = {
+      ...correct,
+      bet: 0.95,
+      fold: 0,
+      foldSmall: 0,
+      foldMedium: 0,
+      foldLarge: 0,
+      air: 0.95,
+    }
+    // The recorder's own averaged continuation is an independently certified
+    // feasible baseline too. Exercise proposals there even when finite-CFR
+    // river re-solving fails the strict inherited cap gate above.
+    const inheritedStrategy = new Map(river.strategy)
+    const restore = (node: RiverNode) => {
+      if (node.kind !== 'action') return
+      const hands = prepare(riverSpot.ranges[node.player], riverSpot.board)
+      inheritedStrategy.set(
+        node.history,
+        Float64Array.from(
+          hands.combos.flatMap(
+            (h) => turnPolicy.get(info(riverSpot, riverPrefix, node.history, node.player, h)) ?? [],
+          ),
+        ),
+      )
+      node.children.forEach(restore)
+    }
+    restore(river.tree)
+    const inheritedRiver = { ...river, strategy: inheritedStrategy }
+    const adaptations = []
+    for (const baseline of [river, inheritedRiver])
+      for (const name of ['correct', 'wrong', 'changing'] as const) {
+        let calls = 0
+        const propose = () => {
+          calls++
+          const reads =
+            name === 'correct' || (name === 'changing' && calls % 2 === 0) ? correct : wrong
+          // The empirical posterior contains actual reach, never the positive
+          // zero-reach placeholders of the protected support.
+          const inherited = carriedPromises(turnRecord, turnHistory, cardKey(riverCard), 1)
+          const posterior = riverSpot.ranges[1].map((h) => ({
+            ...h,
+            weight: inherited.reach[id(h)] as number,
+          }))
+          const proposal = readBasedRiverProposal(baseline, posterior, reads, 1, {
+            ...RIVER_POLICY_TUNING,
+            iterations: 100,
+            scheme,
+          })
+          if (name === 'correct' && proposal !== null) {
+            const modelSpot = {
+              ...riverSpot,
+              ranges: [riverSpot.ranges[0], posterior.filter((h) => h.weight > 0)] as const,
+            }
+            const truth: Policy = new Map()
+            install({ ...baseline, spot: modelSpot }, riverPrefix, truth)
+            for (const [key] of truth) if (playerOf(key) === 1) truth.set(key, [1, 0])
+            const independent = aggregate(
+              modelSpot,
+              values(modelSpot, riverPrefix, truth, 0, false),
+              0,
+            )
+            expect(
+              proposal.value(baseline),
+              'correct model matches enumerated actual opponent',
+            ).toBeCloseTo(independent, 8)
+          }
+          return proposal
+        }
+        const chosen = boundedRiverAdaptation(baseline, riverCarry.gadget, propose)
+        if (baseline === inheritedRiver) expect(chosen.baseline.violations).toBe(0)
+        const adapted: Policy = new Map()
+        install(chosen.solution, riverPrefix, adapted)
+        const complete = new Map(chain)
+        for (const [key, row] of adapted) if (playerOf(key) === 0) complete.set(key, row)
+        const fullBR = aggregate(root, values(root, '', complete, 1, true), 1)
+        expect(fullBR, `${name} model full-game BR`).toBeLessThanOrEqual(
+          (br[1] as number) + tolerance + RIVER_ADAPTATION_ALLOWANCE,
+        )
+        const local = values(riverSpot, riverPrefix, adapted, 1, true)
+        if (chosen.baseline.violations === 0)
+          local.forEach((v, h) => {
+            expect(v, `${name} inherited holding ${h}`).toBeLessThanOrEqual(
+              (riverCarry.gadget.promises[h] as number) + RIVER_ADAPTATION_ALLOWANCE,
+            )
+          })
+        else expect(chosen.solution).toBe(baseline)
+        expect(calls).toBe(chosen.baseline.violations === 0 ? 1 : 0)
+        adaptations.push({
+          baseline: baseline === river ? 'resolved' : 'inherited',
+          name,
+          weight: chosen.weight,
+          baselineViolations: chosen.baseline.violations,
+          fullBR,
+        })
+      }
+    expect(adaptations.some((entry) => entry.baseline === 'inherited' && entry.weight > 0)).toBe(
+      true,
+    )
     expect(zeroReachQueries).toBeGreaterThan(0)
     expect([...flop.strategy.values()].some((r) => r.some((v) => Math.abs(v - 0.5) > 0.1))).toBe(
       true,
@@ -839,6 +954,7 @@ describe.each(['cfr+', 'dcfr'] as const)('%s three-street chain oracle', (scheme
         exactQueries,
         zeroReachQueries,
         maxExactGap,
+        adaptations,
       }),
     )
   }, 30_000)

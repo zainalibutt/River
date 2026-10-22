@@ -581,6 +581,35 @@ export function bestResponseValue(solution: RiverSolution, player: Player): numb
 }
 
 /**
+ * Per-holding best response to the OTHER player's fixed strategy and root
+ * reach. Values are chips at this river's origin, divided by compatible other
+ * reach, never by this holding's own weight. In particular gadget placeholder
+ * weights do not affect the protected player's answer. This is not self-play.
+ */
+export function riverBestResponseValues(solution: RiverSolution, player: Player) {
+  const { spot } = solution
+  const hands = [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)] as const
+  const other = player === 0 ? 1 : 0
+  const masses = compatibleMasses(hands[player], hands[other], hands[other].weights)
+  const summed = counterfactualValues(solution, hands, player, true)
+  const values = Float64Array.from(summed, (v, h) =>
+    (masses[h] as number) > 0 ? v / (masses[h] as number) : 0,
+  )
+  return { hands: hands[player], values, masses }
+}
+
+/** Expected chips against a fixed strategy, with the solution's root ranges. */
+export function riverStrategyValue(solution: RiverSolution, player: Player): number {
+  const { spot } = solution
+  const hands = [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)] as const
+  const values = counterfactualValues(solution, hands, player, false)
+  return (
+    values.reduce((sum, v, h) => sum + v * (hands[player].weights[h] as number), 0) /
+    compatibleWeight(hands[0], hands[1])
+  )
+}
+
+/**
  * Expected chips per deal for each player when both follow the solution, and
  * what a perfect counter-strategy would gain against it, as a share of the pot.
  */

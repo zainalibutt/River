@@ -11,6 +11,7 @@ import {
 import {
   RIVER_CANDIDATE_TUNING,
   RIVER_READS_V8X_TUNING,
+  type RiverPolicyStats,
   riverSolverPolicy,
 } from './bot-river-policy.js'
 import { runSessions, type SessionHandResult } from './bot-session-benchmark.js'
@@ -23,12 +24,15 @@ import {
 } from './bot-session-campaign.js'
 import { clusteredEstimate, pairRuns } from './bot-session-evaluation.js'
 import { solvedFlopPolicy, solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
+import { v9gPolicy } from './bot-v9g-policy.js'
 import {
   loadValueNetwork,
   riverNetworkFromEnvironment,
   turnNetworkFromEnvironment,
   turnStartNetworkFromEnvironment,
 } from './bot-value-network.js'
+
+const riverStats: Record<string, RiverPolicyStats> = {}
 
 /** Named focal policies that comparisons can refer to from the command line. */
 export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
@@ -46,17 +50,15 @@ export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
   },
   /** v9f at live speed: Discounted CFR with 40 rounds on the flop and the turn. */
   get v9g() {
-    const turnStartNetwork = turnStartNetworkFromEnvironment()
-    const flop = process.env.RIVER_FLOP_NETWORK
-    if (!flop)
-      throw new Error('v9g needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
-    return solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flop), {
-      carry: 'both',
-      turnStartNetwork,
-      riverNetwork: riverNetworkFromEnvironment(),
-      scheme: 'dcfr',
-      iterations: 40,
-    }).policy
+    const chain = v9gPolicy()
+    riverStats.v9g = chain.river
+    return chain.policy
+  },
+  /** v9g with a frozen read proposal accepted only within inherited BR caps. */
+  get v9gx() {
+    const chain = v9gPolicy(true)
+    riverStats.v9gx = chain.river
+    return chain.policy
   },
   /** v9d chain with opt-in inherited per-river turn promises. Loaded only when selected. */
   get v9e() {
@@ -276,6 +278,7 @@ writeFileSync(
     estimateAdjusted: adjusted.estimate,
     baseMs,
     nextMs,
+    river: riverStats,
     ...(cached === undefined ? {} : { baselineFrom: cached.from }),
     baselineHands: baseHands,
   }),

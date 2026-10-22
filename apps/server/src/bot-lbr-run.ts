@@ -19,16 +19,12 @@ import type { Situation } from './bot-rollout.js'
 import { runSessions } from './bot-session-benchmark.js'
 import { focalRotation } from './bot-session-campaign.js'
 import { clusteredEstimate } from './bot-session-evaluation.js'
-import { solvedFlopPolicy, solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
+import { solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
+import { v9gPolicy } from './bot-v9g-policy.js'
 import { learnedValuePolicy, type ValueModel } from './bot-value-model.js'
-import {
-  loadValueNetwork,
-  riverNetworkFromEnvironment,
-  turnNetworkFromEnvironment,
-  turnStartNetworkFromEnvironment,
-} from './bot-value-network.js'
+import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
+// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9gx|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
 // Plays one focal policy heads-up against a local best response to it. What
 // the probe wins is a lower bound on how exploitable that policy is. Runs with
 // the same seed deal the same cards, stacks and chairs to every focal policy,
@@ -54,7 +50,7 @@ if (
   focalCast === undefined
 ) {
   throw new Error(
-    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
+    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9gx|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
   )
 }
 let riverStats: RiverPolicyStats | undefined
@@ -129,16 +125,12 @@ const focals: Record<string, () => BotPolicy> = {
   },
   // The fully carried safe chain at live speed (as in bot-compare-table.ts).
   v9g: () => {
-    const flop = process.env.RIVER_FLOP_NETWORK
-    if (!flop)
-      throw new Error('v9g needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
-    const chain = solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flop), {
-      carry: 'both',
-      turnStartNetwork: turnStartNetworkFromEnvironment(),
-      riverNetwork: riverNetworkFromEnvironment(),
-      scheme: 'dcfr',
-      iterations: 40,
-    })
+    const chain = v9gPolicy()
+    riverStats = chain.river
+    return chain.policy
+  },
+  v9gx: () => {
+    const chain = v9gPolicy(true)
     riverStats = chain.river
     return chain.policy
   },
@@ -192,6 +184,7 @@ const run = runSessions({
     'v9a',
     'v9a-reads',
     'v9b',
+    'v9gx',
     'v9h35',
     'v9h50',
   ].includes(focalName)
@@ -239,4 +232,10 @@ if (riverStats !== undefined) {
     `river: ${solved} decisions solved, fallbacks ${JSON.stringify(fallbacks)}, ${solves} solves, ${(trackMs / Math.max(1, solves)).toFixed(0)} ms ranges and ${(solveMs / Math.max(1, solves)).toFixed(0)} ms solving each, ${(combos / Math.max(1, 2 * solves)).toFixed(0)} holdings a range, exploitable ${((100 * exploitability) / Math.max(1, solves)).toFixed(2)}% of the pot
 `,
   )
+  if (focalName === 'v9gx') {
+    const n = Math.max(1, riverStats.adaptationChecks)
+    process.stdout.write(
+      `adaptation: ${riverStats.adaptations}/${riverStats.adaptationChecks} roots (${((100 * riverStats.adaptations) / n).toFixed(2)}%), mean mixture ${(riverStats.mixtureWeight / n).toFixed(6)}, baseline violations ${riverStats.baselineViolations}, max cap violation ${riverStats.maxCapViolation}, max slack ${riverStats.maxCapSlack}, ${(riverStats.adaptationMs / n).toFixed(1)} ms/root\n`,
+    )
+  }
 }
