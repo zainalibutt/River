@@ -12,9 +12,10 @@ import { botPlayerId } from './bot-service.js'
 import { focalRotation } from './bot-session-campaign.js'
 import { slumbotIncrement, slumbotMemory } from './bot-slumbot.js'
 import { type TurnPolicyStats, turnSolverPolicy } from './bot-turn-policy.js'
+import { v9gPolicy } from './bot-v9g-policy.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z|v9a> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
+// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z|v9a|v9g> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
 // Plays hands against Slumbot's public heads-up API, one at a time, sending
 // only our own moves; Slumbot deals and reports our cards. Each finished hand
 // is appended to the output file as one JSON line. A hand that fails, on our
@@ -41,6 +42,8 @@ const policies: Record<string, () => BotPolicy> = {
     turnStats = solver.stats
     return solver.policy
   },
+  // The safe chain at live speed: carried promises at both boundaries, DCFR 40 (bot-v9g-policy.ts).
+  v9g: () => v9gPolicy().policy,
 }
 const make = policies[focalName ?? '']
 const casts = { rotation: focalRotation, champion: () => [championPersonality()] }
@@ -55,7 +58,7 @@ if (
   (readsName !== undefined && readsName !== 'reads')
 ) {
   throw new Error(
-    'usage: <v5|v6|v8z|v9a> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
+    'usage: <v5|v6|v8z|v9a|v9g> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
   )
 }
 const policy = make()
