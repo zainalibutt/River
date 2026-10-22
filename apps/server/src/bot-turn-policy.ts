@@ -70,6 +70,7 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  */
 export interface TurnPolicyTuning extends CfrOptions {
   readonly boundedReads?: boolean
+  readonly baselineCaps?: boolean
   readonly carry?: 'per-river' | 'per-turn' | 'both'
   readonly riverNetwork?: RiverValueNetwork
   readonly turnStartNetwork?: RiverValueNetwork
@@ -466,6 +467,7 @@ export function solvedTurnPolicy(
     {
       ...RIVER_CANDIDATE_TUNING,
       ...(overrides.boundedReads === undefined ? {} : { boundedReads: overrides.boundedReads }),
+      ...(overrides.baselineCaps === undefined ? {} : { baselineCaps: overrides.baselineCaps }),
       scheme: overrides.scheme ?? 'cfr+',
       ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
       ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),
@@ -786,6 +788,7 @@ export function solvedFlopPolicy(
     {
       ...RIVER_CANDIDATE_TUNING,
       ...(overrides.boundedReads === undefined ? {} : { boundedReads: overrides.boundedReads }),
+      ...(overrides.baselineCaps === undefined ? {} : { baselineCaps: overrides.baselineCaps }),
       scheme: overrides.scheme ?? 'cfr+',
       ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
       ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),
@@ -838,4 +841,50 @@ export function solvedFlopPolicy(
       river: river.cacheMemory(),
     }),
   }
+}
+
+/** A hand switches once; no carried promise is consulted after that switch. */
+export function predictableHybridPolicy(
+  chain: BotPolicy,
+  exploit: BotPolicy,
+  predictableTrust: number,
+) {
+  const switched = new HandSolveCache<true>(true, 0)
+  const stats = { switches: 0, turn: 0, river: 0 }
+  const policy: HandAwareBotPolicy = {
+    id: chain.id,
+    version: chain.version,
+    releaseHand(roomId, handNumber) {
+      switched.releaseHand(roomId, handNumber)
+      releasePolicyHand(chain, roomId, handNumber)
+      releasePolicyHand(exploit, roomId, handNumber)
+    },
+    decide(context) {
+      const { observation } = context
+      switched.observe(observation)
+      const key = switched.key(observation, 'hybrid')
+      const street = observation.street
+      if (!switched.has(key) && (street === 'turn' || street === 'river')) {
+        const live = observation.seats.filter((seat) => seat.playerId !== null && !seat.folded)
+        const opponentId = live.find(
+          (seat) => seat.playerId !== observation.actor.playerId,
+        )?.playerId
+        const reads =
+          live.length === 2 && context.profile.skill === 'og'
+            ? riverReads(
+                observation.opponentStats?.find((entry) => entry.playerId === opponentId),
+                observation.opponents.find((entry) => entry.playerId === opponentId),
+                { ...RIVER_POLICY_TUNING, ...RIVER_CANDIDATE_TUNING },
+              )
+            : null
+        if (reads !== null && reads.trust >= predictableTrust) {
+          switched.put(observation, key, true)
+          stats.switches += 1
+          stats[street] += 1
+        }
+      }
+      return (switched.has(key) ? exploit : chain).decide(context)
+    },
+  }
+  return { policy, stats }
 }

@@ -64,6 +64,8 @@ export interface RiverPolicyTuning extends CfrOptions {
   readonly carry?: 'per-river'
   /** Opt in to read proposals constrained by inherited per-holding BR caps. */
   readonly boundedReads?: boolean
+  /** Compare to max(inherited promise, baseline BR), with the same absolute allowance. */
+  readonly baselineCaps?: boolean
   readonly betSizes: readonly number[]
   readonly maxRaises: number
   readonly iterations: number
@@ -499,26 +501,31 @@ function solveSpot(
   }
   if (tuning.boundedReads && carry !== null) {
     const adaptationStarted = performance.now()
-    const chosen = boundedRiverAdaptation(solution, carry.gadget, () => {
-      if (reads === null || reads.trust <= 0) return null
-      // A model posterior is rebuilt separately. Carry's positive support
-      // placeholders must never become posterior evidence for the reads model.
-      const posterior = trackRanges(
-        observation.board,
-        preRiver,
-        players,
-        base,
-        personality,
-        key,
-        tuning.minimumWeightShare,
-        (decision, taken) =>
-          decision.observation.actor.playerId === players[opponent]
-            ? cardBlindShare(read, taken, tuning)
-            : 0,
-        known,
-      )[opponent]
-      return readBasedRiverProposal(solution, combosOf(posterior), reads, opponent, tuning)
-    })
+    const chosen = boundedRiverAdaptation(
+      solution,
+      carry.gadget,
+      () => {
+        if (reads === null || reads.trust <= 0) return null
+        // A model posterior is rebuilt separately. Carry's positive support
+        // placeholders must never become posterior evidence for the reads model.
+        const posterior = trackRanges(
+          observation.board,
+          preRiver,
+          players,
+          base,
+          personality,
+          key,
+          tuning.minimumWeightShare,
+          (decision, taken) =>
+            decision.observation.actor.playerId === players[opponent]
+              ? cardBlindShare(read, taken, tuning)
+              : 0,
+          known,
+        )[opponent]
+        return readBasedRiverProposal(solution, combosOf(posterior), reads, opponent, tuning)
+      },
+      tuning.baselineCaps,
+    )
     stats.adaptationChecks++
     stats.adaptationProposals += Number(chosen.proposed)
     stats.adaptations += Number(chosen.weight > 0)

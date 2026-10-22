@@ -85,6 +85,23 @@ export function riverCapStatus(solution: RiverSolution, gadget: RiverGadget) {
   return { maxViolation, maxSlack, violations }
 }
 
+/** Preserve inherited slack; raise only caps already violated by this fixed baseline.
+ * riverCapStatus adds the single absolute allowance when testing these caps.
+ */
+export function baselineRelativeRiverCaps(
+  baseline: RiverSolution,
+  gadget: RiverGadget,
+): RiverGadget {
+  const { values } = riverBestResponseValues(baseline, gadget.player)
+  if (gadget.promises.length !== values.length) throw new Error('unaligned river promises')
+  return {
+    player: gadget.player,
+    promises: Float64Array.from(gadget.promises, (promise, h) =>
+      Math.max(promise, values[h] as number),
+    ),
+  }
+}
+
 export interface RiverProposal {
   readonly solution: RiverSolution
   /** Fixed posterior/model objective, in chips per deal. */
@@ -96,15 +113,26 @@ export interface RiverProposal {
  * BR is a maximum of linear functions. The fixed model objective is linear.
  * Choose its best endpoint, conservatively rounded down. Baseline failure
  * returns the original root, with no proposal query and no promise refresh.
+ * Baseline-relative mode explicitly relaxes infeasible inherited caps, retaining
+ * the original baseline diagnostics; it does not establish inherited safety.
  */
 export function boundedRiverAdaptation(
   baseline: RiverSolution,
   gadget: RiverGadget,
   propose: () => RiverProposal | null,
+  baselineRelative = false,
 ) {
   const base = riverCapStatus(baseline, gadget)
-  const unchanged = { solution: baseline, weight: 0, baseline: base, cap: base, proposed: false }
-  if (base.violations > 0) return unchanged
+  const caps = baselineRelative ? baselineRelativeRiverCaps(baseline, gadget) : gadget
+  const initialCap = baselineRelative ? riverCapStatus(baseline, caps) : base
+  const unchanged = {
+    solution: baseline,
+    weight: 0,
+    baseline: base,
+    cap: initialCap,
+    proposed: false,
+  }
+  if (initialCap.violations > 0) return unchanged
   const proposal = propose()
   if (proposal === null) return unchanged
   const result = { ...unchanged, proposed: true }
@@ -114,14 +142,14 @@ export function boundedRiverAdaptation(
   let low = 0
   let high = 1
   let solution = baseline
-  let cap = base
+  let cap = initialCap
   const candidate = realizationMixture(baseline, proposal.solution, ours, 1)
-  const end = riverCapStatus(candidate, gadget)
+  const end = riverCapStatus(candidate, caps)
   if (end.violations === 0) return { ...result, solution: candidate, cap: end, weight: 1 }
   for (let step = 0; step < RIVER_MIXTURE_STEPS; step++) {
     const mid = (low + high) / 2
     const mixed = realizationMixture(baseline, proposal.solution, ours, mid)
-    const status = riverCapStatus(mixed, gadget)
+    const status = riverCapStatus(mixed, caps)
     if (status.violations === 0) {
       low = mid
       solution = mixed

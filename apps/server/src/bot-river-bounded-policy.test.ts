@@ -154,6 +154,28 @@ describe('bounded river policy opt-in and freeze', () => {
     expect(count.mock.calls.length).toBeGreaterThan(afterOtherRoom)
   })
 
+  it.each([false, true])('uses baseline-relative caps only when enabled (%s)', (baselineCaps) => {
+    vi.mocked(publicDecisions).mockReturnValue([])
+    const lowCarry: RiverCarrySource = (...args) => {
+      const inherited = carry(...args)
+      if (inherited === null) throw new Error('missing carry')
+      return { ...inherited, gadget: { player: 1, promises: Float64Array.of(99) } }
+    }
+    const bot = riverSolverPolicy(
+      alwaysCallPolicy,
+      'test',
+      1,
+      { ...tuning, boundedReads: true, baselineCaps },
+      undefined,
+      undefined,
+      lowCarry,
+    )
+    bot.policy.decide(context(view()))
+    expect(bot.stats.baselineViolations).toBe(1)
+    expect(bot.stats.adaptationProposals).toBe(Number(baselineCaps))
+    if (baselineCaps) expect(bot.stats.maxCapViolation).toBeLessThanOrEqual(1e-6)
+  })
+
   it('leaves the carried v9g river identical with the flag omitted or explicitly off', () => {
     vi.mocked(publicDecisions).mockReturnValue([])
     const count = vi.spyOn(solver, 'solveRiver')

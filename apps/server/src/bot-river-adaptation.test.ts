@@ -1,6 +1,7 @@
 import { type Card, cardKey, handScore, parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
+  baselineRelativeRiverCaps,
   boundedRiverAdaptation,
   RIVER_ADAPTATION_ALLOWANCE,
   realizationMixture,
@@ -182,6 +183,74 @@ describe('inherited river adaptation', () => {
     expect(result.baseline.violations).toBe(1)
     expect(result.baseline.maxViolation).toBe(1)
     expect(promises).toEqual(Float64Array.of(99))
+  })
+
+  it.each([0, 1] as const)(
+    'builds each baseline-relative cap independently for player %i',
+    (player) => {
+      const baseline = policy(spot, () => [0.4, 0.6])
+      const actual = enumerate(baseline, player)
+      const promises = Float64Array.from(actual, (value, h) => value + (h % 2 === 0 ? -10 : 20))
+      const original = promises.slice()
+      const caps = baselineRelativeRiverCaps(baseline, { player, promises })
+      actual.forEach((value, h) => {
+        expect(caps.promises[h]).toBeCloseTo(Math.max(original[h] as number, value), 9)
+      })
+      expect(promises).toEqual(original)
+      expect(caps.player).toBe(player)
+    },
+  )
+
+  it('permits improvement under baseline caps while preserving inherited violation diagnostics', () => {
+    const vulnerable = policy(tiny, (n) => (n.history === '' ? [0, 1] : [1, 0]))
+    const safer = base
+    const promises = Float64Array.of(99)
+    const result = boundedRiverAdaptation(
+      vulnerable,
+      { player: 1, promises },
+      () => ({
+        solution: safer,
+        // Fixed linear objective on the root realization sequence.
+        value: (s) => 100 * (s.strategy.get('')?.[0] as number),
+      }),
+      true,
+    )
+    expect(enumerate(vulnerable, 1)).toEqual([150])
+    expect(enumerate(result.solution, 1)).toEqual([100])
+    expect(result.weight).toBe(1)
+    expect(result.baseline.maxViolation).toBe(51)
+    expect(result.cap.violations).toBe(0)
+    expect(promises).toEqual(Float64Array.of(99))
+  })
+
+  it('does not allow a new vulnerability after lifting an infeasible promise to the baseline', () => {
+    const result = boundedRiverAdaptation(
+      base,
+      { player: 1, promises: Float64Array.of(99) },
+      () => ({
+        solution: proposal,
+        value: objective,
+      }),
+      true,
+    )
+    expect(result.proposed).toBe(true)
+    expect(result.weight).toBe(0)
+    expect(enumerate(result.solution, 1)).toEqual([100])
+    expect(result.baseline.violations).toBe(1)
+    expect(result.cap.violations).toBe(0)
+  })
+
+  it('still rejects non-finite promises in baseline-relative mode', () => {
+    const result = boundedRiverAdaptation(
+      base,
+      { player: 1, promises: Float64Array.of(Number.NaN) },
+      () => {
+        throw new Error('invalid cap accepted')
+      },
+      true,
+    )
+    expect(result.weight).toBe(0)
+    expect(result.cap.violations).toBe(1)
   })
 
   it('keeps the posterior/model objective separate from protected support placeholders', () => {

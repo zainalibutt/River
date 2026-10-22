@@ -19,8 +19,8 @@ it('shares the original v9g construction and forwards only the explicit bounded 
   const construct = vi.spyOn(chain, 'solvedFlopPolicy')
   const rivers = vi.spyOn(river, 'riverSolverPolicy')
   v9gPolicy()
-  v9gPolicy(false)
-  v9gPolicy(true)
+  v9gPolicy({ boundedReads: false })
+  v9gPolicy({ boundedReads: true })
   const original = {
     carry: 'both',
     turnStartNetwork: network,
@@ -38,4 +38,41 @@ it('shares the original v9g construction and forwards only the explicit bounded 
     expect(rivers.mock.calls[i]?.[3]?.carry).toBe('per-river')
     expect(rivers.mock.calls[i]?.[3]?.safe).toBe(true)
   }
+})
+
+it.each([0.35, 0.5])(
+  'constructs the hybrid at threshold %s and exposes both river counters',
+  (threshold) => {
+    const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+    vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+    vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+    vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+    const wrapper = vi.spyOn(chain, 'predictableHybridPolicy')
+    const result = v9gPolicy({ hybridThreshold: threshold })
+    expect(wrapper.mock.calls[0]?.[2]).toBe(threshold)
+    expect(result.hybrid).toEqual({ switches: 0, turn: 0, river: 0 })
+    expect(result.exploitRiver).toBeDefined()
+    expect(result.exploitRiver).not.toBe(result.river)
+  },
+)
+
+it('forwards the v9gy baseline-cap opt-in to the carried river without changing the chain', () => {
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+  vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+  vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+  vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+  const rivers = vi.spyOn(river, 'riverSolverPolicy')
+  const result = v9gPolicy({ boundedReads: true, baselineCaps: true })
+  expect(rivers.mock.calls[0]?.[3]).toMatchObject({
+    boundedReads: true,
+    baselineCaps: true,
+    safe: true,
+    carry: 'per-river',
+    scheme: 'dcfr',
+  })
+  expect(result.hybrid).toBeUndefined()
 })
