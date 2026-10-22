@@ -19,11 +19,16 @@ import type { Situation } from './bot-rollout.js'
 import { runSessions } from './bot-session-benchmark.js'
 import { focalRotation } from './bot-session-campaign.js'
 import { clusteredEstimate } from './bot-session-evaluation.js'
-import { solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
+import { solvedFlopPolicy, solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
 import { learnedValuePolicy, type ValueModel } from './bot-value-model.js'
-import { turnNetworkFromEnvironment } from './bot-value-network.js'
+import {
+  loadValueNetwork,
+  riverNetworkFromEnvironment,
+  turnNetworkFromEnvironment,
+  turnStartNetworkFromEnvironment,
+} from './bot-value-network.js'
 
-// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
+// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
 // Plays one focal policy heads-up against a local best response to it. What
 // the probe wins is a lower bound on how exploitable that policy is. Runs with
 // the same seed deal the same cards, stacks and chairs to every focal policy,
@@ -49,7 +54,7 @@ if (
   focalCast === undefined
 ) {
   throw new Error(
-    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
+    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
   )
 }
 let riverStats: RiverPolicyStats | undefined
@@ -121,6 +126,21 @@ const focals: Record<string, () => BotPolicy> = {
     const solver = solvedTurnPolicy(turnNetworkFromEnvironment(), {}, true)
     riverStats = solver.river
     return solver.policy
+  },
+  // The fully carried safe chain at live speed (as in bot-compare-table.ts).
+  v9g: () => {
+    const flop = process.env.RIVER_FLOP_NETWORK
+    if (!flop)
+      throw new Error('v9g needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
+    const chain = solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flop), {
+      carry: 'both',
+      turnStartNetwork: turnStartNetworkFromEnvironment(),
+      riverNetwork: riverNetworkFromEnvironment(),
+      scheme: 'dcfr',
+      iterations: 40,
+    })
+    riverStats = chain.river
+    return chain.policy
   },
   'v8z-hu20': () => river(RIVER_CANDIDATE_TUNING, headsUpButtonGuardPolicy(0.2)),
   'v8z-hu12': () => river(RIVER_CANDIDATE_TUNING, headsUpButtonGuardPolicy(0.12)),
