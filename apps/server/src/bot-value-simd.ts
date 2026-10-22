@@ -40,6 +40,9 @@ function module(): WebAssembly.Module | null {
  * no JS buffers/views or WASM memory. GC releases memory with the network.
  */
 class SimdNetwork {
+  get memoryBytes(): number {
+    return this.kernel.memory.buffer.byteLength
+  }
   private readonly kernel: Kernel
   private readonly weights: number[] = []
   private readonly biases: number[] = []
@@ -136,6 +139,13 @@ class SimdNetwork {
 
 const backends = new WeakMap<RiverValueNetwork, SimdNetwork | null>()
 const pools = new WeakMap<RiverValueNetwork, ValueWorkerPool | null>()
+
+export function valueNetworkMemory(network: RiverValueNetwork) {
+  return {
+    wasmBytes: backends.get(network)?.memoryBytes ?? 0,
+    threads: valueNetworkThreads(network),
+  }
+}
 
 /** Actual active participants after the first batch; TS fallback always uses one. */
 export function valueNetworkThreads(network: RiverValueNetwork): number {

@@ -20,6 +20,7 @@ import {
 } from '@river/engine'
 import { allInEquityChips } from './bot-allin-equity.js'
 import { type BoardDeal, chanceLuck } from './bot-chance-luck.js'
+import { releasePolicyHand } from './bot-policy-hand.js'
 import {
   actionFor,
   type BotActionOptions,
@@ -303,6 +304,11 @@ function playHand(
       board = [...publicView.board]
     }
     if (publicView.phase === 'between') {
+      releasePolicyHand(options.focalPolicy, room.id, publicView.handNumber)
+      for (const entrant of entrants) {
+        if (entrant.policy !== undefined)
+          releasePolicyHand(entrant.policy, room.id, publicView.handNumber)
+      }
       if (room.totalChips() !== initialChips) throw new Error('session chip conservation failed')
       const record = room.recentHands(1)[0]
       if (record === undefined) throw new Error('session hand record missing')

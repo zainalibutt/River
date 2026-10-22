@@ -1,6 +1,7 @@
 import { type Card, cardKey, makeDeck } from '@river/engine'
 import { FLOP_ALL_IN_RUNOUTS, flopRunouts } from './bot-flop-solver.js'
 import type { RiverSpot, ShowdownValues } from './bot-river-solver.js'
+import { bufferBytes } from './bot-solver-memory.js'
 import { expectedStrengthRanks, turnRivers } from './bot-turn-end-data.js'
 import {
   carriedPromises,
@@ -20,6 +21,10 @@ export const carriedTurnPromises = carriedPromises
 // Layout ranks depend only on the public board, not ranges, paid chips or the
 // network. Bound this small cache; repeated decisions on a flop reuse it.
 const turnRanks = new Map<string, readonly { card: Card; key: number; ranks: Uint16Array }[]>()
+
+export function flopTurnLayoutMemory() {
+  return { entries: turnRanks.size, bytes: bufferBytes(turnRanks) }
+}
 
 function turnsFor(board: RiverSpot['board']) {
   const key = board.map(cardKey).join(',')

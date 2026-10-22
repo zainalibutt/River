@@ -12,6 +12,7 @@ import { solveFlop } from './bot-flop-solver.js'
 import { perTurnShowdown } from './bot-flop-turn-leaves.js'
 import { decisionClass, type MoveClass } from './bot-lbr-range.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
+import { type HandAwareBotPolicy, HandSolveCache, releasePolicyHand } from './bot-policy-hand.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
 import { carryFromRecord, exactTurnAction, type RiverCarrySource } from './bot-river-carry.js'
 import {
@@ -46,6 +47,7 @@ import {
   riverValues,
   solveRiver,
 } from './bot-river-solver.js'
+import { solveCacheMemory } from './bot-solver-memory.js'
 import {
   createRiverPromiseRecord,
   perRiverShowdown,
@@ -74,6 +76,7 @@ export interface TurnPolicyTuning extends CfrOptions {
   readonly betSizes: readonly number[]
   readonly maxRaises: number
   readonly iterations: number
+  /** Completed-spot limit without carry; carry solves stay pinned until the hand settles. */
   readonly cacheSize: number
   /** How the ranges are tracked through the hand so far, and the reads, as v8z has them. */
   readonly ranges: RiverPolicyTuning
@@ -163,9 +166,10 @@ export function turnSolverPolicy(
   overrides: Partial<TurnPolicyTuning> = {},
   street: StreetSetup = TURN_STREET,
 ): {
-  readonly policy: BotPolicy
+  readonly policy: HandAwareBotPolicy
   readonly stats: TurnPolicyStats
   readonly carried: RiverCarrySource
+  readonly cacheMemory: () => ReturnType<typeof solveCacheMemory>
   /** For one of this policy's past turn moves, the share of each holding that makes it. */
   readonly ownShares: (
     decision: PublicDecision,
@@ -204,11 +208,19 @@ export function turnSolverPolicy(
     trackMs: 0,
     solveMs: 0,
   }
-  const cache = new Map<string, SolvedTurn | string>()
-  const policy: BotPolicy = {
+  const cache = new HandSolveCache<SolvedTurn | string>(
+    tuning.carry !== undefined,
+    tuning.cacheSize,
+  )
+  const policy: HandAwareBotPolicy = {
     id,
     version,
+    releaseHand(roomId, handNumber) {
+      cache.releaseHand(roomId, handNumber)
+      releasePolicyHand(base, roomId, handNumber)
+    },
     decide(context) {
+      cache.observe(context.observation)
       const baseline = () => ({ ...base.decide(context), policyId: id, policyVersion: version })
       if (context.observation.street !== street.street || context.profile.skill !== 'og') {
         return baseline()
@@ -405,7 +417,15 @@ export function turnSolverPolicy(
     })
     return carried.ranges.some((range) => range.length === 0) ? null : carried
   }
-  return { policy, stats, ownShares, opponentShares, explain, carried }
+  return {
+    policy,
+    stats,
+    ownShares,
+    opponentShares,
+    explain,
+    carried,
+    cacheMemory: () => solveCacheMemory(cache),
+  }
 }
 
 /** What the solve says at one turn decision, for reading a hand by hand. */
@@ -477,7 +497,7 @@ function turnDecision(
   base: BotPolicy,
   network: RiverValueNetwork,
   tuning: TurnPolicyTuning,
-  cache: Map<string, SolvedTurn | string>,
+  cache: HandSolveCache<SolvedTurn | string>,
   stats: TurnPolicyStats,
   street: StreetSetup,
 ): BotDecision | string {
@@ -513,7 +533,7 @@ function locate(
   base: BotPolicy,
   network: RiverValueNetwork,
   tuning: TurnPolicyTuning,
-  cache: Map<string, SolvedTurn | string>,
+  cache: HandSolveCache<SolvedTurn | string>,
   stats: TurnPolicyStats,
   street: StreetSetup,
   cachedOnly = false,
@@ -561,9 +581,12 @@ function locate(
         tuning.ranges,
       )
     : null
-  const cacheKey = `${key}|${observation.actor.playerId}|${doubt.toFixed(4)}${
-    reads === null ? '' : `|${Object.values(reads).map((value) => value.toFixed(4))}`
-  }`
+  const cacheKey = cache.key(
+    observation,
+    `${key}|${observation.actor.playerId}|${doubt.toFixed(4)}${
+      reads === null ? '' : `|${Object.values(reads).map((value) => value.toFixed(4))}`
+    }`,
+  )
   let solved = cache.get(cacheKey)
   if (solved === undefined) {
     if (cachedOnly) return 'missing cached turn'
@@ -580,8 +603,7 @@ function locate(
       reads,
       street,
     )
-    cache.set(cacheKey, solved)
-    if (cache.size > tuning.cacheSize) cache.delete(cache.keys().next().value as string)
+    cache.put(observation, cacheKey, solved)
   }
   if (typeof solved === 'string') return solved
   const firstActor = (decisions[turnStart] ?? { observation }).observation.actor.playerId
@@ -803,5 +825,14 @@ export function solvedFlopPolicy(
         },
     FLOP_STREET,
   )
-  return { ...flop, turn: turn.stats, river: river.stats }
+  return {
+    ...flop,
+    turn: turn.stats,
+    river: river.stats,
+    caches: () => ({
+      flop: flop?.cacheMemory(),
+      turn: turn?.cacheMemory(),
+      river: river.cacheMemory(),
+    }),
+  }
 }

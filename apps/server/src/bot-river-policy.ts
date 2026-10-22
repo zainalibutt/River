@@ -36,6 +36,7 @@ import {
   riverValues,
   solveRiver,
 } from './bot-river-solver.js'
+import { solveCacheMemory } from './bot-solver-memory.js'
 
 /**
  * How the river solver is set up. Bets and raises are offered at half the pot
@@ -198,7 +199,11 @@ export function riverSolverPolicy(
   own: KnownShares = () => null,
   theirs: KnownShares = () => null,
   carry: RiverCarrySource = () => null,
-): { readonly policy: BotPolicy; readonly stats: RiverPolicyStats } {
+): {
+  readonly policy: BotPolicy
+  readonly stats: RiverPolicyStats
+  readonly cacheMemory: () => ReturnType<typeof solveCacheMemory>
+} {
   const tuning: RiverPolicyTuning = { ...RIVER_POLICY_TUNING, ...overrides }
   const stats: RiverPolicyStats = {
     solved: 0,
@@ -236,7 +241,7 @@ export function riverSolverPolicy(
       return envelope(result)
     },
   }
-  return { policy, stats }
+  return { policy, stats, cacheMemory: () => solveCacheMemory(cache) }
 }
 
 function solverDecision(
