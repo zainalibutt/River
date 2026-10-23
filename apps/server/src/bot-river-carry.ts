@@ -28,6 +28,7 @@ export function exactTurnAction(
   node: Extract<RiverNode, { kind: 'action' }>,
   decision: PublicDecision,
   spot: RiverSpot,
+  effective = false,
 ): string | undefined {
   const action = decision.taken.action
   const label =
@@ -39,12 +40,17 @@ export function exactTurnAction(
           ? 'c'
           : undefined
   if (label !== undefined) return node.actions.includes(label) ? label : undefined
-  const target =
+  const total =
     action.kind === 'allIn'
       ? decision.observation.actor.stack + decision.observation.actor.betStreet
       : action.kind === 'raiseTo'
         ? action.to
         : Number.NaN
+  const target = effective ? Math.min(total, spot.stack) : total
+  // Uncalled excess is returned by the engine. A short all-in facing a larger
+  // bet is a call in the effective-stack game, with no side pot heads-up.
+  if (effective && target <= node.paid[node.player === 0 ? 1 : 0] && node.actions.includes('c'))
+    return 'c'
   return node.actions.find(
     (offered) =>
       (offered === 'a'

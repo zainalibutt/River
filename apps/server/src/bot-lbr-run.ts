@@ -24,7 +24,7 @@ import { v9gPolicy } from './bot-v9g-policy.js'
 import { learnedValuePolicy, type ValueModel } from './bot-value-model.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
+// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9go|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
 // Plays one focal policy heads-up against a local best response to it. What
 // the probe wins is a lower bound on how exploitable that policy is. Runs with
 // the same seed deal the same cards, stacks and chairs to every focal policy,
@@ -50,7 +50,7 @@ if (
   focalCast === undefined
 ) {
   throw new Error(
-    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
+    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9go|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
   )
 }
 let riverStats: RiverPolicyStats | undefined
@@ -60,12 +60,20 @@ const river = (overrides: Partial<RiverPolicyTuning>, base: BotPolicy = pokerGua
   return solver.policy
 }
 let hybridStats: ReturnType<typeof v9gPolicy>['hybrid']
+let offTree:
+  | {
+      flop: ReturnType<typeof v9gPolicy>['stats']['offTree']
+      turn: ReturnType<typeof v9gPolicy>['turn']['offTree']
+      river: RiverPolicyStats['offTree']
+    }
+  | undefined
 let exploitRiverStats: RiverPolicyStats | undefined
 const v9g = (options: Parameters<typeof v9gPolicy>[0] = {}) => {
   const chain = v9gPolicy(options)
   riverStats = chain.river
   hybridStats = chain.hybrid
   exploitRiverStats = chain.exploitRiver
+  offTree = { flop: chain.stats.offTree, turn: chain.turn.offTree, river: chain.river.offTree }
   return chain.policy
 }
 const focals: Record<string, () => BotPolicy> = {
@@ -134,6 +142,7 @@ const focals: Record<string, () => BotPolicy> = {
   },
   // The fully carried safe chain at live speed (as in bot-compare-table.ts).
   v9g: () => v9g(),
+  v9go: () => v9g({ offTree: 'resolve' }),
   v9gx: () => v9g({ boundedReads: true }),
   v9gy: () => v9g({ boundedReads: true, baselineCaps: true }),
   v9gh: () => v9g({ hybridThreshold: 0.35 }),
@@ -189,6 +198,7 @@ const run = runSessions({
     'v9a-reads',
     'v9b',
     'v9g',
+    'v9go',
     'v9gx',
     'v9gy',
     'v9gh',
@@ -220,6 +230,7 @@ writeFileSync(
     handsPerSession,
     estimate,
     choices,
+    offTree,
     hybrid: hybridStats,
     exploitRiver: exploitRiverStats,
     ...(riverStats === undefined ? {} : { river: riverStats }),
@@ -251,6 +262,7 @@ if (riverStats !== undefined) {
 }
 
 if (hybridStats !== undefined) process.stdout.write(`hybrid: ${JSON.stringify(hybridStats)}\n`)
+if (offTree !== undefined) process.stdout.write(`off tree: ${JSON.stringify(offTree)}\n`)
 
 if (exploitRiverStats !== undefined)
   process.stdout.write(`exploit river: ${JSON.stringify(exploitRiverStats)}\n`)

@@ -11,6 +11,12 @@ import {
 import { solveFlop } from './bot-flop-solver.js'
 import { perTurnShowdown } from './bot-flop-turn-leaves.js'
 import { decisionClass, type MoveClass } from './bot-lbr-range.js'
+import {
+  followWithResolving,
+  type OffTreeState,
+  type OffTreeStats,
+  offTreeStats,
+} from './bot-off-tree.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { type HandAwareBotPolicy, HandSolveCache, releasePolicyHand } from './bot-policy-hand.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
@@ -69,6 +75,7 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  * response, so a wrong read costs little.
  */
 export interface TurnPolicyTuning extends CfrOptions {
+  readonly offTree?: 'resolve'
   readonly boundedReads?: boolean
   readonly baselineCaps?: boolean
   readonly carry?: 'per-river' | 'per-turn' | 'both'
@@ -99,6 +106,7 @@ export const TURN_POLICY_TUNING: TurnPolicyTuning = {
 }
 
 export interface TurnPolicyStats {
+  readonly offTree: OffTreeStats
   carryUsed: number
   carryFallbacks: number
   solved: number
@@ -152,6 +160,7 @@ export const FLOP_STREET: StreetSetup = {
 const BOARD_CARDS = { flop: 3, turn: 4 } as const
 
 interface SolvedTurn {
+  readonly offTree?: OffTreeState<SolvedTurn>
   readonly spot: RiverSpot
   readonly tree: RiverNode
   readonly strategy: ReadonlyMap<string, Float64Array>
@@ -202,6 +211,7 @@ export function turnSolverPolicy(
 } {
   const tuning: TurnPolicyTuning = { ...TURN_POLICY_TUNING, ...overrides }
   const stats: TurnPolicyStats = {
+    offTree: offTreeStats(),
     carryUsed: 0,
     carryFallbacks: 0,
     solved: 0,
@@ -211,7 +221,7 @@ export function turnSolverPolicy(
     solveMs: 0,
   }
   const cache = new HandSolveCache<SolvedTurn | string>(
-    tuning.carry !== undefined,
+    tuning.carry !== undefined || tuning.offTree === 'resolve',
     tuning.cacheSize,
   )
   const policy: HandAwareBotPolicy = {
@@ -398,7 +408,7 @@ export function turnSolverPolicy(
         solved.players[node.player] !== entry.observation.actor.playerId
       )
         return null
-      const action = exactTurnAction(node, entry, solved.spot)
+      const action = exactTurnAction(node, entry, solved.spot, tuning.offTree === 'resolve')
       if (action === undefined) return null
       leafHistory += action
       node = node.children[node.actions.indexOf(action)] as RiverNode
@@ -468,6 +478,7 @@ export function solvedTurnPolicy(
       ...RIVER_CANDIDATE_TUNING,
       ...(overrides.boundedReads === undefined ? {} : { boundedReads: overrides.boundedReads }),
       ...(overrides.baselineCaps === undefined ? {} : { baselineCaps: overrides.baselineCaps }),
+      ...(overrides.offTree === undefined ? {} : { offTree: overrides.offTree }),
       scheme: overrides.scheme ?? 'cfr+',
       ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
       ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),
@@ -585,12 +596,15 @@ function locate(
         tuning.ranges,
       )
     : null
-  const cacheKey = cache.key(
-    observation,
-    `${key}|${observation.actor.playerId}|${doubt.toFixed(4)}${
-      reads === null ? '' : `|${Object.values(reads).map((value) => value.toFixed(4))}`
-    }`,
-  )
+  const cacheKey =
+    tuning.offTree === 'resolve'
+      ? cache.key(observation, `${observation.actor.playerId}|${observation.board.map(cardKey)}`)
+      : cache.key(
+          observation,
+          `${key}|${observation.actor.playerId}|${doubt.toFixed(4)}${
+            reads === null ? '' : `|${Object.values(reads).map((value) => value.toFixed(4))}`
+          }`,
+        )
   let solved = cache.get(cacheKey)
   if (solved === undefined) {
     if (cachedOnly) return 'missing cached turn'
@@ -613,6 +627,18 @@ function locate(
   const firstActor = (decisions[turnStart] ?? { observation }).observation.actor.playerId
   if (firstActor !== solved.players[0]) return 'order mismatch'
   const self: Player = solved.players[0] === observation.actor.playerId ? 0 : 1
+  if (tuning.offTree === 'resolve') {
+    const found = followWithResolving(
+      solved,
+      turnStart === -1 ? [] : decisions.slice(turnStart),
+      self,
+      stats.offTree,
+      (next) => cache.put(observation, cacheKey, next),
+    )
+    if (typeof found === 'string') return found
+    if (found.node.kind !== 'action' || found.node.player !== self) return 'off tree'
+    return { solved: found.solved, node: found.node, self }
+  }
   let node = solved.tree
   for (const decision of turnStart === -1 ? [] : decisions.slice(turnStart)) {
     if (node.kind !== 'action') return 'off tree'
@@ -708,12 +734,20 @@ function solveTurnSpot(
       ? undefined
       : readsModel(reads, spot, opponent)
   let record: RiverPromiseRecord | undefined
-  const solve = (target: RiverSpot, opponentModel?: RiverOpponentModel, gadget?: RiverGadget) => {
+  const solve = (
+    target: RiverSpot,
+    opponentModel?: RiverOpponentModel,
+    gadget?: RiverGadget,
+    tree?: RiverNode,
+    options: CfrOptions = tuning,
+  ) => {
     const perRiver =
       street.street === 'turn' && (tuning.carry === 'per-river' || tuning.carry === 'both')
     const perTurn =
       street.street === 'flop' && (tuning.carry === 'per-turn' || tuning.carry === 'both')
     if (!perRiver && !perTurn) {
+      if (tree !== undefined)
+        throw new Error('off-tree flop/turn resolving requires per-card carry')
       return street.solve(target, tuning.iterations, network, opponentModel, gadget, tuning)
     }
     const leafNetwork = perRiver ? tuning.riverNetwork : tuning.turnStartNetwork
@@ -732,32 +766,49 @@ function solveTurnSpot(
         ? perRiverShowdown(target, leafNetwork, record)
         : perTurnShowdown(target, leafNetwork, record),
       gadget,
-      undefined,
-      tuning,
+      tree,
+      options,
     )
   }
   let solution = solve(spot, model, carry?.gadget)
+  let rootGadget = carry?.gadget
   if (safe && carry === null) {
     // What each opponent holding is worth against the tracked ranges is its
     // promise; the re-solve then plays without trusting their range at all.
     const promises = riverValues(solution).values[opponent]
     const ranges = [...spot.ranges] as [RiverSpot['ranges'][0], RiverSpot['ranges'][1]]
     ranges[opponent] = ranges[opponent].map((entry) => ({ ...entry, weight: 1 }))
-    solution = solve({ ...spot, ranges }, undefined, {
+    rootGadget = {
       player: opponent,
       promises,
-    })
+    }
+    solution = solve({ ...spot, ranges }, undefined, rootGadget)
   }
   stats.solveMs += performance.now() - tracked
   stats.solves += 1
-  return {
-    spot,
-    tree: solution.tree,
-    strategy: solution.strategy,
+  const pack = (result: RiverSolution, state?: OffTreeState<SolvedTurn>): SolvedTurn => ({
+    ...(state === undefined ? {} : { offTree: state }),
+    spot: tuning.offTree === 'resolve' ? result.spot : spot,
+    tree: result.tree,
+    strategy: result.strategy,
     hands: [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)],
     players,
     ...(record === undefined ? {} : { record }),
+  })
+  if (tuning.offTree !== 'resolve') return pack(solution)
+  // A flop without inherited bounds establishes them once from its blueprint.
+  // Subsequent widening must never refresh them at the observed off-tree node.
+  const gadget = rootGadget ?? {
+    player: opponent,
+    promises: riverValues(solution).values[opponent],
   }
+  const rootSpot = solution.spot
+  const state: OffTreeState<SolvedTurn> = {
+    failures: new Map(),
+    solve: (tree, fixedStrategies) =>
+      pack(solve(rootSpot, undefined, gadget, tree, { ...tuning, fixedStrategies }), state),
+  }
+  return pack(solution, state)
 }
 
 /**
@@ -789,6 +840,7 @@ export function solvedFlopPolicy(
       ...RIVER_CANDIDATE_TUNING,
       ...(overrides.boundedReads === undefined ? {} : { boundedReads: overrides.boundedReads }),
       ...(overrides.baselineCaps === undefined ? {} : { baselineCaps: overrides.baselineCaps }),
+      ...(overrides.offTree === undefined ? {} : { offTree: overrides.offTree }),
       scheme: overrides.scheme ?? 'cfr+',
       ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
       ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),

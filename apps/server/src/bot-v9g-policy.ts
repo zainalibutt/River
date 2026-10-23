@@ -9,6 +9,7 @@ import {
 } from './bot-value-network.js'
 
 export interface V9gOptions {
+  readonly offTree?: 'resolve'
   readonly boundedReads?: boolean
   readonly baselineCaps?: boolean
   readonly hybridThreshold?: number
@@ -16,6 +17,7 @@ export interface V9gOptions {
 
 /** Shared table/shark construction for the carried chain and its opt-in variants. */
 export function v9gPolicy({
+  offTree,
   boundedReads = false,
   baselineCaps,
   hybridThreshold,
@@ -29,6 +31,7 @@ export function v9gPolicy({
     scheme: 'dcfr',
     iterations: 40,
     boundedReads,
+    ...(offTree === undefined ? {} : { offTree }),
     ...(baselineCaps === undefined ? {} : { baselineCaps }),
   })
   if (hybridThreshold === undefined) return { ...chain, hybrid: undefined, exploitRiver: undefined }

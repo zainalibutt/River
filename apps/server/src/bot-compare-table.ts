@@ -34,11 +34,17 @@ import {
 
 const hybridStats: Record<string, ReturnType<typeof v9gPolicy>['hybrid']> = {}
 const exploitRiverStats: Record<string, RiverPolicyStats | undefined> = {}
+const offTreeStats: Record<string, unknown> = {}
 function v9g(name: string, options: Parameters<typeof v9gPolicy>[0] = {}): BotPolicy {
   const chain = v9gPolicy(options)
   riverStats[name] = chain.river
   hybridStats[name] = chain.hybrid
   exploitRiverStats[name] = chain.exploitRiver
+  offTreeStats[name] = {
+    flop: chain.stats.offTree,
+    turn: chain.turn.offTree,
+    river: chain.river.offTree,
+  }
   return chain.policy
 }
 const riverStats: Record<string, RiverPolicyStats> = {}
@@ -60,6 +66,9 @@ export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
   /** v9f at live speed: Discounted CFR with 40 rounds on the flop and the turn. */
   get v9g() {
     return v9g('v9g')
+  },
+  get v9go() {
+    return v9g('v9go', { offTree: 'resolve' })
   },
   get v9gx() {
     return v9g('v9gx', { boundedReads: true })
@@ -292,6 +301,7 @@ writeFileSync(
     baseMs,
     nextMs,
     river: riverStats,
+    offTree: offTreeStats,
     hybrid: hybridStats,
     exploitRiver: exploitRiverStats,
     ...(cached === undefined ? {} : { baselineFrom: cached.from }),

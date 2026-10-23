@@ -31,6 +31,8 @@ export type Player = 0 | 1
 
 /** Brown & Sandholm (2019); omitted options preserve linear-average CFR+. */
 export interface CfrOptions {
+  /** Already played own decisions retain their complete per-holding strategy. */
+  readonly fixedStrategies?: ReadonlyMap<string, Float64Array>
   readonly scheme?: 'cfr+' | 'dcfr'
   readonly alpha?: number
   readonly beta?: number
@@ -102,51 +104,104 @@ export interface RiverSolution {
 
 /** The betting tree for a spot: checks, bets and raises by the spot's sizes, capped. */
 export function riverTree(spot: RiverSpot): RiverNode {
+  return buildRiverNode(spot, 0, [0, 0], 0, '', false)
+}
+
+function buildRiverNode(
+  spot: RiverSpot,
+  player: Player,
+  paid: [number, number],
+  raises: number,
+  history: string,
+  facing: boolean,
+): RiverNode {
   const build = (
     player: Player,
     paid: [number, number],
     raises: number,
     history: string,
     facing: boolean,
-  ): RiverNode => {
-    const other: Player = player === 0 ? 1 : 0
-    const actions: string[] = []
-    const children: RiverNode[] = []
-    const add = (action: string, child: RiverNode) => {
-      actions.push(action)
-      children.push(child)
-    }
-    const toCall = paid[other] - paid[player]
-    const left = spot.stack - paid[player]
-    if (facing) {
-      add('f', { kind: 'fold', folder: player, paid: [paid[0], paid[1]] })
-      const called: [number, number] = [paid[0], paid[1]]
-      called[player] = paid[other]
-      add('c', { kind: 'showdown', paid: called })
-    } else if (history.endsWith('k') && history.length > 0) {
-      add('k', { kind: 'showdown', paid: [paid[0], paid[1]] })
-    } else {
-      add('k', build(other, [paid[0], paid[1]], raises, `${history}k`, false))
-    }
-    const canRaise = !facing || raises < spot.maxRaises
-    if (canRaise && left > toCall) {
-      const potAfterCall = spot.pot + paid[0] + paid[1] + toCall
-      const targets = new Set<number>()
-      for (const size of spot.betSizes) {
-        const extra = Math.round(toCall + size * potAfterCall)
-        if (extra < left) targets.add(extra)
-      }
-      if (spot.allIn) targets.add(left)
-      for (const extra of [...targets].sort((a, b) => a - b)) {
-        const next: [number, number] = [paid[0], paid[1]]
-        next[player] += extra
-        const label = extra === left ? 'a' : `b${next[player]}`
-        add(label, build(other, next, facing ? raises + 1 : raises, `${history}${label}`, true))
-      }
-    }
-    return { kind: 'action', player, history, paid: [paid[0], paid[1]], actions, children }
+  ): RiverNode => buildRiverNode(spot, player, paid, raises, history, facing)
+  const other: Player = player === 0 ? 1 : 0
+  const actions: string[] = []
+  const children: RiverNode[] = []
+  const add = (action: string, child: RiverNode) => {
+    actions.push(action)
+    children.push(child)
   }
-  return build(0, [0, 0], 0, '', false)
+  const toCall = paid[other] - paid[player]
+  const left = spot.stack - paid[player]
+  if (facing) {
+    add('f', { kind: 'fold', folder: player, paid: [paid[0], paid[1]] })
+    const called: [number, number] = [paid[0], paid[1]]
+    called[player] = paid[other]
+    add('c', { kind: 'showdown', paid: called })
+  } else if (history.endsWith('k') && history.length > 0) {
+    add('k', { kind: 'showdown', paid: [paid[0], paid[1]] })
+  } else {
+    add('k', build(other, [paid[0], paid[1]], raises, `${history}k`, false))
+  }
+  const canRaise = !facing || raises < spot.maxRaises
+  if (canRaise && left > toCall) {
+    const potAfterCall = spot.pot + paid[0] + paid[1] + toCall
+    const targets = new Set<number>()
+    for (const size of spot.betSizes) {
+      const extra = Math.round(toCall + size * potAfterCall)
+      if (extra < left) targets.add(extra)
+    }
+    if (spot.allIn) targets.add(left)
+    for (const extra of [...targets].sort((a, b) => a - b)) {
+      const next: [number, number] = [paid[0], paid[1]]
+      next[player] += extra
+      const label = extra === left ? 'a' : `b${next[player]}`
+      add(label, build(other, next, facing ? raises + 1 : raises, `${history}${label}`, true))
+    }
+  }
+  return { kind: 'action', player, history, paid: [paid[0], paid[1]], actions, children }
+}
+
+/** Widen only the observed decision, preserving every existing action/subtree. */
+export function addRiverAction(
+  spot: RiverSpot,
+  tree: RiverNode,
+  history: string,
+  target: number,
+): RiverNode {
+  let added = false
+  const walk = (node: RiverNode, raises: number): RiverNode => {
+    if (node.kind !== 'action') return node
+    const other: Player = node.player === 0 ? 1 : 0
+    const facing = node.paid[other] > node.paid[node.player]
+    if (node.history === history) {
+      if (!Number.isSafeInteger(target) || target <= node.paid[other] || target > spot.stack)
+        throw new Error('invalid actual chip target')
+      const label = target === spot.stack ? 'a' : `b${target}`
+      if (node.actions.includes(label)) throw new Error('actual action already present')
+      const paid: [number, number] = [...node.paid]
+      paid[node.player] = target
+      added = true
+      return {
+        ...node,
+        actions: [...node.actions, label],
+        children: [
+          ...node.children,
+          buildRiverNode(spot, other, paid, raises + Number(facing), `${history}${label}`, true),
+        ],
+      }
+    }
+    return {
+      ...node,
+      children: node.children.map((child, a) =>
+        walk(
+          child,
+          raises + Number(facing && !['f', 'c', 'k'].includes(node.actions[a] as string)),
+        ),
+      ),
+    }
+  }
+  const result = walk(tree, 0)
+  if (!added) throw new Error('missing ancestor decision')
+  return result
 }
 
 /**
@@ -178,6 +233,7 @@ type Compiled =
       /** The modelled player's known strategy here, and the reach its part passes down. */
       readonly fixed: Float64Array | null
       readonly fixedReach: readonly Float64Array[]
+      readonly locked: Float64Array | undefined
     }
 
 function compile(
@@ -185,6 +241,7 @@ function compile(
   hands: readonly [Hands, Hands],
   model: RiverOpponentModel | undefined,
   history = '',
+  locked?: ReadonlyMap<string, Float64Array>,
 ): Compiled {
   const out = [
     new Float64Array(hands[0].combos.length),
@@ -208,10 +265,11 @@ function compile(
     values: new Array<Float64Array>(width),
     out,
     children: node.children.map((child, action) =>
-      compile(child, hands, model, `${node.history}${node.actions[action] as string}`),
+      compile(child, hands, model, `${node.history}${node.actions[action] as string}`, locked),
     ),
     fixed: modelled ? model.strategy(node, hands[node.player]) : null,
     fixedReach: modelled ? node.actions.map(() => new Float64Array(count)) : [],
+    locked: locked?.get(node.history),
   }
 }
 
@@ -305,7 +363,7 @@ export function solveRiver(
     return dcfr ? next * (next >= 0 ? positiveDiscount : negativeDiscount) : Math.max(0, next)
   }
   const scratch = scratchFor(hands)
-  const root = compile(tree, hands, model)
+  const root = compile(tree, hands, model, '', options.fixedStrategies)
   const combined = new Float64Array(Math.max(hands[0].combos.length, hands[1].combos.length))
   // `fixed` is the modelled player's reach while they follow the model; it is
   // only carried while the other player is the one learning.
@@ -343,7 +401,8 @@ export function solveRiver(
       }
       for (let action = 0; action < width; action += 1) {
         strategy[h * width + action] =
-          total > 0 ? Math.max(0, regret[h * width + action] as number) / total : 1 / width
+          node.locked?.[h * width + action] ??
+          (total > 0 ? Math.max(0, regret[h * width + action] as number) / total : 1 / width)
       }
     }
     if (node.player === traverser) {
@@ -371,15 +430,16 @@ export function solveRiver(
         }
         out[h] = value
       }
-      for (let h = 0; h < count; h += 1) {
-        for (let action = 0; action < width; action += 1) {
-          const at = h * width + action
-          regret[at] = updatedRegret(
-            regret[at] as number,
-            ((values[action] as Float64Array)[h] as number) - (out[h] as number),
-          )
+      if (node.locked === undefined)
+        for (let h = 0; h < count; h += 1) {
+          for (let action = 0; action < width; action += 1) {
+            const at = h * width + action
+            regret[at] = updatedRegret(
+              regret[at] as number,
+              ((values[action] as Float64Array)[h] as number) - (out[h] as number),
+            )
+          }
         }
-      }
       return out
     }
     // For each iteration sample, (strategy sums of p, carried reach of p,
@@ -474,7 +534,9 @@ export function solveRiver(
       let total = 0
       for (let action = 0; action < width; action += 1) total += sum[start + action] as number
       for (let action = 0; action < width; action += 1) {
-        table[start + action] = total > 0 ? (sum[start + action] as number) / total : 1 / width
+        table[start + action] =
+          node.locked?.[start + action] ??
+          (total > 0 ? (sum[start + action] as number) / total : 1 / width)
       }
     }
     strategy.set(node.history, table)

@@ -1,5 +1,7 @@
-import { type Card, cardKey, parseCard } from '@river/engine'
+import { type BotObservationV1, type Card, cardKey, parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
+import { followWithResolving, type OffTreeState, offTreeStats } from './bot-off-tree.js'
+import type { PublicDecision } from './bot-public-replay.js'
 import { boundedRiverAdaptation, RIVER_ADAPTATION_ALLOWANCE } from './bot-river-adaptation.js'
 import { carryFromRecord } from './bot-river-carry.js'
 import { RIVER_POLICY_TUNING, type RiverReads, readBasedRiverProposal } from './bot-river-policy.js'
@@ -7,9 +9,11 @@ import {
   type Player,
   prepare,
   type RangeCombo,
+  type RiverGadget,
   type RiverNode,
   type RiverSolution,
   type RiverSpot,
+  riverValues,
   type ShowdownValues,
   solveRiver,
 } from './bot-river-solver.js'
@@ -44,6 +48,10 @@ const mutations = [
   'holding-order',
   'blocked',
   'snapshot',
+  'off-tree-refresh',
+  'off-tree-drop',
+  'off-tree-refresh-river',
+  'off-tree-drop-river',
 ]
 if (!mutations.includes(mutation)) throw new Error(`unknown CHAIN_MUTATION: ${mutation}`)
 const root: RiverSpot = {
@@ -60,6 +68,7 @@ const root: RiverSpot = {
   maxRaises: 0,
 }
 const streetKey = (s: RiverSpot) => s.board.map(cardKey).join(',')
+let offTreeOracle = false
 const info = (s: RiverSpot, prefix: string, history: string, p: Player, h: RangeCombo) =>
   `${prefix}/${streetKey(s)}/${history}/${p}/${id(h)}`
 type Policy = Map<string, number[]>
@@ -137,6 +146,39 @@ const share = (board: readonly Card[], a: RangeCombo, b: RangeCombo) => {
 // This betting tree is intentionally smaller than riverTree: no IP open-bet.
 function betting(s: RiverSpot): RiverNode {
   const bet = Math.round(s.pot / 2)
+  if (
+    offTreeOracle &&
+    ((s.board.length === 4 && cardKey(s.board[3] as Card) === cardKey(parseCard('Kc'))) ||
+      (s.board.length === 5 &&
+        s.pot === 74 &&
+        cardKey(s.board[3] as Card) === cardKey(parseCard('Kc')) &&
+        cardKey(s.board[4] as Card) === cardKey(parseCard('Kd'))))
+  ) {
+    const targets = [...new Set([bet, Math.round(s.pot * 0.43)])]
+    return {
+      kind: 'action',
+      player: 0,
+      history: '',
+      paid: [0, 0],
+      actions: ['k', ...targets.map((n) => `b${n}`)],
+      children: [
+        { kind: 'showdown', paid: [0, 0] },
+        ...targets.map(
+          (n): RiverNode => ({
+            kind: 'action',
+            player: 1,
+            history: `b${n}`,
+            paid: [n, 0],
+            actions: ['f', 'c'],
+            children: [
+              { kind: 'fold', folder: 1, paid: [n, 0] },
+              { kind: 'showdown', paid: [n, n] },
+            ],
+          }),
+        ),
+      ],
+    }
+  }
   return {
     kind: 'action',
     player: 0,
@@ -167,6 +209,186 @@ const nextSpot = (s: RiverSpot, paid: readonly number[], c: Card): RiverSpot => 
   ranges: s.ranges.map((r) =>
     r.filter((h) => clear(h.hole, [c])),
   ) as unknown as RiverSpot['ranges'],
+})
+
+describe.each(['cfr+', 'dcfr'] as const)('%s off-tree three-street chain', (scheme) => {
+  it('widens turn and river opponent bets with inherited bounds and audits full-game BR', () => {
+    offTreeOracle = true
+    try {
+      const record = createPromiseRecord()
+      const sums: Policy = new Map()
+      const flop = solveRiver(
+        root,
+        iterations,
+        undefined,
+        leaf(root, '', record, sums),
+        undefined,
+        betting(root),
+        { scheme },
+      )
+      const blueprint = normalized(sums)
+      install(flop, '', blueprint)
+      const br = seats.map((p) => aggregate(root, values(root, '', blueprint, p, true), p))
+      const gap = Math.max(0, (br[0] as number) + (br[1] as number) - root.pot)
+      expect(gap).toBeLessThan(1)
+      const tolerance = 2 * gap + 1e-6
+      const turnBase = nextSpot(root, [10, 10], parseCard('Kc'))
+      const turnCarry = carryFromRecord(record, 'b10c', cardKey(parseCard('Kc')), 1, turnBase)
+      const turnSpot = { ...turnBase, ranges: turnCarry.ranges }
+      const stats = offTreeStats()
+      const stripActual = (tree: RiverNode): RiverNode => {
+        if (tree.kind !== 'action') throw new Error('expected betting root')
+        return { ...tree, actions: tree.actions.slice(0, 2), children: tree.children.slice(0, 2) }
+      }
+      type Resolved = RiverSolution & {
+        readonly players: readonly [string, string]
+        readonly record?: PromiseRecord
+        readonly continuation: Policy
+        readonly offTree: OffTreeState<Resolved>
+      }
+      const resolve = (spot: RiverSpot, prefix: string, inherited: RiverGadget): Resolved => {
+        const state: OffTreeState<Resolved> = {
+          failures: new Map(),
+          solve: (tree) => run(tree, true),
+        }
+        const run = (tree: RiverNode, widened: boolean): Resolved => {
+          const rec = createPromiseRecord()
+          const continuation: Policy = new Map()
+          const showdown =
+            spot.board.length === 4 ? leaf(spot, prefix, rec, continuation) : undefined
+          let gadget = inherited
+          if (
+            widened &&
+            (mutation === 'off-tree-refresh' ||
+              (spot.board.length === 5 && mutation === 'off-tree-refresh-river'))
+          ) {
+            const fresh = solveRiver(spot, iterations, undefined, showdown, undefined, tree, {
+              scheme,
+            })
+            gadget = { player: 0, promises: riverValues(fresh).values[0] }
+          }
+          if (
+            widened &&
+            (mutation === 'off-tree-drop' ||
+              (spot.board.length === 5 && mutation === 'off-tree-drop-river'))
+          )
+            tree = stripActual(tree)
+          const solution = solveRiver(spot, iterations, undefined, showdown, gadget, tree, {
+            scheme,
+          })
+          expect(gadget.promises, 'off-tree solve retains inherited holding bounds').toBe(
+            inherited.promises,
+          )
+          const policy = normalized(continuation)
+          install(solution, prefix, policy)
+          return {
+            ...solution,
+            players: ['opponent', 'us'],
+            record: rec,
+            continuation: policy,
+            offTree: state,
+          }
+        }
+        return run(stripActual(betting(spot)), false)
+      }
+      const follow = (initial: Resolved, target: number) => {
+        const decision: PublicDecision = {
+          observation: { actor: { playerId: 'opponent' } } as BotObservationV1,
+          taken: {
+            seat: 0,
+            street: initial.spot.board.length === 4 ? 'turn' : 'river',
+            action: { kind: 'raiseTo', to: target },
+          },
+        }
+        const found = followWithResolving(initial, [decision], 1, stats, () => {})
+        if (typeof found === 'string') throw new Error(found)
+        expect(found.node.kind).toBe('action')
+        expect(found.solved.tree.kind === 'action' && found.solved.tree.actions).toEqual([
+          'k',
+          `b${Math.round(initial.spot.pot / 2)}`,
+          `b${target}`,
+        ])
+        return found.solved
+      }
+      const turnPrefix = '/b10c'
+      const turn = follow(resolve(turnSpot, turnPrefix, turnCarry.gadget), 17)
+      // Hand arithmetic: 40 + 17 + 17 = 74; 190 - 17 = 173 behind.
+      const turnHistory = 'b17c'
+      expect(turn.record?.leaves.get(turnHistory)?.paid).toEqual([17, 17])
+      const riverCard = parseCard('Kd')
+      const riverBase = nextSpot(turnSpot, [17, 17], riverCard)
+      expect([riverBase.pot, riverBase.stack]).toEqual([74, 173])
+      const riverCarry = carryFromRecord(
+        turn.record as PromiseRecord,
+        turnHistory,
+        cardKey(riverCard),
+        1,
+        riverBase,
+      )
+      const source = turn.record?.leaves.get(turnHistory)
+      const actual = carriedPromises(
+        turn.record as PromiseRecord,
+        turnHistory,
+        cardKey(riverCard),
+        1,
+      )
+      const translated = carriedPromises(
+        turn.record as PromiseRecord,
+        'b20c',
+        cardKey(riverCard),
+        1,
+      )
+      expect(actual.promises).not.toEqual(translated.promises)
+      for (const [i, h] of prepare(riverCarry.ranges[0], riverBase.board).combos.entries()) {
+        expect(riverCarry.gadget.promises[i]).toBeCloseTo(
+          (actual.promises[id(h)] as number) * 74,
+          8,
+        )
+        expect(source?.cards.get(cardKey(riverCard))).toBeDefined()
+      }
+      const riverSpot = { ...riverBase, ranges: riverCarry.ranges }
+      const riverPrefix = `${turnPrefix}/${turnHistory}`
+      const river = follow(resolve(riverSpot, riverPrefix, riverCarry.gadget), 32)
+      const changed = (replacement: Policy, reference: Policy) =>
+        Math.max(
+          ...[...replacement]
+            .filter(([key]) => playerOf(key) === 1)
+            .flatMap(([key, row]) =>
+              row.map((v, i) => Math.abs(v - (reference.get(key)?.[i] ?? v))),
+            ),
+        )
+      expect(
+        changed(turn.continuation, blueprint),
+        'turn changes our continuation',
+      ).toBeGreaterThan(1e-5)
+      expect(
+        changed(river.continuation, turn.continuation),
+        'river changes our continuation',
+      ).toBeGreaterThan(1e-5)
+      const chain = new Map(blueprint)
+      for (const replacement of [turn.continuation, river.continuation])
+        for (const [key, row] of replacement) if (playerOf(key) === 1) chain.set(key, row)
+      const chainedBR = aggregate(root, values(root, '', chain, 0, true), 0)
+      expect(
+        chainedBR,
+        'independent full-game opponent BR including both actual sizes',
+      ).toBeLessThanOrEqual((br[0] as number) + tolerance)
+      expect(stats).toMatchObject({ events: 2, resolves: 2, failures: {} })
+      console.log(
+        JSON.stringify({
+          scheme,
+          offTree: true,
+          blueprintBR: br[0],
+          chainedBR,
+          gap,
+          tolerance,
+          stats,
+        }),
+      )
+    } finally {
+      offTreeOracle = false
+    }
+  }, 60_000)
 })
 
 // Two-phase simplex, max c*x subject to A*x <= b, x >= 0. Bland-style index
@@ -392,12 +614,12 @@ function exact(s: RiverSpot, prefix: string) {
 // summing all compatible opponent holdings; never choose by hidden deal.
 function values(s: RiverSpot, prefix: string, policy: Policy, p: Player, best: boolean) {
   const other = p === 0 ? 1 : 0
-  const probabilities = (key: string) => {
+  const probabilities = (key: string, width: number) => {
     const row = policy.get(key)
     if (
-      row?.length !== 2 ||
+      row?.length !== width ||
       row.some((v) => !Number.isFinite(v) || v < -1e-9) ||
-      Math.abs((row[0] as number) + (row[1] as number) - 1) > 1e-8
+      Math.abs(row.reduce((a, b) => a + b, 0) - 1) > 1e-8
     ) {
       throw new Error(`missing or invalid full-game policy: ${key}`)
     }
@@ -407,61 +629,60 @@ function values(s: RiverSpot, prefix: string, policy: Policy, p: Player, best: b
     const walk = (
       spot: RiverSpot,
       pre: string,
+      node: RiverNode,
       history: string,
-      facing: boolean,
       reach: number[],
       paid: readonly [number, number],
     ): number => {
-      const bet = Math.round(spot.pot / 2)
-      const actor = facing ? 1 : 0
-      const actions = facing ? ['f', 'c'] : ['k', `b${bet}`]
-      const result = actions.map((action, ai) => {
-        let r = reach
-        if (actor === other)
-          r = reach.map((w, j) => {
-            if (w === 0) return 0
-            const o = s.ranges[other][j] as RangeCombo
-            return w * (probabilities(info(spot, pre, history, other, o))[ai] as number)
-          })
-        const nextPaid: [number, number] = [...paid]
-        if (action === 'c') nextPaid[1] += bet
-        if (action.startsWith('b')) {
-          nextPaid[0] += bet
-          return walk(spot, pre, action, true, r, nextPaid)
+      if (node.kind === 'action') {
+        const actor = node.player
+        const actions = node.actions
+        const result = actions.map((action, ai) => {
+          let r = reach
+          if (actor === other)
+            r = reach.map((w, j) => {
+              if (w === 0) return 0
+              const o = s.ranges[other][j] as RangeCombo
+              return (
+                w *
+                (probabilities(info(spot, pre, history, other, o), actions.length)[ai] as number)
+              )
+            })
+          return walk(spot, pre, node.children[ai] as RiverNode, history + action, r, paid)
+        })
+        if (actor === p) {
+          if (best) return Math.max(...result)
+          const probs = probabilities(info(spot, pre, history, p, h), actions.length)
+          return result.reduce((a, v, i) => a + v * (probs[i] as number), 0)
         }
-        const pot = s.pot + nextPaid[0] + nextPaid[1]
-        if (action === 'f')
-          return r.reduce((a, w) => a + w * (p === 0 ? pot - nextPaid[0] : -nextPaid[1]), 0)
-        const closed = history + action
-        if (spot.board.length === 5)
-          return r.reduce((a, w, j) => {
-            const o = s.ranges[other][j] as RangeCombo
-            return a + w * (share(spot.board, h, o) * pot - nextPaid[p])
-          }, 0)
-        let v = 0
-        for (const c of deck)
-          if (clear([c], [...spot.board, ...h.hole])) {
-            const rr = r.map((w, j) =>
-              clear([c], (s.ranges[other][j] as RangeCombo).hole) ? w : 0,
-            )
-            if (rr.every((w) => w === 0)) continue
-            const ns = nextSpot(spot, action === 'c' ? [bet, bet] : [0, 0], c)
-            v +=
-              walk(ns, `${pre}/${closed}`, '', false, rr, nextPaid) /
-              (deck.length - spot.board.length - 4)
-          }
-        return v
-      })
-      if (actor === p) {
-        if (best) return Math.max(...result)
-        const probs = probabilities(info(spot, pre, history, p, h))
-        return result.reduce((a, v, i) => a + v * (probs[i] as number), 0)
+        return result.reduce((a, b) => a + b, 0)
       }
-      return result.reduce((a, b) => a + b, 0)
+      const r = reach
+      const nextPaid: [number, number] = [paid[0] + node.paid[0], paid[1] + node.paid[1]]
+      const pot = s.pot + nextPaid[0] + nextPaid[1]
+      if (node.kind === 'fold')
+        return r.reduce((a, w) => a + w * (p === node.folder ? -nextPaid[p] : pot - nextPaid[p]), 0)
+      const closed = history
+      if (spot.board.length === 5)
+        return r.reduce((a, w, j) => {
+          const o = s.ranges[other][j] as RangeCombo
+          return a + w * (share(spot.board, h, o) * pot - nextPaid[p])
+        }, 0)
+      let v = 0
+      for (const c of deck)
+        if (clear([c], [...spot.board, ...h.hole])) {
+          const rr = r.map((w, j) => (clear([c], (s.ranges[other][j] as RangeCombo).hole) ? w : 0))
+          if (rr.every((w) => w === 0)) continue
+          const ns = nextSpot(spot, node.paid, c)
+          v +=
+            walk(ns, `${pre}/${closed}`, betting(ns), '', rr, nextPaid) /
+            (deck.length - spot.board.length - 4)
+        }
+      return v
     }
     const reach = s.ranges[other].map((o) => (clear(h.hole, o.hole) ? o.weight : 0))
     const mass = reach.reduce((a, b) => a + b, 0)
-    return mass > 0 ? walk(s, prefix, '', false, reach, [0, 0]) / mass : 0
+    return mass > 0 ? walk(s, prefix, betting(s), '', reach, [0, 0]) / mass : 0
   })
 }
 function aggregate(s: RiverSpot, vs: number[], p: Player) {
@@ -607,7 +828,7 @@ function normalized(sums: Policy): Policy {
   return new Map(
     [...sums].map(([k, xs]) => {
       const total = xs.reduce((a, b) => a + b, 0)
-      return [k, total > 0 ? xs.map((x) => x / total) : xs.map(() => 0.5)]
+      return [k, total > 0 ? xs.map((x) => x / total) : xs.map(() => 1 / xs.length)]
     }),
   )
 }

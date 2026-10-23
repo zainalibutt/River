@@ -21,6 +21,7 @@ it('shares the original v9g construction and forwards only the explicit bounded 
   v9gPolicy()
   v9gPolicy({ boundedReads: false })
   v9gPolicy({ boundedReads: true })
+  v9gPolicy({ offTree: 'resolve' })
   const original = {
     carry: 'both',
     turnStartNetwork: network,
@@ -38,6 +39,13 @@ it('shares the original v9g construction and forwards only the explicit bounded 
     expect(rivers.mock.calls[i]?.[3]?.carry).toBe('per-river')
     expect(rivers.mock.calls[i]?.[3]?.safe).toBe(true)
   }
+  expect(construct.mock.calls[3]).toEqual([
+    network,
+    network,
+    { ...original, boundedReads: false, offTree: 'resolve' },
+  ])
+  expect(rivers.mock.calls[3]?.[3]?.offTree).toBe('resolve')
+  expect(rivers.mock.calls.slice(0, 3).every((call) => call[3]?.offTree === undefined)).toBe(true)
 })
 
 it.each([0.35, 0.5])(

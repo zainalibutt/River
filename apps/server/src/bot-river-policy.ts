@@ -22,6 +22,12 @@ import {
   updateRange,
   type WeightedHolding,
 } from './bot-lbr-range.js'
+import {
+  followWithResolving,
+  type OffTreeState,
+  type OffTreeStats,
+  offTreeStats,
+} from './bot-off-tree.js'
 import { type HandAwareBotPolicy, HandSolveCache, releasePolicyHand } from './bot-policy-hand.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
 import { boundedRiverAdaptation, type RiverProposal } from './bot-river-adaptation.js'
@@ -54,6 +60,7 @@ import { solveCacheMemory } from './bot-solver-memory.js'
  * and raising more than a typical player gets more of that doubt.
  */
 export interface RiverPolicyTuning extends CfrOptions {
+  readonly offTree?: 'resolve'
   /**
    * Use the per-holding re-solving gadget (lane B), with reads and added air
    * off. Without `carry`, promises retain the historical refreshed-solve path;
@@ -163,6 +170,7 @@ export const RIVER_READS_V8X_TUNING: Partial<RiverPolicyTuning> = {
 const SIZE_FOLD_STRENGTH = 3
 
 export interface RiverPolicyStats {
+  readonly offTree: OffTreeStats
   /** River decisions the solver answered. */
   solved: number
   /** River decisions left to the base policy, by reason. */
@@ -191,6 +199,7 @@ export interface RiverPolicyStats {
 type Player = 0 | 1
 
 interface SolvedRiver {
+  readonly offTree?: OffTreeState<SolvedRiver>
   readonly spot: RiverSpot
   readonly tree: RiverNode
   readonly strategy: ReadonlyMap<string, Float64Array>
@@ -224,6 +233,7 @@ export function riverSolverPolicy(
 } {
   const tuning: RiverPolicyTuning = { ...RIVER_POLICY_TUNING, ...overrides }
   const stats: RiverPolicyStats = {
+    offTree: offTreeStats(),
     solved: 0,
     fallbacks: {},
     solves: 0,
@@ -245,7 +255,7 @@ export function riverSolverPolicy(
     adaptationMs: 0,
   }
   const cache = new HandSolveCache<SolvedRiver | string>(
-    tuning.boundedReads === true,
+    tuning.boundedReads === true || tuning.offTree === 'resolve',
     tuning.cacheSize,
   )
   const policy: HandAwareBotPolicy = {
@@ -327,11 +337,12 @@ function solverDecision(
           tuning,
         )
       : null
-  const cacheKey = tuning.boundedReads
-    ? cache.key(observation, `${observation.actor.playerId}|${observation.board.map(cardKey)}`)
-    : `${key}|${observation.actor.playerId}${doubt > 0 ? `|${doubt.toFixed(4)}` : ''}${
-        reads === null ? '' : `|${Object.values(reads).map((value) => value.toFixed(4))}`
-      }`
+  const cacheKey =
+    tuning.boundedReads || tuning.offTree === 'resolve'
+      ? cache.key(observation, `${observation.actor.playerId}|${observation.board.map(cardKey)}`)
+      : `${key}|${observation.actor.playerId}${doubt > 0 ? `|${doubt.toFixed(4)}` : ''}${
+          reads === null ? '' : `|${Object.values(reads).map((value) => value.toFixed(4))}`
+        }`
   let solved = cache.get(cacheKey)
   // Once chosen, even new reads that would otherwise trigger a fallback do
   // not change this river's policy. The flag-off path retains its old guards.
@@ -363,12 +374,24 @@ function solverDecision(
   if (firstActor !== solved.players[0]) return 'order mismatch'
   const self: Player = solved.players[0] === observation.actor.playerId ? 0 : 1
   let node = solved.tree
-  for (const decision of riverStart === -1 ? [] : decisions.slice(riverStart)) {
-    if (node.kind !== 'action') return 'off tree'
-    const index = node.actions.indexOf(translate(node, decision, solved.spot))
-    if (index === -1) return 'off tree'
-    node = node.children[index] as RiverNode
-  }
+  if (tuning.offTree === 'resolve') {
+    const found = followWithResolving(
+      solved,
+      riverStart === -1 ? [] : decisions.slice(riverStart),
+      self,
+      stats.offTree,
+      (next) => cache.put(observation, cacheKey, next),
+    )
+    if (typeof found === 'string') return found
+    solved = found.solved
+    node = found.node
+  } else
+    for (const decision of riverStart === -1 ? [] : decisions.slice(riverStart)) {
+      if (node.kind !== 'action') return 'off tree'
+      const index = node.actions.indexOf(translate(node, decision, solved.spot))
+      if (index === -1) return 'off tree'
+      node = node.children[index] as RiverNode
+    }
   if (node.kind !== 'action' || node.player !== self) return 'off tree'
   const table = solved.strategy.get(node.history)
   const hole = observation.actor.hole
@@ -480,21 +503,20 @@ function solveSpot(
   let solution =
     guessed ??
     solveRiver(spot, tuning.iterations, undefined, undefined, carry?.gadget, undefined, tuning)
+  let rootGadget = carry?.gadget
   if (safe && guessed !== undefined) {
     // Historical fallback: refreshed values, not inherited earlier-street bounds.
     // Preserve this path for existing policies and count opt-in carry misses.
     const promises = riverValues(guessed).values[opponent]
     const flat = [...spot.ranges] as [RiverSpot['ranges'][0], RiverSpot['ranges'][1]]
     flat[opponent] = flat[opponent].map((entry) => ({ ...entry, weight: 1 }))
+    rootGadget = { player: opponent, promises }
     solution = solveRiver(
       { ...spot, ranges: flat },
       tuning.iterations,
       undefined,
       undefined,
-      {
-        player: opponent,
-        promises,
-      },
+      rootGadget,
       undefined,
       tuning,
     )
@@ -542,13 +564,32 @@ function solveSpot(
   stats.solves += 1
   stats.exploitability += riverReport(guessed ?? solution).exploitability
   stats.combos += spot.ranges[0].length + spot.ranges[1].length
-  return {
-    spot,
-    tree: solution.tree,
-    strategy: solution.strategy,
+  const pack = (result: RiverSolution, state?: OffTreeState<SolvedRiver>): SolvedRiver => ({
+    ...(state === undefined ? {} : { offTree: state }),
+    spot: tuning.offTree === 'resolve' ? result.spot : spot,
+    tree: result.tree,
+    strategy: result.strategy,
     hands: [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)],
     players,
+  })
+  if (tuning.offTree !== 'resolve') return pack(solution)
+  const gadget = rootGadget ?? {
+    player: opponent,
+    promises: riverValues(solution).values[opponent],
   }
+  const rootSpot = solution.spot
+  const state: OffTreeState<SolvedRiver> = {
+    failures: new Map(),
+    solve: (tree, fixedStrategies) =>
+      pack(
+        solveRiver(rootSpot, tuning.iterations, undefined, undefined, gadget, tree, {
+          ...tuning,
+          fixedStrategies,
+        }),
+        state,
+      ),
+  }
+  return pack(solution, state)
 }
 
 /** Build the v8z restricted Nash proposal and a FIXED model objective. */
