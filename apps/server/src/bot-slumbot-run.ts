@@ -7,6 +7,7 @@ import {
   seedFromString,
 } from '@river/engine'
 import { pokerGuardPolicy, v5GuardPolicy } from './bot-poker-guard.js'
+import { releasePolicyHand } from './bot-policy-hand.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
 import { botPlayerId } from './bot-service.js'
 import { focalRotation } from './bot-session-campaign.js'
@@ -135,12 +136,15 @@ for (let hand = 0; hand < hands; hand += 1) {
     }
   } catch (error) {
     failed += 1
+    // Every Slumbot hand is replayed as hand 1 of room 'slumbot', so release it here.
+    releasePolicyHand(policy, 'slumbot', 1)
     appendFileSync(
       `${out}.errors.jsonl`,
       `${JSON.stringify({ hand, action: state?.action ?? null, clientPos: state?.client_pos ?? null, hole: state?.hole_cards ?? null, board: state?.board ?? null, incr, error: String(error) })}\n`,
     )
     continue
   }
+  releasePolicyHand(policy, 'slumbot', 1)
   if (state?.winnings === undefined) continue
   total += state.winnings
   if (memory !== null) {
