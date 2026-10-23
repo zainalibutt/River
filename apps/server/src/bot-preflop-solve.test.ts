@@ -20,6 +20,7 @@ import {
   validateEquityTable,
 } from './bot-preflop-solve-equity.js'
 import { type makePack, reachedFrequencies } from './bot-preflop-solve-output.js'
+import { DEFAULT_HAND_REALISATION, isHandRealisation } from './bot-preflop-solve-realisation.js'
 import {
   DEFAULT_REALISATION,
   decisionNodes,
@@ -71,23 +72,72 @@ function exhaustive(
     for (let first = 0; first < 3; first += 1) {
       for (let second = 0; second < 3; second += 1) {
         if (first === second) continue
-        const walk = (node: PreflopNode): number => {
+        const walk = (node: PreflopNode, opposing = [1, 1, 1]): number => {
           if (node.kind !== 'decision') {
             if (node.kind === 'fold')
               return node.folder === player ? -node.paid[player] : (node.paid[1 - player] as number)
             const win = player === 0 ? Number(first > second) : Number(second > first)
-            const factor = node.kind === 'all-in' ? 1 : player === 0 ? factors.ip : factors.oop
-            return (node.paid[0] + node.paid[1]) * win * factor - node.paid[player]
+            const pot = node.paid[0] + node.paid[1]
+            if (node.kind === 'all-in') return pot * win - node.paid[player]
+            if (!isHandRealisation(factors))
+              return pot * win * (player === 0 ? factors.ip : factors.oop) - node.paid[player]
+            // Independent scalar oracle for this toy's only flop: checked limp, depth 1.5.
+            // Enumerate all possible opposing holdings, excluding our two cards.
+            const hero = player === 0 ? first : second
+            let mass = 0
+            let winningMass = 0
+            for (let other = 0; other < 3; other += 1) {
+              if (other === hero) continue
+              mass += opposing[other] as number
+              winningMass += (opposing[other] as number) * Number(hero > other)
+            }
+            if (mass === 0) return 0
+            const equity = winningMass / mass
+            const q =
+              Math.max(
+                0,
+                Math.min(
+                  1,
+                  (equity - factors.equity.floor) / (factors.equity.ceiling - factors.equity.floor),
+                ),
+              ) ** factors.equity.power
+            const curve = factors.pots.limped[player === 0 ? 'ip' : 'oop']
+            const deep =
+              curve.base +
+              curve.equitySlope * q +
+              factors.features.pair +
+              factors.features.highCard * ((11 + hero - 2) / 12)
+            const spr = (1.5 - node.paid[player]) / pot
+            const factor = Math.max(
+              factors.bounds.min,
+              Math.min(factors.bounds.max, 1 + (spr / (spr + factors.sprHalfLife)) * (deep - 1)),
+            )
+            return pot * equity * factor - node.paid[player]
           }
           const hand = node.player === 0 ? first : second
           if (pure && node.player === player)
-            return walk(node.children[plan.get(`${node.id}:${hand}`) as number] as PreflopNode)
+            return walk(
+              node.children[plan.get(`${node.id}:${hand}`) as number] as PreflopNode,
+              opposing,
+            )
           let result = 0
           for (let action = 0; action < node.actions.length; action += 1)
             result +=
               ((strategy.get(node.id) as Float64Array<ArrayBufferLike>)[
                 hand * node.actions.length + action
-              ] as number) * walk(node.children[action] as PreflopNode)
+              ] as number) *
+              walk(
+                node.children[action] as PreflopNode,
+                node.player === player
+                  ? opposing
+                  : opposing.map(
+                      (reach, other) =>
+                        reach *
+                        ((strategy.get(node.id) as Float64Array)[
+                          other * node.actions.length + action
+                        ] as number),
+                    ),
+              )
           return result
         }
         total += walk(tree) / 6
@@ -113,6 +163,25 @@ function exhaustive(
   return { value: value(false), br, plans }
 }
 describe('offline preflop solver: independent exhaustive oracle', () => {
+  it('matches the independent range-dependent v2 toy oracle, including blocked/unreachable ranges', () => {
+    const tree = preflopTree(1.5)
+    const policies = [new Map(uniform(tree, 3)), new Map(uniform(tree, 3))]
+    policies[1]?.set('button', Float64Array.from([0, 1, 0, 0, 0, 1, 1, 0, 0]))
+    for (const policy of policies) {
+      const actual = bestResponseCertificate(tree, toy, policy, DEFAULT_HAND_REALISATION)
+      for (const p of [0, 1] as const) {
+        const oracle = exhaustive(tree, policy, p, DEFAULT_HAND_REALISATION)
+        expect(actual.profileValueBb[p]).toBeCloseTo(oracle.value, 12)
+        expect(actual.bestResponseValueBb[p]).toBeCloseTo(oracle.br, 12)
+      }
+    }
+    const trainer = new PreflopTrainer(tree, toy, DEFAULT_HAND_REALISATION)
+    trainer.step(2000)
+    const policy = trainer.average()
+    const a = exhaustive(tree, policy, 0, DEFAULT_HAND_REALISATION)
+    const b = exhaustive(tree, policy, 1, DEFAULT_HAND_REALISATION)
+    expect((a.br - a.value + b.br - b.value) / 2).toBeLessThan(0.0001)
+  })
   it('matches every BR, profile value and general-sum improvement on the six-card toy', () => {
     const tree = preflopTree(1.5)
     const policy = uniform(tree, 3)
@@ -283,13 +352,18 @@ describe('preflop equity and exact card removal', () => {
   })
 })
 describe('generated preflop packs', () => {
-  it.each([100, 200])(
-    '%i bb is complete, legal, normalised, correctly labelled and certified',
-    (depth) => {
+  it.each([
+    ['v1', 100],
+    ['v1', 200],
+    ['v2', 100],
+    ['v2', 200],
+  ] as const)(
+    '%s %i bb is complete, legal, normalised, correctly labelled and certified',
+    (version, depth) => {
       const pack = JSON.parse(
-        readFileSync(new URL(`../preflop/v1/${depth}bb.json`, import.meta.url), 'utf8'),
+        readFileSync(new URL(`../preflop/${version}/${depth}bb.json`, import.meta.url), 'utf8'),
       ) as ReturnType<typeof makePack>
-      expect(pack.version).toBe('river-hu-preflop-v1')
+      expect(pack.version).toBe(`river-hu-preflop-${version}`)
       expect(pack.metadata.effectiveStackBb).toBe(depth)
       expect(pack.metadata.tree).toEqual(preflopTree(depth))
       expect(pack.nodes).toHaveLength(12)
@@ -313,7 +387,11 @@ describe('generated preflop packs', () => {
       expect(pack.metadata.equity.spotChecks['AA-vs-KK']).toBeCloseTo(0.82, 1)
       expect(pack.metadata.equity.spotChecks['AKs-vs-QQ']).toBeCloseTo(0.46, 1)
       expect(pack.metadata.equity.spotChecks['72o-vs-AA']).toBeCloseTo(0.12, 1)
-      const dump = readFileSync(new URL(`../preflop/v1/${depth}bb.txt`, import.meta.url), 'utf8')
+      const dump = readFileSync(
+        new URL(`../preflop/${version}/${depth}bb.txt`, import.meta.url),
+        'utf8',
+      )
+      expect(dump).toContain(`river-hu-preflop-${version}`)
       expect(dump).toContain('button/raise-2.5/raise-9')
       expect(pack.headlines.bbVsOpen2_5).not.toBeNull()
       // The big ignored cache is not required for tests in a fresh checkout.

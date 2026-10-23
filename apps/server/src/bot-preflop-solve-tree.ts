@@ -1,3 +1,15 @@
+import {
+  flopContext,
+  isHandRealisation,
+  type Realisation,
+  realisationFactor,
+} from './bot-preflop-solve-realisation.js'
+
+export {
+  DEFAULT_REALISATION,
+  type Realisation,
+  validateRealisation,
+} from './bot-preflop-solve-realisation.js'
 /** Offline heads-up preflop tree. Amounts are total contributions in big blinds. */
 export type Seat = 0 | 1
 export interface PreflopAction {
@@ -20,20 +32,6 @@ export type PreflopNode =
       readonly paid: readonly [number, number]
       readonly folder?: Seat
     }
-
-export interface Realisation {
-  readonly ip: number
-  readonly oop: number
-}
-
-/** A deliberately simple tunable model, not fitted postflop skill estimates. */
-export const DEFAULT_REALISATION: Realisation = { ip: 1.05, oop: 0.95 }
-
-export function validateRealisation(factors: Realisation): void {
-  if (![factors.ip, factors.oop].every((v) => Number.isFinite(v) && v > 0)) {
-    throw new Error('realisation factors must be finite and positive')
-  }
-}
 
 /** The requested finite action abstraction, including every jam's call/fold response. */
 export function preflopTree(depth: number): PreflopNode {
@@ -138,12 +136,32 @@ export function terminalUtility(
   player: Seat,
   equity: number,
   factors: Realisation,
+  context?: { readonly hand: string; readonly depth: number },
 ): number {
   if (node.kind === 'fold') {
     return node.folder === player ? -node.paid[player] : node.paid[player === 0 ? 1 : 0]
   }
-  const factor = node.kind === 'all-in' ? 1 : player === 0 ? factors.ip : factors.oop
+  let factor = 1
+  if (node.kind === 'flop') {
+    if (isHandRealisation(factors)) {
+      if (!context) throw new Error('hand-dependent realisation requires hand and depth')
+      const { potType, spr } = flopContext(node.paid, context.depth)
+      factor = realisationFactor(
+        context.hand,
+        equity,
+        player === 0 ? 'ip' : 'oop',
+        potType,
+        spr,
+        factors,
+      )
+    } else factor = player === 0 ? factors.ip : factors.oop
+  }
   return (node.paid[0] + node.paid[1]) * equity * factor - node.paid[player]
+}
+
+/** Jams expose the effective depth even when the root only contains the blinds. */
+export function treeDepth(tree: PreflopNode): number {
+  return Math.max(...tree.paid, ...(tree.kind === 'decision' ? tree.children.map(treeDepth) : []))
 }
 
 export function decisionNodes(tree: PreflopNode): Extract<PreflopNode, { kind: 'decision' }>[] {

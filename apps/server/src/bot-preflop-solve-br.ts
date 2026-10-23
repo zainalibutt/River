@@ -5,7 +5,18 @@ import {
   HAND_CLASSES,
   type Hole,
 } from './bot-preflop-solve-equity.js'
-import type { PreflopNode, Realisation, Seat } from './bot-preflop-solve-tree.js'
+import {
+  flopContext,
+  isHandRealisation,
+  realisationFactor,
+  validateRealisation,
+} from './bot-preflop-solve-realisation.js'
+import {
+  type PreflopNode,
+  type Realisation,
+  type Seat,
+  treeDepth,
+} from './bot-preflop-solve-tree.js'
 export interface Certificate {
   readonly profileValueBb: readonly [number, number]
   readonly bestResponseValueBb: readonly [number, number]
@@ -26,9 +37,17 @@ function payoff(
   p: Seat,
   e: number,
   r: Realisation,
+  hand: string,
+  depth: number,
 ): number {
   if (node.kind === 'fold') return node.folder === p ? -node.paid[p] : (node.paid[1 - p] as number)
-  const realised = node.kind === 'flop' ? (p === 0 ? r.ip : r.oop) : 1
+  let realised = 1
+  if (node.kind === 'flop') {
+    if (isHandRealisation(r)) {
+      const { potType, spr } = flopContext(node.paid, depth)
+      realised = realisationFactor(hand, e, p === 0 ? 'ip' : 'oop', potType, spr, r)
+    } else realised = p === 0 ? r.ip : r.oop
+  }
   return (node.paid[0] + node.paid[1]) * e * realised - node.paid[p]
 }
 export function validateStrategy(
@@ -66,22 +85,38 @@ export function bestResponseCertificate(
 ): Certificate {
   const n = model.classes.length
   validateStrategy(tree, strategy, n)
+  validateRealisation(factors)
+  const depth = treeDepth(tree)
   const totalDeals = model.deals.reduce((a, b) => a + b, 0)
   const solve = (player: Seat, responding: boolean): number => {
     const walk = (node: PreflopNode, opponentReach: Float64Array): Float64Array => {
       const out = new Float64Array(n)
       if (node.kind !== 'decision') {
         for (let h = 0; h < n; h += 1) {
+          let mass = 0
+          let wins = 0
           for (let o = 0; o < n; o += 1) {
             const pair = player === 0 ? h * n + o : o * n + h
             const e =
               player === 0 ? (model.equity[pair] as number) : 1 - (model.equity[pair] as number)
+            const weight = (model.deals[pair] as number) * (opponentReach[o] as number)
+            if (node.kind === 'flop' && isHandRealisation(factors)) {
+              mass += weight
+              wins += weight * e
+              continue
+            }
             out[h] =
               (out[h] as number) +
               ((model.deals[pair] as number) / totalDeals) *
                 (opponentReach[o] as number) *
-                payoff(node, player, e, factors)
+                payoff(node, player, e, factors, model.classes[h] as string, depth)
           }
+          if (node.kind === 'flop' && isHandRealisation(factors))
+            out[h] =
+              mass === 0
+                ? 0
+                : (mass / totalDeals) *
+                  payoff(node, player, wins / mass, factors, model.classes[h] as string, depth)
         }
         return out
       }
@@ -142,6 +177,8 @@ export function comboBestResponseValues(
   factors: Realisation,
 ): readonly [number, number] {
   const combos = HAND_CLASSES.flatMap((h, classId) => h.combos.map((hole) => ({ hole, classId })))
+  validateRealisation(factors)
+  const depth = treeDepth(tree)
   const n = combos.length
   const m = HAND_CLASSES.length
   const counts = new Float64Array(n * m)
@@ -156,17 +193,38 @@ export function comboBestResponseValues(
       if (node.kind !== 'decision') {
         for (let h = 0; h < n; h += 1) {
           const heroClass = (combos[h] as { hole: Hole; classId: number }).classId
+          let mass = 0
+          let wins = 0
           for (let o = 0; o < m; o += 1) {
             const e =
               player === 0
                 ? (table.equity[heroClass * m + o] as number)
                 : 1 - (table.equity[o * m + heroClass] as number)
+            const weight = (counts[h * m + o] as number) * (opponentReach[o] as number)
+            if (node.kind === 'flop' && isHandRealisation(factors)) {
+              mass += weight
+              wins += weight * e
+              continue
+            }
             out[h] =
               (out[h] as number) +
               ((counts[h * m + o] as number) / (1326 * 1225)) *
                 (opponentReach[o] as number) *
-                payoff(node, player, e, factors)
+                payoff(node, player, e, factors, table.classes[heroClass] as string, depth)
           }
+          if (node.kind === 'flop' && isHandRealisation(factors))
+            out[h] =
+              mass === 0
+                ? 0
+                : (mass / (1326 * 1225)) *
+                  payoff(
+                    node,
+                    player,
+                    wins / mass,
+                    factors,
+                    table.classes[heroClass] as string,
+                    depth,
+                  )
         }
         return out
       }

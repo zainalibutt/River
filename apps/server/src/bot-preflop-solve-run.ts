@@ -1,10 +1,15 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { bestResponseCertificate, comboBestResponseValues } from './bot-preflop-solve-br.js'
 import { PreflopTrainer } from './bot-preflop-solve-cfr.js'
 import { loadOrGenerateEquity } from './bot-preflop-solve-equity.js'
 import { gridDump, makePack } from './bot-preflop-solve-output.js'
+import {
+  DEFAULT_HAND_REALISATION,
+  isHandRealisation,
+  parseRealisation,
+} from './bot-preflop-solve-realisation.js'
 import { DEFAULT_REALISATION, preflopTree } from './bot-preflop-solve-tree.js'
 
 function numberArg(args: readonly string[], flag: string, fallback: number): number {
@@ -20,6 +25,12 @@ function localPath(path: string): string {
     throw new Error('output must stay inside the worktree')
   return absolute
 }
+function stringArg(args: readonly string[], flag: string): string | undefined {
+  const i = args.indexOf(flag)
+  if (i < 0) return undefined
+  if (!args[i + 1] || args[i + 1]?.startsWith('--')) throw new Error(`missing ${flag}`)
+  return args[i + 1]
+}
 /** One depth per bounded invocation; equity is generated once and reused across both packs. */
 export function runPreflop(args = process.argv.slice(2)): void {
   const budgetStarted = performance.now()
@@ -29,10 +40,29 @@ export function runPreflop(args = process.argv.slice(2)): void {
   const maxIterations = numberArg(args, '--iterations', 10000)
   const maxSeconds = Math.min(480, numberArg(args, '--seconds', 240))
   const target = numberArg(args, '--target', 0.0075)
-  const factors = {
-    ip: numberArg(args, '--ip', DEFAULT_REALISATION.ip),
-    oop: numberArg(args, '--oop', DEFAULT_REALISATION.oop),
-  }
+  const configPath = stringArg(args, '--realisation')
+  const flat = args.includes('--flat')
+  if (flat && configPath) throw new Error('--flat and --realisation are mutually exclusive')
+  if (!flat && (args.includes('--ip') || args.includes('--oop')))
+    throw new Error('--ip/--oop require --flat')
+  const factors = parseRealisation(
+    configPath
+      ? JSON.parse(readFileSync(localPath(configPath), 'utf8'))
+      : flat
+        ? {
+            ip: numberArg(args, '--ip', DEFAULT_REALISATION.ip),
+            oop: numberArg(args, '--oop', DEFAULT_REALISATION.oop),
+          }
+        : DEFAULT_HAND_REALISATION,
+  )
+  const outputDir = localPath(
+    stringArg(args, '--output-dir') ??
+      (isHandRealisation(factors) ? 'apps/server/preflop/v2' : 'out/preflop-solve/flat'),
+  )
+  const legacyDir = localPath('apps/server/preflop/v1')
+  const legacyRelative = relative(legacyDir, outputDir)
+  if (legacyRelative === '' || (!legacyRelative.startsWith('..') && !isAbsolute(legacyRelative)))
+    throw new Error('v1 packs are preserved; choose a different output directory')
   const table = loadOrGenerateEquity(
     localPath(`out/preflop-solve/equity-v1-${samples}.json`),
     samples,
@@ -85,10 +115,13 @@ export function runPreflop(args = process.argv.slice(2)): void {
     target,
     checkpoints,
   })
-  const path = localPath(`apps/server/preflop/v1/${depth}bb.json`)
+  const path = localPath(resolve(outputDir, `${depth}bb.json`))
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${JSON.stringify(pack, null, 2)}\n`)
-  writeFileSync(localPath(`apps/server/preflop/v1/${depth}bb.txt`), gridDump(depth, tree, strategy))
+  writeFileSync(
+    localPath(resolve(outputDir, `${depth}bb.txt`)),
+    gridDump(depth, tree, strategy, pack.version),
+  )
   process.stdout.write(
     `${JSON.stringify({ depth, iterations: trainer.iterations, seconds, certificate, headlines: pack.headlines, output: path, targetMet: pack.metadata.solver.targetMet })}\n`,
   )

@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto'
 import type { Certificate } from './bot-preflop-solve-br.js'
 import type { DealModel, PreflopStrategy } from './bot-preflop-solve-cfr.js'
 import { type EquityTable, HAND_CLASSES } from './bot-preflop-solve-equity.js'
+import { isHandRealisation } from './bot-preflop-solve-realisation.js'
 import { decisionNodes, type PreflopNode, type Realisation } from './bot-preflop-solve-tree.js'
-export const PACK_VERSION = 'river-hu-preflop-v1'
+export const PACK_VERSION = 'river-hu-preflop-v2'
 /** Frequencies CONDITIONED ON BOTH reaches and the legal joint deal, not raw combo averages. */
 export function reachedFrequencies(
   tree: PreflopNode,
@@ -97,7 +99,7 @@ export function makePack(options: {
       : null
   }
   return {
-    version: PACK_VERSION,
+    version: isHandRealisation(factors) ? PACK_VERSION : 'river-hu-preflop-v1',
     metadata: {
       game: 'Heads-up NLHE, no rake/ante, blinds 0.5/1 bb',
       effectiveStackBb: depth,
@@ -106,14 +108,27 @@ export function makePack(options: {
         formula:
           'pot * equity(own holding vs compatible opponent reach at this node) * realisation - own total contribution',
         factors,
-        factorSource:
-          'Simple model: IP receives a 5% relative equity bonus, OOP a 5% relative discount by default. Parameters are tunable assumptions, not empirical poker estimates.',
+        realisationFormula: isHandRealisation(factors)
+          ? 'q=clamp((rangeEquity-floor)/(ceiling-floor),0,1)^power; deep=base[position,potType]+equitySlope[position,potType]*q+dot(featureWeights,handFeatures); R=clamp(1+SPR/(SPR+sprHalfLife)*(deep-1),min,max); SPR=(depth-matchedContribution)/pot. See v2/README.md for hand features.'
+          : 'R=ip or oop; all-in R=1',
+        configHash: createHash('sha256').update(JSON.stringify(factors)).digest('hex'),
+        factorSource: isHandRealisation(factors)
+          ? 'Public illustrative EQR estimates plus explicit uncalibrated priors. See v2/README.md for sources, formula, parameters, uncertainty and JSON calibration format.'
+          : 'Legacy flat factors; tunable assumptions, not empirical poker estimates.',
+        sources: isHandRealisation(factors)
+          ? [
+              'https://blog.gtowizard.com/what-is-equity-in-poker/',
+              'https://blog.gtowizard.com/equity-realization/',
+              'https://blog.gtowizard.com/stack-to-pot-ratio/',
+            ]
+          : [],
         allIn:
           'Unadjusted showdown equity from the same cached Monte Carlo table; no realisation factor. Not exhaustive board enumeration.',
         gameType:
           'general-sum when realisation differs from 1; shares are not normalised or clipped',
-        averaging:
-          'Fixed factors make terminal payoff linear in opponent reach. Averaging terminal pair equity equals equity against the actual card-conditioned node range.',
+        averaging: isHandRealisation(factors)
+          ? 'Nonlinear opponent-range model: compute compatible reach mass and mean equity first, then R(hand, mean equity, position, pot type, SPR). Recompute at every traversal and for exported average-strategy best responses. Never average pairwise R or training-time utilities. No CFR convergence guarantee.'
+          : 'Fixed factors make terminal payoff linear in opponent reach. Averaging terminal pair equity equals equity against the actual card-conditioned node range.',
       },
       equity: {
         version: table.version,
@@ -187,11 +202,16 @@ const LETTERS: Readonly<Record<string, string>> = {
   'raise-9': 'T',
   'raise-22': 'Q',
 }
-export function gridDump(depth: number, tree: PreflopNode, strategy: PreflopStrategy): string {
+export function gridDump(
+  depth: number,
+  tree: PreflopNode,
+  strategy: PreflopStrategy,
+  version = PACK_VERSION,
+): string {
   const nodes = decisionNodes(tree)
   const wanted = ['button', 'button/limp', 'button/raise-2.5', 'button/raise-2.5/raise-9']
   const lines = [
-    `${PACK_VERSION}: ${depth} bb`,
+    `${version}: ${depth} bb`,
     'Rows/columns AKQJT98765432. Pairs diagonal; suited above; offsuit below.',
     'F fold, L limp, K check, C call, O open 2.5, R raise 4, T 3bet 9, Q 4bet 22, J jam.',
     'Cells show all actions >=10%, or the largest action. Whole percentages; JSON is authoritative.',

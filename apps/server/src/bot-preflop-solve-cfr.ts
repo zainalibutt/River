@@ -1,8 +1,10 @@
+import { isHandRealisation } from './bot-preflop-solve-realisation.js'
 import {
   type PreflopNode,
   type Realisation,
   type Seat,
   terminalUtility,
+  treeDepth,
   validateRealisation,
 } from './bot-preflop-solve-tree.js'
 /** Full ordered deal distribution. It can also describe a small exhaustive test game. */
@@ -63,12 +65,16 @@ function matched(regrets: Float64Array, hands: number, width: number): Float64Ar
 /**
  * Range-vector alternating CFR+/DCFR. Every legal deal is integrated, never sampled.
  * Each return is conditional on our holding, weighted by opponent counterfactual reach.
- * Two separate utility kernels are essential: fixed realisation factors are general-sum.
+ * Separate utilities are essential. V2 flop payoffs are nonlinear in opponent reach;
+ * recompute range equity before applying R, never apply R to individual pair equities.
+ * This general-sum surrogate has no CFR convergence guarantee; measure deviations.
  */
 export class PreflopTrainer {
   private readonly nodes = new Map<string, LearningNode>()
   private readonly kernels = new Map<PreflopNode, readonly [Float64Array, Float64Array]>()
   readonly hands: number
+  private readonly depth: number
+  private readonly rowMass: readonly number[]
   iterations = 0
   constructor(
     readonly tree: PreflopNode,
@@ -79,10 +85,12 @@ export class PreflopTrainer {
     validateModel(model)
     validateRealisation(factors)
     this.hands = model.classes.length
+    this.depth = treeDepth(tree)
     const n = this.hands
     const rowMass = Array.from({ length: n }, (_, h) =>
       model.deals.slice(h * n, (h + 1) * n).reduce((a, b) => a + b, 0),
     )
+    this.rowMass = rowMass
     const prepare = (node: PreflopNode): void => {
       if (node.kind === 'decision') {
         this.nodes.set(node.id, {
@@ -91,6 +99,7 @@ export class PreflopTrainer {
         })
         node.children.forEach(prepare)
       } else {
+        if (node.kind === 'flop' && isHandRealisation(factors)) return
         const kernels: [Float64Array, Float64Array] = [
           new Float64Array(n * n),
           new Float64Array(n * n),
@@ -130,6 +139,31 @@ export class PreflopTrainer {
       ): Float64Array => {
         const value = new Float64Array(n)
         if (node.kind !== 'decision') {
+          if (node.kind === 'flop' && isHandRealisation(this.factors)) {
+            for (let h = 0; h < n; h += 1) {
+              let mass = 0
+              let wins = 0
+              for (let o = 0; o < n; o += 1) {
+                const pair = player === 0 ? h * n + o : o * n + h
+                const weight = (this.model.deals[pair] as number) * (opponent[o] as number)
+                const e =
+                  player === 0
+                    ? (this.model.equity[pair] as number)
+                    : 1 - (this.model.equity[pair] as number)
+                mass += weight
+                wins += weight * e
+              }
+              value[h] =
+                mass === 0
+                  ? 0
+                  : (mass / (this.rowMass[h] as number)) *
+                    terminalUtility(node, player, wins / mass, this.factors, {
+                      hand: this.model.classes[h] as string,
+                      depth: this.depth,
+                    })
+            }
+            return value
+          }
           const kernel = (
             this.kernels.get(node) as readonly [
               Float64Array<ArrayBufferLike>,
