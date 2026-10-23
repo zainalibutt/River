@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { cardKey } from '@river/engine'
 import type { RiverSpot } from './bot-river-solver.js'
-import { COMBOS, comboIndex52, strengthRanks } from './bot-river-value-data.js'
+import { COMBOS, comboIndex52, RIVER_DATA_SETTINGS, strengthRanks } from './bot-river-value-data.js'
 import { simdForwardBatch } from './bot-value-simd.js'
 
 /**
@@ -299,7 +299,15 @@ export function bucketInputs(
   const buckets = layout.held.length
   const inputs = buffer ?? new Float32Array((checked === undefined ? 3 : 5) * buckets + 1)
   inputs.fill(0)
-  inputs[0] = Math.log(stack / pot)
+  // The training data samples stack to pot within these limits; a deeper or
+  // shallower spot is read as the nearest one the networks have seen rather
+  // than extrapolated (a 200 bb limped pot reaches about 100).
+  inputs[0] = Math.log(
+    Math.min(
+      RIVER_DATA_SETTINGS.maxStackToPot,
+      Math.max(RIVER_DATA_SETTINGS.minStackToPot, stack / pot),
+    ),
+  )
   ranges.forEach((range, player) => {
     let total = 0
     for (let index = 0; index < COMBOS; index += 1) {

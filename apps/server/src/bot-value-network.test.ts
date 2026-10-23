@@ -65,6 +65,15 @@ describe('the value network in the server', () => {
     }
   })
 
+  it('reads a stack deeper or shallower than any training spot as the nearest one trained', () => {
+    const layout = bucketsFromIds(new Uint8Array(COMBOS).fill(0), 4)
+    const ranges = [new Float64Array(COMBOS).fill(1), new Float64Array(COMBOS).fill(1)] as const
+    const { maxStackToPot, minStackToPot } = RIVER_DATA_SETTINGS
+    expect(bucketInputs(layout, ranges, 100 * 200, 200)[0]).toBeCloseTo(Math.log(maxStackToPot), 6)
+    expect(bucketInputs(layout, ranges, 1, 1000)[0]).toBeCloseTo(Math.log(minStackToPot), 6)
+    expect(bucketInputs(layout, ranges, 10 * 200, 200)[0]).toBeCloseTo(Math.log(10), 6)
+  })
+
   it('computes what PyTorch computes', () => {
     for (const example of fixture.cases) {
       const out = forward(network, Float32Array.from(example.inputs))
