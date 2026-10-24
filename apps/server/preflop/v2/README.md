@@ -201,8 +201,106 @@ Alternatively, in a narrow hand/equity/position/pot/SPR bin, estimate
 Keep sample counts and second moments or bootstrap units for uncertainty.
 Do not clip losing observations, condition only on showdowns, average noisy
 per-hand ratios, or pool changing postflop policies. Do not use a zero-equity
-bin to estimate a ratio. The fitting/collection job is future work; this change
-provides the contract and injectable parameters, not fabricated measurements.
+bin to estimate a ratio. The collector and fitter below implement this contract.
+A short smoke tests the pipeline; it does not establish production coefficients.
+
+## Measuring our bot
+
+`src/bot-realisation-calibrate.ts` runs **v9gp against v9gp**, with the normal
+40-round DCFR postflop chain, table preflop at both seats, and fresh hands without
+session reads. This measures our continuation policy against a competent copy
+of itself, and makes its reconstructed table belief the opponent's generating
+preflop strategy. It is an on-policy estimate, not an opponent-independent R.
+There is no all-in adjustment or showdown-only selection. Each non-all-in flop
+leaf produces two observations, even if either player later folds. Preflop
+folds and preflop all-ins produce no continuation observations; shard sidecars
+retain their denominator. Alternate seat assignment prevents a fixed seat from
+being identified with position. Both players buy in for the requested depth,
+including their blinds; final stack minus buy-in includes uncalled returns and
+all later contributions. Thus continuation return can be negative.
+
+Equity integrates the **physical** `exactPreflopRanges(trace, [], players)` reach,
+removes hero's two cards, samples an opponent by its exact reach weight, and
+samples two boards per draw. It never conditions on the actual flop or revealed
+opponent holding. `equityTableHash` identifies this estimator rather than the
+offline class-equity cache. The default 8,192 opponent draws have a conservative
+MC standard-error bound of `0.5 / sqrt(8192) = 0.00553`; increase samples for a
+final calibration to check measurement-error sensitivity. SPR is recoverable
+exactly as `(effectiveStackBb - ownPreflopContributionBb) / potBb`. New rows also
+write this as `spr`; the fitter checks it when present and accepts original v1
+rows that omit it.
+
+Each hand has its own `<seed>:<worker>:<handIndex>` deck/action/equity streams.
+The index is `shard * handsPerShard + offset`; replay needs no earlier shard.
+Complete JSONL shards are renamed from `.part`; interrupted shards are replayed.
+Sidecars contain a SHA-256 checked before skipping a completed shard.
+Use one process per worker index and distinct output directories for depths.
+The manifest pins source, engine, table and model-content hashes, estimator,
+seed and shard size. A changed manifest is rejected. Keep it with the JSONL.
+The CLI only writes below the current worktree and never invokes git.
+
+The bounded weighted least-squares fitter estimates 16 amplitudes: base and
+equity slope in each of six position/pot cells plus the four hand-feature
+bonuses. Equity floor/ceiling/power, SPR half-life, connectivity shape and R
+saturation bounds stay at their explicit prior values; jointly fitting all
+these shape choices needs substantially more SPR/equity coverage. Amplitude
+boxes are `[0,3]` for base/slopes and `[0,1]` for feature bonuses. The fitter also
+enforces both IP/OOP dominance endpoints and evaluates the clamped R in the
+objective. Active-set Gauss-Newton and bounded coordinate updates are
+deterministic; inspect `converged` and the residual loss because saturation
+makes this a local nonlinear fit. Output passes `parseRealisation` and can be
+given directly to `bot-preflop-solve-run.ts --realisation`.
+
+The `.fit.json` sidecar prints fitted/prior coefficients and hand-cluster
+sandwich standard errors (both positions from one hand stay in one cluster).
+Rank-deficient designs, small samples and active constraints have `null` SEs,
+not zero uncertainty. Duplicate hand/position observations, mixed policy IDs,
+invalid weights and incompatible equity estimators are rejected. Losing returns
+are never clipped. Keep a separate seed/worker set for held-out residual checks;
+do not adopt the smoke coefficients as production calibration.
+
+```powershell
+$env:RIVER_TURN_NETWORK='<models>/turnend-6/river-buckets-128'
+$env:RIVER_FLOP_NETWORK='<models>/flop2-ck50/river-buckets-128'
+$env:RIVER_TURN_START_NETWORK='<models>/turnstart-c1-53k-e50/river-buckets-128'
+$env:RIVER_RIVER_NETWORK='<models>/night1-buckets/river-buckets-128'
+$env:RIVER_VALUE_BACKEND='wasm'
+$env:RIVER_VALUE_THREADS='1'
+# Repeat this exact command to skip completed shards and resume.
+cmd /c npx tsx apps/server/src/bot-realisation-calibrate.ts --seed calibration-100bb-v1 --worker 0 --shards 10 --hands-per-shard 5 --depth 100 --equity-samples 8192 --seconds 540 --out out/realisation-100bb-v1
+cmd /c npx tsx apps/server/src/bot-realisation-calibrate.ts --fit --input out/realisation-100bb-v1 --out out/realisation-100bb-v1/realisation.json
+cmd /c npx vitest run apps/server/src/bot-realisation-calibrate.test.ts --maxWorkers 1 --no-file-parallelism
+cmd /c npx tsc -p apps/server --noEmit
+cmd /c npx biome check apps/server/src/bot-realisation-calibrate.ts apps/server/src/bot-realisation-fit.ts apps/server/src/bot-realisation-calibrate.test.ts
+```
+
+Collection defaults to one value thread and rejects more than four. `--seconds`
+is checked between hands, capped at 600; an in-flight synchronous policy solve
+cannot be interrupted. Keep shards small enough to finish within the budget.
+Fit planning fields extrapolate SE as `sqrt(pilotHands / futureHands)`, assuming
+the same sampling distribution. A run-size decision requires a larger pilot
+with all pot types represented, separate validation seeds and coverage at both
+100bb and 200bb; a 50-hand smoke cannot identify rare-cell uncertainty reliably.
+
+The 2026-10-24 100bb smoke played 50 hands in 310.156 seconds with the four
+models above, WASM and one value thread: **580.35 dealt hands/hour/worker**,
+21 flop hands, 42 observations, 16 postflop folds and 11 negative continuation
+returns. All 21 pairs conserve net chips and their continuation returns sum to
+the initial flop pot. A final-code replay reproduces the first hand's equity
+and outcome exactly; a second invocation skips its checksummed shard.
+See `out/realisation-smoke-20261024/report.md`, `planning.json`, and
+`realisation.json.fit.json` for the commands, planning calculation and fit.
+The smoke fit is rank-deficient and has null standard errors; do not deploy it.
+
+A rough two-coefficient-per-cell planning calculation (holding hand features
+fixed, using observed return variance and reach frequency) suggests about
+0.6–15.5 million dealt hands for base SE 0.03, and 3.7–56.8 million for slope
+SE 0.03 in limped/single-raised cells. The one observed 3-bet flop gives no
+precision estimate. These are unstable pilot extrapolations, not guarantees;
+the joint fit can need more. Start with **10,000 hands per depth** on distinct
+training/held-out seeds and re-estimate. At the measured 100bb speed this is
+34.5 worker-hours for 20,000 hands; 200bb throughput remains unmeasured. Do not
+launch a multi-million-hand fleet based on this smoke alone.
 
 ```powershell
 node_modules/.bin/tsx.cmd apps/server/src/bot-preflop-solve-run.ts --depth 100 --target 0.001 --seconds 60 --iterations 10000
