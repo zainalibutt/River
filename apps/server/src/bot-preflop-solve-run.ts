@@ -41,6 +41,8 @@ export function runPreflop(args = process.argv.slice(2)): void {
   const maxSeconds = Math.min(480, numberArg(args, '--seconds', 240))
   const target = numberArg(args, '--target', 0.0075)
   const configPath = stringArg(args, '--realisation')
+  const treeVersion = stringArg(args, '--tree') ?? 'v3'
+  if (treeVersion !== 'v2' && treeVersion !== 'v3') throw new Error('invalid --tree')
   const flat = args.includes('--flat')
   if (flat && configPath) throw new Error('--flat and --realisation are mutually exclusive')
   if (!flat && (args.includes('--ip') || args.includes('--oop')))
@@ -57,7 +59,9 @@ export function runPreflop(args = process.argv.slice(2)): void {
   )
   const outputDir = localPath(
     stringArg(args, '--output-dir') ??
-      (isHandRealisation(factors) ? 'apps/server/preflop/v2' : 'out/preflop-solve/flat'),
+      (isHandRealisation(factors)
+        ? `apps/server/preflop/${treeVersion}`
+        : 'out/preflop-solve/flat'),
   )
   const legacyDir = localPath('apps/server/preflop/v1')
   const legacyRelative = relative(legacyDir, outputDir)
@@ -70,7 +74,7 @@ export function runPreflop(args = process.argv.slice(2)): void {
     Math.min(480, maxSeconds),
   )
   const started = performance.now()
-  const tree = preflopTree(depth)
+  const tree = preflopTree(depth, treeVersion)
   const trainer = new PreflopTrainer(tree, table, factors)
   const checkpoints: {
     iterations: number
@@ -114,6 +118,7 @@ export function runPreflop(args = process.argv.slice(2)): void {
     comboBestResponse,
     target,
     checkpoints,
+    treeVersion,
   })
   const path = localPath(resolve(outputDir, `${depth}bb.json`))
   mkdirSync(dirname(path), { recursive: true })

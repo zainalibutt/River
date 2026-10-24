@@ -4,7 +4,7 @@ import type { DealModel, PreflopStrategy } from './bot-preflop-solve-cfr.js'
 import { type EquityTable, HAND_CLASSES } from './bot-preflop-solve-equity.js'
 import { isHandRealisation } from './bot-preflop-solve-realisation.js'
 import { decisionNodes, type PreflopNode, type Realisation } from './bot-preflop-solve-tree.js'
-export const PACK_VERSION = 'river-hu-preflop-v2'
+export const PACK_VERSION = 'river-hu-preflop-v3'
 /** Frequencies CONDITIONED ON BOTH reaches and the legal joint deal, not raw combo averages. */
 export function reachedFrequencies(
   tree: PreflopNode,
@@ -74,6 +74,7 @@ export function makePack(options: {
     seconds: number
     exploitabilityBb: number
   }[]
+  treeVersion?: 'v2' | 'v3'
 }) {
   const { depth, tree, table, factors, strategy, certificate, target } = options
   const reached = reachedFrequencies(tree, table, strategy)
@@ -99,7 +100,12 @@ export function makePack(options: {
       : null
   }
   return {
-    version: isHandRealisation(factors) ? PACK_VERSION : 'river-hu-preflop-v1',
+    version:
+      options.treeVersion === 'v2'
+        ? isHandRealisation(factors)
+          ? 'river-hu-preflop-v2'
+          : 'river-hu-preflop-v1'
+        : PACK_VERSION,
     metadata: {
       game: 'Heads-up NLHE, no rake/ante, blinds 0.5/1 bb',
       effectiveStackBb: depth,
@@ -184,7 +190,9 @@ export function makePack(options: {
     },
     headlines: {
       button: headline('button'),
+      bbVsOpen2: headline('button/raise-2'),
       bbVsOpen2_5: headline('button/raise-2.5'),
+      bbVsOpen3: headline('button/raise-3'),
       bbVsLimp: headline('button/limp'),
     },
     classCombos: HAND_CLASSES.map((h) => ({ hand: h.name, cards: h.combos })),
@@ -209,11 +217,11 @@ export function gridDump(
   version = PACK_VERSION,
 ): string {
   const nodes = decisionNodes(tree)
-  const wanted = ['button', 'button/limp', 'button/raise-2.5', 'button/raise-2.5/raise-9']
+  const wanted = nodes.map((node) => node.id)
   const lines = [
     `${version}: ${depth} bb`,
     'Rows/columns AKQJT98765432. Pairs diagonal; suited above; offsuit below.',
-    'F fold, L limp, K check, C call, O open 2.5, R raise 4, T 3bet 9, Q 4bet 22, J jam.',
+    'F fold, L limp, K check, C call, O raise 2.5, R raise 4, T raise 9, Q raise 22, J jam. Other raises show their total bb target.',
     'Cells show all actions >=10%, or the largest action. Whole percentages; JSON is authoritative.',
   ]
   for (const id of wanted) {

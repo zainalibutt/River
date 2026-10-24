@@ -34,7 +34,7 @@ export type PreflopNode =
     }
 
 /** The requested finite action abstraction, including every jam's call/fold response. */
-export function preflopTree(depth: number): PreflopNode {
+export function preflopTree(depth: number, version: 'v2' | 'v3' = 'v3'): PreflopNode {
   if (!Number.isFinite(depth) || depth < 1) throw new Error('effective depth must be at least 1 bb')
   const terminal = (paid: readonly [number, number]): PreflopNode => ({
     kind: paid[0] === depth ? 'all-in' : 'flop',
@@ -71,21 +71,33 @@ export function preflopTree(depth: number): PreflopNode {
       add({ label: 'check', kind: 'check', to: paid[player] }, terminal(paid))
     }
     if (paid[other] < depth) {
-      const sized =
-        stage === 'button'
-          ? 2.5
-          : stage === 'limped'
-            ? 4
-            : stage === 'opened'
-              ? 9
-              : stage === 'three-bet'
-                ? 22
-                : undefined
+      // V2 remains reproducible. V3 adds relative sizes and the common observed
+      // Slumbot totals (9/15 bb 3-bets, 18/24 bb 4-bets). No non-jam 5-bet.
+      const sizes =
+        version === 'v2'
+          ? stage === 'button'
+            ? [2.5]
+            : stage === 'limped'
+              ? [4]
+              : stage === 'opened'
+                ? [9]
+                : stage === 'three-bet'
+                  ? [22]
+                  : []
+          : stage === 'button'
+            ? [2, 2.5, 3]
+            : stage === 'limped'
+              ? [3, 4]
+              : stage === 'opened'
+                ? [3.5 * paid[other], 4.5 * paid[other], 9, 15]
+                : stage === 'three-bet'
+                  ? [Math.round(2.3 * paid[other] * 100) / 100, 18, 24]
+                  : []
       const targets = new Set<number>()
-      if (sized !== undefined)
+      for (const sized of sizes)
         targets.add(Math.min(depth, Math.max(sized, paid[other] + lastRaise)))
       targets.add(depth)
-      for (const to of targets) {
+      for (const to of [...targets].sort((a, b) => a - b)) {
         if (to <= paid[other]) continue
         const jam = to === depth
         const label = jam ? 'jam' : `raise-${to}`

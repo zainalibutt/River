@@ -118,7 +118,7 @@ describe('hand-dependent preflop realisation', () => {
     const model = JSON.parse(
       readFileSync(new URL('../preflop/v2/mutation-fixture.json', import.meta.url), 'utf8'),
     ) as DealModel
-    const tree = preflopTree(100)
+    const tree = preflopTree(100, 'v2')
     const result = [config, DEFAULT_REALISATION].map((factors) => {
       const trainer = new PreflopTrainer(tree, model, factors)
       trainer.step(1500)

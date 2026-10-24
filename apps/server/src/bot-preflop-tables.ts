@@ -42,16 +42,17 @@ export interface PreflopTableStats {
   clampedAbove: number
 }
 
-const packs = new Map<number, PreflopPack>()
+const packs = new Map<string, PreflopPack>()
 /** Add exported depths here (or inject packs into tablePreflopPolicy). Ties choose shallower. */
 export const PREFLOP_DEPTHS = [100, 200] as const
-export function loadPreflopPack(depth: number): PreflopPack {
-  let pack = packs.get(depth)
+export function loadPreflopPack(depth: number, version: 'v2' | 'v3' = 'v3'): PreflopPack {
+  const key = `${version}:${depth}`
+  let pack = packs.get(key)
   if (!pack) {
     pack = JSON.parse(
-      readFileSync(new URL(`../preflop/v2/${depth}bb.json`, import.meta.url), 'utf8'),
+      readFileSync(new URL(`../preflop/${version}/${depth}bb.json`, import.meta.url), 'utf8'),
     ) as PreflopPack
-    packs.set(depth, pack)
+    packs.set(key, pack)
   }
   return pack
 }
@@ -172,7 +173,7 @@ export interface PreflopTrace {
 export function tracePreflop(
   observation: BotObservationV1,
   history: readonly PublicDecision[],
-  available: readonly PreflopPack[] = PREFLOP_DEPTHS.map(loadPreflopPack),
+  available: readonly PreflopPack[] = PREFLOP_DEPTHS.map((depth) => loadPreflopPack(depth)),
 ): PreflopTrace | string {
   const dealt = observation.seats.filter((s) => s.playerId !== null && s.betHand > 0)
   if (dealt.length !== 2 || observation.dealerSeat === undefined) return 'not heads-up'
@@ -260,7 +261,7 @@ export function exactPreflopRanges(
 
 export function tablePreflopPolicy(
   base: BotPolicy,
-  available = PREFLOP_DEPTHS.map(loadPreflopPack),
+  available = PREFLOP_DEPTHS.map((depth) => loadPreflopPack(depth)),
 ): TablePreflopSource {
   const stats: PreflopTableStats = {
     decisions: 0,

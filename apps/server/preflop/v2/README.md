@@ -1,7 +1,9 @@
 # Heads-up preflop v2: hand-dependent continuation
 
 These offline packs retain the v1 tree, exact legal-deal weights and equity cache.
-The opt-in `v9gp` bot uses these packs. The v1 JSON and text packs are preserved.
+The opt-in `v9gp` bot now defaults to [v3 packs](../v3/README.md), using this same
+realisation model. These v2 packs remain loadable with `loadPreflopPack(depth, 'v2')`
+and injectable into `tablePreflopPolicy`. The v1 JSON and text packs are preserved.
 The game is no-rake HU NLHE, 0.5/1 blinds, 100 or 200 bb including the blind.
 All sizes are total contributions. See [the v1 tree/equity documentation](../README.md).
 

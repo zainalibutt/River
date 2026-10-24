@@ -239,9 +239,31 @@ describe('offline preflop solver: independent exhaustive oracle', () => {
   })
 })
 describe('offline preflop tree and payoff', () => {
-  it('has all requested branches and sizes at 100 and 200 bb', () => {
+  it('v3 includes relative and observed sizes with only jam raises after a four-bet', () => {
     for (const depth of [100, 200]) {
       const nodes = decisionNodes(preflopTree(depth))
+      const raises = (id: string) =>
+        nodes
+          .find((n) => n.id === id)
+          ?.actions.filter((a) => a.kind === 'raise')
+          .map((a) => a.to)
+      expect(raises('button')).toEqual([2, 2.5, 3])
+      expect(raises('button/limp')).toEqual([3, 4])
+      expect(raises('button/raise-2')).toEqual([7, 9, 15])
+      expect(raises('button/raise-2.5')).toEqual([8.75, 9, 11.25, 15])
+      expect(raises('button/raise-3')).toEqual([9, 10.5, 13.5, 15])
+      expect(raises('button/raise-2/raise-7')).toEqual([16.1, 18, 24])
+      expect(raises('button/raise-2.5/raise-9')).toEqual([18, 20.7, 24])
+      // 18/24 collapse to the legal min-raise of 28 after a 15 bb 3-bet.
+      expect(raises('button/raise-2/raise-15')).toEqual([28, 34.5])
+      for (const node of nodes.filter((n) => n.id.split('/').length >= 4))
+        expect(node.actions.every((a) => a.kind !== 'raise')).toBe(true)
+      expect(nodes.length).toBeLessThan(110)
+    }
+  })
+  it('has all requested branches and sizes at 100 and 200 bb', () => {
+    for (const depth of [100, 200]) {
+      const nodes = decisionNodes(preflopTree(depth, 'v2'))
       const labels = (id: string) => nodes.find((n) => n.id === id)?.actions.map((a) => a.label)
       expect(labels('button')).toEqual(['fold', 'limp', 'raise-2.5', 'jam'])
       expect(labels('button/limp')).toEqual(['check', 'raise-4', 'jam'])
@@ -280,6 +302,7 @@ describe('offline preflop tree and payoff', () => {
     expect(decisionNodes(preflopTree(2.5))[0]?.actions.map((a) => a.label)).toEqual([
       'fold',
       'limp',
+      'raise-2',
       'jam',
     ])
     for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY])
@@ -357,6 +380,8 @@ describe('generated preflop packs', () => {
     ['v1', 200],
     ['v2', 100],
     ['v2', 200],
+    ['v3', 100],
+    ['v3', 200],
   ] as const)(
     '%s %i bb is complete, legal, normalised, correctly labelled and certified',
     (version, depth) => {
@@ -365,8 +390,8 @@ describe('generated preflop packs', () => {
       ) as ReturnType<typeof makePack>
       expect(pack.version).toBe(`river-hu-preflop-${version}`)
       expect(pack.metadata.effectiveStackBb).toBe(depth)
-      expect(pack.metadata.tree).toEqual(preflopTree(depth))
-      expect(pack.nodes).toHaveLength(12)
+      expect(pack.metadata.tree).toEqual(preflopTree(depth, version === 'v3' ? 'v3' : 'v2'))
+      expect(pack.nodes).toHaveLength(decisionNodes(pack.metadata.tree).length)
       const strategy = new Map(
         pack.nodes.map((node) => [
           node.id,
@@ -394,6 +419,7 @@ describe('generated preflop packs', () => {
       expect(dump).toContain(`river-hu-preflop-${version}`)
       expect(dump).toContain('button/raise-2.5/raise-9')
       expect(pack.headlines.bbVsOpen2_5).not.toBeNull()
+      if (version === 'v3') expect(pack.headlines.bbVsOpen2).not.toBeNull()
       // The big ignored cache is not required for tests in a fresh checkout.
       const cachePath = 'out/preflop-solve/equity-v1-8192.json'
       if (existsSync(cachePath)) {
@@ -422,5 +448,6 @@ describe('generated preflop packs', () => {
         expect(() => validateEquityTable({ ...table, hash: 'corrupted' })).toThrow('hash')
       }
     },
+    60_000,
   )
 })

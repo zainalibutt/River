@@ -83,6 +83,23 @@ function traced(obs: BotObservationV1) {
 }
 
 describe('v9gp public table path', () => {
+  it('defaults to v3, keeps v2 loadable, and maps every supported open exactly', () => {
+    expect(decisionNodes(loadPreflopPack(200).metadata.tree)[0]?.actions.map((a) => a.to)).toEqual([
+      0.5, 1, 2, 2.5, 3, 200,
+    ])
+    expect(loadPreflopPack(200)).not.toBe(loadPreflopPack(200, 'v2'))
+    for (const size of [2, 2.5, 3]) {
+      const game = room()
+      act(game, { kind: 'raiseTo', to: size * 500 })
+      const obs = observation(game)
+      const trace = traced(obs)
+      expect(trace.node.kind === 'decision' && trace.node.id).toBe(`button/raise-${size}`)
+      expect(trace.offTree).toEqual([])
+      const legacy = tracePreflop(obs, publicDecisions(obs) ?? [], [loadPreflopPack(100, 'v2')])
+      expect(typeof legacy).not.toBe('string')
+      if (typeof legacy !== 'string') expect(legacy.offTree).toEqual(size === 2.5 ? [] : [0])
+    }
+  })
   it('maps physical cards to the suit-invariant table class', () => {
     const card = (rank: 'A' | 'K' | '7' | '2', suit: 'h' | 'd') => ({ rank, suit })
     expect(preflopClass([card('K', 'h'), card('A', 'h')])).toBe('AKs')
@@ -108,7 +125,7 @@ describe('v9gp public table path', () => {
               ? { kind: 'call' }
               : label === 'jam'
                 ? { kind: 'allIn' }
-                : { kind: 'raiseTo', to: Number(label.slice(6)) * 500 },
+                : { kind: 'raiseTo', to: Math.round(Number(label.slice(6)) * 500) },
           )
         }
         const obs = observation(game)
@@ -150,7 +167,7 @@ describe('v9gp public table path', () => {
             )
           })
         }
-  })
+  }, 90_000)
 
   it('selects nearest depths, clamps, and permits additional depths', () => {
     expect([20, 100, 149, 150, 151, 200, 300].map((d) => selectPreflopDepth(d))).toEqual([
@@ -212,7 +229,7 @@ describe('v9gp public table path', () => {
     expect(pseudoHarmonicLower(0.75, 0.75, 99)).toBe(1)
     expect(pseudoHarmonicLower(0.75, 99, 99)).toBe(0)
     const source = tablePreflopPolicy(pokerGuardPolicy)
-    for (const size of [3, 30]) {
+    for (const size of [2.75, 30]) {
       const game = room()
       if (size === 30) {
         act(game, { kind: 'raiseTo', to: 1250 })
@@ -221,10 +238,10 @@ describe('v9gp public table path', () => {
       act(game, { kind: 'raiseTo', to: size * 500 })
       const obs = { ...observation(game), handNumber: size }
       const trace = traced(obs)
-      expect(trace.offTree).toEqual([size === 3 ? 0 : 2])
+      expect(trace.offTree).toEqual([size === 2.75 ? 0 : 2])
       expect(traced(obs).node).toEqual(trace.node)
       expect(trace.node.kind === 'decision' && trace.node.id).toMatch(
-        size === 3 ? /^button\/(raise-2.5|jam)$/ : /^button\/raise-2.5\/raise-9\/(raise-22|jam)$/,
+        size === 2.75 ? /^button\/raise-(2.5|3)$/ : /^button\/raise-2.5\/raise-9\/(raise-24|jam)$/,
       )
       source.policy.decide(context(obs))
       source.policy.decide(context(obs))
@@ -232,14 +249,14 @@ describe('v9gp public table path', () => {
     expect(source.stats.preflopOffTree).toBe(2)
     // Empirical translation frequencies across independently seeded public hand identities.
     const game = room()
-    act(game, { kind: 'raiseTo', to: 1500 })
+    act(game, { kind: 'raiseTo', to: 1375 })
     const obs = observation(game)
     let lower = 0
     for (let handNumber = 1; handNumber <= 2000; handNumber++) {
       const trace = traced({ ...obs, handNumber })
       if (trace.node.kind === 'decision' && trace.node.id.endsWith('raise-2.5')) lower++
     }
-    const p = pseudoHarmonicLower(0.75, 1, 49.5)
+    const p = pseudoHarmonicLower(0.75, 0.875, 1)
     expect(lower / 2000).toBeCloseTo(p, 1)
   })
 
@@ -296,7 +313,7 @@ describe('v9gp public table path', () => {
     'carries exact products for every combo in a four-bet/call line at %i bb',
     (depth) => {
       const game = room(depth)
-      for (const to of [1250, 4500, 11000]) act(game, { kind: 'raiseTo', to })
+      for (const to of [1250, 4500, 10350]) act(game, { kind: 'raiseTo', to })
       act(game, { kind: 'call' })
       const obs = observation(game)
       const trace = traced(obs)
@@ -306,14 +323,16 @@ describe('v9gp public table path', () => {
       for (const [player, range] of ranges.entries())
         for (const holding of range) {
           const name = preflopClass(holding.hole)
-          const p = (id: string, k: number) =>
-            pack.nodes.find((n) => n.id === id)?.classes.find((r) => r.hand === name)?.frequencies[
-              k
-            ] as number
+          const p = (id: string, label: string) => {
+            const node = decisionNodes(pack.metadata.tree).find((n) => n.id === id)
+            const k = node?.actions.findIndex((a) => a.label === label) as number
+            return pack.nodes.find((n) => n.id === id)?.classes.find((r) => r.hand === name)
+              ?.frequencies[k] as number
+          }
           const expected =
             player === 0
-              ? p('button/raise-2.5', 2) * p('button/raise-2.5/raise-9/raise-22', 1)
-              : p('button', 2) * p('button/raise-2.5/raise-9', 2)
+              ? p('button/raise-2.5', 'raise-9') * p('button/raise-2.5/raise-9/raise-20.7', 'call')
+              : p('button', 'raise-2.5') * p('button/raise-2.5/raise-9', 'raise-20.7')
           expect(holding.weight).toBe(expected)
           expect(
             holding.hole.some((c) => obs.board.some((b) => b.rank === c.rank && b.suit === c.suit)),

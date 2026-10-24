@@ -68,8 +68,8 @@ const mutations = [
   {
     id: 'apply-realisation-to-all-in',
     file: 'tree',
-    from: "node.kind === 'all-in' ? 1 : player === 0 ? factors.ip : factors.oop",
-    to: 'player === 0 ? factors.ip : factors.oop',
+    from: "if (node.kind === 'flop') {",
+    to: "if (node.kind === 'flop' || node.kind === 'all-in') {",
     test: 'bypasses realisation for all-ins',
   },
 ]
