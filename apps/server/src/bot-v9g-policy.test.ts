@@ -134,3 +134,32 @@ it('forwards the v9gy baseline-cap opt-in to the carried river without changing 
   })
   expect(result.hybrid).toBeUndefined()
 })
+
+it('v9gz enables only river optimization; flag off has identical v9gp construction', () => {
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+  vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+  vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+  vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+  const rivers = vi.spyOn(river, 'riverSolverPolicy')
+  const turns = vi.spyOn(chain, 'solvedFlopPolicy')
+  const options = { offTree: 'resolve' as const, preflopTables: true }
+  v9gPolicy(options)
+  v9gPolicy({ ...options, safeExploitV2: false })
+  expect(rivers.mock.calls[0]?.[3]).toEqual(rivers.mock.calls[1]?.[3])
+  // Fresh table closures differ by identity; all other chain options match.
+  const { preflop: _a, ...a } = turns.mock.calls[0]?.[2] ?? {}
+  const { preflop: _b, ...b } = turns.mock.calls[1]?.[2] ?? {}
+  expect(a).toEqual(b)
+  const enabled = v9gPolicy({ ...options, safeExploitV2: true })
+  expect(rivers.mock.calls[2]?.[3]).toMatchObject({
+    safeExploitV2: true,
+    safe: true,
+    carry: 'per-river',
+    offTree: 'resolve',
+  })
+  expect(enabled.preflop).toBeDefined()
+  expect(enabled.river.safeExploit).toMatchObject({ eligible: 0, proposed: 0, accepted: 0 })
+  expect(enabled.hybrid).toBeUndefined()
+})

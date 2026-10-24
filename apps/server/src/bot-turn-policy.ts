@@ -76,6 +76,9 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  * response, so a wrong read costs little.
  */
 export interface TurnPolicyTuning extends CfrOptions {
+  /** Forwarded to the river only; turn optimization is not enabled. */
+  readonly safeExploitV2?: boolean
+  readonly safeExploitConfig?: Partial<import('./bot-safe-exploitation.js').SafeExploitConfig>
   readonly preflop?: TablePreflopSource
   readonly offTree?: 'resolve'
   readonly boundedReads?: boolean
@@ -478,6 +481,9 @@ export function solvedTurnPolicy(
     1,
     {
       ...RIVER_CANDIDATE_TUNING,
+      ...(overrides.safeExploitV2
+        ? { safeExploitV2: true, safeExploitConfig: overrides.safeExploitConfig }
+        : {}),
       ...(overrides.boundedReads === undefined ? {} : { boundedReads: overrides.boundedReads }),
       ...(overrides.baselineCaps === undefined ? {} : { baselineCaps: overrides.baselineCaps }),
       ...(overrides.offTree === undefined ? {} : { offTree: overrides.offTree }),
@@ -841,6 +847,9 @@ export function solvedFlopPolicy(
     1,
     {
       ...RIVER_CANDIDATE_TUNING,
+      ...(overrides.safeExploitV2
+        ? { safeExploitV2: true, safeExploitConfig: overrides.safeExploitConfig }
+        : {}),
       ...(overrides.boundedReads === undefined ? {} : { boundedReads: overrides.boundedReads }),
       ...(overrides.baselineCaps === undefined ? {} : { baselineCaps: overrides.baselineCaps }),
       ...(overrides.offTree === undefined ? {} : { offTree: overrides.offTree }),

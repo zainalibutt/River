@@ -100,6 +100,67 @@ const tuning = {
 afterEach(() => vi.restoreAllMocks())
 
 describe('bounded river policy opt-in and freeze', () => {
+  it('v9gz freezes one audited root across changing reads and records the strict budget', () => {
+    vi.mocked(publicDecisions).mockReturnValue([])
+    const count = vi.spyOn(solver, 'solveRiver')
+    const bot = riverSolverPolicy(
+      alwaysCallPolicy,
+      'test',
+      1,
+      { ...tuning, safeExploitV2: true },
+      undefined,
+      undefined,
+      carry,
+    )
+    const original = view()
+    const observation = {
+      ...original,
+      seats: original.seats.map((seat) => ({ ...seat, betHand: seat.seat === 0 ? 50 : 100 })),
+    }
+    const first = bot.policy.decide(context(observation))
+    const initialSolves = count.mock.calls.length
+    expect(bot.stats.safeExploit).toMatchObject({ eligible: 1, proposed: 1 })
+    expect(bot.stats.safeExploit.roots[0]?.budget).toBe(0.1)
+    expect(bot.stats.safeExploit.maxBRIncrease).toBeLessThanOrEqual(0.1 + 1e-9)
+    for (const fold of [0, 1, 0.5])
+      expect(bot.policy.decide(context({ ...observation, opponentStats: [reads(fold)] }))).toEqual(
+        first,
+      )
+    expect(bot.stats.safeExploit.eligible).toBe(1)
+    expect(count.mock.calls.length).toBe(initialSolves)
+    bot.policy.releaseHand(observation.roomId, observation.handNumber)
+    bot.policy.decide(context(observation))
+    expect(bot.stats.safeExploit.eligible).toBe(2)
+  })
+
+  it('v9gz off is byte-identical to the carried v9gp river, including its RNG decisions', () => {
+    vi.mocked(publicDecisions).mockReturnValue([])
+    const options = { ...tuning, offTree: 'resolve' as const }
+    const original = riverSolverPolicy(
+      alwaysCallPolicy,
+      'test',
+      1,
+      options,
+      undefined,
+      undefined,
+      carry,
+    )
+    const disabled = riverSolverPolicy(
+      alwaysCallPolicy,
+      'test',
+      1,
+      { ...options, safeExploitV2: false },
+      undefined,
+      undefined,
+      carry,
+    )
+    for (let seed = 0; seed < 50; seed++)
+      expect(disabled.policy.decide(context(view(), seed))).toEqual(
+        original.policy.decide(context(view(), seed)),
+      )
+    expect(disabled.stats).toMatchObject({ safeExploit: { eligible: 0, proposed: 0, accepted: 0 } })
+  })
+
   it('freezes across adversarial read/tilt changes, later actions and cache pressure until settlement', () => {
     vi.mocked(publicDecisions).mockReturnValue([])
     const count = vi.spyOn(solver, 'solveRiver')

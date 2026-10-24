@@ -46,6 +46,12 @@ import {
   riverValues,
   solveRiver,
 } from './bot-river-solver.js'
+import {
+  riverExploitBudget,
+  SAFE_EXPLOIT_CONFIG,
+  type SafeExploitConfig,
+  solveBudgetedStreet,
+} from './bot-safe-exploitation.js'
 import { solveCacheMemory } from './bot-solver-memory.js'
 
 /**
@@ -60,6 +66,8 @@ import { solveCacheMemory } from './bot-solver-memory.js'
  * and raising more than a typical player gets more of that doubt.
  */
 export interface RiverPolicyTuning extends CfrOptions {
+  readonly safeExploitV2?: boolean
+  readonly safeExploitConfig?: Partial<SafeExploitConfig>
   readonly offTree?: 'resolve'
   /**
    * Use the per-holding re-solving gadget (lane B), with reads and added air
@@ -170,6 +178,29 @@ export const RIVER_READS_V8X_TUNING: Partial<RiverPolicyTuning> = {
 const SIZE_FOLD_STRENGTH = 3
 
 export interface RiverPolicyStats {
+  readonly safeExploit: {
+    eligible: number
+    proposed: number
+    accepted: number
+    auditFailures: number
+    actionTV: number
+    modelEVGain: number
+    budgetSpent: number
+    maxBRIncrease: number
+    latencyMs: number
+    roots: {
+      proposed: boolean
+      accepted: boolean
+      actionTV: number
+      modelEVGain: number
+      budget: number
+      budgetSpent: number
+      maxBRIncrease: number
+      auditFailures: number
+      latencyMs: number
+      modelWeight: number
+    }[]
+  }
   readonly offTree: OffTreeStats
   /** River decisions the solver answered. */
   solved: number
@@ -233,6 +264,18 @@ export function riverSolverPolicy(
 } {
   const tuning: RiverPolicyTuning = { ...RIVER_POLICY_TUNING, ...overrides }
   const stats: RiverPolicyStats = {
+    safeExploit: {
+      eligible: 0,
+      proposed: 0,
+      accepted: 0,
+      auditFailures: 0,
+      actionTV: 0,
+      modelEVGain: 0,
+      budgetSpent: 0,
+      maxBRIncrease: 0,
+      latencyMs: 0,
+      roots: [],
+    },
     offTree: offTreeStats(),
     solved: 0,
     fallbacks: {},
@@ -255,7 +298,7 @@ export function riverSolverPolicy(
     adaptationMs: 0,
   }
   const cache = new HandSolveCache<SolvedRiver | string>(
-    tuning.boundedReads === true || tuning.offTree === 'resolve',
+    tuning.safeExploitV2 === true || tuning.boundedReads === true || tuning.offTree === 'resolve',
     tuning.cacheSize,
   )
   const policy: HandAwareBotPolicy = {
@@ -330,7 +373,7 @@ function solverDecision(
   const read = observation.opponents.find((summary) => summary.playerId === opponentId)
   const doubt = cardBlindShare(read, 'aggressive', tuning)
   const reads =
-    tuning.exploitReads || tuning.boundedReads
+    tuning.exploitReads || tuning.boundedReads || tuning.safeExploitV2
       ? riverReads(
           observation.opponentStats?.find((entry) => entry.playerId === opponentId),
           read,
@@ -338,7 +381,7 @@ function solverDecision(
         )
       : null
   const cacheKey =
-    tuning.boundedReads || tuning.offTree === 'resolve'
+    tuning.safeExploitV2 || tuning.boundedReads || tuning.offTree === 'resolve'
       ? cache.key(observation, `${observation.actor.playerId}|${observation.board.map(cardKey)}`)
       : `${key}|${observation.actor.playerId}${doubt > 0 ? `|${doubt.toFixed(4)}` : ''}${
           reads === null ? '' : `|${Object.values(reads).map((value) => value.toFixed(4))}`
@@ -346,7 +389,7 @@ function solverDecision(
   let solved = cache.get(cacheKey)
   // Once chosen, even new reads that would otherwise trigger a fallback do
   // not change this river's policy. The flag-off path retains its old guards.
-  if (!tuning.boundedReads || solved === undefined) {
+  if ((!tuning.safeExploitV2 && !tuning.boundedReads) || solved === undefined) {
     if (tuning.extremeReadsToBase < 1 && doubt >= tuning.extremeReadsToBase) return 'extreme reads'
     if (tuning.allInToBase && live.some((seat) => seat.playerId === opponentId && seat.allIn)) {
       return 'facing all-in'
@@ -521,7 +564,71 @@ function solveSpot(
       tuning,
     )
   }
-  if (tuning.boundedReads && carry !== null) {
+  if (tuning.safeExploitV2) {
+    const started = performance.now()
+    const config = { ...SAFE_EXPLOIT_CONFIG, ...tuning.safeExploitConfig }
+    // Blind posts are the hand contribution not accounted for by actions.
+    // A short blind underestimates the nominal stake, which is conservative.
+    const bigBlind = Math.max(
+      0,
+      ...observation.seats.map(
+        (seat) =>
+          seat.betHand -
+          (observation.actions ?? [])
+            .filter((action) => action.seat === seat.seat)
+            .reduce((sum, action) => sum + (action.amountCommitted ?? 0), 0),
+      ),
+    )
+    const budget = riverExploitBudget(pot, bigBlind, config)
+    const counters = stats.safeExploit
+    counters.eligible++
+    let chosen: ReturnType<typeof solveBudgetedStreet> | undefined
+    if (reads !== null && reads.trust > 0) {
+      const posterior = trackRanges(
+        observation.board,
+        preRiver,
+        players,
+        base,
+        personality,
+        key,
+        tuning.minimumWeightShare,
+        (decision, taken) =>
+          decision.observation.actor.playerId === players[opponent]
+            ? cardBlindShare(read, taken, tuning)
+            : 0,
+        known,
+      )[opponent]
+      chosen = solveBudgetedStreet(
+        solution,
+        readsModel(reads, solution.spot, opponent),
+        combosOf(posterior),
+        budget,
+        config,
+      )
+      solution = chosen.solution
+    }
+    const root = {
+      proposed: chosen?.proposed ?? false,
+      accepted: (chosen?.weight ?? 0) > 0,
+      actionTV: chosen?.actionTV ?? 0,
+      modelEVGain: chosen?.modelEVGain ?? 0,
+      budget,
+      budgetSpent: chosen?.maxBRIncrease ?? 0,
+      maxBRIncrease: chosen?.maxBRIncrease ?? 0,
+      auditFailures: chosen?.auditFailures ?? 0,
+      latencyMs: performance.now() - started,
+      modelWeight: chosen?.modelWeight ?? 0,
+    }
+    counters.proposed += Number(root.proposed)
+    counters.accepted += Number(root.accepted)
+    counters.actionTV += root.actionTV
+    counters.modelEVGain += root.modelEVGain
+    counters.budgetSpent += root.budgetSpent
+    counters.maxBRIncrease = Math.max(counters.maxBRIncrease, root.maxBRIncrease)
+    counters.auditFailures += root.auditFailures
+    counters.latencyMs += root.latencyMs
+    counters.roots.push(root)
+  } else if (tuning.boundedReads && carry !== null) {
     const adaptationStarted = performance.now()
     const chosen = boundedRiverAdaptation(
       solution,

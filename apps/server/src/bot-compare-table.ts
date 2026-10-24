@@ -74,6 +74,9 @@ export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
   get v9gp() {
     return v9g('v9gp', { offTree: 'resolve', preflopTables: true })
   },
+  get v9gz() {
+    return v9g('v9gz', { offTree: 'resolve', preflopTables: true, safeExploitV2: true })
+  },
   get v9gx() {
     return v9g('v9gx', { boundedReads: true })
   },
@@ -200,6 +203,13 @@ const cast =
       : undefined
 const sessions = Number(sessionsText)
 const first = firstText === undefined ? 0 : Number(firstText)
+// Bounded smoke runs may override the campaign's normal session length.
+const smokeHands =
+  process.env.RIVER_COMPARE_HANDS === undefined
+    ? undefined
+    : Number(process.env.RIVER_COMPARE_HANDS)
+if (smokeHands !== undefined && (!Number.isSafeInteger(smokeHands) || smokeHands < 1))
+  throw new Error('RIVER_COMPARE_HANDS must be a positive integer')
 if (
   table === undefined ||
   baseline === undefined ||
@@ -211,11 +221,12 @@ if (
     'usage: <table> <seed prefix> <sessions> <baseline> <candidate: v9a|v9a-reads|v9b|v9h35|v9h50|...> <out.json> [first session] [rotation|champion]',
   )
 }
+const campaignHandsPerSession = campaignSize(table).handsPerSession
 const common = {
   seed: `${prefix}-${table.name}`,
   sessions,
   firstSession: first,
-  handsPerSession: campaignSize(table).handsPerSession,
+  handsPerSession: smokeHands ?? campaignHandsPerSession,
   // The focal seat keeps the public statistics a live bot would; policies that do not read them are unaffected.
   plugin: opponentStatsPlugin(),
   table,
@@ -230,6 +241,7 @@ interface ComparePiece {
   readonly first: number
   readonly sessions: number
   readonly baselineHands?: SessionHandResult[]
+  readonly handsPerSession?: number
 }
 /** The baseline's hands from the piece in `directory` that played it on these deals. */
 function cachedBaseline(directory: string, tableName: string) {
@@ -242,6 +254,7 @@ function cachedBaseline(directory: string, tableName: string) {
       piece.baseline === baselinePolicyName &&
       piece.first === first &&
       piece.sessions === sessions &&
+      (piece.handsPerSession ?? campaignHandsPerSession) === common.handsPerSession &&
       piece.baselineHands !== undefined
     ) {
       return { hands: piece.baselineHands, from: join(directory, name) }
@@ -298,6 +311,7 @@ writeFileSync(
     candidate: candidateName,
     first,
     sessions,
+    handsPerSession: common.handsPerSession,
     perSession: raw.perSession,
     estimate: raw.estimate,
     perSessionAdjusted: adjusted.perSession,

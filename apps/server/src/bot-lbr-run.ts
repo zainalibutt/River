@@ -24,7 +24,7 @@ import { v9gPolicy } from './bot-v9g-policy.js'
 import { learnedValuePolicy, type ValueModel } from './bot-value-model.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9go|v9gp|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
+// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9go|v9gp|v9gz|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
 // Plays one focal policy heads-up against a local best response to it. What
 // the probe wins is a lower bound on how exploitable that policy is. Runs with
 // the same seed deal the same cards, stacks and chairs to every focal policy,
@@ -50,7 +50,7 @@ if (
   focalCast === undefined
 ) {
   throw new Error(
-    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9go|v9gp|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
+    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9go|v9gp|v9gz|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
   )
 }
 let riverStats: RiverPolicyStats | undefined
@@ -146,6 +146,7 @@ const focals: Record<string, () => BotPolicy> = {
   v9g: () => v9g(),
   v9go: () => v9g({ offTree: 'resolve' }),
   v9gp: () => v9g({ offTree: 'resolve', preflopTables: true }),
+  v9gz: () => v9g({ offTree: 'resolve', preflopTables: true, safeExploitV2: true }),
   v9gx: () => v9g({ boundedReads: true }),
   v9gy: () => v9g({ boundedReads: true, baselineCaps: true }),
   v9gh: () => v9g({ hybridThreshold: 0.35 }),
@@ -203,6 +204,7 @@ const run = runSessions({
     'v9g',
     'v9go',
     'v9gp',
+    'v9gz',
     'v9gx',
     'v9gy',
     'v9gh',
@@ -264,6 +266,8 @@ if (riverStats !== undefined) {
       `adaptation: ${riverStats.adaptations}/${riverStats.adaptationChecks} roots (${((100 * riverStats.adaptations) / n).toFixed(2)}%), mean mixture ${(riverStats.mixtureWeight / n).toFixed(6)}, baseline violations ${riverStats.baselineViolations}, max baseline violation ${riverStats.maxBaselineViolation}, max cap violation ${riverStats.maxCapViolation}, max slack ${riverStats.maxCapSlack}, ${(riverStats.adaptationMs / n).toFixed(1)} ms/root\n`,
     )
   }
+  if (focalName === 'v9gz')
+    process.stdout.write(`safe exploit: ${JSON.stringify(riverStats.safeExploit)}\n`)
 }
 
 if (hybridStats !== undefined) process.stdout.write(`hybrid: ${JSON.stringify(hybridStats)}\n`)

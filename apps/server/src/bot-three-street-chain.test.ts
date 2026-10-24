@@ -4,7 +4,12 @@ import { followWithResolving, type OffTreeState, offTreeStats } from './bot-off-
 import type { PublicDecision } from './bot-public-replay.js'
 import { boundedRiverAdaptation, RIVER_ADAPTATION_ALLOWANCE } from './bot-river-adaptation.js'
 import { carryFromRecord } from './bot-river-carry.js'
-import { RIVER_POLICY_TUNING, type RiverReads, readBasedRiverProposal } from './bot-river-policy.js'
+import {
+  RIVER_POLICY_TUNING,
+  type RiverReads,
+  readBasedRiverProposal,
+  readsModel,
+} from './bot-river-policy.js'
 import {
   type Player,
   prepare,
@@ -18,6 +23,7 @@ import {
   solveRiver,
 } from './bot-river-solver.js'
 import { COMBOS, comboIndex52 } from './bot-river-value-data.js'
+import { solveBudgetedStreet } from './bot-safe-exploitation.js'
 import {
   carriedPromises,
   createPromiseRecord,
@@ -374,6 +380,26 @@ describe.each(['cfr+', 'dcfr'] as const)('%s off-tree three-street chain', (sche
         'independent full-game opponent BR including both actual sizes',
       ).toBeLessThanOrEqual((br[0] as number) + tolerance)
       expect(stats).toMatchObject({ events: 2, resolves: 2, failures: {} })
+      // Budgeted river adaptation also composes on the actual widened tree.
+      const modeled: import('./bot-river-solver.js').RiverOpponentModel = {
+        player: 0,
+        weight: 0.35,
+        strategy: (node, hands) =>
+          Float64Array.from(
+            hands.combos.flatMap(() =>
+              node.actions.map((_, a) => Number(a === node.actions.length - 1)),
+            ),
+          ),
+      }
+      const chosen = solveBudgetedStreet(river, modeled, riverSpot.ranges[0], 0.04)
+      const adapted: Policy = new Map()
+      install(chosen.solution, riverPrefix, adapted)
+      const adaptedChain = new Map(chain)
+      for (const [key, row] of adapted) if (playerOf(key) === 1) adaptedChain.set(key, row)
+      const adaptedBR = aggregate(root, values(root, '', adaptedChain, 0, true), 0)
+      expect(adaptedBR, 'v9gz widened river full-game BR').toBeLessThanOrEqual(
+        chainedBR + 0.04 + 1e-9,
+      )
       console.log(
         JSON.stringify({
           scheme,
@@ -1159,6 +1185,43 @@ describe.each(['cfr+', 'dcfr'] as const)('%s three-street chain oracle', (scheme
     expect(adaptations.some((entry) => entry.baseline === 'inherited' && entry.weight > 0)).toBe(
       true,
     )
+    // v9gz: actual x0 BR caps, not the inherited promises. The independent
+    // full-game enumerator includes every chance card and opponent deviation.
+    const budgeted = []
+    for (const [name, reads] of [
+      ['correct', correct],
+      ['wrong', wrong],
+      ['changing', correct],
+    ] as const) {
+      const fixedModel = readsModel(reads, riverSpot, 1)
+      let calls = 0
+      const selectedModel =
+        name === 'changing'
+          ? {
+              ...fixedModel,
+              strategy: (
+                node: Extract<RiverNode, { kind: 'action' }>,
+                hands: ReturnType<typeof prepare>,
+              ) => readsModel(++calls % 2 ? correct : wrong, riverSpot, 1).strategy(node, hands),
+            }
+          : fixedModel
+      const budget = 0.04
+      const chosen = solveBudgetedStreet(river, selectedModel, riverSpot.ranges[1], budget)
+      const adapted: Policy = new Map()
+      install(chosen.solution, riverPrefix, adapted)
+      const complete = new Map(chain)
+      for (const [key, row] of adapted) if (playerOf(key) === 0) complete.set(key, row)
+      const local0 = values(riverSpot, riverPrefix, riverPolicy, 1, true)
+      values(riverSpot, riverPrefix, adapted, 1, true).forEach((v, h) => {
+        expect(v - (local0[h] as number), `v9gz ${name} holding ${h}`).toBeLessThanOrEqual(
+          budget + 1e-9,
+        )
+      })
+      const fullBR = aggregate(root, values(root, '', complete, 1, true), 1)
+      expect(fullBR, `v9gz ${name} whole chain`).toBeLessThanOrEqual(chained + budget + 1e-9)
+      expect(fullBR).toBeLessThanOrEqual((br[1] as number) + tolerance + budget)
+      budgeted.push({ name, weight: chosen.weight, maxBRIncrease: chosen.maxBRIncrease, fullBR })
+    }
     expect(zeroReachQueries).toBeGreaterThan(0)
     expect([...flop.strategy.values()].some((r) => r.some((v) => Math.abs(v - 0.5) > 0.1))).toBe(
       true,
@@ -1176,6 +1239,7 @@ describe.each(['cfr+', 'dcfr'] as const)('%s three-street chain oracle', (scheme
         zeroReachQueries,
         maxExactGap,
         adaptations,
+        budgeted,
       }),
     )
   }, 30_000)

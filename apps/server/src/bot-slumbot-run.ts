@@ -16,7 +16,7 @@ import { type TurnPolicyStats, turnSolverPolicy } from './bot-turn-policy.js'
 import { v9gPolicy } from './bot-v9g-policy.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z|v9a|v9g|v9go|v9gp> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
+// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z|v9a|v9g|v9go|v9gp|v9gz> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
 // Plays hands against Slumbot's public heads-up API, one at a time, sending
 // only our own moves; Slumbot deals and reports our cards. Each finished hand
 // is appended to the output file as one JSON line. A hand that fails, on our
@@ -35,6 +35,7 @@ const hands = Number(handText)
 const v8z = () => riverSolverPolicy(pokerGuardPolicy, 'river-solver', 1, RIVER_CANDIDATE_TUNING)
 let turnStats: TurnPolicyStats | undefined
 let offTree: unknown
+let riverStats: ReturnType<typeof v9gPolicy>['river'] | undefined
 const policies: Record<string, () => BotPolicy> = {
   v5: () => v5GuardPolicy,
   v6: () => pokerGuardPolicy,
@@ -61,6 +62,17 @@ const policies: Record<string, () => BotPolicy> = {
     }
     return chain.policy
   },
+  v9gz: () => {
+    const chain = v9gPolicy({ offTree: 'resolve', preflopTables: true, safeExploitV2: true })
+    riverStats = chain.river
+    offTree = {
+      flop: chain.stats.offTree,
+      turn: chain.turn.offTree,
+      river: chain.river.offTree,
+      preflop: chain.preflop,
+    }
+    return chain.policy
+  },
 }
 const make = policies[focalName ?? '']
 const casts = { rotation: focalRotation, champion: () => [championPersonality()] }
@@ -75,7 +87,7 @@ if (
   (readsName !== undefined && readsName !== 'reads')
 ) {
   throw new Error(
-    'usage: <v5|v6|v8z|v9a|v9g|v9go|v9gp> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
+    'usage: <v5|v6|v8z|v9a|v9g|v9go|v9gp|v9gz> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
   )
 }
 const policy = make()
@@ -206,6 +218,7 @@ for (let hand = 0; hand < hands; hand += 1) {
   if ((hand + 1) % 50 === 0 || hand + 1 === hands) {
     const seconds = Math.round((Date.now() - started) / 1000)
     if (offTree !== undefined) process.stderr.write(`off tree: ${JSON.stringify(offTree)}\n`)
+    if (riverStats !== undefined) process.stderr.write(`river: ${JSON.stringify(riverStats)}\n`)
     process.stderr.write(
       `${focalName}: ${hand + 1}/${hands} hands, ${((total / 100 / (hand + 1 - failed)) * 100).toFixed(1)} bb/100 so far, ${failed} failed, ${memory === null ? 'no reads' : `${unobserved} unobserved`}, ${seconds}s${
         turnStats === undefined
