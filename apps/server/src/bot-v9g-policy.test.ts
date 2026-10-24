@@ -1,5 +1,9 @@
+import { championPersonality, mulberry32, parseCard } from '@river/engine'
 import { afterEach, expect, it, vi } from 'vitest'
+import * as preflop from './bot-preflop-tables.js'
 import * as river from './bot-river-policy.js'
+import { observationFor, profileFor } from './bot-service.js'
+import { slumbotRoom } from './bot-slumbot.js'
 import * as chain from './bot-turn-policy.js'
 import { v9gPolicy } from './bot-v9g-policy.js'
 import * as networks from './bot-value-network.js'
@@ -7,6 +11,52 @@ import * as networks from './bot-value-network.js'
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
+})
+
+it('leaves v9go identical with preflopTables absent or false; only v9gp opts in', () => {
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+  vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+  vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+  vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+  const tables = vi.spyOn(preflop, 'tablePreflopPolicy')
+  const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+  const original = v9gPolicy({ offTree: 'resolve' })
+  const disabled = v9gPolicy({ offTree: 'resolve', preflopTables: false })
+  expect(tables).not.toHaveBeenCalled()
+  expect(original.preflop).toBeUndefined()
+  expect(disabled.preflop).toBeUndefined()
+  expect(construct.mock.calls[0]).toEqual(construct.mock.calls[1])
+  const room = slumbotRoom(
+    { action: '', clientPos: 1, hole: ['7h', '2d'].map(parseCard), board: [] },
+    { ours: 'a', theirs: 'b' },
+  )
+  const observation = observationFor(
+    room.viewFor('a'),
+    'a',
+    undefined,
+    room.id,
+    room.currentActions(),
+  )
+  if (!observation) throw new Error('missing observation')
+  const personality = championPersonality()
+  for (let seed = 1; seed <= 100; seed++) {
+    const context = {
+      observation,
+      personality,
+      profile: profileFor(personality),
+      tilt: observation.tilt,
+      rng: mulberry32(seed),
+    }
+    expect(original.policy.decide(context)).toEqual(
+      disabled.policy.decide({ ...context, rng: mulberry32(seed) }),
+    )
+  }
+  const enabled = v9gPolicy({ offTree: 'resolve', preflopTables: true })
+  expect(tables).toHaveBeenCalledTimes(1)
+  expect(enabled.preflop).toBeDefined()
+  expect(construct.mock.calls[2]?.[2]?.preflop?.stats).toBe(enabled.preflop)
 })
 
 it('shares the original v9g construction and forwards only the explicit bounded river opt-in', () => {

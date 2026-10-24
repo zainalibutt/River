@@ -16,7 +16,7 @@ import { type TurnPolicyStats, turnSolverPolicy } from './bot-turn-policy.js'
 import { v9gPolicy } from './bot-v9g-policy.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z|v9a|v9g|v9go> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
+// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z|v9a|v9g|v9go|v9gp> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
 // Plays hands against Slumbot's public heads-up API, one at a time, sending
 // only our own moves; Slumbot deals and reports our cards. Each finished hand
 // is appended to the output file as one JSON line. A hand that fails, on our
@@ -51,6 +51,16 @@ const policies: Record<string, () => BotPolicy> = {
     offTree = { flop: chain.stats.offTree, turn: chain.turn.offTree, river: chain.river.offTree }
     return chain.policy
   },
+  v9gp: () => {
+    const chain = v9gPolicy({ offTree: 'resolve', preflopTables: true })
+    offTree = {
+      flop: chain.stats.offTree,
+      turn: chain.turn.offTree,
+      river: chain.river.offTree,
+      preflop: chain.preflop,
+    }
+    return chain.policy
+  },
 }
 const make = policies[focalName ?? '']
 const casts = { rotation: focalRotation, champion: () => [championPersonality()] }
@@ -65,7 +75,7 @@ if (
   (readsName !== undefined && readsName !== 'reads')
 ) {
   throw new Error(
-    'usage: <v5|v6|v8z|v9a|v9g|v9go> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
+    'usage: <v5|v6|v8z|v9a|v9g|v9go|v9gp> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
   )
 }
 const policy = make()

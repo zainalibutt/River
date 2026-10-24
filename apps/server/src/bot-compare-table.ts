@@ -41,6 +41,7 @@ function v9g(name: string, options: Parameters<typeof v9gPolicy>[0] = {}): BotPo
   hybridStats[name] = chain.hybrid
   exploitRiverStats[name] = chain.exploitRiver
   offTreeStats[name] = {
+    ...(chain.preflop === undefined ? {} : { preflop: chain.preflop }),
     flop: chain.stats.offTree,
     turn: chain.turn.offTree,
     river: chain.river.offTree,
@@ -69,6 +70,9 @@ export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
   },
   get v9go() {
     return v9g('v9go', { offTree: 'resolve' })
+  },
+  get v9gp() {
+    return v9g('v9gp', { offTree: 'resolve', preflopTables: true })
   },
   get v9gx() {
     return v9g('v9gx', { boundedReads: true })

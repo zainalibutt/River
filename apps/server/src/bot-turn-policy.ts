@@ -19,6 +19,7 @@ import {
 } from './bot-off-tree.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { type HandAwareBotPolicy, HandSolveCache, releasePolicyHand } from './bot-policy-hand.js'
+import type { TablePreflopSource } from './bot-preflop-tables.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
 import { carryFromRecord, exactTurnAction, type RiverCarrySource } from './bot-river-carry.js'
 import {
@@ -75,6 +76,7 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  * response, so a wrong read costs little.
  */
 export interface TurnPolicyTuning extends CfrOptions {
+  readonly preflop?: TablePreflopSource
   readonly offTree?: 'resolve'
   readonly boundedReads?: boolean
   readonly baselineCaps?: boolean
@@ -692,8 +694,11 @@ function solveTurnSpot(
   // A safe re-solve carries the earlier solves' reaches exactly: a move a solver made
   // narrows the range by that solver's own shares, with no doubt mixed in and nothing
   // pruned. Doubt and pruning stay for moves no solver made (v8z's preflop).
+  const tableRanges =
+    street.street === 'flop' ? tuning.preflop?.ranges(observation, preTurn, players) : null
   const ranges =
     carry?.ranges ??
+    tableRanges ??
     trackRanges(
       observation.board,
       preTurn,
@@ -720,7 +725,7 @@ function solveTurnSpot(
     ranges:
       carry?.ranges ??
       (([0, 1] as const).map((player) =>
-        safe && player === opponent
+        safe && player === opponent && !tableRanges
           ? combosWithFloor(ranges[player], FULL_SUPPORT_SHARE)
           : combosOf(ranges[player]),
       ) as unknown as RiverSpot['ranges']),
@@ -831,7 +836,7 @@ export function solvedFlopPolicy(
       : flop.opponentShares(decision, taken, personality, history, true)
   }
   const river = riverSolverPolicy(
-    pokerGuardPolicy,
+    overrides.preflop?.policy ?? pokerGuardPolicy,
     'river-solver',
     1,
     {

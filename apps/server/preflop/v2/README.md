@@ -1,9 +1,41 @@
 # Heads-up preflop v2: hand-dependent continuation
 
 These offline packs retain the v1 tree, exact legal-deal weights and equity cache.
-They are not wired into a live bot. The v1 JSON and text packs are preserved.
+The opt-in `v9gp` bot uses these packs. The v1 JSON and text packs are preserved.
 The game is no-rake HU NLHE, 0.5/1 blinds, 100 or 200 bb including the blind.
 All sizes are total contributions. See [the v1 tree/equity documentation](../README.md).
+
+## Live v9gp path
+
+`bot-v9g-policy.ts` enables `preflopTables: true` together with `offTree: 'resolve'`.
+Other variants retain their existing defaults. The shared constructor is exposed
+as `v9gp` by the compare, LBR and Slumbot runners.
+
+The effective starting stack includes posted blinds. Choose the nearest exported
+depth (100/200bb, ties to 100); clamp outside that interval and count each clamped
+hand. `PREFLOP_DEPTHS` and injectable packs leave room for further depths.
+Multiply total table targets by the actual posted big blind: at 250/500 the open,
+limp raise, 3-bet and 4-bet are 1,250 / 2,000 / 4,500 / 11,000 chips. Apply the
+live minimum raise and effective stack cap; jam means the live effective all-in.
+Actions that collapse to one live move have their probabilities added for reach.
+
+Off-size raises are bracketed by the available aggressive targets, clamping at
+the endpoints. In pot shares after calling, `s = (raiseTo-currentBet)/(pot+call)`,
+translate x down to A with probability `(B-x)*(1+A)/((B-A)*(1+x))`, otherwise up
+to B ([Ganzfried and Sandholm](https://www.sigecom.org/exchanges/volume_14/2/GANZFRIED.pdf),
+section 2.2). A public-prefix seed fixes this translation across live lookup and
+range reconstruction; our move sampling uses the supplied policy RNG.
+`preflopOffTree` counts translated actions once per hand, including translations
+first observed at the flop. Unsupported sequences and missing history fall back
+to v6, with separate decision and range fallback counters.
+
+At the flop, both ranges use exact products of their own table action
+probabilities per physical combo. The opponent's line defines a table belief,
+not a claim about their actual strategy. Board removal and downstream compatible
+deal handling remain in place. This path bypasses preflop sampling, smoothing,
+pruning and support floors. A translated jam/call still supplies table reach if
+the actual non-all-in wager leaves a live flop. Subsequent carried solves keep
+the existing v9go behavior.
 
 ## Public starting points and uncertainty
 
