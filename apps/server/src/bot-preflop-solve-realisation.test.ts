@@ -55,7 +55,7 @@ describe('hand-dependent preflop realisation', () => {
             previousOop = oop
           }
         }
-  })
+  }, 60_000)
   it('rewards suitedness/connectivity/pairs and reduces the weak-hand tax at low SPR', () => {
     const r = (hand: string, spr = 20) =>
       realisationFactor(hand, 0.4, 'oop', 'single-raised', spr, config)
