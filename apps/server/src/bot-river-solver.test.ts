@@ -9,6 +9,7 @@ import {
   type RiverSolution,
   type RiverSpot,
   riverReport,
+  riverTerminalEvaluator,
   riverValues,
   type ShowdownValues,
   solveRiver as solveRiverBase,
@@ -40,6 +41,45 @@ function randomRange(board: readonly Card[], count: number, seed: number): Range
 }
 
 describe('river showdowns', () => {
+  it('reuses terminal scratch across seats, reaches and fold/showdown payoffs', () => {
+    const board = cards('Ah Kd 7s 4c 2h')
+    const hands = [
+      prepare(randomRange(board, 23, 5), board),
+      prepare(randomRange(board, 19, 6), board),
+    ] as const
+    const settle = riverTerminalEvaluator(hands, 100)
+    const nodes = [
+      { kind: 'showdown', paid: [40, 40] },
+      { kind: 'fold', folder: 0, paid: [30, 90] },
+      { kind: 'fold', folder: 1, paid: [90, 30] },
+    ] as const
+    const saved = settle(nodes[0], 0, hands[1].weights)
+    const snapshot = [...saved]
+    for (const p of [0, 1, 0] as const) {
+      const other = p === 0 ? 1 : 0
+      const reach = hands[other].weights.map((w, h) => w * (h % 3))
+      for (const node of nodes) {
+        const values = settle(node, p, reach)
+        hands[p].combos.forEach((mine, h) => {
+          let expected = 0
+          hands[other].combos.forEach((theirs, o) => {
+            if (
+              mine.hole.some((a) => theirs.hole.some((b) => a.rank === b.rank && a.suit === b.suit))
+            )
+              return
+            const diff = (hands[p].strength[h] as number) - (hands[other].strength[o] as number)
+            const share =
+              node.kind === 'fold' ? Number(node.folder !== p) : diff > 0 ? 1 : diff < 0 ? 0 : 0.5
+            expected +=
+              (reach[o] as number) * (share * (100 + node.paid[0] + node.paid[1]) - node.paid[p])
+          })
+          expect(values[h]).toBeCloseTo(expected, 9)
+        })
+      }
+    }
+    expect([...saved]).toEqual(snapshot)
+  })
+
   it('match a brute-force count of every compatible pair', () => {
     const board = cards('Ah Kd 7s 4c 2h')
     const hero = prepare(randomRange(board, 60, 1), board)

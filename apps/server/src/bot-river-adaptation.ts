@@ -25,8 +25,25 @@ export function realizationMixture(
   weight: number,
 ): RiverSolution {
   if (weight === 0) return baseline
-  const strategy = new Map(baseline.strategy)
+  return realizationMixtureLine(baseline, proposal, ours)(weight)
+}
+
+/** Prepare the two fixed realization plans once for repeated mixture queries. */
+export function realizationMixtureLine(
+  baseline: RiverSolution,
+  proposal: RiverSolution,
+  ours: Player,
+) {
   const count = prepare(baseline.spot.ranges[ours], baseline.spot.board).combos.length
+  const plans: {
+    history: string
+    width: number
+    base: Float64Array
+    baseReach: Float64Array
+    proposedReach: Float64Array
+    nextBase: Float64Array
+    nextProposed: Float64Array
+  }[] = []
   const walk = (node: RiverNode, baseReach: Float64Array, proposedReach: Float64Array) => {
     if (node.kind !== 'action') return
     if (node.player !== ours) {
@@ -40,29 +57,53 @@ export function realizationMixture(
     const width = node.actions.length
     if (base?.length !== count * width || proposed?.length !== count * width)
       throw new Error('river mixture requires aligned own strategy tables')
-    const mixed = new Float64Array(base.length)
-    for (let action = 0; action < width; action++) {
-      const nextBase = new Float64Array(count)
-      const nextProposed = new Float64Array(count)
+    const nextBase = new Float64Array(base.length)
+    const nextProposed = new Float64Array(base.length)
+    node.children.forEach((child, a) => {
+      const b = new Float64Array(count)
+      const p = new Float64Array(count)
       for (let h = 0; h < count; h++) {
-        const at = h * width + action
-        const b = baseReach[h] as number
-        const p = proposedReach[h] as number
-        nextBase[h] = b * (base[at] as number)
-        nextProposed[h] = p * (proposed[at] as number)
-        const parent = (1 - weight) * b + weight * p
-        mixed[at] =
-          parent > 0
-            ? ((1 - weight) * (nextBase[h] as number) + weight * (nextProposed[h] as number)) /
-              parent
-            : (base[at] as number)
+        const at = h * width + a
+        b[h] = (baseReach[h] as number) * (base[at] as number)
+        p[h] = (proposedReach[h] as number) * (proposed[at] as number)
+        nextBase[at] = b[h] as number
+        nextProposed[at] = p[h] as number
       }
-      walk(node.children[action] as RiverNode, nextBase, nextProposed)
-    }
-    strategy.set(node.history, mixed)
+      walk(child, b, p)
+    })
+    plans.push({
+      history: node.history,
+      width,
+      base,
+      baseReach,
+      proposedReach,
+      nextBase,
+      nextProposed,
+    })
   }
   walk(baseline.tree, new Float64Array(count).fill(1), new Float64Array(count).fill(1))
-  return { ...baseline, strategy }
+  return (weight: number): RiverSolution => {
+    if (weight === 0) return baseline
+    const strategy = new Map(baseline.strategy)
+    for (const plan of plans) {
+      const mixed = new Float64Array(plan.base.length)
+      for (let h = 0; h < count; h++) {
+        const parent =
+          (1 - weight) * (plan.baseReach[h] as number) + weight * (plan.proposedReach[h] as number)
+        for (let a = 0; a < plan.width; a++) {
+          const at = h * plan.width + a
+          mixed[at] =
+            parent > 0
+              ? ((1 - weight) * (plan.nextBase[at] as number) +
+                  weight * (plan.nextProposed[at] as number)) /
+                parent
+              : (plan.base[at] as number)
+        }
+      }
+      strategy.set(plan.history, mixed)
+    }
+    return { ...baseline, strategy }
+  }
 }
 
 export function riverCapStatus(solution: RiverSolution, gadget: RiverGadget) {

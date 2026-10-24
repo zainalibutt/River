@@ -777,6 +777,20 @@ export function terminal(
   return out
 }
 
+/** Reuse blocker scratch for sequential terminal evaluations on fixed ranges. */
+export function riverTerminalEvaluator(hands: readonly [Hands, Hands], pot: number) {
+  const scratch = scratchFor(hands)
+  return (
+    node: Exclude<RiverNode, { kind: 'action' }>,
+    traverser: Player,
+    opponent: Float64Array,
+  ): Float64Array => {
+    const out = new Float64Array(hands[traverser].combos.length)
+    terminalInto(node, traverser, hands, opponent, pot, scratch, out)
+    return out
+  }
+}
+
 function terminalInto(
   node: Exclude<RiverNode, { kind: 'action' }>,
   traverser: Player,

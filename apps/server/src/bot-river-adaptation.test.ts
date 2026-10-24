@@ -5,6 +5,7 @@ import {
   boundedRiverAdaptation,
   RIVER_ADAPTATION_ALLOWANCE,
   realizationMixture,
+  realizationMixtureLine,
 } from './bot-river-adaptation.js'
 import { RIVER_POLICY_TUNING, readBasedRiverProposal } from './bot-river-policy.js'
 import {
@@ -88,6 +89,40 @@ function enumerate(solution: RiverSolution, p: Player): number[] {
 }
 
 describe('inherited river adaptation', () => {
+  it.each([0, 1] as const)(
+    'reuses a realization line without mixing behavioral rows (seat %i)',
+    (ours) => {
+      const s = { ...spot, maxRaises: 1 }
+      const base = policy(s, (node, h) =>
+        node.actions.map((_, a) => (a === h % node.actions.length ? 1 : 0)),
+      )
+      const proposed = policy(s, (node, h) =>
+        node.actions.map((_, a) => (a === (h + 1) % node.actions.length ? 1 : 0)),
+      )
+      const line = realizationMixtureLine(base, proposed, ours)
+      const end = line(1)
+      const first = line(0.37)
+      const snapshot = [...first.strategy].map(([key, values]) => [key, [...values]])
+      const baseBR = enumerate(base, ours === 0 ? 1 : 0)
+      const endBR = enumerate(end, ours === 0 ? 1 : 0)
+      for (const w of [1, 0.5, 0.01, 0.999, 0.37, 0]) {
+        const mixed = line(w)
+        // The fixed-opponent objective is affine in realization, even at later own nodes.
+        expect(riverStrategyValue(mixed, ours)).toBeCloseTo(
+          (1 - w) * riverStrategyValue(base, ours) + w * riverStrategyValue(end, ours),
+          10,
+        )
+        enumerate(mixed, ours === 0 ? 1 : 0).forEach((v, h) => {
+          expect(v).toBeLessThanOrEqual(
+            (1 - w) * (baseBR[h] as number) + w * (endBR[h] as number) + 1e-10,
+          )
+        })
+      }
+      expect(line(0)).toBe(base)
+      expect([...first.strategy].map(([key, values]) => [key, [...values]])).toEqual(snapshot)
+    },
+  )
+
   it.each([0, 1] as const)(
     'matches per-holding enumerated BR for player %i, not self-play',
     (p) => {
