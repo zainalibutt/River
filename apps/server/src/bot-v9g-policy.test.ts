@@ -163,3 +163,22 @@ it('v9gz enables only river optimization; flag off has identical v9gp constructi
   expect(enabled.river.safeExploit).toMatchObject({ eligible: 0, proposed: 0, accepted: 0 })
   expect(enabled.hybrid).toBeUndefined()
 })
+
+it('v9gz2 independently enables turn and river while explicit turn-off keeps v9gp construction', () => {
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+  vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+  vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+  vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+  const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+  const options = { offTree: 'resolve' as const, preflopTables: true }
+  v9gPolicy(options)
+  v9gPolicy({ ...options, safeTurnExploit: false, safeExploitV2: false })
+  const { preflop: _a, ...a } = construct.mock.calls[0]?.[2] ?? {}
+  const { preflop: _b, ...b } = construct.mock.calls[1]?.[2] ?? {}
+  expect(a).toEqual(b)
+  const enabled = v9gPolicy({ ...options, safeTurnExploit: true, safeExploitV2: true })
+  expect(construct.mock.calls[2]?.[2]).toMatchObject({ safeTurnExploit: true, safeExploitV2: true })
+  expect(enabled.turn.safeExploit).toMatchObject({ eligible: 0, proposed: 0, accepted: 0 })
+})

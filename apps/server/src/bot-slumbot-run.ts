@@ -73,6 +73,23 @@ const policies: Record<string, () => BotPolicy> = {
     }
     return chain.policy
   },
+  v9gz2: () => {
+    const chain = v9gPolicy({
+      offTree: 'resolve',
+      preflopTables: true,
+      safeExploitV2: true,
+      safeTurnExploit: true,
+    })
+    riverStats = chain.river
+    turnStats = chain.turn
+    offTree = {
+      flop: chain.stats.offTree,
+      turn: chain.turn.offTree,
+      river: chain.river.offTree,
+      preflop: chain.preflop,
+    }
+    return chain.policy
+  },
 }
 const make = policies[focalName ?? '']
 const casts = { rotation: focalRotation, champion: () => [championPersonality()] }
@@ -219,6 +236,8 @@ for (let hand = 0; hand < hands; hand += 1) {
     const seconds = Math.round((Date.now() - started) / 1000)
     if (offTree !== undefined) process.stderr.write(`off tree: ${JSON.stringify(offTree)}\n`)
     if (riverStats !== undefined) process.stderr.write(`river: ${JSON.stringify(riverStats)}\n`)
+    if (focalName === 'v9gz2')
+      process.stderr.write(`turn safe exploit: ${JSON.stringify(turnStats?.safeExploit)}\n`)
     process.stderr.write(
       `${focalName}: ${hand + 1}/${hands} hands, ${((total / 100 / (hand + 1 - failed)) * 100).toFixed(1)} bb/100 so far, ${failed} failed, ${memory === null ? 'no reads' : `${unobserved} unobserved`}, ${seconds}s${
         turnStats === undefined

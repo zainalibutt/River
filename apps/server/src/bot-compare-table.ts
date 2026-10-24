@@ -45,6 +45,7 @@ function v9g(name: string, options: Parameters<typeof v9gPolicy>[0] = {}): BotPo
     flop: chain.stats.offTree,
     turn: chain.turn.offTree,
     river: chain.river.offTree,
+    safeExploit: { turn: chain.turn.safeExploit, river: chain.river.safeExploit },
   }
   return chain.policy
 }
@@ -76,6 +77,14 @@ export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
   },
   get v9gz() {
     return v9g('v9gz', { offTree: 'resolve', preflopTables: true, safeExploitV2: true })
+  },
+  get v9gz2() {
+    return v9g('v9gz2', {
+      offTree: 'resolve',
+      preflopTables: true,
+      safeExploitV2: true,
+      safeTurnExploit: true,
+    })
   },
   get v9gx() {
     return v9g('v9gx', { boundedReads: true })

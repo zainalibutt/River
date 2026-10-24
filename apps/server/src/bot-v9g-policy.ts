@@ -2,6 +2,7 @@ import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { tablePreflopPolicy } from './bot-preflop-tables.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
 import type { SafeExploitConfig } from './bot-safe-exploitation.js'
+import type { SafeTurnExploitConfig } from './bot-safe-turn-exploitation.js'
 import { predictableHybridPolicy, solvedFlopPolicy } from './bot-turn-policy.js'
 import {
   loadValueNetwork,
@@ -17,6 +18,8 @@ export interface V9gOptions {
   readonly hybridThreshold?: number
   readonly preflopTables?: boolean
   readonly safeExploitV2?: boolean
+  readonly safeTurnExploit?: boolean
+  readonly safeTurnExploitConfig?: Partial<SafeTurnExploitConfig>
   readonly safeExploitConfig?: Partial<SafeExploitConfig>
 }
 
@@ -28,6 +31,8 @@ export function v9gPolicy({
   hybridThreshold,
   preflopTables = false,
   safeExploitV2 = false,
+  safeTurnExploit = false,
+  safeTurnExploitConfig,
   safeExploitConfig,
 }: V9gOptions = {}) {
   const flop = process.env.RIVER_FLOP_NETWORK
@@ -41,6 +46,7 @@ export function v9gPolicy({
     iterations: 40,
     boundedReads,
     ...(safeExploitV2 ? { safeExploitV2, safeExploitConfig } : {}),
+    ...(safeTurnExploit ? { safeTurnExploit, safeTurnExploitConfig } : {}),
     ...(preflop === undefined ? {} : { preflop }),
     ...(offTree === undefined ? {} : { offTree }),
     ...(baselineCaps === undefined ? {} : { baselineCaps }),

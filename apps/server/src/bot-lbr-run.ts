@@ -69,10 +69,12 @@ let offTree:
     }
   | undefined
 let exploitRiverStats: RiverPolicyStats | undefined
+let turnExploitStats: ReturnType<typeof v9gPolicy>['turn']['safeExploit'] | undefined
 const v9g = (options: Parameters<typeof v9gPolicy>[0] = {}) => {
   const chain = v9gPolicy(options)
   preflopStats = chain.preflop
   riverStats = chain.river
+  turnExploitStats = chain.turn.safeExploit
   hybridStats = chain.hybrid
   exploitRiverStats = chain.exploitRiver
   offTree = { flop: chain.stats.offTree, turn: chain.turn.offTree, river: chain.river.offTree }
@@ -147,6 +149,8 @@ const focals: Record<string, () => BotPolicy> = {
   v9go: () => v9g({ offTree: 'resolve' }),
   v9gp: () => v9g({ offTree: 'resolve', preflopTables: true }),
   v9gz: () => v9g({ offTree: 'resolve', preflopTables: true, safeExploitV2: true }),
+  v9gz2: () =>
+    v9g({ offTree: 'resolve', preflopTables: true, safeExploitV2: true, safeTurnExploit: true }),
   v9gx: () => v9g({ boundedReads: true }),
   v9gy: () => v9g({ boundedReads: true, baselineCaps: true }),
   v9gh: () => v9g({ hybridThreshold: 0.35 }),
@@ -205,6 +209,7 @@ const run = runSessions({
     'v9go',
     'v9gp',
     'v9gz',
+    'v9gz2',
     'v9gx',
     'v9gy',
     'v9gh',
@@ -240,6 +245,7 @@ writeFileSync(
     hybrid: hybridStats,
     preflop: preflopStats,
     exploitRiver: exploitRiverStats,
+    turnSafeExploit: turnExploitStats,
     ...(riverStats === undefined ? {} : { river: riverStats }),
     hands: run.hands.map((hand) => [
       hand.session,
@@ -266,9 +272,11 @@ if (riverStats !== undefined) {
       `adaptation: ${riverStats.adaptations}/${riverStats.adaptationChecks} roots (${((100 * riverStats.adaptations) / n).toFixed(2)}%), mean mixture ${(riverStats.mixtureWeight / n).toFixed(6)}, baseline violations ${riverStats.baselineViolations}, max baseline violation ${riverStats.maxBaselineViolation}, max cap violation ${riverStats.maxCapViolation}, max slack ${riverStats.maxCapSlack}, ${(riverStats.adaptationMs / n).toFixed(1)} ms/root\n`,
     )
   }
-  if (focalName === 'v9gz')
+  if (focalName === 'v9gz' || focalName === 'v9gz2')
     process.stdout.write(`safe exploit: ${JSON.stringify(riverStats.safeExploit)}\n`)
 }
+if (focalName === 'v9gz2')
+  process.stdout.write(`turn safe exploit: ${JSON.stringify(turnExploitStats)}\n`)
 
 if (hybridStats !== undefined) process.stdout.write(`hybrid: ${JSON.stringify(hybridStats)}\n`)
 if (preflopStats !== undefined) process.stdout.write(`preflop: ${JSON.stringify(preflopStats)}\n`)

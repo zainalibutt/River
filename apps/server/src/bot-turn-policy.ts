@@ -32,6 +32,7 @@ import {
   nearestStrength,
   RIVER_CANDIDATE_TUNING,
   RIVER_POLICY_TUNING,
+  type RiverPolicyStats,
   type RiverPolicyTuning,
   type RiverReads,
   readsModel,
@@ -52,8 +53,15 @@ import {
   type RiverSolution,
   type RiverSpot,
   riverValues,
+  type ShowdownValues,
   solveRiver,
 } from './bot-river-solver.js'
+import {
+  SAFE_TURN_EXPLOIT_CONFIG,
+  type SafeTurnExploitConfig,
+  solveBudgetedTurnDecision,
+  turnExploitBudget,
+} from './bot-safe-turn-exploitation.js'
 import { solveCacheMemory } from './bot-solver-memory.js'
 import {
   createRiverPromiseRecord,
@@ -76,8 +84,10 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  * response, so a wrong read costs little.
  */
 export interface TurnPolicyTuning extends CfrOptions {
-  /** Forwarded to the river only; turn optimization is not enabled. */
+  /** River optimization; separately opt in to the one-decision turn envelope. */
   readonly safeExploitV2?: boolean
+  readonly safeTurnExploit?: boolean
+  readonly safeTurnExploitConfig?: Partial<SafeTurnExploitConfig>
   readonly safeExploitConfig?: Partial<import('./bot-safe-exploitation.js').SafeExploitConfig>
   readonly preflop?: TablePreflopSource
   readonly offTree?: 'resolve'
@@ -111,6 +121,7 @@ export const TURN_POLICY_TUNING: TurnPolicyTuning = {
 }
 
 export interface TurnPolicyStats {
+  readonly safeExploit: RiverPolicyStats['safeExploit']
   readonly offTree: OffTreeStats
   carryUsed: number
   carryFallbacks: number
@@ -165,6 +176,15 @@ export const FLOP_STREET: StreetSetup = {
 const BOARD_CARDS = { flop: 3, turn: 4 } as const
 
 interface SolvedTurn {
+  /** Shadow tables/records above remain immutable for all later decisions. */
+  readonly exploit?: {
+    attempted: boolean
+    selected?: { history: string; table: Float64Array }
+    reference: RiverSolution
+    readonly showdown: ShowdownValues | undefined
+    readonly reads: RiverReads | null
+    readonly posterior: () => readonly import('./bot-river-solver.js').RangeCombo[]
+  }
   readonly offTree?: OffTreeState<SolvedTurn>
   readonly spot: RiverSpot
   readonly tree: RiverNode
@@ -216,6 +236,18 @@ export function turnSolverPolicy(
 } {
   const tuning: TurnPolicyTuning = { ...TURN_POLICY_TUNING, ...overrides }
   const stats: TurnPolicyStats = {
+    safeExploit: {
+      eligible: 0,
+      proposed: 0,
+      accepted: 0,
+      auditFailures: 0,
+      actionTV: 0,
+      modelEVGain: 0,
+      budgetSpent: 0,
+      maxBRIncrease: 0,
+      latencyMs: 0,
+      roots: [],
+    },
     offTree: offTreeStats(),
     carryUsed: 0,
     carryFallbacks: 0,
@@ -226,7 +258,7 @@ export function turnSolverPolicy(
     solveMs: 0,
   }
   const cache = new HandSolveCache<SolvedTurn | string>(
-    tuning.carry !== undefined || tuning.offTree === 'resolve',
+    tuning.safeTurnExploit === true || tuning.carry !== undefined || tuning.offTree === 'resolve',
     tuning.cacheSize,
   )
   const policy: HandAwareBotPolicy = {
@@ -528,10 +560,75 @@ function turnDecision(
   const found = locate(observation, personality, base, network, tuning, cache, stats, street)
   if (typeof found === 'string') return found
   const { solved, node, self } = found
-  const table = solved.strategy.get(node.history)
+  let table = solved.strategy.get(node.history)
   const hole = observation.actor.hole
   if (table === undefined || hole.length !== 2) return 'no strategy'
   const hands = solved.hands[self]
+  const exploit = solved.exploit
+  if (exploit && !exploit.attempted) {
+    exploit.attempted = true
+    const started = performance.now()
+    const config = { ...SAFE_TURN_EXPLOIT_CONFIG, ...tuning.safeTurnExploitConfig }
+    const bigBlind = Math.max(
+      0,
+      ...observation.seats.map(
+        (seat) =>
+          seat.betHand -
+          (observation.actions ?? [])
+            .filter((action) => action.seat === seat.seat)
+            .reduce((sum, action) => sum + (action.amountCommitted ?? 0), 0),
+      ),
+    )
+    const budget = turnExploitBudget(solved.spot.pot, bigBlind, config)
+    let chosen: ReturnType<typeof solveBudgetedTurnDecision> | undefined
+    let failures = 0
+    // A stand-in holding is outside the certificate's protected own support.
+    if (
+      budget > 0 &&
+      comboIndex(hands, hole as [Card, Card]) !== undefined &&
+      exploit.reads &&
+      exploit.reads.trust > 0
+    ) {
+      try {
+        chosen = solveBudgetedTurnDecision(
+          exploit.reference,
+          node,
+          readsModel(exploit.reads, exploit.reference.spot, self === 0 ? 1 : 0),
+          exploit.posterior(),
+          budget,
+          config,
+          exploit.showdown,
+        )
+        if (chosen.weight > 0) exploit.selected = { history: node.history, table: chosen.table }
+      } catch {
+        failures++
+      }
+    }
+    const root = {
+      proposed: chosen?.proposed ?? false,
+      accepted: (chosen?.weight ?? 0) > 0,
+      actionTV: chosen?.actionTV ?? 0,
+      modelEVGain: chosen?.modelEVGain ?? 0,
+      budget,
+      budgetSpent: chosen?.maxBRIncrease ?? 0,
+      maxBRIncrease: chosen?.maxBRIncrease ?? 0,
+      auditFailures: (chosen?.auditFailures ?? 0) + failures,
+      latencyMs: performance.now() - started,
+      modelWeight: chosen?.modelWeight ?? 0,
+    }
+    const counters = stats.safeExploit
+    counters.eligible++
+    counters.proposed += Number(root.proposed)
+    counters.accepted += Number(root.accepted)
+    counters.actionTV += root.actionTV
+    counters.modelEVGain += root.modelEVGain
+    counters.budgetSpent += root.budgetSpent
+    counters.maxBRIncrease = Math.max(counters.maxBRIncrease, root.maxBRIncrease)
+    counters.auditFailures += root.auditFailures
+    counters.latencyMs += root.latencyMs
+    counters.roots.push(root)
+  }
+  if (exploit?.selected?.history === node.history) table = exploit.selected.table
   const index =
     comboIndex(hands, hole as [Card, Card]) ?? nearestStrength(hands, hole, observation.board)
   const width = node.actions.length
@@ -597,15 +694,16 @@ function locate(
     )
     if (predictable !== null && predictable.trust >= tuning.predictableTrust) return 'predictable'
   }
-  const reads = tuning.reads
-    ? riverReads(
-        observation.opponentStats?.find((entry) => entry.playerId === opponentId),
-        read,
-        tuning.ranges,
-      )
-    : null
+  const reads =
+    tuning.reads || (tuning.safeTurnExploit && street.street === 'turn')
+      ? riverReads(
+          observation.opponentStats?.find((entry) => entry.playerId === opponentId),
+          read,
+          tuning.ranges,
+        )
+      : null
   const cacheKey =
-    tuning.offTree === 'resolve'
+    tuning.offTree === 'resolve' || tuning.safeTurnExploit
       ? cache.key(observation, `${observation.actor.playerId}|${observation.board.map(cardKey)}`)
       : cache.key(
           observation,
@@ -690,7 +788,8 @@ function solveTurnSpot(
     street.known(decision, taken, player, history, observation.actor.playerId)
   const wantsCarry =
     street.street === 'turn' && (tuning.carry === 'per-turn' || tuning.carry === 'both')
-  const safe = street.safe && (wantsCarry || reads === null || reads.trust <= 0)
+  const safe =
+    street.safe && (tuning.safeTurnExploit || wantsCarry || reads === null || reads.trust <= 0)
   const carry =
     safe && wantsCarry ? (street.carry?.(observation, personality, preTurn, players) ?? null) : null
   if (safe && wantsCarry) {
@@ -741,7 +840,7 @@ function solveTurnSpot(
   }
   if (spot.ranges[0].length === 0 || spot.ranges[1].length === 0) return 'empty range'
   const model =
-    (safe && wantsCarry) || reads === null || reads.trust <= 0
+    tuning.safeTurnExploit || (safe && wantsCarry) || reads === null || reads.trust <= 0
       ? undefined
       : readsModel(reads, spot, opponent)
   let record: RiverPromiseRecord | undefined
@@ -795,7 +894,34 @@ function solveTurnSpot(
   }
   stats.solveMs += performance.now() - tracked
   stats.solves += 1
+  const exploit: SolvedTurn['exploit'] =
+    tuning.safeTurnExploit && street.street === 'turn'
+      ? {
+          attempted: false,
+          reference: solution,
+          showdown: preparedLeaves?.withRecord() ?? solution.showdown,
+          reads,
+          posterior: () =>
+            combosOf(
+              trackRanges(
+                observation.board,
+                preTurn,
+                players,
+                base,
+                personality,
+                key,
+                tuning.ranges.minimumWeightShare,
+                (decision, taken) =>
+                  decision.observation.actor.playerId === players[opponent]
+                    ? cardBlindShare(read, taken, tuning.ranges)
+                    : 0,
+                known,
+              )[opponent],
+            ),
+        }
+      : undefined
   const pack = (result: RiverSolution, state?: OffTreeState<SolvedTurn>): SolvedTurn => ({
+    ...(exploit === undefined ? {} : { exploit: Object.assign(exploit, { reference: result }) }),
     ...(state === undefined ? {} : { offTree: state }),
     spot: tuning.offTree === 'resolve' ? result.spot : spot,
     tree: result.tree,

@@ -24,6 +24,7 @@ import {
 } from './bot-river-solver.js'
 import { COMBOS, comboIndex52 } from './bot-river-value-data.js'
 import { solveBudgetedStreet } from './bot-safe-exploitation.js'
+import { auditTurnDecision, selectCertifiedTurnDecision } from './bot-safe-turn-exploitation.js'
 import {
   carriedPromises,
   createPromiseRecord,
@@ -1220,6 +1221,35 @@ describe.each(['cfr+', 'dcfr'] as const)('%s three-street chain oracle', (scheme
       const fullBR = aggregate(root, values(root, '', complete, 1, true), 1)
       expect(fullBR, `v9gz ${name} whole chain`).toBeLessThanOrEqual(chained + budget + 1e-9)
       expect(fullBR).toBeLessThanOrEqual((br[1] as number) + tolerance + budget)
+      // v9gz2 composes the conservative turn envelope with the river audit.
+      // Keep EVERY recorded continuation fixed; replace only the first turn
+      // decision. The enumerator still maximizes over the complete three-
+      // street game and all cards, with blockers and chip origins intact.
+      if (turn.tree.kind !== 'action') throw new Error('missing turn root')
+      const turnRoot = turn.tree
+      const turnBudget = 0.06
+      const rootProposal = Float64Array.from(
+        turn.strategy.get(turn.tree.history) as Float64Array,
+        (_, i) => Number(i % turnRoot.actions.length === (name === 'wrong' ? 0 : 1)),
+      )
+      const turnChosen = selectCertifiedTurnDecision(turn, turn.tree, rootProposal, turnBudget)
+      expect(turnChosen.weight).toBeGreaterThan(0)
+      expect(
+        auditTurnDecision(turn, turn.tree, turnChosen.table).maxBRIncrease,
+      ).toBeLessThanOrEqual(turnBudget)
+      const selectedTurn: Policy = new Map()
+      install(
+        { ...turn, strategy: new Map(turn.strategy).set(turn.tree.history, turnChosen.table) },
+        turnPrefix,
+        selectedTurn,
+      )
+      // Only copy this street's rows; the executable river policy above is
+      // unchanged, including the selected river adaptation.
+      for (const [key, row] of selectedTurn) if (playerOf(key) === 0) complete.set(key, row)
+      const combinedBR = aggregate(root, values(root, '', complete, 1, true), 1)
+      expect(combinedBR, `v9gz2 ${name} whole chain`).toBeLessThanOrEqual(
+        chained + budget + turnBudget + 1e-9,
+      )
       budgeted.push({ name, weight: chosen.weight, maxBRIncrease: chosen.maxBRIncrease, fullBR })
     }
     expect(zeroReachQueries).toBeGreaterThan(0)

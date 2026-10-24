@@ -11,9 +11,11 @@ import { createTurnPromiseRecord, perTurnShowdown } from './bot-flop-turn-leaves
 import { legacyGuardPolicy } from './bot-poker-guard.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
 import { carryFromRecord, exactTurnAction } from './bot-river-carry.js'
+import * as riverPolicy from './bot-river-policy.js'
 import * as solver from './bot-river-solver.js'
 import { prepare, type RangeCombo, type RiverSpot, riverTree } from './bot-river-solver.js'
 import { COMBOS, comboIndex52 } from './bot-river-value-data.js'
+import * as safeTurn from './bot-safe-turn-exploitation.js'
 import { profileFor } from './bot-service.js'
 import { FLOP_STREET, solvedFlopPolicy, TURN_STREET, turnSolverPolicy } from './bot-turn-policy.js'
 import { type RiverValueNetwork, turnStartNetworkFromEnvironment } from './bot-value-network.js'
@@ -91,6 +93,150 @@ const context = (observation: BotObservationV1) => ({
   profile: profileFor(person),
   tilt: observation.tilt,
   rng: mulberry32(1),
+})
+
+describe('v9gz2 fixed turn continuation wiring', () => {
+  it('zero turn budget and flag-off preserve decisions and RNG exactly', () => {
+    vi.mocked(publicDecisions).mockReturnValue([])
+    const observation = view('turn')
+    const options = {
+      carry: 'both' as const,
+      riverNetwork: network,
+      offTree: 'resolve' as const,
+      iterations: 2,
+      betSizes: [0.5],
+      maxRaises: 0,
+    }
+    const original = turnSolverPolicy(legacyGuardPolicy, network, 'test', 1, options)
+    const disabled = turnSolverPolicy(legacyGuardPolicy, network, 'test', 1, {
+      ...options,
+      safeTurnExploit: false,
+    })
+    const zero = turnSolverPolicy(legacyGuardPolicy, network, 'test', 1, {
+      ...options,
+      safeTurnExploit: true,
+      safeTurnExploitConfig: { turnBudgetBb: 0 },
+    })
+    for (let seed = 0; seed < 12; seed++) {
+      const run = (bot: typeof original) => {
+        const rng = mulberry32(seed)
+        let draws = 0
+        const result = bot.policy.decide({
+          ...context(observation),
+          rng: () => {
+            draws++
+            return rng()
+          },
+        })
+        return { result, draws }
+      }
+      expect(run(zero)).toEqual(run(original))
+      expect(run(disabled)).toEqual(run(original))
+    }
+    expect(zero.stats.safeExploit).toMatchObject({ eligible: 1, proposed: 0, accepted: 0 })
+    expect(disabled.stats.safeExploit.eligible).toBe(0)
+  })
+
+  it('plays a selected row once but keeps tracking, carry and off-tree prefixes on the shadow policy', () => {
+    vi.mocked(publicDecisions).mockReturnValue([])
+    const read = {
+      bet: 0,
+      fold: 1,
+      raise: 0,
+      foldSmall: 1,
+      foldMedium: 1,
+      foldLarge: 1,
+      air: 0,
+      size: 0.5,
+      trust: 0.8,
+    }
+    const readsSpy = vi.spyOn(riverPolicy, 'riverReads').mockReturnValue(read)
+    const proposal = vi
+      .spyOn(safeTurn, 'solveBudgetedTurnDecision')
+      .mockImplementation((baseline, node) => {
+        const table = new Float64Array(baseline.strategy.get(node.history)?.length ?? 0)
+        for (let h = 0; h < table.length / node.actions.length; h++)
+          table[h * node.actions.length + 1] = 1
+        return {
+          table,
+          weight: 1,
+          maxBRIncrease: 0,
+          actionTV: 0.1,
+          auditFailures: 0,
+          modelEVGain: 1,
+          modelWeight: 0.35,
+          proposed: true,
+        }
+      })
+    try {
+      const original = view('turn')
+      const observation = {
+        ...original,
+        seats: original.seats.map((s) => ({ ...s, betHand: s.seat === 0 ? 50 : 100 })),
+      }
+      const options = {
+        carry: 'both' as const,
+        riverNetwork: network,
+        offTree: 'resolve' as const,
+        iterations: 2,
+        betSizes: [0.5],
+        maxRaises: 0,
+      }
+      const baseline = turnSolverPolicy(legacyGuardPolicy, network, 'test', 1, options)
+      const adapted = turnSolverPolicy(legacyGuardPolicy, network, 'test', 1, {
+        ...options,
+        safeTurnExploit: true,
+      })
+      const first = adapted.policy.decide(context(observation))
+      expect(first.decision.kind).toBe('raiseTo')
+      expect(adapted.stats.safeExploit).toMatchObject({ eligible: 1, accepted: 1 })
+      const past = move(observation, { kind: 'check' })
+      const expected = baseline.ownShares(past, 'passive', person, true)
+      const actual = adapted.ownShares(past, 'passive', person, true)
+      expect(expected).not.toBeNull()
+      expect(actual?.(observation.actor.hole as [Card, Card])).toBe(
+        expected?.(observation.actor.hole as [Card, Card]),
+      )
+      // Changed evidence cannot buy a second turn budget or change the row.
+      readsSpy.mockReturnValue({ ...read, fold: 0, trust: 0.1 })
+      expect(adapted.policy.decide(context(observation))).toEqual(first)
+      expect(proposal).toHaveBeenCalledTimes(1)
+      const history = [
+        move(observation, { kind: 'check' }),
+        move(view('turn', 'b'), { kind: 'check' }),
+      ]
+      const river = {
+        ...observation,
+        street: 'river' as const,
+        board: [...observation.board, parseCard('3d')],
+      }
+      vi.mocked(publicDecisions).mockReturnValue(history)
+      expect(adapted.carried(river, person, history, ['a', 'b'])).toEqual(
+        baseline.carried(river, person, history, ['a', 'b']),
+      )
+      const offTreeHistory = [
+        move(observation, { kind: 'check' }),
+        move(view('turn', 'b'), { kind: 'raiseTo', to: 43 }),
+      ]
+      vi.mocked(publicDecisions).mockReturnValue(offTreeHistory)
+      const reply = {
+        ...observation,
+        pot: 143,
+        currentBet: 43,
+        amountToCall: 43,
+        seats: observation.seats.map((s) =>
+          s.playerId === 'b' ? { ...s, stack: 257, betStreet: 43, betHand: s.betHand + 43 } : s,
+        ),
+      }
+      expect(adapted.policy.decide(context(reply))).toEqual(baseline.policy.decide(context(reply)))
+      expect(adapted.stats.offTree.resolves).toBe(1)
+      expect(adapted.stats.safeExploit.eligible).toBe(1)
+      expect(proposal).toHaveBeenCalledTimes(1)
+    } finally {
+      proposal.mockRestore()
+      readsSpy.mockRestore()
+    }
+  })
 })
 
 describe.each(['cfr+', 'dcfr'] as const)('%s policy carry', (scheme) => {
