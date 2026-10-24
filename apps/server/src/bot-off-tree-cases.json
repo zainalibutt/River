@@ -1,0 +1,731 @@
+[
+  {
+    "seed": "ref1-s5",
+    "session": 0,
+    "hand": 55,
+    "roomId": "session-0-hand-55",
+    "street": "flop",
+    "history": "kb1000b2980",
+    "paid": [2980, 1000],
+    "actions": ["f", "c", "b9940"],
+    "pot": 1000,
+    "stack": 19500,
+    "board": [
+      {
+        "rank": "Q",
+        "suit": "c"
+      },
+      {
+        "rank": "7",
+        "suit": "s"
+      },
+      {
+        "rank": "A",
+        "suit": "s"
+      }
+    ],
+    "actor": {
+      "stack": 48500,
+      "betStreet": 1000,
+      "betHand": 1500
+    },
+    "move": {
+      "kind": "allIn"
+    },
+    "decision": {
+      "observation": {
+        "version": 1,
+        "roomId": "session-0-hand-55",
+        "handNumber": 1,
+        "actor": {
+          "playerId": "bot:albie",
+          "seat": 0,
+          "hole": [],
+          "stack": 48500,
+          "betHand": 1500,
+          "betStreet": 1000
+        },
+        "street": "flop",
+        "board": [
+          {
+            "rank": "Q",
+            "suit": "c"
+          },
+          {
+            "rank": "7",
+            "suit": "s"
+          },
+          {
+            "rank": "A",
+            "suit": "s"
+          }
+        ],
+        "dealerSeat": 0,
+        "pot": 4980,
+        "currentBet": 2980,
+        "amountToCall": 1980,
+        "legal": {
+          "fold": true,
+          "check": false,
+          "call": {
+            "enabled": true,
+            "amount": 1980
+          },
+          "raiseTo": {
+            "enabled": true,
+            "min": 4960,
+            "max": 49500
+          },
+          "allIn": {
+            "enabled": true,
+            "amount": 49500
+          }
+        },
+        "seats": [
+          {
+            "seat": 0,
+            "playerId": "bot:albie",
+            "stack": 48500,
+            "betHand": 1500,
+            "betStreet": 1000,
+            "folded": false,
+            "allIn": false,
+            "away": false
+          },
+          {
+            "seat": 1,
+            "playerId": "bot:jules",
+            "stack": 16520,
+            "betHand": 3480,
+            "betStreet": 2980,
+            "folded": false,
+            "allIn": false,
+            "away": false
+          }
+        ],
+        "opponents": [
+          {
+            "version": 1,
+            "playerId": "bot:jules",
+            "sampleCount": 0,
+            "confidence": 0,
+            "vpip": 0,
+            "pfr": 0,
+            "aggressionFrequency": 0,
+            "showdownFrequency": 0,
+            "averageAggressivePotRatio": 0
+          }
+        ],
+        "actions": [
+          {
+            "seat": 0,
+            "street": "preflop",
+            "action": {
+              "kind": "call"
+            },
+            "amountCommitted": 250,
+            "potBefore": 750,
+            "streetBetAfter": 500
+          },
+          {
+            "seat": 1,
+            "street": "preflop",
+            "action": {
+              "kind": "check"
+            },
+            "amountCommitted": 0,
+            "potBefore": 1000,
+            "streetBetAfter": 500
+          },
+          {
+            "seat": 1,
+            "street": "flop",
+            "action": {
+              "kind": "check"
+            },
+            "amountCommitted": 0,
+            "potBefore": 1000,
+            "streetBetAfter": 0
+          },
+          {
+            "seat": 0,
+            "street": "flop",
+            "action": {
+              "kind": "raiseTo",
+              "to": 1000
+            },
+            "amountCommitted": 1000,
+            "potBefore": 1000,
+            "streetBetAfter": 1000
+          },
+          {
+            "seat": 1,
+            "street": "flop",
+            "action": {
+              "kind": "raiseTo",
+              "to": 2980
+            },
+            "amountCommitted": 2980,
+            "potBefore": 2000,
+            "streetBetAfter": 2980
+          }
+        ],
+        "tilt": {
+          "factor": 0
+        }
+      },
+      "taken": {
+        "seat": 0,
+        "street": "flop",
+        "action": {
+          "kind": "allIn"
+        },
+        "amountCommitted": 48500,
+        "potBefore": 4980,
+        "streetBetAfter": 49500
+      }
+    }
+  },
+  {
+    "seed": "ref1-s5",
+    "session": 1,
+    "hand": 48,
+    "roomId": "session-1-hand-48",
+    "street": "flop",
+    "history": "b1000b2980",
+    "paid": [1000, 2980],
+    "actions": ["f", "c", "b9940"],
+    "pot": 1000,
+    "stack": 19500,
+    "board": [
+      {
+        "rank": "3",
+        "suit": "c"
+      },
+      {
+        "rank": "9",
+        "suit": "d"
+      },
+      {
+        "rank": "7",
+        "suit": "c"
+      }
+    ],
+    "actor": {
+      "stack": 48500,
+      "betStreet": 1000,
+      "betHand": 1500
+    },
+    "move": {
+      "kind": "allIn"
+    },
+    "decision": {
+      "observation": {
+        "version": 1,
+        "roomId": "session-1-hand-48",
+        "handNumber": 1,
+        "actor": {
+          "playerId": "bot:albie",
+          "seat": 1,
+          "hole": [],
+          "stack": 48500,
+          "betHand": 1500,
+          "betStreet": 1000
+        },
+        "street": "flop",
+        "board": [
+          {
+            "rank": "3",
+            "suit": "c"
+          },
+          {
+            "rank": "9",
+            "suit": "d"
+          },
+          {
+            "rank": "7",
+            "suit": "c"
+          }
+        ],
+        "dealerSeat": 0,
+        "pot": 4980,
+        "currentBet": 2980,
+        "amountToCall": 1980,
+        "legal": {
+          "fold": true,
+          "check": false,
+          "call": {
+            "enabled": true,
+            "amount": 1980
+          },
+          "raiseTo": {
+            "enabled": true,
+            "min": 4960,
+            "max": 49500
+          },
+          "allIn": {
+            "enabled": true,
+            "amount": 49500
+          }
+        },
+        "seats": [
+          {
+            "seat": 0,
+            "playerId": "bot:kazimir",
+            "stack": 16520,
+            "betHand": 3480,
+            "betStreet": 2980,
+            "folded": false,
+            "allIn": false,
+            "away": false
+          },
+          {
+            "seat": 1,
+            "playerId": "bot:albie",
+            "stack": 48500,
+            "betHand": 1500,
+            "betStreet": 1000,
+            "folded": false,
+            "allIn": false,
+            "away": false
+          }
+        ],
+        "opponents": [
+          {
+            "version": 1,
+            "playerId": "bot:kazimir",
+            "sampleCount": 0,
+            "confidence": 0,
+            "vpip": 0,
+            "pfr": 0,
+            "aggressionFrequency": 0,
+            "showdownFrequency": 0,
+            "averageAggressivePotRatio": 0
+          }
+        ],
+        "actions": [
+          {
+            "seat": 0,
+            "street": "preflop",
+            "action": {
+              "kind": "call"
+            },
+            "amountCommitted": 250,
+            "potBefore": 750,
+            "streetBetAfter": 500
+          },
+          {
+            "seat": 1,
+            "street": "preflop",
+            "action": {
+              "kind": "check"
+            },
+            "amountCommitted": 0,
+            "potBefore": 1000,
+            "streetBetAfter": 500
+          },
+          {
+            "seat": 1,
+            "street": "flop",
+            "action": {
+              "kind": "raiseTo",
+              "to": 1000
+            },
+            "amountCommitted": 1000,
+            "potBefore": 1000,
+            "streetBetAfter": 1000
+          },
+          {
+            "seat": 0,
+            "street": "flop",
+            "action": {
+              "kind": "raiseTo",
+              "to": 2980
+            },
+            "amountCommitted": 2980,
+            "potBefore": 2000,
+            "streetBetAfter": 2980
+          }
+        ],
+        "tilt": {
+          "factor": 0
+        }
+      },
+      "taken": {
+        "seat": 1,
+        "street": "flop",
+        "action": {
+          "kind": "allIn"
+        },
+        "amountCommitted": 48500,
+        "potBefore": 4980,
+        "streetBetAfter": 49500
+      }
+    }
+  },
+  {
+    "seed": "ref1-s5",
+    "session": 1,
+    "hand": 61,
+    "roomId": "session-1-hand-61",
+    "street": "flop",
+    "history": "kb1000b2980",
+    "paid": [2980, 1000],
+    "actions": ["f", "c", "b9940"],
+    "pot": 1000,
+    "stack": 49500,
+    "board": [
+      {
+        "rank": "5",
+        "suit": "h"
+      },
+      {
+        "rank": "7",
+        "suit": "c"
+      },
+      {
+        "rank": "9",
+        "suit": "c"
+      }
+    ],
+    "actor": {
+      "stack": 98500,
+      "betStreet": 1000,
+      "betHand": 1500
+    },
+    "move": {
+      "kind": "allIn"
+    },
+    "decision": {
+      "observation": {
+        "version": 1,
+        "roomId": "session-1-hand-61",
+        "handNumber": 1,
+        "actor": {
+          "playerId": "bot:albie",
+          "seat": 0,
+          "hole": [],
+          "stack": 98500,
+          "betHand": 1500,
+          "betStreet": 1000
+        },
+        "street": "flop",
+        "board": [
+          {
+            "rank": "5",
+            "suit": "h"
+          },
+          {
+            "rank": "7",
+            "suit": "c"
+          },
+          {
+            "rank": "9",
+            "suit": "c"
+          }
+        ],
+        "dealerSeat": 0,
+        "pot": 4980,
+        "currentBet": 2980,
+        "amountToCall": 1980,
+        "legal": {
+          "fold": true,
+          "check": false,
+          "call": {
+            "enabled": true,
+            "amount": 1980
+          },
+          "raiseTo": {
+            "enabled": true,
+            "min": 4960,
+            "max": 99500
+          },
+          "allIn": {
+            "enabled": true,
+            "amount": 99500
+          }
+        },
+        "seats": [
+          {
+            "seat": 0,
+            "playerId": "bot:albie",
+            "stack": 98500,
+            "betHand": 1500,
+            "betStreet": 1000,
+            "folded": false,
+            "allIn": false,
+            "away": false
+          },
+          {
+            "seat": 1,
+            "playerId": "bot:kazimir",
+            "stack": 46520,
+            "betHand": 3480,
+            "betStreet": 2980,
+            "folded": false,
+            "allIn": false,
+            "away": false
+          }
+        ],
+        "opponents": [
+          {
+            "version": 1,
+            "playerId": "bot:kazimir",
+            "sampleCount": 0,
+            "confidence": 0,
+            "vpip": 0,
+            "pfr": 0,
+            "aggressionFrequency": 0,
+            "showdownFrequency": 0,
+            "averageAggressivePotRatio": 0
+          }
+        ],
+        "actions": [
+          {
+            "seat": 0,
+            "street": "preflop",
+            "action": {
+              "kind": "call"
+            },
+            "amountCommitted": 250,
+            "potBefore": 750,
+            "streetBetAfter": 500
+          },
+          {
+            "seat": 1,
+            "street": "preflop",
+            "action": {
+              "kind": "check"
+            },
+            "amountCommitted": 0,
+            "potBefore": 1000,
+            "streetBetAfter": 500
+          },
+          {
+            "seat": 1,
+            "street": "flop",
+            "action": {
+              "kind": "check"
+            },
+            "amountCommitted": 0,
+            "potBefore": 1000,
+            "streetBetAfter": 0
+          },
+          {
+            "seat": 0,
+            "street": "flop",
+            "action": {
+              "kind": "raiseTo",
+              "to": 1000
+            },
+            "amountCommitted": 1000,
+            "potBefore": 1000,
+            "streetBetAfter": 1000
+          },
+          {
+            "seat": 1,
+            "street": "flop",
+            "action": {
+              "kind": "raiseTo",
+              "to": 2980
+            },
+            "amountCommitted": 2980,
+            "potBefore": 2000,
+            "streetBetAfter": 2980
+          }
+        ],
+        "tilt": {
+          "factor": 0
+        }
+      },
+      "taken": {
+        "seat": 0,
+        "street": "flop",
+        "action": {
+          "kind": "allIn"
+        },
+        "amountCommitted": 98500,
+        "potBefore": 4980,
+        "streetBetAfter": 99500
+      }
+    }
+  },
+  {
+    "seed": "ref1-s5",
+    "session": 1,
+    "hand": 64,
+    "roomId": "session-1-hand-64",
+    "street": "flop",
+    "history": "b3574b10651",
+    "paid": [3574, 10651],
+    "actions": ["f", "c", "b35527"],
+    "pot": 3574,
+    "stack": 48213,
+    "board": [
+      {
+        "rank": "K",
+        "suit": "s"
+      },
+      {
+        "rank": "7",
+        "suit": "h"
+      },
+      {
+        "rank": "3",
+        "suit": "d"
+      }
+    ],
+    "actor": {
+      "stack": 94639,
+      "betStreet": 3574,
+      "betHand": 5361
+    },
+    "move": {
+      "kind": "allIn"
+    },
+    "decision": {
+      "observation": {
+        "version": 1,
+        "roomId": "session-1-hand-64",
+        "handNumber": 1,
+        "actor": {
+          "playerId": "bot:albie",
+          "seat": 1,
+          "hole": [],
+          "stack": 94639,
+          "betHand": 5361,
+          "betStreet": 3574
+        },
+        "street": "flop",
+        "board": [
+          {
+            "rank": "K",
+            "suit": "s"
+          },
+          {
+            "rank": "7",
+            "suit": "h"
+          },
+          {
+            "rank": "3",
+            "suit": "d"
+          }
+        ],
+        "dealerSeat": 0,
+        "pot": 17799,
+        "currentBet": 10651,
+        "amountToCall": 7077,
+        "legal": {
+          "fold": true,
+          "check": false,
+          "call": {
+            "enabled": true,
+            "amount": 7077
+          },
+          "raiseTo": {
+            "enabled": true,
+            "min": 17728,
+            "max": 98213
+          },
+          "allIn": {
+            "enabled": true,
+            "amount": 98213
+          }
+        },
+        "seats": [
+          {
+            "seat": 0,
+            "playerId": "bot:kazimir",
+            "stack": 37562,
+            "betHand": 12438,
+            "betStreet": 10651,
+            "folded": false,
+            "allIn": false,
+            "away": false
+          },
+          {
+            "seat": 1,
+            "playerId": "bot:albie",
+            "stack": 94639,
+            "betHand": 5361,
+            "betStreet": 3574,
+            "folded": false,
+            "allIn": false,
+            "away": false
+          }
+        ],
+        "opponents": [
+          {
+            "version": 1,
+            "playerId": "bot:kazimir",
+            "sampleCount": 0,
+            "confidence": 0,
+            "vpip": 0,
+            "pfr": 0,
+            "aggressionFrequency": 0,
+            "showdownFrequency": 0,
+            "averageAggressivePotRatio": 0
+          }
+        ],
+        "actions": [
+          {
+            "seat": 0,
+            "street": "preflop",
+            "action": {
+              "kind": "raiseTo",
+              "to": 1787
+            },
+            "amountCommitted": 1537,
+            "potBefore": 750,
+            "streetBetAfter": 1787
+          },
+          {
+            "seat": 1,
+            "street": "preflop",
+            "action": {
+              "kind": "call"
+            },
+            "amountCommitted": 1287,
+            "potBefore": 2287,
+            "streetBetAfter": 1787
+          },
+          {
+            "seat": 1,
+            "street": "flop",
+            "action": {
+              "kind": "raiseTo",
+              "to": 3574
+            },
+            "amountCommitted": 3574,
+            "potBefore": 3574,
+            "streetBetAfter": 3574
+          },
+          {
+            "seat": 0,
+            "street": "flop",
+            "action": {
+              "kind": "raiseTo",
+              "to": 10651
+            },
+            "amountCommitted": 10651,
+            "potBefore": 7148,
+            "streetBetAfter": 10651
+          }
+        ],
+        "tilt": {
+          "factor": 0
+        }
+      },
+      "taken": {
+        "seat": 1,
+        "street": "flop",
+        "action": {
+          "kind": "allIn"
+        },
+        "amountCommitted": 94639,
+        "potBefore": 17799,
+        "streetBetAfter": 98213
+      }
+    }
+  }
+]

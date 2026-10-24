@@ -1,5 +1,5 @@
 import type { PublicDecision } from './bot-public-replay.js'
-import { exactTurnAction } from './bot-river-carry.js'
+import { actualChipTarget, exactTurnAction } from './bot-river-carry.js'
 import { addRiverAction, type Player, type RiverNode, type RiverSpot } from './bot-river-solver.js'
 
 export interface OffTreeStats {
@@ -58,13 +58,7 @@ export function followWithResolving<T extends Solved & { readonly offTree?: OffT
       const started = performance.now()
       try {
         if (state === undefined) throw new Error('missing root bounds')
-        const move = decision.taken.action
-        const target =
-          move.kind === 'raiseTo'
-            ? move.to
-            : move.kind === 'allIn'
-              ? decision.observation.actor.stack + decision.observation.actor.betStreet
-              : Number.NaN
+        const target = actualChipTarget(decision, solved.spot, true)
         const tree = addRiverAction(solved.spot, solved.tree, node.history, target)
         const next = state.solve(tree, fixedStrategies)
         // Verify the actual branch survived the solve before replacing the carry record.

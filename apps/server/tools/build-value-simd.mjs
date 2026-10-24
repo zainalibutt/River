@@ -43,16 +43,23 @@ const loop = (index, limit, body) => {
   advance(index, 1)
   emit(0x0c, 0, 0x0b, 0x0b)
 }
-// Locals: b=9,r=10,c=11,inputRow=12,weightRow=13,sum=14,acc=15.
-loop(9, 6, () => {
-  get(0)
-  get(9)
-  get(5)
-  mul()
-  constant(4)
-  mul()
-  add()
-  set(12)
+// Locals: b=9,r=10,c=11,inputRows=12..15,weightRow=16,sum=17,
+// accumulators=18..21,weightVector=22. Four batch rows share each weight
+// load. Each accumulator keeps the original multiply/add and lane-reduction
+// order, including scalar tails, so results remain bit-identical.
+const denseRows = (width) => {
+  for (let b = 0; b < width; b++) {
+    get(0)
+    get(9)
+    constant(b)
+    add()
+    get(5)
+    mul()
+    constant(4)
+    mul()
+    add()
+    set(12 + b)
+  }
   loop(10, 4, () => {
     // A requested output row, or no mask. Hidden layers always have mask=0.
     get(8)
@@ -71,9 +78,11 @@ loop(9, 6, () => {
     constant(4)
     mul()
     add()
-    set(13)
-    simd(12, ...new Array(16).fill(0))
-    set(15) // v128.const 0
+    set(16)
+    for (let b = 0; b < width; b++) {
+      simd(12, ...new Array(16).fill(0))
+      set(18 + b) // v128.const 0
+    }
     constant(0)
     set(11)
     emit(0x02, 0x40, 0x03, 0x40)
@@ -82,83 +91,111 @@ loop(9, 6, () => {
     add()
     get(5)
     emit(0x4b, 0x0d, 1)
-    get(15)
-    get(13)
+    get(16)
     get(11)
     constant(4)
     mul()
     add()
     simd(0, 2, 0)
-    get(12)
-    get(11)
-    constant(4)
-    mul()
-    add()
-    simd(0, 2, 0)
-    simd(230)
-    simd(228)
-    set(15) // f32x4.mul; f32x4.add
+    set(22)
+    for (let b = 0; b < width; b++) {
+      get(18 + b)
+      get(22)
+      get(12 + b)
+      get(11)
+      constant(4)
+      mul()
+      add()
+      simd(0, 2, 0)
+      simd(230)
+      simd(228)
+      set(18 + b) // f32x4.mul; f32x4.add
+    }
     advance(11, 4)
     emit(0x0c, 0, 0x0b, 0x0b)
-    get(2)
-    get(10)
-    constant(4)
-    mul()
-    add()
-    load()
-    for (let lane = 0; lane < 4; lane++) {
-      get(15)
-      simd(31, lane)
-      emit(0x92) // extract_lane; f32.add
+    for (let b = 0; b < width; b++) {
+      get(2)
+      get(10)
+      constant(4)
+      mul()
+      add()
+      load()
+      for (let lane = 0; lane < 4; lane++) {
+        get(18 + b)
+        simd(31, lane)
+        emit(0x92) // extract_lane; f32.add
+      }
+      set(17)
+      // Reset the scalar tail for each independent dot product.
+      get(5)
+      constant(4)
+      emit(0x6e) // i32.div_u
+      constant(4)
+      mul()
+      set(11)
+      emit(0x02, 0x40, 0x03, 0x40)
+      get(11)
+      get(5)
+      emit(0x4f, 0x0d, 1)
+      get(17)
+      get(16)
+      get(11)
+      constant(4)
+      mul()
+      add()
+      load()
+      get(12 + b)
+      get(11)
+      constant(4)
+      mul()
+      add()
+      load()
+      emit(0x94, 0x92)
+      set(17)
+      advance(11, 1)
+      emit(0x0c, 0, 0x0b, 0x0b)
+      get(3)
+      get(9)
+      constant(b)
+      add()
+      get(4)
+      mul()
+      get(10)
+      add()
+      constant(4)
+      mul()
+      add()
+      get(17)
+      emit(0x43, 0, 0, 0, 0, 0x5d, 0x04, 0x7d) // sum < 0
+      get(17)
+      get(7)
+      emit(0x94, 0x05)
+      get(17)
+      emit(0x0b)
+      emit(0x38, 2, 0) // store
     }
-    set(14)
-    emit(0x02, 0x40, 0x03, 0x40)
-    get(11)
-    get(5)
-    emit(0x4f, 0x0d, 1)
-    get(14)
-    get(13)
-    get(11)
-    constant(4)
-    mul()
-    add()
-    load()
-    get(12)
-    get(11)
-    constant(4)
-    mul()
-    add()
-    load()
-    emit(0x94, 0x92)
-    set(14)
-    advance(11, 1)
-    emit(0x0c, 0, 0x0b, 0x0b)
-    get(3)
-    get(9)
-    get(4)
-    mul()
-    get(10)
-    add()
-    constant(4)
-    mul()
-    add()
-    get(14)
-    emit(0x43, 0, 0, 0, 0, 0x5d, 0x04, 0x7d) // sum < 0
-    get(14)
-    get(7)
-    emit(0x94, 0x05)
-    get(14)
-    emit(0x0b)
-    emit(0x38, 2, 0, 0x0b) // store; end requested-row branch
+    emit(0x0b) // end requested-row branch
   })
+}
+loop(9, 6, () => {
+  get(9)
+  constant(4)
+  add()
+  get(6)
+  emit(0x4d, 0x04, 0x40) // b + 4 <= batch
+  denseRows(4)
+  advance(9, 3) // The outer loop adds the fourth row.
+  emit(0x05)
+  denseRows(1)
+  emit(0x0b)
 })
 emit(0x0b)
 const params = [0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7d, 0x7f]
 const body = [
   ...vector([
-    [5, 0x7f],
+    [8, 0x7f],
     [1, 0x7d],
-    [1, 0x7b],
+    [5, 0x7b],
   ]),
   ...code,
 ]

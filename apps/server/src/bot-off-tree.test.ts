@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs'
 import {
   type BotObservationV1,
   type Card,
   cardKey,
+  makeDeck,
   parseCard,
   personalityPool,
 } from '@river/engine'
@@ -9,7 +11,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { followWithResolving, type OffTreeState, offTreeStats } from './bot-off-tree.js'
 import { legacyGuardPolicy } from './bot-poker-guard.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
-import { carryFromRecord, exactTurnAction, type RiverCarry } from './bot-river-carry.js'
+import {
+  actualChipTarget,
+  carryFromRecord,
+  exactTurnAction,
+  type RiverCarry,
+} from './bot-river-carry.js'
 import { riverSolverPolicy } from './bot-river-policy.js'
 import * as solver from './bot-river-solver.js'
 import {
@@ -124,7 +131,7 @@ describe('off-tree policy resolving', () => {
   it('keeps inherited bounds, exact chips and replaces the per-card record for the actual turn line', () => {
     vi.mocked(publicDecisions).mockReturnValue([bet])
     const calls = vi.spyOn(solver, 'solveRiver')
-    const records = vi.spyOn(leaves, 'perRiverShowdown')
+    const records = vi.spyOn(leaves, 'createRiverPromiseRecord')
     const turn = turnSolverPolicy(
       legacyGuardPolicy,
       network,
@@ -148,8 +155,8 @@ describe('off-tree policy resolving', () => {
       ),
     ).toBe(true)
     expect(turn.stats.offTree).toMatchObject({ events: 1, resolves: 1, failures: {} })
-    const latest = records.mock.calls.at(-1)?.[2]
-    expect(latest).not.toBe(records.mock.calls[0]?.[2])
+    const latest = records.mock.results.at(-1)?.value
+    expect(latest).not.toBe(records.mock.results[0]?.value)
     expect(latest?.leaves.get('b43c')?.paid).toEqual([43, 43])
     expect(latest?.leaves.get('b43c')?.pot).toBe(186)
     const closed = [bet, move(view('turn', 'b', 43), { kind: 'call' })]
@@ -270,6 +277,166 @@ it('returns unmatched excess and treats a short all-in as an effective call', ()
   const shortCall = move(view('turn', 'b', 300), { kind: 'allIn' })
   expect(exactTurnAction(response, shortCall, spot, true)).toBe('c')
   expect(response.children[response.actions.indexOf('c')]).toMatchObject({ paid: [300, 300] })
+})
+
+it.each(['allIn', 'raiseTo'] as const)(
+  'widens an oversized %s beyond the raise cap using effective street chips',
+  (kind) => {
+    type State = RiverSolution & {
+      players: readonly [string, string]
+      offTree: OffTreeState<State>
+    }
+    const s = { ...spot, board: view('river').board, maxRaises: 1 }
+    const state: OffTreeState<State> = {
+      failures: new Map(),
+      solve: (tree, fixedStrategies) => ({
+        ...solveRiver(s, 8, undefined, undefined, undefined, tree, { fixedStrategies }),
+        players: ['a', 'b'],
+        offTree: state,
+      }),
+    }
+    const initial: State = { ...solveRiver(s, 8), players: ['a', 'b'], offTree: state }
+    const observation = {
+      ...view('river', 'a'),
+      actor: { ...view('river', 'a').actor, stack: 434, betStreet: 66, betHand: 209 },
+    }
+    const deviation = move(observation, kind === 'allIn' ? { kind } : { kind, to: 500 })
+    expect(actualChipTarget(deviation, s)).toBe(500)
+    expect(actualChipTarget(deviation, s, true)).toBe(300)
+    const history = [
+      move(view('river', 'a'), { kind: 'raiseTo', to: 66 }),
+      move(view('river', 'b', 66), { kind: 'raiseTo', to: 219 }),
+      deviation,
+    ]
+    const stats = offTreeStats()
+    let replacements = 0
+    const result = followWithResolving(initial, history, 1, stats, () => {
+      replacements++
+    })
+    if (typeof result === 'string') throw new Error(result)
+    expect(result.node).toMatchObject({
+      history: 'b66b219a',
+      paid: [300, 219],
+      actions: ['f', 'c'],
+    })
+    expect(result.solved.strategy.get('b66')).toEqual(initial.strategy.get('b66'))
+    expect(stats).toMatchObject({ events: 1, resolves: 1, failures: {} })
+    expect(replacements).toBe(1)
+    expect(
+      followWithResolving(result.solved, history, 1, stats, () => {
+        replacements++
+      }),
+    ).toEqual(result)
+    expect(stats.events).toBe(1)
+    expect(replacements).toBe(1)
+  },
+)
+
+const capturedCases = JSON.parse(
+  readFileSync(new URL('./bot-off-tree-cases.json', import.meta.url), 'utf8'),
+) as readonly {
+  roomId: string
+  board: RiverSpot['board']
+  pot: number
+  stack: number
+  history: string
+  paid: readonly [number, number]
+  actions: readonly string[]
+  decision: PublicDecision
+}[]
+
+it.each(capturedCases)('replays the captured ref1-s5 failure at $roomId', async (fixture) => {
+  // Reconstruct the actual legal public transcript, including earlier-street
+  // chips, rather than inventing street targets from a simplified observation.
+  const replay =
+    await vi.importActual<typeof import('./bot-public-replay.js')>('./bot-public-replay.js')
+  const decisions = replay.publicDecisions(fixture.decision.observation)
+  if (decisions === null) throw new Error('captured transcript did not replay')
+  const prefix = decisions.filter((d) => d.taken.street === 'flop')
+  const first = prefix[0]?.observation.actor.playerId
+  const second = fixture.decision.observation.seats.find((s) => s.playerId !== first)?.playerId
+  if (!first || !second) throw new Error('captured players missing')
+  const players = [first, second] as const
+  const opponent = players.indexOf(fixture.decision.observation.actor.playerId)
+  const self = opponent === 0 ? 1 : 0
+  const root = prefix[0]?.observation
+  if (root === undefined) throw new Error('missing street root')
+  expect(Math.min(...root.seats.map((s) => s.stack + s.betStreet))).toBe(fixture.stack)
+  expect(root.pot - root.seats.reduce((sum, s) => sum + s.betStreet, 0)).toBe(fixture.pot)
+  const blocked = new Set(fixture.board.map(cardKey))
+  const deck = makeDeck().filter((c) => !blocked.has(cardKey(c)))
+  const holding = (start: number) => ({
+    hole: deck.slice(start, start + 2) as [Card, Card],
+    weight: 1,
+  })
+  const s: RiverSpot = {
+    ...spot,
+    board: fixture.board,
+    pot: fixture.pot,
+    stack: fixture.stack,
+    maxRaises: 1,
+    ranges: [
+      [holding(0), holding(2)],
+      [holding(4), holding(6)],
+    ],
+  }
+  type State = RiverSolution & { players: typeof players; offTree: OffTreeState<State> }
+  const state: OffTreeState<State> = {
+    failures: new Map(),
+    solve: (tree, fixedStrategies) => ({
+      ...solveRiver(s, 8, undefined, undefined, undefined, tree, { fixedStrategies }),
+      players,
+      offTree: state,
+    }),
+  }
+  const initial: State = { ...solveRiver(s, 8), players, offTree: state }
+  const stats = offTreeStats()
+  // LBR first probes its pot raise, so that exact branch is already present.
+  const observation = fixture.decision.observation
+  const potTarget = observation.currentBet + observation.pot + observation.amountToCall
+  const probe: PublicDecision = {
+    observation: fixture.decision.observation,
+    taken: {
+      ...fixture.decision.taken,
+      action: { kind: 'raiseTo', to: potTarget },
+      amountCommitted: potTarget - observation.actor.betStreet,
+      streetBetAfter: potTarget,
+    },
+  }
+  const probed = followWithResolving(initial, [...prefix, probe], self, stats, () => {})
+  if (typeof probed === 'string') throw new Error(probed)
+  const before = followWithResolving(probed.solved, prefix, self, stats, () => {})
+  if (typeof before === 'string') throw new Error(before)
+  expect(before.node).toMatchObject({
+    history: fixture.history,
+    paid: fixture.paid,
+    actions: fixture.actions,
+  })
+  const raw = observation.actor.stack + observation.actor.betStreet
+  expect(raw).toBeGreaterThan(fixture.stack)
+  expect(actualChipTarget(fixture.decision, s)).toBe(raw)
+  expect(() => addRiverAction(s, before.solved.tree, fixture.history, raw)).toThrow(
+    'invalid actual chip target',
+  )
+  const result = followWithResolving(
+    before.solved,
+    [...prefix, fixture.decision],
+    self,
+    stats,
+    () => {},
+  )
+  if (typeof result === 'string') throw new Error(result)
+  const paid = [...fixture.paid]
+  paid[opponent] = fixture.stack
+  expect(result.node).toMatchObject({ history: `${fixture.history}a`, paid, actions: ['f', 'c'] })
+  if (result.node.kind !== 'action') throw new Error('missing response')
+  expect(result.node.children[result.node.actions.indexOf('c')]).toEqual({
+    kind: 'showdown',
+    paid: [fixture.stack, fixture.stack],
+  })
+  const ownRaise = fixture.history.replace(/b\d+$/, '')
+  expect(result.solved.strategy.get(ownRaise)).toEqual(before.solved.strategy.get(ownRaise))
+  expect(stats).toMatchObject({ events: 3, resolves: 3, failures: {} })
 })
 
 it('freezes played own strategy before an opponent deviation and counts a failed solve once', () => {

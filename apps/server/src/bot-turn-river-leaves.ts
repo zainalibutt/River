@@ -1,5 +1,5 @@
 import type { Card } from '@river/engine'
-import type { Player, RiverSpot, ShowdownValues } from './bot-river-solver.js'
+import type { Hands, Player, RiverSpot, ShowdownValues } from './bot-river-solver.js'
 import { COMBOS } from './bot-river-value-data.js'
 import { HOLDING_CARDS, turnRivers } from './bot-turn-end-data.js'
 import { allInShowdown, holdingIndices, massesFor } from './bot-turn-solver.js'
@@ -36,6 +36,11 @@ export function createPromiseRecord(): PromiseRecord {
   return { leaves: new Map() }
 }
 
+/** Sequential solves of one street root share preparation, never CFR samples. */
+export interface PerCardShowdown extends ShowdownValues {
+  readonly withRecord: (record?: PromiseRecord) => PerCardShowdown
+}
+
 /**
  * Closed turn betting valued on every river, with both reaches card-restricted.
  * Each compatible (h,o) leaves 52 - 4 - 2 - 2 = 44 cards. Thus sum_c M_c(h)
@@ -46,7 +51,7 @@ export function perRiverShowdown(
   spot: RiverSpot,
   riverNetwork: RiverValueNetwork | RiverLeafEvaluator,
   record?: PromiseRecord,
-): ShowdownValues {
+): PerCardShowdown {
   if (spot.board.length !== 4) throw new Error('per-river turn leaves need four board cards')
   if (typeof riverNetwork !== 'function' && riverNetwork.checked !== undefined) {
     throw new Error('per-river leaves need a river network without checked-down additions')
@@ -80,7 +85,7 @@ export function perCardShowdown(
   chanceCards: number,
   allIn: ShowdownValues,
   record?: PromiseRecord,
-): ShowdownValues {
+): PerCardShowdown {
   const prepared = cards.map((river) => ({
     ...river,
     board: [...spot.board, river.card],
@@ -107,157 +112,221 @@ export function perCardShowdown(
         }
   let indices: ReturnType<typeof holdingIndices> | undefined
   let masses: ReturnType<typeof massesFor> | undefined
-  return (node, traverser, hands, self, opponent, out, visit) => {
-    const other = traverser === 0 ? 1 : 0
-    const total = spot.pot + node.paid[0] + node.paid[1]
-    const behind = spot.stack - Math.max(...node.paid)
-    if (behind <= 0) {
-      allIn(node, traverser, hands, self, opponent, out, visit)
-      return
-    }
-    if (indices === undefined) {
-      indices = holdingIndices(hands)
-      if (typeof riverNetwork !== 'function' && networkBuffers !== undefined) {
-        for (const player of [0, 1] as const) {
-          for (const river of prepared) {
-            for (const index of indices[player]) {
-              const bucket = river.layout?.bucketOf[index] as number
-              if (bucket >= 0)
-                networkBuffers.outputs[player][player * riverNetwork.buckets + bucket] = 1
+  let previousHands: readonly [Hands, Hands] | undefined
+  // Network inference is pure for immutable weights and exactly equal f32
+  // inputs. Keep only the last query per terminal/traverser; CFR samples and
+  // chip/mass conversion below still run on every visit. Widened trees retain
+  // shared terminal objects, so these entries also serve subsequent solves.
+  const predictions = new WeakMap<object, { input: Float32Array; values: Float32Array }[]>()
+  const withRecord = (record?: PromiseRecord): PerCardShowdown => {
+    const showdown: ShowdownValues = (node, traverser, hands, self, opponent, out, visit) => {
+      // Preparation depends on holding order, but not range weights. The initial
+      // blueprint, root gadget and widened solves keep this order and may change
+      // weights. Reject accidental reuse for different support or permutations.
+      if (hands !== previousHands) {
+        if (previousHands !== undefined)
+          for (const player of [0, 1] as const) {
+            const before = previousHands[player].cards
+            const after = hands[player].cards
+            if (before.length !== after.length || before.some((card, i) => card !== after[i]))
+              throw new Error('per-card preparation holding order changed')
+          }
+        previousHands = hands
+      }
+      const other = traverser === 0 ? 1 : 0
+      const total = spot.pot + node.paid[0] + node.paid[1]
+      const behind = spot.stack - Math.max(...node.paid)
+      if (behind <= 0) {
+        allIn(node, traverser, hands, self, opponent, out, visit)
+        return
+      }
+      if (indices === undefined) {
+        indices = holdingIndices(hands)
+        if (typeof riverNetwork !== 'function' && networkBuffers !== undefined) {
+          for (const player of [0, 1] as const) {
+            for (const river of prepared) {
+              for (const index of indices[player]) {
+                const bucket = river.layout?.bucketOf[index] as number
+                if (bucket >= 0)
+                  networkBuffers.outputs[player][player * riverNetwork.buckets + bucket] = 1
+              }
             }
           }
         }
       }
-    }
-    const holdingIds = indices
-    masses ??= massesFor(hands)
-    let leaf: CarriedLeaf | undefined
-    if (record !== undefined && visit !== undefined) {
-      leaf = record.leaves.get(visit.history)
-      if (leaf === undefined) {
-        const present = [new Uint8Array(COMBOS), new Uint8Array(COMBOS)] as const
-        for (const player of [0, 1] as const) {
-          for (const index of indices[player]) present[player][index] = 1
+      const holdingIds = indices
+      masses ??= massesFor(hands)
+      let leaf: CarriedLeaf | undefined
+      if (record !== undefined && visit !== undefined) {
+        leaf = record.leaves.get(visit.history)
+        if (leaf === undefined) {
+          const present = [new Uint8Array(COMBOS), new Uint8Array(COMBOS)] as const
+          for (const player of [0, 1] as const) {
+            for (const index of indices[player]) present[player][index] = 1
+          }
+          leaf = {
+            pot: total,
+            paid: node.paid,
+            present,
+            reach: [new Float64Array(COMBOS), new Float64Array(COMBOS)],
+            weight: [0, 0],
+            cards: new Map(),
+          }
+          record.leaves.set(visit.history, leaf)
         }
-        leaf = {
-          pot: total,
-          paid: node.paid,
-          present,
-          reach: [new Float64Array(COMBOS), new Float64Array(COMBOS)],
-          weight: [0, 0],
-          cards: new Map(),
+        // Pair opponent reach with this traverser's CFVs from the same pass,
+        // matching the opponent's strategy sums in solveRiver. DCFR sample s at T
+        // weighs (s/(T+1))^gamma; CFR+ weighs s. Never average final queries.
+        const discount = visit.discount ?? 1
+        leaf.weight[other] = discount * leaf.weight[other] + visit.weight
+        for (let h = 0; h < opponent.length; h += 1) {
+          const index = indices[other][h] as number
+          leaf.reach[other][index] =
+            discount * (leaf.reach[other][index] as number) + visit.weight * (opponent[h] as number)
         }
-        record.leaves.set(visit.history, leaf)
       }
-      // Pair opponent reach with this traverser's CFVs from the same pass,
-      // matching the opponent's strategy sums in solveRiver. DCFR sample s at T
-      // weighs (s/(T+1))^gamma; CFR+ weighs s. Never average final queries.
-      const discount = visit.discount ?? 1
-      leaf.weight[other] = discount * leaf.weight[other] + visit.weight
-      for (let h = 0; h < opponent.length; h += 1) {
-        const index = indices[other][h] as number
-        leaf.reach[other][index] =
-          discount * (leaf.reach[other][index] as number) + visit.weight * (opponent[h] as number)
+      // A branch the traverser never plays still needs values for its regrets, so,
+      // as in turnShowdown, the network sees its whole range there.
+      let ownTotal = 0
+      for (let h = 0; h < self.length; h += 1) ownTotal += self[h] as number
+      const ownRange = ownTotal > 0 ? self : hands[traverser].weights
+      out.fill(0)
+      // Zero opponent reach gives zero CFVs for every holding. Preserve every
+      // averaging sample (including its discount) without evaluating a network
+      // whose predictions would all be multiplied by zero. Own zero reach still
+      // uses the full-range fallback above: those deviations need regrets.
+      if (typeof riverNetwork !== 'function' && opponent.every((weight) => weight === 0)) {
+        if (leaf !== undefined && visit !== undefined)
+          for (const river of prepared) {
+            let sums = leaf.cards.get(river.key)
+            if (sums === undefined) {
+              sums = [new Float64Array(COMBOS), new Float64Array(COMBOS)]
+              leaf.cards.set(river.key, sums)
+            }
+            for (const index of holdingIds[traverser])
+              if ((river.ranks[index] as number) > 0)
+                sums[traverser][index] =
+                  (visit.discount ?? 1) * (sums[traverser][index] as number) + 0
+          }
+        return
       }
-    }
-    // A branch the traverser never plays still needs values for its regrets, so,
-    // as in turnShowdown, the network sees its whole range there.
-    let ownTotal = 0
-    for (let h = 0; h < self.length; h += 1) ownTotal += self[h] as number
-    const ownRange = ownTotal > 0 ? self : hands[traverser].weights
-    out.fill(0)
-    let batchValues: Float32Array | undefined
-    if (typeof riverNetwork !== 'function' && networkBuffers !== undefined) {
-      const columns = 3 * riverNetwork.buckets + 1
+      let batchValues: Float32Array | undefined
+      if (typeof riverNetwork !== 'function' && networkBuffers !== undefined) {
+        const columns = 3 * riverNetwork.buckets + 1
+        for (let r = 0; r < prepared.length; r += 1) {
+          const river = prepared[r] as (typeof prepared)[number]
+          reach[0].fill(0)
+          reach[1].fill(0)
+          for (const player of [0, 1] as const) {
+            const source = player === traverser ? ownRange : opponent
+            for (let h = 0; h < source.length; h += 1) {
+              const index = indices[player][h] as number
+              if ((river.ranks[index] as number) > 0) reach[player][index] = source[h] as number
+            }
+          }
+          bucketInputs(
+            river.layout as BucketLayout,
+            reach,
+            behind,
+            total,
+            undefined,
+            'live',
+            networkBuffers.input.subarray(r * columns, (r + 1) * columns),
+          )
+        }
+        let saved = predictions.get(node)
+        if (saved === undefined) {
+          saved = []
+          predictions.set(node, saved)
+        }
+        const previous = saved[traverser]
+        if (
+          previous !== undefined &&
+          networkBuffers.input.every((value, i) => Object.is(value, previous.input[i]))
+        ) {
+          batchValues = previous.values
+        } else {
+          batchValues = forwardBatch(
+            riverNetwork,
+            networkBuffers.input,
+            prepared.length,
+            networkBuffers.layers,
+            networkBuffers.outputs[traverser],
+          )
+          if (previous === undefined)
+            saved[traverser] = {
+              input: networkBuffers.input.slice(),
+              values: batchValues.slice(),
+            }
+          else {
+            previous.input.set(networkBuffers.input)
+            previous.values.set(batchValues)
+          }
+        }
+      }
       for (let r = 0; r < prepared.length; r += 1) {
         const river = prepared[r] as (typeof prepared)[number]
-        reach[0].fill(0)
-        reach[1].fill(0)
         for (const player of [0, 1] as const) {
           const source = player === traverser ? ownRange : opponent
           for (let h = 0; h < source.length; h += 1) {
             const index = indices[player][h] as number
-            if ((river.ranks[index] as number) > 0) reach[player][index] = source[h] as number
+            const live = (river.ranks[index] as number) > 0
+            const weight = live ? (source[h] as number) : 0
+            restricted[player][h] = weight
           }
         }
-        bucketInputs(
-          river.layout as BucketLayout,
-          reach,
-          behind,
-          total,
-          undefined,
-          'live',
-          networkBuffers.input.subarray(r * columns, (r + 1) * columns),
-        )
-      }
-      batchValues = forwardBatch(
-        riverNetwork,
-        networkBuffers.input,
-        prepared.length,
-        networkBuffers.layers,
-        networkBuffers.outputs[traverser],
-      )
-    }
-    for (let r = 0; r < prepared.length; r += 1) {
-      const river = prepared[r] as (typeof prepared)[number]
-      for (const player of [0, 1] as const) {
-        const source = player === traverser ? ownRange : opponent
-        for (let h = 0; h < source.length; h += 1) {
-          const index = indices[player][h] as number
-          const live = (river.ranks[index] as number) > 0
-          const weight = live ? (source[h] as number) : 0
-          restricted[player][h] = weight
-        }
-      }
-      masses(traverser, restricted[other].subarray(0, opponent.length), met)
-      let values: readonly [ArrayLike<number>, ArrayLike<number>] | undefined
-      if (typeof riverNetwork === 'function') {
-        const without = (player: Player) =>
-          hands[player].combos.flatMap((combo, h) =>
-            (river.ranks[holdingIds[player][h] as number] as number) > 0
-              ? [{ hole: combo.hole, weight: restricted[player][h] as number }]
-              : [],
+        masses(traverser, restricted[other].subarray(0, opponent.length), met)
+        let values: readonly [ArrayLike<number>, ArrayLike<number>] | undefined
+        if (typeof riverNetwork === 'function') {
+          const without = (player: Player) =>
+            hands[player].combos.flatMap((combo, h) =>
+              (river.ranks[holdingIds[player][h] as number] as number) > 0
+                ? [{ hole: combo.hole, weight: restricted[player][h] as number }]
+                : [],
+            )
+          values = riverNetwork(
+            {
+              ...spot,
+              board: river.board,
+              pot: total,
+              stack: behind,
+              ranges: [without(0), without(1)],
+            },
+            river.ranks,
           )
-        values = riverNetwork(
-          {
-            ...spot,
-            board: river.board,
-            pot: total,
-            stack: behind,
-            ranges: [without(0), without(1)],
-          },
-          river.ranks,
-        )
-      }
-      let sums: readonly [Float64Array, Float64Array] | undefined
-      if (leaf !== undefined) {
-        sums = leaf.cards.get(river.key)
-        if (sums === undefined) {
-          sums = [new Float64Array(COMBOS), new Float64Array(COMBOS)]
-          leaf.cards.set(river.key, sums)
         }
-      }
-      for (let h = 0; h < out.length; h += 1) {
-        const index = indices[traverser][h] as number
-        if ((river.ranks[index] as number) === 0) continue
-        const bucket = river.layout?.bucketOf[index] as number
-        const predicted =
-          values === undefined
-            ? (batchValues?.[
-                r * 2 * (riverNetwork as RiverValueNetwork).buckets +
-                  traverser * (riverNetwork as RiverValueNetwork).buckets +
-                  bucket
-              ] as number)
-            : (values[traverser][index] as number)
-        const value = (met[h] as number) * (predicted * total - node.paid[traverser])
-        out[h] = (out[h] as number) + value / chanceCards
-        if (sums !== undefined && visit !== undefined) {
-          sums[traverser][index] =
-            (visit.discount ?? 1) * (sums[traverser][index] as number) + visit.weight * value
+        let sums: readonly [Float64Array, Float64Array] | undefined
+        if (leaf !== undefined) {
+          sums = leaf.cards.get(river.key)
+          if (sums === undefined) {
+            sums = [new Float64Array(COMBOS), new Float64Array(COMBOS)]
+            leaf.cards.set(river.key, sums)
+          }
+        }
+        for (let h = 0; h < out.length; h += 1) {
+          const index = indices[traverser][h] as number
+          if ((river.ranks[index] as number) === 0) continue
+          const bucket = river.layout?.bucketOf[index] as number
+          const predicted =
+            values === undefined
+              ? (batchValues?.[
+                  r * 2 * (riverNetwork as RiverValueNetwork).buckets +
+                    traverser * (riverNetwork as RiverValueNetwork).buckets +
+                    bucket
+                ] as number)
+              : (values[traverser][index] as number)
+          const value = (met[h] as number) * (predicted * total - node.paid[traverser])
+          out[h] = (out[h] as number) + value / chanceCards
+          if (sums !== undefined && visit !== undefined) {
+            sums[traverser][index] =
+              (visit.discount ?? 1) * (sums[traverser][index] as number) + visit.weight * value
+          }
         }
       }
     }
+    return Object.assign(showdown, { withRecord })
   }
+  return withRecord(record)
 }
 
 /**

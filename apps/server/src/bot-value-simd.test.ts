@@ -40,6 +40,56 @@ const buffersFor = (network: RiverValueNetwork, batch: number) =>
   network.layers.map((layer) => new Float32Array(batch * layer.rows))
 
 describe('WASM SIMD value inference', () => {
+  it('preserves the original SIMD dot-product bits across batch blocks, tails and masks', () => {
+    vi.stubEnv('RIVER_VALUE_BACKEND', 'wasm')
+    const f = Math.fround
+    for (const columns of [3, 4, 7, 8, 9, 385, 641]) {
+      const network = randomNetwork([columns, 9, 5])
+      for (const batch of [1, 2, 3, 4, 5, 7, 8, 9, 49]) {
+        const input = Float32Array.from({ length: batch * columns }, (_, i) => (i % 17) / 7 - 1)
+        let expected = input
+        // Independent scalar emulation of the original four SIMD lanes and
+        // bias/lane/tail reduction order, rather than a tolerance against TS.
+        for (const layer of network.layers) {
+          const output = new Float32Array(batch * layer.rows)
+          for (let b = 0; b < batch; b++)
+            for (let r = 0; r < layer.rows; r++) {
+              const lanes = new Float32Array(4)
+              let c = 0
+              for (; c + 4 <= layer.columns; c += 4)
+                for (let lane = 0; lane < 4; lane++)
+                  lanes[lane] = f(
+                    (lanes[lane] as number) +
+                      f(
+                        (layer.weight[r * layer.columns + c + lane] as number) *
+                          (expected[b * layer.columns + c + lane] as number),
+                      ),
+                  )
+              let sum = layer.bias[r] as number
+              for (const lane of lanes) sum = f(sum + lane)
+              for (; c < layer.columns; c++)
+                sum = f(
+                  sum +
+                    f(
+                      (layer.weight[r * layer.columns + c] as number) *
+                        (expected[b * layer.columns + c] as number),
+                    ),
+                )
+              output[b * layer.rows + r] = sum < 0 ? f(sum * f(layer.slope ?? 1)) : sum
+            }
+          expected = output
+        }
+        for (const mask of [undefined, Uint8Array.of(1, 0, 1, 0)]) {
+          const buffers = buffersFor(network, batch)
+          buffers.at(-1)?.fill(987)
+          const actual = forwardBatch(network, input, batch, buffers, mask)
+          for (let i = 0; i < actual.length; i++)
+            expect(Object.is(actual[i], mask?.[i % 5] === 0 ? 987 : expected[i])).toBe(true)
+        }
+      }
+    }
+  })
+
   it.each([
     [385, 512, 512, 512, 256],
     [641, 512, 512, 512, 256],

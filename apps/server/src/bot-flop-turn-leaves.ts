@@ -1,11 +1,12 @@
 import { type Card, cardKey, makeDeck } from '@river/engine'
 import { FLOP_ALL_IN_RUNOUTS, flopRunouts } from './bot-flop-solver.js'
-import type { RiverSpot, ShowdownValues } from './bot-river-solver.js'
+import type { RiverSpot } from './bot-river-solver.js'
 import { bufferBytes } from './bot-solver-memory.js'
 import { expectedStrengthRanks, turnRivers } from './bot-turn-end-data.js'
 import {
   carriedPromises,
   createPromiseRecord,
+  type PerCardShowdown,
   type PromiseRecord,
   perCardShowdown,
   type RiverLeafEvaluator,
@@ -57,7 +58,7 @@ export function perTurnShowdown(
   network: RiverValueNetwork | TurnLeafEvaluator,
   record?: TurnPromiseRecord,
   runouts = FLOP_ALL_IN_RUNOUTS,
-): ShowdownValues {
+): PerCardShowdown {
   if (spot.board.length !== 3) throw new Error('per-turn flop leaves need three board cards')
   if (
     typeof network !== 'function' &&

@@ -23,6 +23,22 @@ export type RiverCarrySource = (
   players: readonly [string, string],
 ) => RiverCarry | null
 
+/** Street contribution, with unmatched heads-up excess returned by the engine. */
+export function actualChipTarget(
+  decision: PublicDecision,
+  spot: RiverSpot,
+  effective = false,
+): number {
+  const action = decision.taken.action
+  const total =
+    action.kind === 'allIn'
+      ? decision.observation.actor.stack + decision.observation.actor.betStreet
+      : action.kind === 'raiseTo'
+        ? action.to
+        : Number.NaN
+  return effective && Number.isSafeInteger(total) ? Math.min(total, spot.stack) : total
+}
+
 /** Exact chip targets, including all-ins; never translate an off-tree size. */
 export function exactTurnAction(
   node: Extract<RiverNode, { kind: 'action' }>,
@@ -40,13 +56,7 @@ export function exactTurnAction(
           ? 'c'
           : undefined
   if (label !== undefined) return node.actions.includes(label) ? label : undefined
-  const total =
-    action.kind === 'allIn'
-      ? decision.observation.actor.stack + decision.observation.actor.betStreet
-      : action.kind === 'raiseTo'
-        ? action.to
-        : Number.NaN
-  const target = effective ? Math.min(total, spot.stack) : total
+  const target = actualChipTarget(decision, spot, effective)
   // Uncalled excess is returned by the engine. A short all-in facing a larger
   // bet is a call in the effective-stack game, with no side pot heads-up.
   if (effective && target <= node.paid[node.player === 0 ? 1 : 0] && node.actions.includes('c'))

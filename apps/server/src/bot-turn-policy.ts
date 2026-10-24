@@ -734,6 +734,7 @@ function solveTurnSpot(
       ? undefined
       : readsModel(reads, spot, opponent)
   let record: RiverPromiseRecord | undefined
+  let preparedLeaves: ReturnType<typeof perRiverShowdown> | undefined
   const solve = (
     target: RiverSpot,
     opponentModel?: RiverOpponentModel,
@@ -758,17 +759,14 @@ function solveTurnSpot(
           : 'per-turn carry needs a turn-start network',
       )
     record = createRiverPromiseRecord()
-    return solveRiver(
-      target,
-      tuning.iterations,
-      opponentModel,
-      perRiver
-        ? perRiverShowdown(target, leafNetwork, record)
-        : perTurnShowdown(target, leafNetwork, record),
-      gadget,
-      tree,
-      options,
-    )
+    const showdown =
+      preparedLeaves === undefined
+        ? perRiver
+          ? perRiverShowdown(target, leafNetwork, record)
+          : perTurnShowdown(target, leafNetwork, record)
+        : preparedLeaves.withRecord(record)
+    preparedLeaves = showdown
+    return solveRiver(target, tuning.iterations, opponentModel, showdown, gadget, tree, options)
   }
   let solution = solve(spot, model, carry?.gadget)
   let rootGadget = carry?.gadget
