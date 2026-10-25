@@ -10,6 +10,7 @@ import {
 } from '@river/engine'
 import { solveFlop } from './bot-flop-solver.js'
 import { perTurnShowdown } from './bot-flop-turn-leaves.js'
+import { type LbrQueryPolicy, policyMoveShares } from './bot-lbr-query.js'
 import { decisionClass, type MoveClass } from './bot-lbr-range.js'
 import {
   followWithResolving,
@@ -202,7 +203,7 @@ export function turnSolverPolicy(
   overrides: Partial<TurnPolicyTuning> = {},
   street: StreetSetup = TURN_STREET,
 ): {
-  readonly policy: HandAwareBotPolicy
+  readonly policy: HandAwareBotPolicy & LbrQueryPolicy
   readonly stats: TurnPolicyStats
   readonly carried: RiverCarrySource
   readonly cacheMemory: () => ReturnType<typeof solveCacheMemory>
@@ -261,9 +262,29 @@ export function turnSolverPolicy(
     tuning.safeTurnExploit === true || tuning.carry !== undefined || tuning.offTree === 'resolve',
     tuning.cacheSize,
   )
-  const policy: HandAwareBotPolicy = {
+  const policy: HandAwareBotPolicy & LbrQueryPolicy = {
     id,
     version,
+    moveShares(context, taken) {
+      if (context.observation.street !== street.street || context.profile.skill !== 'og') {
+        return policyMoveShares(base, context, taken)
+      }
+      // The optional exploit can select a different table at the decision itself.
+      // Use sampled decisions there rather than report the baseline as exact.
+      if (tuning.safeTurnExploit) return null
+      return ownShares(
+        {
+          observation: context.observation,
+          taken: {
+            seat: context.observation.actor.seat,
+            street: context.observation.street,
+            action: { kind: 'check' },
+          },
+        },
+        taken,
+        context.personality,
+      )
+    },
     releaseHand(roomId, handNumber) {
       cache.releaseHand(roomId, handNumber)
       releasePolicyHand(base, roomId, handNumber)

@@ -13,6 +13,23 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
+it('shares injected inference weights while giving each query seat independent solve state', () => {
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  const flop = vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+  const turn = vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+  const start = vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+  const riverNetwork = vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+  const live = v9gPolicy()
+  const query = v9gPolicy({}, live.networks)
+  for (const loader of [flop, turn, start, riverNetwork]) expect(loader).toHaveBeenCalledTimes(1)
+  expect(query.networks).toBe(live.networks)
+  expect(query.policy).not.toBe(live.policy)
+  expect(query.stats).not.toBe(live.stats)
+  expect(query.turn).not.toBe(live.turn)
+  expect(query.river).not.toBe(live.river)
+})
+
 it('leaves v9go identical with preflopTables absent or false; only v9gp opts in', () => {
   const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
   vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')

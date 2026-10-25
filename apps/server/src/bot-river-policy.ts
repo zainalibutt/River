@@ -16,7 +16,9 @@ import {
   publicBetSize,
   type RateEstimate,
 } from '@river/engine'
+import { type LbrQueryPolicy, policyMoveShares } from './bot-lbr-query.js'
 import {
+  decisionClass,
   type MoveClass,
   recordedClass,
   updateRange,
@@ -258,7 +260,7 @@ export function riverSolverPolicy(
   theirs: KnownShares = () => null,
   carry: RiverCarrySource = () => null,
 ): {
-  readonly policy: HandAwareBotPolicy
+  readonly policy: HandAwareBotPolicy & LbrQueryPolicy
   readonly stats: RiverPolicyStats
   readonly cacheMemory: () => ReturnType<typeof solveCacheMemory>
 } {
@@ -301,9 +303,36 @@ export function riverSolverPolicy(
     tuning.safeExploitV2 === true || tuning.boundedReads === true || tuning.offTree === 'resolve',
     tuning.cacheSize,
   )
-  const policy: HandAwareBotPolicy = {
+  const policy: HandAwareBotPolicy & LbrQueryPolicy = {
     id,
     version,
+    moveShares(context, taken) {
+      if (context.observation.street !== 'river' || context.profile.skill !== 'og') {
+        return policyMoveShares(base, context, taken)
+      }
+      const found = locateRiver(context, base, tuning, cache, stats, own, theirs, carry)
+      if (typeof found === 'string') return null
+      const { solved, node, self, table } = found
+      const hands = solved.hands[self]
+      const width = node.actions.length
+      const matches = node.actions.map(
+        (action) =>
+          decisionClass(
+            decisionFor(node, action, solved.spot, context.observation),
+            context.observation,
+          ) === taken,
+      )
+      return (hole) => {
+        const index =
+          comboIndex(hands, hole as [Card, Card]) ??
+          nearestStrength(hands, hole, context.observation.board)
+        let share = 0
+        for (let action = 0; action < width; action++) {
+          if (matches[action]) share += table[index * width + action] as number
+        }
+        return share
+      }
+    },
     releaseHand(roomId, handNumber) {
       cache.releaseHand(roomId, handNumber)
       releasePolicyHand(base, roomId, handNumber)
@@ -343,6 +372,46 @@ function solverDecision(
   theirs: KnownShares,
   carry: RiverCarrySource,
 ): BotDecision | string {
+  const found = locateRiver(context, base, tuning, cache, stats, own, theirs, carry)
+  if (typeof found === 'string') return found
+  const { solved, node, self, table } = found
+  const { observation } = context
+  const hole = observation.actor.hole
+  const hands = solved.hands[self]
+  const index =
+    comboIndex(hands, hole as [Card, Card]) ?? nearestStrength(hands, hole, observation.board)
+  const width = node.actions.length
+  const row = table.subarray(index * width, (index + 1) * width)
+  const roll = context.rng()
+  let pick = row.length - 1
+  let cumulative = 0
+  for (let action = 0; action < row.length; action += 1) {
+    cumulative += row[action] as number
+    if (roll < cumulative) {
+      pick = action
+      break
+    }
+  }
+  return decisionFor(node, node.actions[pick] as string, solved.spot, observation)
+}
+
+function locateRiver(
+  context: BotPolicyContextV1,
+  base: BotPolicy,
+  tuning: RiverPolicyTuning,
+  cache: HandSolveCache<SolvedRiver | string>,
+  stats: RiverPolicyStats,
+  own: KnownShares,
+  theirs: KnownShares,
+  carry: RiverCarrySource,
+):
+  | {
+      solved: SolvedRiver
+      node: Extract<RiverNode, { kind: 'action' }>
+      self: 0 | 1
+      table: Float64Array
+    }
+  | string {
   const { observation, personality } = context
   const live = observation.seats.filter((seat) => seat.playerId !== null && !seat.folded)
   if (live.length !== 2) return 'not heads-up'
@@ -439,22 +508,7 @@ function solverDecision(
   const table = solved.strategy.get(node.history)
   const hole = observation.actor.hole
   if (table === undefined || hole.length !== 2) return 'no strategy'
-  const hands = solved.hands[self]
-  const index =
-    comboIndex(hands, hole as [Card, Card]) ?? nearestStrength(hands, hole, observation.board)
-  const width = node.actions.length
-  const row = table.subarray(index * width, (index + 1) * width)
-  const roll = context.rng()
-  let pick = row.length - 1
-  let cumulative = 0
-  for (let action = 0; action < row.length; action += 1) {
-    cumulative += row[action] as number
-    if (roll < cumulative) {
-      pick = action
-      break
-    }
-  }
-  return decisionFor(node, node.actions[pick] as string, solved.spot, observation)
+  return { solved, node, self, table }
 }
 
 function solveSpot(

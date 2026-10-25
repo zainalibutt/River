@@ -95,6 +95,8 @@ export interface SessionRunOptions {
   readonly firstSession?: number
   /** Called before every focal decision with what the focal seat may legally see. */
   readonly onFocalDecision?: (point: FocalDecisionPoint) => void
+  /** Public hand frame, also available when the opponent acts before the focal seat. */
+  readonly onHandOpened?: (frame: SessionHandFrame) => void
   /**
    * Also report each focal hand valued at the focal seat's showdown share when
    * the betting closed before the river with two seats left, as `adjustedChips`.
@@ -124,6 +126,11 @@ export interface FocalDecisionPoint {
   readonly prefix: readonly HandAction[]
   readonly observation: BotObservationV1
   readonly focalOptions: Partial<BotActionOptions>
+}
+
+export interface SessionHandFrame extends Omit<FocalDecisionPoint, 'prefix' | 'observation'> {
+  readonly roomId: string
+  readonly handNumber: number
 }
 
 export type PositionClass = 'button' | 'big-blind' | 'early' | 'middle' | 'late' | 'blinds'
@@ -281,6 +288,16 @@ function playHand(
     entrants,
     ids,
   )
+  options.onHandOpened?.({
+    seed: options.seed,
+    session,
+    hand,
+    startMs,
+    entrants,
+    focalOptions,
+    roomId: room.id,
+    handNumber: room.viewFor('').handNumber,
+  })
 
   let beforeLast: RoomView | undefined
   // Two-seat hands only: both holdings are then every card dealt.
