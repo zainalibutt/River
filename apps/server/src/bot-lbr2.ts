@@ -264,7 +264,7 @@ export function localBestResponse2(
     const personality = state.frame.entrants[0]?.personality
     const neutral = range.find((holding) => holding.weight > 0)?.hole
     if (!personality || !neutral) return range.map(() => 0)
-    // Clone public data once per branch, then freeze it. Re-cloning a growing
+    // Copy public data once per branch, then freeze it. Copying a growing
     // history for every RNG draw costs far more than the policy lookup itself.
     const views = new Map<BotObservationV1, BotObservationV1>()
     const personalities = new Map<number, ReturnType<typeof blend>>()
