@@ -45,7 +45,21 @@ export interface PreflopTableStats {
 const packs = new Map<string, PreflopPack>()
 /** Add exported depths here (or inject packs into tablePreflopPolicy). Ties choose shallower. */
 export const PREFLOP_DEPTHS = [100, 200] as const
-export function loadPreflopPack(depth: number, version: 'v2' | 'v3' = 'v3'): PreflopPack {
+export type PreflopPackVersion = 'v2' | 'v3' | 'v4'
+
+/** The pack v9gp plays: v3 unless an experiment sets RIVER_PREFLOP_PACK (v2, v3 or v4). */
+export function defaultPreflopPackVersion(
+  text = process.env.RIVER_PREFLOP_PACK,
+): PreflopPackVersion {
+  if (text === undefined || text === '') return 'v3'
+  if (text === 'v2' || text === 'v3' || text === 'v4') return text
+  throw new Error('RIVER_PREFLOP_PACK must be v2, v3 or v4')
+}
+
+export function loadPreflopPack(
+  depth: number,
+  version: PreflopPackVersion = defaultPreflopPackVersion(),
+): PreflopPack {
   const key = `${version}:${depth}`
   let pack = packs.get(key)
   if (!pack) {

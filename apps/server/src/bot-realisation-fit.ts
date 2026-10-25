@@ -5,6 +5,7 @@ import {
   type Position,
   type PotType,
   parseRealisation,
+  realisationFactor,
 } from './bot-preflop-solve-realisation.js'
 export interface RealisationObservation {
   schema: 'river-realisation-observation-v1'
@@ -24,6 +25,16 @@ export interface RealisationObservation {
   equityVsOpponentRange: number
   netFromHandStartBb: number
   weight: number
+  /** Solver rows share handId across every holding on one sampled flop. */
+  holdingId?: string
+  valueSource?: 'flop-solver'
+  board?: readonly string[]
+  rootValuePots?: number
+  rootCFVChips?: number
+  compatibleMass?: number
+  chipsPerBb?: number
+  realisedFraction?: number | null
+  stratum?: string
 }
 const POTS: PotType[] = ['limped', 'single-raised', 'three-bet-plus']
 const POSITIONS: Position[] = ['ip', 'oop']
@@ -116,7 +127,26 @@ export function fitRealisation(
       Math.abs(o.potBb - 2 * o.ownPreflopContributionBb) > 1e-8
     )
       throw new Error('invalid observation (matched HU flop contributions required)')
-    const key = `${o.handId}:${o.position}`
+    if (o.valueSource === 'flop-solver') {
+      if (
+        !o.holdingId ||
+        !o.board ||
+        o.board.length !== 3 ||
+        !Number.isFinite(o.rootValuePots) ||
+        !Number.isFinite(o.rootCFVChips) ||
+        !(Number(o.compatibleMass) > 0) ||
+        !(Number(o.chipsPerBb) > 0) ||
+        Math.abs(
+          Number(o.rootValuePots) -
+            Number(o.rootCFVChips) / Number(o.compatibleMass) / Number(o.chipsPerBb) / o.potBb,
+        ) > 1e-8 ||
+        Math.abs(
+          Number(o.rootValuePots) - (o.netFromHandStartBb + o.ownPreflopContributionBb) / o.potBb,
+        ) > 1e-8
+      )
+        throw new Error('invalid solver value units or origin')
+    }
+    const key = `${o.handId}:${o.position}:${o.holdingId ?? ''}`
     if (seen.has(key)) throw new Error(`duplicate observation ${key}`)
     seen.add(key)
     const e = o.equityVsOpponentRange
@@ -166,7 +196,9 @@ export function fitRealisation(
   let b = coefficients(prior)
   let converged = false
   let iterations = 0
-  for (; iterations < 80; iterations++) {
+  let lastParameterChange = Number.POSITIVE_INFINITY
+  let relativeLossImprovement = Number.POSITIVE_INFINITY
+  for (; iterations < 400; iterations++) {
     const h = matrix(),
       g = zeros()
     for (const r of rows) {
@@ -207,8 +239,10 @@ export function fitRealisation(
       next = b.map((v, j) => v + step * (required(candidate[j]) - v))
     }
     const change = Math.max(...next.map((v, j) => Math.abs(v - required(b[j]))))
+    lastParameterChange = change
+    relativeLossImprovement = (before - loss(next)) / Math.max(1, before)
     b = next
-    if (change < 1e-8) {
+    if (change < 1e-8 || (change < 1e-5 && Math.abs(relativeLossImprovement) < 1e-12)) {
       converged = true
       break
     }
@@ -255,6 +289,7 @@ export function fitRealisation(
       standardError: se,
       atBound,
       projectedFlopHandsForSE003: se === null ? null : Math.ceil(hands * (se / 0.03) ** 2),
+      projectedFlopsForSE002: se === null ? null : Math.ceil(hands * (se / 0.02) ** 2),
     }
   })
   return {
@@ -263,11 +298,40 @@ export function fitRealisation(
     observations: rows.length,
     hands,
     converged,
-    iterations: Math.min(iterations + 1, 80),
+    iterations: Math.min(iterations + 1, 400),
+    lastParameterChange,
+    relativeLossImprovement,
     weightedSSE: loss(b),
     identifiable: inv !== null,
     uncertainty:
       'hand-cluster sandwich; null for rank deficiency, small samples or active constraints; use independent held-out runs',
+  }
+}
+
+/** A whole flop (both seats and all holdings) is the validation unit. */
+export function realisationError(
+  observations: readonly RealisationObservation[],
+  config: HandRealisation,
+) {
+  let weight = 0,
+    squared = 0,
+    signed = 0
+  for (const o of observations) {
+    const spr = (o.effectiveStackBb - o.ownPreflopContributionBb) / o.potBb
+    const prediction =
+      o.equityVsOpponentRange *
+      realisationFactor(o.handClass, o.equityVsOpponentRange, o.position, o.potType, spr, config)
+    const residual = (o.netFromHandStartBb + o.ownPreflopContributionBb) / o.potBb - prediction
+    weight += o.weight
+    squared += o.weight * residual ** 2
+    signed += o.weight * residual
+  }
+  return {
+    observations: observations.length,
+    flops: new Set(observations.map((o) => o.handId)).size,
+    weight,
+    rmsePots: weight > 0 ? Math.sqrt(squared / weight) : null,
+    biasPots: weight > 0 ? signed / weight : null,
   }
 }
 

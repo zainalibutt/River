@@ -1,0 +1,437 @@
+{
+  "config": {
+    "model": "hand-equity-v2",
+    "bounds": {
+      "min": 0.4,
+      "max": 1.5
+    },
+    "equity": {
+      "floor": 0.2,
+      "ceiling": 0.8,
+      "power": 1
+    },
+    "sprHalfLife": 4,
+    "features": {
+      "pair": 0.13762827471492134,
+      "suited": 0.031916297836206815,
+      "connected": 0.031957176413457924,
+      "highCard": 0,
+      "connectivitySpan": 4,
+      "wheelConnectivity": 0.5
+    },
+    "pots": {
+      "limped": {
+        "ip": {
+          "base": 0.5111726347736881,
+          "equitySlope": 0.9972746705286732
+        },
+        "oop": {
+          "base": 0,
+          "equitySlope": 1.3860310622785448
+        }
+      },
+      "single-raised": {
+        "ip": {
+          "base": 0.004944471104824956,
+          "equitySlope": 1.609987612737462
+        },
+        "oop": {
+          "base": 0,
+          "equitySlope": 1.5290059453928009
+        }
+      },
+      "three-bet-plus": {
+        "ip": {
+          "base": 0,
+          "equitySlope": 1.725421204833488
+        },
+        "oop": {
+          "base": 0,
+          "equitySlope": 1.6634473285268683
+        }
+      }
+    }
+  },
+  "parameters": [
+    {
+      "name": "limped.ip.base",
+      "prior": 0.78,
+      "fitted": 0.5111726347736881,
+      "standardError": 0.27033641795943025,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 2924,
+      "projectedFlopsForSE002": 6578
+    },
+    {
+      "name": "limped.ip.equitySlope",
+      "prior": 0.65,
+      "fitted": 0.9972746705286732,
+      "standardError": 0.3380815557644443,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 4572,
+      "projectedFlopsForSE002": 10287
+    },
+    {
+      "name": "limped.oop.base",
+      "prior": 0.43,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    },
+    {
+      "name": "limped.oop.equitySlope",
+      "prior": 0.8,
+      "fitted": 1.3860310622785448,
+      "standardError": 1.053831867854553,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 44423,
+      "projectedFlopsForSE002": 99951
+    },
+    {
+      "name": "single-raised.ip.base",
+      "prior": 0.74,
+      "fitted": 0.004944471104824956,
+      "standardError": 0.1387460429830998,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 771,
+      "projectedFlopsForSE002": 1733
+    },
+    {
+      "name": "single-raised.ip.equitySlope",
+      "prior": 0.7,
+      "fitted": 1.609987612737462,
+      "standardError": 0.2708150778466797,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 2934,
+      "projectedFlopsForSE002": 6601
+    },
+    {
+      "name": "single-raised.oop.base",
+      "prior": 0.39,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    },
+    {
+      "name": "single-raised.oop.equitySlope",
+      "prior": 0.9,
+      "fitted": 1.5290059453928009,
+      "standardError": 0.32189455057158656,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 4145,
+      "projectedFlopsForSE002": 9326
+    },
+    {
+      "name": "three-bet-plus.ip.base",
+      "prior": 0.7,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    },
+    {
+      "name": "three-bet-plus.ip.equitySlope",
+      "prior": 0.75,
+      "fitted": 1.725421204833488,
+      "standardError": 0.5265790553846067,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 11092,
+      "projectedFlopsForSE002": 24956
+    },
+    {
+      "name": "three-bet-plus.oop.base",
+      "prior": 0.36,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    },
+    {
+      "name": "three-bet-plus.oop.equitySlope",
+      "prior": 0.95,
+      "fitted": 1.6634473285268683,
+      "standardError": 0.5335998616417222,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 11390,
+      "projectedFlopsForSE002": 25626
+    },
+    {
+      "name": "pair",
+      "prior": 0.08,
+      "fitted": 0.13762827471492134,
+      "standardError": 0.09743397865225824,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 380,
+      "projectedFlopsForSE002": 855
+    },
+    {
+      "name": "suited",
+      "prior": 0.1,
+      "fitted": 0.031916297836206815,
+      "standardError": 0.04192542921352251,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 71,
+      "projectedFlopsForSE002": 159
+    },
+    {
+      "name": "connected",
+      "prior": 0.06,
+      "fitted": 0.031957176413457924,
+      "standardError": 0.07890401685668239,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 250,
+      "projectedFlopsForSE002": 561
+    },
+    {
+      "name": "highCard",
+      "prior": 0.04,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    }
+  ],
+  "observations": 84672,
+  "hands": 36,
+  "converged": true,
+  "iterations": 106,
+  "lastParameterChange": 2.7916785727555293e-7,
+  "relativeLossImprovement": 5.158045645813213e-13,
+  "weightedSSE": 2564.6536199263915,
+  "identifiable": true,
+  "uncertainty": "hand-cluster sandwich; null for rank deficiency, small samples or active constraints; use independent held-out runs",
+  "training": {
+    "prior": {
+      "observations": 84672,
+      "flops": 36,
+      "weight": 25409.612018219945,
+      "rmsePots": 0.34703559302682546,
+      "biasPots": -0.06346387029177149
+    },
+    "fitted": {
+      "observations": 84672,
+      "flops": 36,
+      "weight": 25409.612018219945,
+      "rmsePots": 0.3176986300168882,
+      "biasPots": -0.01791681585411317
+    }
+  },
+  "heldout": {
+    "prior": {
+      "observations": 56448,
+      "flops": 24,
+      "weight": 17120.521166650444,
+      "rmsePots": 0.37571968938414424,
+      "biasPots": -0.06756838234033898
+    },
+    "fitted": {
+      "observations": 56448,
+      "flops": 24,
+      "weight": 17120.521166650444,
+      "rmsePots": 0.3462455958748501,
+      "biasPots": -0.022424933220545583
+    }
+  },
+  "heldoutByStratum": {
+    "100:limped": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1846.0647841141752,
+        "rmsePots": 0.30068964875654713,
+        "biasPots": -0.07668808353555219
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1846.0647841141752,
+        "rmsePots": 0.28005103050827723,
+        "biasPots": -0.0357692146281692
+      }
+    },
+    "100:open-2": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 2065.3906178397597,
+        "rmsePots": 0.36300480505029364,
+        "biasPots": -0.04354758735752713
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 2065.3906178397597,
+        "rmsePots": 0.3250568894999581,
+        "biasPots": 0.008341472009788312
+      }
+    },
+    "100:open-2.5": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1422.5177860198207,
+        "rmsePots": 0.27694146957469845,
+        "biasPots": -0.1018247412797184
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1422.5177860198207,
+        "rmsePots": 0.25700994876059735,
+        "biasPots": -0.06837142085851569
+      }
+    },
+    "100:open-3": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1590.7405714355484,
+        "rmsePots": 0.253315919918022,
+        "biasPots": -0.054569236691009146
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1590.7405714355484,
+        "rmsePots": 0.22365582755170735,
+        "biasPots": -0.010619538112518744
+      }
+    },
+    "100:limp-isolation": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1078.0759459694689,
+        "rmsePots": 0.36408052335973,
+        "biasPots": -0.0345583072667383
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1078.0759459694689,
+        "rmsePots": 0.3217804959914895,
+        "biasPots": 0.020402843906177817
+      }
+    },
+    "100:three-bet-plus": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 550.5233423408745,
+        "rmsePots": 0.30348586313973386,
+        "biasPots": -0.0016598905103137802
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 550.5233423408745,
+        "rmsePots": 0.25395214964536067,
+        "biasPots": 0.0030038734184756545
+      }
+    },
+    "200:limped": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1964.3537927211953,
+        "rmsePots": 0.3827699916451819,
+        "biasPots": -0.08064697488004872
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1964.3537927211953,
+        "rmsePots": 0.35314519358565605,
+        "biasPots": -0.03737211585640281
+      }
+    },
+    "200:open-2": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 2154.317004806353,
+        "rmsePots": 0.4124176561083956,
+        "biasPots": -0.058334968316734584
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 2154.317004806353,
+        "rmsePots": 0.3846622710495293,
+        "biasPots": -0.001731127048781497
+      }
+    },
+    "200:open-2.5": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1481.7101150578549,
+        "rmsePots": 0.6088742887146251,
+        "biasPots": -0.11055747469786135
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1481.7101150578549,
+        "rmsePots": 0.5802526668029484,
+        "biasPots": -0.0591805048776131
+      }
+    },
+    "200:open-3": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1432.539202091026,
+        "rmsePots": 0.3736810409978659,
+        "biasPots": -0.09294263084749096
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1432.539202091026,
+        "rmsePots": 0.3429856440268274,
+        "biasPots": -0.04912324399671913
+      }
+    },
+    "200:limp-isolation": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1043.4448766502483,
+        "rmsePots": 0.32291200862474495,
+        "biasPots": -0.05529779628464743
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 1043.4448766502483,
+        "rmsePots": 0.29099574830243,
+        "biasPots": -0.0029002597926101065
+      }
+    },
+    "200:three-bet-plus": {
+      "prior": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 490.84312760452605,
+        "rmsePots": 0.3513307569354532,
+        "biasPots": -0.03406216694709533
+      },
+      "fitted": {
+        "observations": 4704,
+        "flops": 2,
+        "weight": 490.84312760452605,
+        "rmsePots": 0.3170003518378092,
+        "biasPots": -0.01302379261820332
+      }
+    }
+  },
+  "targetNote": "Fitted to flop-conditional equity and solver values. Preflop packs use pre-board equity; the nonlinear transport is not validated by this fit."
+}

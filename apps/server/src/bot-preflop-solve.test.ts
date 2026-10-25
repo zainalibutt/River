@@ -382,6 +382,8 @@ describe('generated preflop packs', () => {
     ['v2', 200],
     ['v3', 100],
     ['v3', 200],
+    ['v4', 100],
+    ['v4', 200],
   ] as const)(
     '%s %i bb is complete, legal, normalised, correctly labelled and certified',
     (version, depth) => {
@@ -390,7 +392,9 @@ describe('generated preflop packs', () => {
       ) as ReturnType<typeof makePack>
       expect(pack.version).toBe(`river-hu-preflop-${version}`)
       expect(pack.metadata.effectiveStackBb).toBe(depth)
-      expect(pack.metadata.tree).toEqual(preflopTree(depth, version === 'v3' ? 'v3' : 'v2'))
+      expect(pack.metadata.tree).toEqual(
+        preflopTree(depth, version === 'v3' || version === 'v4' ? 'v3' : 'v2'),
+      )
       expect(pack.nodes).toHaveLength(decisionNodes(pack.metadata.tree).length)
       const strategy = new Map(
         pack.nodes.map((node) => [
@@ -419,7 +423,7 @@ describe('generated preflop packs', () => {
       expect(dump).toContain(`river-hu-preflop-${version}`)
       expect(dump).toContain('button/raise-2.5/raise-9')
       expect(pack.headlines.bbVsOpen2_5).not.toBeNull()
-      if (version === 'v3') expect(pack.headlines.bbVsOpen2).not.toBeNull()
+      if (version === 'v3' || version === 'v4') expect(pack.headlines.bbVsOpen2).not.toBeNull()
       // The big ignored cache is not required for tests in a fresh checkout.
       const cachePath = 'out/preflop-solve/equity-v1-8192.json'
       if (existsSync(cachePath)) {

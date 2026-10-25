@@ -29,6 +29,15 @@ describe('hand-dependent preflop realisation', () => {
     )
     expect(() => runPreflop(['--output-dir', '../outside'])).toThrow('inside the worktree')
     expect(() => runPreflop(['--realisation'])).toThrow('missing --realisation')
+    expect(() => runPreflop(['--pack-version', 'v4'])).toThrow(
+      'requires --tree v3 and --realisation',
+    )
+    expect(() => runPreflop(['--pack-version', 'unknown'])).toThrow(
+      'requires --tree v3 and --realisation',
+    )
+    expect(() =>
+      runPreflop(['--pack-version', 'v4', '--tree', 'v2', '--realisation', 'unused.json']),
+    ).toThrow('requires --tree v3 and --realisation')
   })
   it('is bounded and monotone in equity, with IP >= OOP, for every hand and pot/SPR', () => {
     const ranks = 'AKQJT98765432'

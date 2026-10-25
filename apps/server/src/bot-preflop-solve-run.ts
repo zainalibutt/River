@@ -42,6 +42,9 @@ export function runPreflop(args = process.argv.slice(2)): void {
   const target = numberArg(args, '--target', 0.0075)
   const configPath = stringArg(args, '--realisation')
   const treeVersion = stringArg(args, '--tree') ?? 'v3'
+  const packVersion = stringArg(args, '--pack-version')
+  if (packVersion !== undefined && (packVersion !== 'v4' || treeVersion !== 'v3' || !configPath))
+    throw new Error('--pack-version v4 requires --tree v3 and --realisation')
   if (treeVersion !== 'v2' && treeVersion !== 'v3') throw new Error('invalid --tree')
   const flat = args.includes('--flat')
   if (flat && configPath) throw new Error('--flat and --realisation are mutually exclusive')
@@ -60,7 +63,7 @@ export function runPreflop(args = process.argv.slice(2)): void {
   const outputDir = localPath(
     stringArg(args, '--output-dir') ??
       (isHandRealisation(factors)
-        ? `apps/server/preflop/${treeVersion}`
+        ? `apps/server/preflop/${packVersion ?? treeVersion}`
         : 'out/preflop-solve/flat'),
   )
   const legacyDir = localPath('apps/server/preflop/v1')
@@ -119,6 +122,12 @@ export function runPreflop(args = process.argv.slice(2)): void {
     target,
     checkpoints,
     treeVersion,
+    ...(packVersion === 'v4' ? { packVersion } : {}),
+    ...(configPath
+      ? {
+          realisationSource: `Supplied config: ${configPath}. See its .fit.json report and preflop/v4/README.md for calibration scope and uncertainty.`,
+        }
+      : {}),
   })
   const path = localPath(resolve(outputDir, `${depth}bb.json`))
   mkdirSync(dirname(path), { recursive: true })

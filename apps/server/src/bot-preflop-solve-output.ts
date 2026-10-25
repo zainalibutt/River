@@ -75,6 +75,8 @@ export function makePack(options: {
     exploitabilityBb: number
   }[]
   treeVersion?: 'v2' | 'v3'
+  packVersion?: 'v4'
+  realisationSource?: string
 }) {
   const { depth, tree, table, factors, strategy, certificate, target } = options
   const reached = reachedFrequencies(tree, table, strategy)
@@ -101,11 +103,13 @@ export function makePack(options: {
   }
   return {
     version:
-      options.treeVersion === 'v2'
-        ? isHandRealisation(factors)
-          ? 'river-hu-preflop-v2'
-          : 'river-hu-preflop-v1'
-        : PACK_VERSION,
+      options.packVersion === 'v4'
+        ? 'river-hu-preflop-v4'
+        : options.treeVersion === 'v2'
+          ? isHandRealisation(factors)
+            ? 'river-hu-preflop-v2'
+            : 'river-hu-preflop-v1'
+          : PACK_VERSION,
     metadata: {
       game: 'Heads-up NLHE, no rake/ante, blinds 0.5/1 bb',
       effectiveStackBb: depth,
@@ -118,9 +122,11 @@ export function makePack(options: {
           ? 'q=clamp((rangeEquity-floor)/(ceiling-floor),0,1)^power; deep=base[position,potType]+equitySlope[position,potType]*q+dot(featureWeights,handFeatures); R=clamp(1+SPR/(SPR+sprHalfLife)*(deep-1),min,max); SPR=(depth-matchedContribution)/pot. See v2/README.md for hand features.'
           : 'R=ip or oop; all-in R=1',
         configHash: createHash('sha256').update(JSON.stringify(factors)).digest('hex'),
-        factorSource: isHandRealisation(factors)
-          ? 'Public illustrative EQR estimates plus explicit uncalibrated priors. See v2/README.md for sources, formula, parameters, uncertainty and JSON calibration format.'
-          : 'Legacy flat factors; tunable assumptions, not empirical poker estimates.',
+        factorSource:
+          options.realisationSource ??
+          (isHandRealisation(factors)
+            ? 'Public illustrative EQR estimates plus explicit uncalibrated priors. See v2/README.md for sources, formula, parameters, uncertainty and JSON calibration format.'
+            : 'Legacy flat factors; tunable assumptions, not empirical poker estimates.'),
         sources: isHandRealisation(factors)
           ? [
               'https://blog.gtowizard.com/what-is-equity-in-poker/',

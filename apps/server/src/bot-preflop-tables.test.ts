@@ -11,6 +11,7 @@ import * as leaves from './bot-flop-turn-leaves.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { decisionNodes } from './bot-preflop-solve-tree.js'
 import {
+  defaultPreflopPackVersion,
   exactPreflopRanges,
   loadPreflopPack,
   preflopClass,
@@ -372,5 +373,14 @@ describe('v9gp public table path', () => {
     expect(source.stats.exactRanges).toBe(1)
     const expected = source.ranges(obs, publicDecisions(obs) ?? [], ['b', 'a'])?.map(river.combosOf)
     expect(leaf.mock.calls[0]?.[0].ranges).toEqual(expected)
+  })
+})
+
+describe('the preflop pack switch', () => {
+  it('plays v3 by default and the pack an experiment names', () => {
+    expect(defaultPreflopPackVersion('')).toBe('v3')
+    expect(defaultPreflopPackVersion('v4')).toBe('v4')
+    expect(() => defaultPreflopPackVersion('v9')).toThrow()
+    expect(loadPreflopPack(100, 'v4').metadata).toBeDefined()
   })
 })
