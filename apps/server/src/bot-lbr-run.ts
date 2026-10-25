@@ -27,6 +27,8 @@ import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
 // Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9go|v9gp|v9gz|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
 // Opt in with --shark2. Optional integer settings: --shark2-holdings=0 (all),
+// --shark2-fast selects a capped, cached profile with the same complete size menu.
+// --first-session=N shards independent sessions without changing their deals.
 // --shark2-draws=16, --shark2-preflop-runouts=48, --shark2-continuation-boards=8,
 // --shark2-flop-runouts=48,
 // --shark2-turn-runouts=32. JSON remains compatible with bot-lbr-pool.ts.
@@ -35,7 +37,13 @@ import { turnNetworkFromEnvironment } from './bot-value-network.js'
 // the same seed deal the same cards, stacks and chairs to every focal policy,
 // so their results pair hand for hand. v8z-forget is v8z with no memory of its
 // opponent (forgetOpponents), so a pair of runs prices the memory.
-const shark = shark2Arguments(process.argv.slice(2))
+// Session sharding preserves deals, personality rotation and within-session memory.
+const cli = process.argv.slice(2)
+const firstFlag = cli.find((arg) => arg.startsWith('--first-session='))
+const firstSession = firstFlag === undefined ? 0 : Number(firstFlag.split('=')[1])
+if (!Number.isSafeInteger(firstSession) || firstSession < 0)
+  throw new Error('invalid first session')
+const shark = shark2Arguments(cli.filter((arg) => arg !== firstFlag))
 const [focalName, seed, sessionArg, out, handArg, castName] = shark.positional
 const focalCast =
   castName === undefined || castName === 'rotation'
@@ -189,6 +197,7 @@ const onChoice: NonNullable<Parameters<typeof localBestResponse>[1]>['onChoice']
 }
 const shark2 = shark.enabled
   ? localBestResponse2(focal, {
+      fast: shark.fast === true,
       tuning: shark.tuning,
       createQueryPolicy: () => {
         // Constructors publish telemetry for the live seat. Keep disposable-query
@@ -230,6 +239,7 @@ const started = Date.now()
 const run = runSessions({
   seed,
   sessions,
+  firstSession,
   handsPerSession,
   table: {
     name: 'heads-up-best-response',
@@ -267,16 +277,16 @@ const run = runSessions({
     ? { plugin: opponentStatsPlugin() }
     : {}),
   onFocalHand: (session, hand) => {
-    if (hand === 0 && session > 0) {
+    if (hand === 0 && session > firstSession) {
       const seconds = (Date.now() - started) / 1000
       process.stderr.write(
-        `${focalName}: ${session}/${sessions} sessions, ${seconds.toFixed(0)}s\n`,
+        `${focalName}: ${session - firstSession}/${sessions} sessions, ${seconds.toFixed(0)}s\n`,
       )
     }
   },
 })
 const estimate = clusteredEstimate(
-  run.hands.map((hand) => ({ session: hand.session, value: -hand.focalChips })),
+  run.hands.map((hand) => ({ session: hand.session - firstSession, value: -hand.focalChips })),
   sessions,
 )
 writeFileSync(
@@ -285,13 +295,14 @@ writeFileSync(
     focal: focalName,
     seed,
     sessions,
+    firstSession,
     handsPerSession,
     estimate,
     choices,
     ...(shark2 === undefined
       ? {}
       : {
-          probe: 'shark2',
+          probe: shark.fast ? 'shark2-fast' : 'shark2',
           tuning: shark2.tuning,
           queryStats: shark2.stats,
           sizeChoices,
@@ -319,7 +330,7 @@ process.stdout.write(
 )
 if (shark2 !== undefined)
   process.stdout.write(
-    `shark2: ${((Date.now() - started) / run.hands.length / 1000).toFixed(3)} s/hand; settings ${JSON.stringify(shark2.tuning)}; queries ${JSON.stringify(shark2.stats)}\n`,
+    `${shark.fast ? 'shark2-fast' : 'shark2'}: ${((Date.now() - started) / run.hands.length / 1000).toFixed(3)} s/hand; settings ${JSON.stringify(shark2.tuning)}; queries ${JSON.stringify(shark2.stats)}\n`,
   )
 if (riverStats !== undefined) {
   const { solves, solved, fallbacks, trackMs, solveMs, exploitability, combos } = riverStats

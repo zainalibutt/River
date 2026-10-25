@@ -1,3 +1,4 @@
+import { memoLbrSolve } from './bot-lbr-query.js'
 import {
   type CfrOptions,
   type Hands,
@@ -235,6 +236,12 @@ export interface ShowdownTable {
   readonly won: (traverser: 0 | 1, opponent: Float64Array, out: Float64Array) => Float64Array
 }
 
+// Numeric preparation can be shared only inside an opt-in disposable-query
+// scope. Public runout ranks and both complete holding orders form the key;
+// range weights are applied later by each branch's independent evaluator.
+const TURN_QUERY_TABLE = {}
+const FLOP_QUERY_TABLE = {}
+
 /**
  * The showdown table for a solve's holdings. Every pairing of two holdings
  * that share no card leaves 44 river cards, and what each pairing wins on
@@ -242,30 +249,38 @@ export interface ShowdownTable {
  * those rivers. Each call is then one pass over that table.
  */
 export function showdownTable(rivers: TurnRivers, hands: readonly [Hands, Hands]): ShowdownTable {
-  const [first, second] = holdingIndices(hands)
-  const { n, m, a0, b0, a1, b1, clash } = pairings(hands)
-  // share[h * m + o]: what holding h of player 0 wins against holding o of
-  // player 1, a half for a tie, over the rivers they leave; 0 when they clash,
-  // since a clashing pairing is never dealt.
-  const share = new Float32Array(n * m)
-  const theirRank = new Int32Array(m)
-  for (const { key, ranks } of rivers.rivers) {
-    for (let o = 0; o < m; o += 1) {
-      theirRank[o] = a1[o] === key || b1[o] === key ? -1 : (ranks[second[o] as number] as number)
-    }
-    for (let h = 0; h < n; h += 1) {
-      if (a0[h] === key || b0[h] === key) continue
-      const mine = ranks[first[h] as number] as number
-      const row = h * m
-      for (let o = 0; o < m; o += 1) {
-        const theirs = theirRank[o] as number
-        if (theirs < 0 || clash[row + o] === 1) continue
-        share[row + o] =
-          (share[row + o] as number) + (mine > theirs ? 1 : mine === theirs ? 0.5 : 0)
+  const { share, clash, n, m } = memoLbrSolve(
+    TURN_QUERY_TABLE,
+    [hands.map((held) => held.cards), rivers.rivers],
+    () => {
+      const [first, second] = holdingIndices(hands)
+      const { n, m, a0, b0, a1, b1, clash } = pairings(hands)
+      // share[h * m + o]: what holding h of player 0 wins against holding o of
+      // player 1, a half for a tie, over the rivers they leave; 0 when they clash,
+      // since a clashing pairing is never dealt.
+      const share = new Float32Array(n * m)
+      const theirRank = new Int32Array(m)
+      for (const { key, ranks } of rivers.rivers) {
+        for (let o = 0; o < m; o += 1) {
+          theirRank[o] =
+            a1[o] === key || b1[o] === key ? -1 : (ranks[second[o] as number] as number)
+        }
+        for (let h = 0; h < n; h += 1) {
+          if (a0[h] === key || b0[h] === key) continue
+          const mine = ranks[first[h] as number] as number
+          const row = h * m
+          for (let o = 0; o < m; o += 1) {
+            const theirs = theirRank[o] as number
+            if (theirs < 0 || clash[row + o] === 1) continue
+            share[row + o] =
+              (share[row + o] as number) + (mine > theirs ? 1 : mine === theirs ? 0.5 : 0)
+          }
+        }
       }
-    }
-  }
-  for (let at = 0; at < share.length; at += 1) share[at] = (share[at] as number) / 44
+      for (let at = 0; at < share.length; at += 1) share[at] = (share[at] as number) / 44
+      return { share, clash, n, m }
+    },
+  )
   return tableFromShares(share, clash, n, m)
 }
 
@@ -307,31 +322,38 @@ export function runoutShowdownTable(
   runouts: readonly { readonly ranks: Uint16Array }[],
   hands: readonly [Hands, Hands],
 ): ShowdownTable {
-  const [first, second] = holdingIndices(hands)
-  const { n, m, clash } = pairings(hands)
-  const share = new Float32Array(n * m)
-  const count = new Uint16Array(n * m)
-  const theirRank = new Int32Array(m)
-  for (const { ranks } of runouts) {
-    for (let o = 0; o < m; o += 1) theirRank[o] = ranks[second[o] as number] as number
-    for (let h = 0; h < n; h += 1) {
-      const mine = ranks[first[h] as number] as number
-      if (mine === 0) continue
-      const row = h * m
-      for (let o = 0; o < m; o += 1) {
-        const theirs = theirRank[o] as number
-        if (theirs === 0 || clash[row + o] === 1) continue
-        share[row + o] =
-          (share[row + o] as number) + (mine > theirs ? 1 : mine === theirs ? 0.5 : 0)
-        count[row + o] = (count[row + o] as number) + 1
+  const { share, clash, n, m } = memoLbrSolve(
+    FLOP_QUERY_TABLE,
+    [hands.map((held) => held.cards), runouts],
+    () => {
+      const [first, second] = holdingIndices(hands)
+      const { n, m, clash } = pairings(hands)
+      const share = new Float32Array(n * m)
+      const count = new Uint16Array(n * m)
+      const theirRank = new Int32Array(m)
+      for (const { ranks } of runouts) {
+        for (let o = 0; o < m; o += 1) theirRank[o] = ranks[second[o] as number] as number
+        for (let h = 0; h < n; h += 1) {
+          const mine = ranks[first[h] as number] as number
+          if (mine === 0) continue
+          const row = h * m
+          for (let o = 0; o < m; o += 1) {
+            const theirs = theirRank[o] as number
+            if (theirs === 0 || clash[row + o] === 1) continue
+            share[row + o] =
+              (share[row + o] as number) + (mine > theirs ? 1 : mine === theirs ? 0.5 : 0)
+            count[row + o] = (count[row + o] as number) + 1
+          }
+        }
       }
-    }
-  }
-  for (let at = 0; at < share.length; at += 1) {
-    const seen = count[at] as number
-    // A pairing no sampled runout leaves open splits the pot.
-    share[at] = seen > 0 ? (share[at] as number) / seen : 0.5
-  }
+      for (let at = 0; at < share.length; at += 1) {
+        const seen = count[at] as number
+        // A pairing no sampled runout leaves open splits the pot.
+        share[at] = seen > 0 ? (share[at] as number) / seen : 0.5
+      }
+      return { share, clash, n, m }
+    },
+  )
   return tableFromShares(share, clash, n, m)
 }
 

@@ -13,6 +13,7 @@ import { type LbrQueryPolicy, policyMoveShares } from './bot-lbr-query.js'
 import { decisionClass, LBR_RANGE_TUNING } from './bot-lbr-range.js'
 import {
   localBestResponse2,
+  SHARK2_FAST_TUNING,
   SHARK2_TUNING,
   type Shark2Choice,
   shark2Actions,
@@ -57,12 +58,14 @@ const pairRaiser: BotPolicy = {
 
 function run(
   focal: BotPolicy,
-  second: boolean,
+  second: boolean | 'fast',
   count: number,
   onChoice?: (choice: Shark2Choice) => void,
+  replaceFocalHole = false,
 ) {
   const shark = second
     ? localBestResponse2(focal, {
+        fast: second === 'fast',
         createQueryPolicy: () => ({ ...focal }),
         ...(onChoice === undefined ? {} : { onChoice }),
       })
@@ -81,7 +84,18 @@ function run(
       ],
     },
     focalPolicy: focal,
-    onFocalDecision: probe.watch,
+    onFocalDecision: (point) =>
+      probe.watch(
+        replaceFocalHole
+          ? {
+              ...point,
+              observation: {
+                ...point.observation,
+                actor: { ...point.observation.actor, hole: ['Ah', 'Ad'].map(parseCard) },
+              },
+            }
+          : point,
+      ),
     ...(shark === undefined ? {} : { onHandOpened: shark.watchHand }),
     allInAdjustment: true,
   }).hands
@@ -125,6 +139,26 @@ function view(street: BotObservationV1['street'] = 'flop'): BotObservationV1 {
 }
 
 describe('shark2', () => {
+  it('fast ignores the focal seats actual dealt hole cards', () => {
+    expect(run(pairRaiser, 'fast', 8, undefined, true).hands).toEqual(
+      run(pairRaiser, 'fast', 8).hands,
+    )
+  }, 300_000)
+  it.each([alwaysFoldPolicy, alwaysCallPolicy, pairRaiser])(
+    'fast still beats the old shark against $id on the existing fixed deals',
+    (focal) => {
+      const count = focal === alwaysFoldPolicy ? 20 : 100
+      const old = run(focal, false, count)
+      const fast = run(focal, 'fast', count)
+      console.info(
+        `${focal.id}: old ${old.raw}, fast ${fast.raw}; adjusted ${old.adjusted} / ${fast.adjusted}`,
+      )
+      expect(fast.raw).toBeGreaterThanOrEqual(old.raw)
+      expect(fast.adjusted).toBeGreaterThanOrEqual(old.adjusted)
+    },
+    120_000,
+  )
+
   it.each([alwaysFoldPolicy, alwaysCallPolicy, pairRaiser])(
     'wins at least as much against $id on the existing fixed deals',
     (focal) => {
@@ -202,7 +236,7 @@ describe('shark2', () => {
   })
 
   it.each([0.33, 1.5])(
-    'actually selects the %s-pot bet with local response valuation',
+    'fast actually selects the %s-pot bet with local response valuation',
     (fraction) => {
       const focal: BotPolicy = {
         ...alwaysCallPolicy,
@@ -226,9 +260,9 @@ describe('shark2', () => {
       const choices: { choice: Shark2Choice; pot: number }[] = []
       let pot = 0
       const probe = localBestResponse2(focal, {
+        fast: true,
         createQueryPolicy: () => ({ ...focal }),
         onChoice: (choice) => choices.push({ choice, pot }),
-        tuning: { maximumHoldings: 600 },
       })
       runSessions({
         seed: 'shark2-sizing',
@@ -315,6 +349,26 @@ describe('shark2', () => {
     })
     const args = ['call', 'seed', '2', 'out.json', '10', 'champion']
     expect(shark2Arguments(args)).toEqual({ enabled: false, positional: args, tuning: {} })
+    expect(shark2Arguments(['--shark2-fast', ...args])).toEqual({
+      enabled: true,
+      fast: true,
+      positional: args,
+      tuning: SHARK2_FAST_TUNING,
+    })
+    expect(shark2Arguments(['--shark2-draws=3', '--shark2-fast']).tuning.samplesPerHolding).toBe(3)
+    const normal = localBestResponse2(alwaysCallPolicy, {
+      createQueryPolicy: () => ({ ...alwaysCallPolicy }),
+    })
+    expect(normal.tuning).toEqual(SHARK2_TUNING)
+    expect(normal.tuning).toEqual({
+      maximumHoldings: 0,
+      samplesPerHolding: 16,
+      preflopRunouts: 48,
+      continuationBoards: 8,
+      flopRunouts: 48,
+      turnRunouts: 32,
+      smoothing: 0.02,
+    })
     expect(
       shark2Arguments(['--shark2', ...args, '--shark2-holdings=600', '--shark2-draws=24']),
     ).toEqual({
@@ -384,6 +438,57 @@ const network: RiverValueNetwork = {
   ],
 }
 
+it('reuses numeric solves without changing query decisions or carried values at identical tuning', () => {
+  const play = (fast: boolean) => {
+    const makeChain = () =>
+      solvedFlopPolicy(network, network, {
+        carry: 'both',
+        iterations: 2,
+        scheme: 'dcfr',
+        offTree: 'resolve',
+        turnStartNetwork: network,
+        riverNetwork: network,
+      })
+    const focal = makeChain()
+    const choices: Shark2Choice[] = []
+    const probe = localBestResponse2(focal.policy, {
+      fast,
+      createQueryPolicy: () => makeChain().policy,
+      tuning: {
+        maximumHoldings: 8,
+        samplesPerHolding: 2,
+        preflopRunouts: 4,
+        flopRunouts: 4,
+        turnRunouts: 4,
+        continuationBoards: 2,
+      },
+      onChoice: (choice) => choices.push(choice),
+    })
+    const hands = runSessions({
+      seed: 'v9g-memory-regression',
+      sessions: 2,
+      handsPerSession: 3,
+      focalPolicy: focal.policy,
+      table: {
+        name: 'memo-equivalence',
+        style: 'plain',
+        entrants: [
+          { personality: focalPerson as NonNullable<typeof focalPerson> },
+          { personality: opponent as NonNullable<typeof opponent>, policy: probe.policy },
+        ],
+      },
+      onHandOpened: probe.watchHand,
+      onFocalDecision: probe.watch,
+    }).hands
+    return { hands, choices, hits: probe.stats.solveCacheHits }
+  }
+  const plain = play(false)
+  const cached = play(true)
+  expect(cached.hits).toBeGreaterThan(0)
+  expect(cached.hands).toEqual(plain.hands)
+  expect(cached.choices).toEqual(plain.choices)
+}, 120_000)
+
 it('reports native river probabilities matching the policy RNG intervals for each holding', () => {
   const room = slumbotRoom(
     {
@@ -452,6 +557,7 @@ it('isolates hypothetical queries from live carried solves, decisions and oppone
     const memories: unknown[] = []
     const queryChains: ReturnType<typeof makeChain>[] = []
     const probe = localBestResponse2(chain.policy, {
+      fast: true,
       createQueryPolicy: () => {
         const query = makeChain()
         queryChains.push(query)
@@ -549,6 +655,7 @@ it('isolates hypothetical queries from live carried solves, decisions and oppone
   expect(noisy.memories).toEqual(clean.memories)
   expect(noisy.checks).toBeGreaterThan(0)
   expect(noisy.queryStats.exactQueries).toBeGreaterThan(0)
+  expect(noisy.queryStats.solveCacheHits).toBeGreaterThan(0)
   expect(noisy.carries).toBeGreaterThan(0)
 }, 120_000)
 
@@ -599,4 +706,84 @@ it('uses a probability hook directly rather than estimating it from random draws
       'fold',
     )?.([parseCard('2s'), parseCard('3s')]),
   ).toBe(1)
+})
+
+it('caches fast answers only within the same hand and own hole cards, retaining the full menu', () => {
+  let frame: SessionHandFrame | undefined
+  let captured: BotPolicyContextV1 | undefined
+  runSessions({
+    seed: 'fast-cache',
+    sessions: 2,
+    handsPerSession: 1,
+    focalPolicy: alwaysCallPolicy,
+    table: {
+      name: 'cache',
+      style: 'plain',
+      entrants: [
+        { personality: focalPerson as NonNullable<typeof focalPerson> },
+        {
+          personality: opponent as NonNullable<typeof opponent>,
+          policy: {
+            ...alwaysCallPolicy,
+            decide(context) {
+              if (!captured)
+                captured = { ...context, observation: structuredClone(context.observation) }
+              return alwaysCallPolicy.decide(context)
+            },
+          },
+        },
+      ],
+    },
+    onHandOpened(opened) {
+      if (!captured) frame = opened
+    },
+  })
+  if (!frame || !captured) throw new Error('missing cache fixture')
+  const context = captured as BotPolicyContextV1
+  let queried = 0
+  const queries: BotObservationV1[] = []
+  const make = () =>
+    localBestResponse2(alwaysCallPolicy, {
+      fast: true,
+      tuning: { maximumHoldings: 16 },
+      createQueryPolicy: (): LbrQueryPolicy => ({
+        ...alwaysCallPolicy,
+        moveShares(query) {
+          queried++
+          queries.push(structuredClone(query.observation))
+          return (hole) => (hole[0].rank === hole[1].rank ? 0 : 1)
+        },
+      }),
+    })
+  const probe = make()
+  probe.watchHand(frame)
+  const first = probe.policy.decide(context)
+  expect(queries.map((query) => query.actions?.at(-1)?.action)).toEqual(
+    shark2Actions(context.observation),
+  )
+  const calls = queried
+  expect(probe.policy.decide(context)).toEqual(first)
+  expect(queried).toBe(calls)
+  expect(probe.stats.cacheHits).toBe(calls)
+
+  // A different private holding in the very same public state must recompute
+  // blockers, range and answers, and match a completely fresh probe.
+  const changed = {
+    ...context,
+    observation: {
+      ...context.observation,
+      actor: { ...context.observation.actor, hole: ['2c', '3d'].map(parseCard) },
+    },
+  }
+  const result = probe.policy.decide(changed)
+  expect(queried).toBeGreaterThan(calls)
+  const clean = make()
+  clean.watchHand(frame)
+  expect(result).toEqual(clean.policy.decide(changed))
+  const beforeReset = queried
+  probe.watchHand(frame) // Even reusing room/hand identifiers creates a new scope.
+  probe.policy.decide(context)
+  expect(queried).toBeGreaterThan(beforeReset)
+  probe.policy.releaseHand(frame.roomId, frame.handNumber)
+  expect(() => probe.policy.decide(context)).toThrow('watchHand')
 })

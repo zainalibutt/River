@@ -13,7 +13,7 @@ import {
   type TurnAction,
 } from '@river/engine'
 import type { ProbeChoice } from './bot-lbr.js'
-import { policyMoveShares } from './bot-lbr-query.js'
+import { LbrQueryMemo, policyMoveShares, withLbrQueryMemo } from './bot-lbr-query.js'
 import {
   decisionClass,
   type MoveClass,
@@ -36,6 +36,22 @@ export const SHARK2_TUNING = {
   continuationBoards: 8,
   flopRunouts: 48,
   turnRunouts: 32,
+  smoothing: 0.02,
+} as const
+
+/** Uniform holding subsample, with the same action/continuation valuation as shark2.
+ * A single 24-runout equity has worst-case SE <= 0.5/sqrt(24) = 10.3pp
+ * (roughly +/-20pp at 95%, normal approximation). Range averaging reduces
+ * noise, but posterior weighting and continuation boards prevent a blanket
+ * aggregate error guarantee. River showdown equities remain exact.
+ */
+export const SHARK2_FAST_TUNING = {
+  maximumHoldings: 256,
+  samplesPerHolding: 8,
+  preflopRunouts: 24,
+  continuationBoards: 4,
+  flopRunouts: 24,
+  turnRunouts: 16,
   smoothing: 0.02,
 } as const
 
@@ -67,8 +83,10 @@ export function shark2Arguments(args: readonly string[]) {
     'turn-runouts': 'turnRunouts',
   }
   let enabled = false
+  const fast = args.includes('--shark2-fast')
+  if (fast) Object.assign(tuning, SHARK2_FAST_TUNING)
   for (const arg of args) {
-    if (arg === '--shark2') {
+    if (arg === '--shark2' || arg === '--shark2-fast') {
       enabled = true
       continue
     }
@@ -91,7 +109,7 @@ export function shark2Arguments(args: readonly string[]) {
   }
   if (!enabled && Object.keys(tuning).length > 0)
     throw new Error('shark2 settings require --shark2')
-  return { enabled, positional, tuning }
+  return { enabled, positional, tuning, ...(fast ? { fast: true } : {}) }
 }
 
 interface HandState {
@@ -99,6 +117,9 @@ interface HandState {
   readonly points: BotObservationV1[]
   range: WeightedHolding[] | null
   applied: number
+  ownHole: string | undefined
+  readonly answers: Map<string, { shares: number[]; exact: boolean }>
+  solveMemo: LbrQueryMemo
 }
 
 /** All sizes are raise-to totals. Raises add a fraction of the pot AFTER calling. */
@@ -206,10 +227,14 @@ export function localBestResponse2(
   options: {
     readonly createQueryPolicy: () => BotPolicy
     readonly tuning?: Partial<Shark2Tuning>
+    readonly fast?: boolean
     readonly onChoice?: (choice: Shark2Choice) => void
   },
 ) {
-  const tuning: Shark2Tuning = { ...SHARK2_TUNING, ...options.tuning }
+  const tuning: Shark2Tuning = {
+    ...(options.fast ? SHARK2_FAST_TUNING : SHARK2_TUNING),
+    ...options.tuning,
+  }
   for (const [key, value] of Object.entries(tuning)) {
     if (
       !Number.isFinite(value) ||
@@ -220,7 +245,22 @@ export function localBestResponse2(
       throw new Error(`invalid shark2 setting ${key}`)
     }
   }
-  const stats = { exactQueries: 0, sampledQueries: 0, sampledDecisions: 0, rangeResets: 0 }
+  const stats = {
+    exactQueries: 0,
+    sampledQueries: 0,
+    sampledDecisions: 0,
+    rangeResets: 0,
+    decisions: 0,
+    totalMs: 0,
+    queryMs: 0,
+    equityMs: 0,
+    bookkeepingMs: 0,
+    cacheHits: 0,
+    primeMs: 0,
+    exactMs: 0,
+    sampledMs: 0,
+    solveCacheHits: 0,
+  }
   let hand: HandState | undefined
   const watchHand = (frame: SessionHandFrame) => {
     hand = {
@@ -228,6 +268,9 @@ export function localBestResponse2(
       points: [],
       range: null,
       applied: 0,
+      ownHole: undefined,
+      answers: new Map(),
+      solveMemo: new LbrQueryMemo(),
     }
   }
   const watch = (point: FocalDecisionPoint) => {
@@ -259,6 +302,34 @@ export function localBestResponse2(
     history: readonly BotObservationV1[],
     seed: string,
   ): number[] => {
+    const started = performance.now()
+    const solveHitsBefore = state.solveMemo.hits
+    // Cache numbers, never a policy/solve closure. Include every public input,
+    // invented holding, live mask and our blockers; discard the map at settlement.
+    // Sampled answers also require the RNG seed. Exact answers do not use it.
+    const publicView = (view: BotObservationV1) => ({
+      ...view,
+      actor: { ...view.actor, hole: [] },
+    })
+    const key = options.fast
+      ? JSON.stringify([
+          state.ownHole,
+          publicView(observation),
+          history.map(publicView),
+          taken,
+          range.map((holding) => [holding.hole.map(cardKey), holding.weight > 0]),
+        ])
+      : ''
+    const cached = options.fast
+      ? (state.answers.get(key) ?? state.answers.get(`${key}:${seed}`))
+      : undefined
+    if (cached) {
+      stats.cacheHits++
+      if (cached.exact) stats.exactQueries++
+      else stats.sampledQueries++
+      stats.queryMs += performance.now() - started
+      return cached.shares
+    }
     const query = options.createQueryPolicy()
     if (query === focal) throw new Error('shark2 needs an independent query policy')
     const personality = state.frame.entrants[0]?.personality
@@ -295,28 +366,45 @@ export function localBestResponse2(
       }
     }
     try {
-      for (const past of history) query.decide(contextFor(past, neutral, -1))
-      const known = policyMoveShares(query, contextFor(observation, neutral, -1), taken)
+      const primeStarted = performance.now()
+      const scoped = <T>(run: () => T) =>
+        withLbrQueryMemo(options.fast ? state.solveMemo : undefined, run)
+      for (const past of history) scoped(() => query.decide(contextFor(past, neutral, -1)))
+      stats.primeMs += performance.now() - primeStarted
+      const exactStarted = performance.now()
+      const known = scoped(() =>
+        policyMoveShares(query, contextFor(observation, neutral, -1), taken),
+      )
       if (known !== null) {
         stats.exactQueries++
-        return range.map((holding) =>
+        const shares = range.map((holding) =>
           holding.weight === 0 ? 0 : checkedShare(known(holding.hole)),
         )
+        if (options.fast) state.answers.set(key, { shares, exact: true })
+        stats.exactMs += performance.now() - exactStarted
+        return shares
       }
+      stats.exactMs += performance.now() - exactStarted
       stats.sampledQueries++
-      return range.map((holding) => {
+      const sampledStarted = performance.now()
+      const shares = range.map((holding) => {
         if (holding.weight === 0) return 0
         let matches = 0
         for (let sample = 0; sample < tuning.samplesPerHolding; sample++) {
           const context = contextFor(observation, holding.hole, sample)
-          const result = decideWithFallback(query, context)
+          const result = scoped(() => decideWithFallback(query, context))
           stats.sampledDecisions++
           if (decisionClass(result.decision, context.observation) === taken) matches++
         }
         return matches / tuning.samplesPerHolding
       })
+      if (options.fast) state.answers.set(`${key}:${seed}`, { shares, exact: false })
+      stats.sampledMs += performance.now() - sampledStarted
+      return shares
     } finally {
       releasePolicyHand(query, observation.roomId, observation.handNumber)
+      stats.queryMs += performance.now() - started
+      stats.solveCacheHits += state.solveMemo.hits - solveHitsBefore
     }
   }
   const policy: HandAwareBotPolicy = {
@@ -326,6 +414,9 @@ export function localBestResponse2(
       if (hand?.frame.roomId === roomId && hand.frame.handNumber === handNumber) hand = undefined
     },
     decide(context) {
+      const started = performance.now()
+      const queryBefore = stats.queryMs
+      const equityBefore = stats.equityMs
       const observation = context.observation
       const state = hand
       if (
@@ -334,6 +425,14 @@ export function localBestResponse2(
         state.frame.handNumber !== observation.handNumber
       ) {
         throw new Error('shark2 needs watchHand before the first probe decision')
+      }
+      const ownHole = observation.actor.hole.map(cardKey).sort().join(',')
+      if (options.fast && state.ownHole !== ownHole) {
+        state.range = null
+        state.applied = 0
+        state.answers.clear()
+        state.solveMemo = new LbrQueryMemo()
+        state.ownHole = ownHole
       }
       const range =
         state.range ??
@@ -375,9 +474,11 @@ export function localBestResponse2(
         for (const holding of range)
           holding.weight = holding.hole.some((card) => board.has(cardKey(card))) ? 0 : 1
       }
+      const equityStarted = performance.now()
       const wins = range.map((holding) =>
         holding.weight === 0 ? 0 : shark2Equity(observation, holding.hole, tuning),
       )
+      stats.equityMs += performance.now() - equityStarted
       const equity = weighted(range, wins)
       const { amountToCall, actor, pot } = observation
       const paid = Math.min(amountToCall, actor.stack)
@@ -394,8 +495,10 @@ export function localBestResponse2(
         )
         return [{ action, facing, folds }]
       })
+      const continuationStarted = performance.now()
       const flops =
         observation.street === 'river' ? [] : continuationScenarios(observation, range, tuning)
+      stats.equityMs += performance.now() - continuationStarted
       const jamFolds = aggressive.find((entry) => entry.action.kind === 'allIn')?.folds
       const continuing = (at: number) => 1 - (jamFolds?.[at] ?? 1)
       const opponentStack =
@@ -441,6 +544,11 @@ export function localBestResponse2(
       let best = choices[0] as (typeof choices)[number]
       for (const choice of choices) if (choice.value > best.value + 1e-8) best = choice
       options.onChoice?.({ ...best, street: observation.street, kind: best.decision.kind, equity })
+      const elapsed = performance.now() - started
+      stats.decisions++
+      stats.totalMs += elapsed
+      stats.bookkeepingMs +=
+        elapsed - (stats.queryMs - queryBefore) - (stats.equityMs - equityBefore)
       return {
         policyId: this.id,
         policyVersion: this.version,

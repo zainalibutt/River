@@ -10,7 +10,7 @@ import {
 } from '@river/engine'
 import { solveFlop } from './bot-flop-solver.js'
 import { perTurnShowdown } from './bot-flop-turn-leaves.js'
-import { type LbrQueryPolicy, policyMoveShares } from './bot-lbr-query.js'
+import { type LbrQueryPolicy, memoLbrSolve, policyMoveShares } from './bot-lbr-query.js'
 import { decisionClass, type MoveClass } from './bot-lbr-range.js'
 import {
   followWithResolving,
@@ -866,12 +866,14 @@ function solveTurnSpot(
       : readsModel(reads, spot, opponent)
   let record: RiverPromiseRecord | undefined
   let preparedLeaves: ReturnType<typeof perRiverShowdown> | undefined
+  const queryValues = new WeakMap<RiverSolution, readonly [Float64Array, Float64Array]>()
   const solve = (
     target: RiverSpot,
     opponentModel?: RiverOpponentModel,
     gadget?: RiverGadget,
     tree?: RiverNode,
     options: CfrOptions = tuning,
+    valuesNeeded = false,
   ) => {
     const perRiver =
       street.street === 'turn' && (tuning.carry === 'per-river' || tuning.carry === 'both')
@@ -897,14 +899,65 @@ function solveTurnSpot(
           : perTurnShowdown(target, leafNetwork, record)
         : preparedLeaves.withRecord(record)
     preparedLeaves = showdown
-    return solveRiver(target, tuning.iterations, opponentModel, showdown, gadget, tree, options)
+    // Opponent models contain arbitrary strategy closures, which cannot form
+    // a complete numeric cache key. Keep those solves outside the memo.
+    const memo =
+      opponentModel === undefined
+        ? memoLbrSolve
+        : <T>(_owner: object, _input: unknown, compute: (memoized: boolean) => T) => compute(false)
+    const saved = memo(
+      leafNetwork,
+      [
+        street.street,
+        target,
+        tuning.iterations,
+        opponentModel,
+        gadget,
+        tree,
+        options.scheme,
+        options.alpha,
+        options.beta,
+        options.gamma,
+        options.fixedStrategies,
+        valuesNeeded,
+      ],
+      (memoized) => {
+        const result = solveRiver(
+          target,
+          tuning.iterations,
+          opponentModel,
+          showdown,
+          gadget,
+          tree,
+          options,
+        )
+        // Showdown is a mutable scratch closure, recreated above in every branch.
+        const { showdown: _showdown, ...numeric } = result
+        // Root bounds read the solution once more after CFR. On a cache hit,
+        // recomputing them would rebuild expensive all-in showdown tables in
+        // a fresh scratch closure, despite reusing the strategy itself.
+        const values = memoized && valuesNeeded ? riverValues(result).values : undefined
+        return { numeric, record, values }
+      },
+    )
+    record = saved.record
+    const result = { ...saved.numeric, showdown }
+    if (saved.values) queryValues.set(result, saved.values)
+    return result
   }
-  let solution = solve(spot, model, carry?.gadget)
+  let solution = solve(
+    spot,
+    model,
+    carry?.gadget,
+    undefined,
+    tuning,
+    (safe && carry === null) || (tuning.offTree === 'resolve' && carry === null),
+  )
   let rootGadget = carry?.gadget
   if (safe && carry === null) {
     // What each opponent holding is worth against the tracked ranges is its
     // promise; the re-solve then plays without trusting their range at all.
-    const promises = riverValues(solution).values[opponent]
+    const promises = (queryValues.get(solution) ?? riverValues(solution).values)[opponent]
     const ranges = [...spot.ranges] as [RiverSpot['ranges'][0], RiverSpot['ranges'][1]]
     ranges[opponent] = ranges[opponent].map((entry) => ({ ...entry, weight: 1 }))
     rootGadget = {
@@ -956,7 +1009,7 @@ function solveTurnSpot(
   // Subsequent widening must never refresh them at the observed off-tree node.
   const gadget = rootGadget ?? {
     player: opponent,
-    promises: riverValues(solution).values[opponent],
+    promises: (queryValues.get(solution) ?? riverValues(solution).values)[opponent],
   }
   const rootSpot = solution.spot
   const state: OffTreeState<SolvedTurn> = {
