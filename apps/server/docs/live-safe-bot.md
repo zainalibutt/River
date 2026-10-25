@@ -29,7 +29,7 @@ value; disable `BOT_LIVE_SAFE` and restart to restore the original selection.
 
 Package both `.bin` and `.json` for each stem below. Set the four network
 variables to their absolute paths **inside the server image**. These exports
-were read from `<models>` for measurement and are not bundled
+were read from a local models folder for measurement and are not bundled
 in this worktree.
 
 | Export directory / stem | Weights bytes | Metadata bytes |
