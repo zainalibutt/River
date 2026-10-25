@@ -24,6 +24,7 @@ export interface ThinkRequest {
 export interface BotRiverThinker {
   wants(view: RoomView, playerId: string, personality: BotPersonality): boolean
   think(request: ThinkRequest, deadlineMs: number): Promise<TurnAction | null>
+  releaseHand?(roomId: string, handNumber: number): void
   close(): Promise<void>
 }
 

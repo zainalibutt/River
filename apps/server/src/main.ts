@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url'
 import { config as loadEnv } from 'dotenv'
 import { serveApiRoutes } from './api-routes.js'
 import { createSupabaseTokenVerifier } from './auth.js'
+import { type LiveSafeBotPolicy, liveBotThinker } from './bot-live-safe.js'
 import { SupabaseBotOpponentStore } from './bot-opponent-store.js'
-import { workerRiverThinker } from './bot-thinker.js'
 import { readServerConfig } from './config.js'
 import { SupabaseCosmeticStore } from './cosmetic-store.js'
 import { createSupabaseEconomy } from './economy-service.js'
@@ -66,7 +66,25 @@ async function start(): Promise<void> {
   })
   const rememberOpponents = process.env.BOT_OPPONENT_PERSISTENCE === 'true'
   // The OG's river solver, worked out on a worker thread; off unless switched on.
-  const solveRivers = process.env.BOT_RIVER_SOLVER === 'true'
+  const botThinker = liveBotThinker(process.env, {
+    onEvent: (event) => {
+      if (event.type === 'ready' || event.reason)
+        console.log('bot-live-safe', JSON.stringify(event))
+    },
+  })
+  if (process.env.BOT_LIVE_SAFE === 'true' && botThinker !== undefined) {
+    const safe = botThinker as LiveSafeBotPolicy
+    setInterval(() => {
+      console.log(
+        'bot-live-safe-summary',
+        JSON.stringify({
+          ...safe.stats,
+          ...safe.diagnostics(),
+          rss: process.memoryUsage().rss,
+        }),
+      )
+    }, 60_000).unref()
+  }
   // Paying back what a crash left seated needs the table its migration makes;
   // off until that migration has been applied and this is switched on.
   const refundCrashes = process.env.TABLE_CRASH_REFUND === 'true'
@@ -75,7 +93,7 @@ async function start(): Promise<void> {
     // A person who opens River alone should find a table with people at it:
     // three to eight of them, in chairs the table's room id picks.
     botSeats: 'random',
-    ...(solveRivers ? { botRiverThinker: workerRiverThinker() } : {}),
+    ...(botThinker === undefined ? {} : { botRiverThinker: botThinker }),
     ...(rememberOpponents
       ? {
           botOpponentStore: new SupabaseBotOpponentStore({
@@ -146,7 +164,10 @@ async function start(): Promise<void> {
         .catch((error: unknown) => {
           console.error('shutdown: could not settle every table', error)
         })
-        .finally(() => server.close())
+        .finally(async () => {
+          await botThinker?.close()
+          server.close()
+        })
     })
   }
   process.once('SIGINT', shutdown)

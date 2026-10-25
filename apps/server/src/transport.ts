@@ -32,6 +32,7 @@ import { applyAdminAction, MemoryBanList } from './admin.js'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
 import type { ActionShadowPort, PreparedActionShadow } from './bot-learning-shadow.js'
 import type { BotOpponentObservation, BotOpponentStore } from './bot-opponent-store.js'
+import { releasePolicyHand } from './bot-policy-hand.js'
 import {
   actionFor,
   type BotDecisionTraceSink,
@@ -2130,6 +2131,21 @@ export class RoomHub {
     events: RoomEvent[],
     requester?: ConnectionState,
   ): void {
+    for (const event of events) {
+      if (event.kind !== 'handRecorded') continue
+      if (this.botPolicy !== undefined) {
+        try {
+          releasePolicyHand(this.botPolicy, state.room.id, event.record.handNumber)
+        } catch (error) {
+          this.onError('bot policy hand release failed', error)
+        }
+      }
+      try {
+        this.botRiverThinker?.releaseHand?.(state.room.id, event.record.handNumber)
+      } catch (error) {
+        this.onError('bot thinker hand release failed', error)
+      }
+    }
     this.recordOpponentMemories(state, events)
     this.payLeaversAfterHand(state, events)
     for (const connection of state.connections) {

@@ -15,6 +15,7 @@ import { ACTION_LABELS, type ActionModelV1 } from './bot-learning-model.js'
 import type { ActionShadowPort, PreparedActionShadow } from './bot-learning-shadow.js'
 import { OnlineActionShadow } from './bot-learning-shadow.js'
 import type { BotOpponentObservation, BotOpponentStore } from './bot-opponent-store.js'
+import { type HandAwareBotPolicy, HandSolveCache } from './bot-policy-hand.js'
 import { type BotDecisionTrace, randomBotTable } from './bot-service.js'
 import type { BotRiverThinker, ThinkRequest } from './bot-thinker.js'
 import type { LedgerRow, SupabaseEconomy } from './economy-service.js'
@@ -2272,6 +2273,91 @@ describe('bots at the table', () => {
       fallbackReason: null,
     })
     expect(JSON.stringify(peer.messages)).not.toContain('trace-test')
+  })
+
+  it('releases carry records in the live broadcast path after showdown, fold and all-in hands', async () => {
+    vi.useFakeTimers()
+    const cache = new HandSolveCache<object>(true, 0)
+    const released = vi.fn((roomId: string, handNumber: number) =>
+      cache.releaseHand(roomId, handNumber),
+    )
+    const thinkerRelease = vi.fn()
+    const policy: HandAwareBotPolicy = {
+      id: 'hand-recording-live-policy',
+      version: 1,
+      releaseHand: released,
+      decide(context) {
+        const obs = context.observation
+        cache.put(obs, cache.key(obs, `${obs.actor.playerId}:${obs.street}`), {})
+        return {
+          policyId: this.id,
+          policyVersion: 1,
+          observationVersion: 1,
+          fallbackReason: null,
+          decision: obs.legal.check ? { kind: 'check' } : { kind: 'call' },
+        }
+      },
+    }
+    const thinker: BotRiverThinker = {
+      wants: () => false,
+      think: async () => null,
+      close: async () => {},
+      releaseHand: thinkerRelease,
+    }
+    const { hub } = setup(
+      30_000,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      1,
+      undefined,
+      policy,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      thinker,
+    )
+    const { peer, connection } = await sitAndStart(hub)
+    const view = () => {
+      const snapshot = peer.last('snapshot')
+      if (snapshot?.kind !== 'snapshot') throw new Error('expected snapshot')
+      return snapshot.view
+    }
+    let steps = 0
+    for (const [round, finish] of ['call', 'fold', 'allIn'].entries()) {
+      for (; steps < 1_000 && view().handNumber < round + 1; steps += 1) {
+        await vi.advanceTimersByTimeAsync(500)
+      }
+      expect(view().handNumber).toBe(round + 1)
+      for (; steps < 1_000 && view().phase === 'hand'; steps += 1) {
+        const current = view()
+        if (current.currentActor?.playerId === ALICE && current.legal !== null) {
+          const kind =
+            finish === 'fold' && current.legal.fold.enabled
+              ? 'fold'
+              : finish === 'allIn' && current.legal.allIn.enabled
+                ? 'allIn'
+                : current.legal.check.enabled
+                  ? 'check'
+                  : 'call'
+          await connection.receive(
+            JSON.stringify({
+              kind: 'command',
+              requestId: `release-${steps}`,
+              command: { kind: 'act', action: { kind } },
+            }),
+          )
+        } else await vi.advanceTimersByTimeAsync(500)
+      }
+      expect(view().phase).toBe('between')
+      expect(released).toHaveBeenCalledWith('river-one', round + 1)
+      expect(thinkerRelease).toHaveBeenCalledWith('river-one', round + 1)
+      expect(cache.size).toBe(0)
+    }
+    expect(released).toHaveBeenCalledTimes(3)
+    expect(thinkerRelease).toHaveBeenCalledTimes(3)
   })
 
   it('gives each bot its own exact-once session read of a human after a settled hand', async () => {

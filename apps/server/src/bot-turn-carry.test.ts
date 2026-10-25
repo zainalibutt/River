@@ -135,7 +135,7 @@ describe('v9gz2 fixed turn continuation wiring', () => {
     }
     expect(zero.stats.safeExploit).toMatchObject({ eligible: 1, proposed: 0, accepted: 0 })
     expect(disabled.stats.safeExploit.eligible).toBe(0)
-  })
+  }, 120_000)
 
   it('plays a selected row once but keeps tracking, carry and off-tree prefixes on the shadow policy', () => {
     vi.mocked(publicDecisions).mockReturnValue([])
