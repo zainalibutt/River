@@ -1,8 +1,8 @@
 param(
-  [string]$Python = '<venv>\Scripts\python.exe',
+  [string]$Python = 'python',
   [string]$Out = 'art/out/d8',
-  [string]$BucketModel = '<models>/turnstart-c1-53k-e50/river-buckets-128',
-  [string[]]$Data = @('<data>/turnstart-c1-pc3', '<data>/turnstart-c1-pc2', '<data>/turnstart-c1-pc1'),
+  [Parameter(Mandatory)] [string]$BucketModel,
+  [Parameter(Mandatory)] [string[]]$Data,
   [switch]$Prepared
 )
 $ErrorActionPreference = 'Stop'
