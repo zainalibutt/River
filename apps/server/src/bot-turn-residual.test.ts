@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { COMBOS, comboIndex52 } from './bot-river-value-data.js'
 import { HOLDING_CARDS } from './bot-turn-end-data.js'
 import {
+  loadTurnResidualNetwork,
   permuteHolding,
   TURN_RESIDUAL_INPUTS,
   TURN_STATIC,
@@ -11,7 +12,8 @@ import {
   turnResidualValues,
 } from './bot-turn-residual.js'
 import { historicalOrder } from './bot-turn-residual-split.js'
-import type { RiverValueNetwork } from './bot-value-network.js'
+import { forward, type RiverValueNetwork } from './bot-value-network.js'
+import { valueNetworkBackend } from './bot-value-simd.js'
 
 const keys = (text: string) => text.split(' ').map((c) => cardKey(parseCard(c)))
 const holding = (text: string) => {
@@ -39,6 +41,85 @@ function constant(inputs: number, outputs: number, value: number): RiverValueNet
 }
 
 describe('D8 turn-start residual', () => {
+  it.each(['ts', 'wasm'])(
+    'loads a 64x2 export and matches scalar PReLU inference (%s)',
+    (backend) => {
+      const folder = mkdtempSync(join(process.cwd(), '.d8-parity-'))
+      const prior = process.env.RIVER_VALUE_BACKEND
+      process.env.RIVER_VALUE_BACKEND = backend
+      try {
+        const stem = join(folder, 'residual')
+        const shape = [TURN_RESIDUAL_INPUTS, 64, 64, 1]
+        const head: RiverValueNetwork = {
+          buckets: 128,
+          layers: shape.slice(1).map((rows, i) => {
+            const columns = shape[i] as number
+            return {
+              rows,
+              columns,
+              weight: Float32Array.from(
+                { length: rows * columns },
+                (_, k) => (((k * 13 + i * 7) % 37) - 18) / 100,
+              ),
+              bias: Float32Array.from({ length: rows }, (_, k) => ((k % 5) - 2) / 10),
+              slope: i === shape.length - 2 ? null : 0.125 + i / 8,
+            }
+          }),
+        }
+        function save(suffix: string, network: RiverValueNetwork) {
+          const tensors: { name: string; shape: number[]; offset: number }[] = []
+          const arrays: Float32Array[] = []
+          let offset = 0
+          const add = (name: string, dimensions: number[], values: Float32Array) => {
+            tensors.push({ name, shape: dimensions, offset })
+            arrays.push(values)
+            offset += values.byteLength
+          }
+          network.layers.forEach((l, i) => {
+            add(`${2 * i}.weight`, [l.rows, l.columns], l.weight)
+            add(`${2 * i}.bias`, [l.rows], l.bias)
+            if (l.slope !== null) add(`${2 * i + 1}.weight`, [1], Float32Array.of(l.slope))
+          })
+          writeFileSync(`${stem}-${suffix}.json`, JSON.stringify({ buckets: 128, tensors }))
+          writeFileSync(
+            `${stem}-${suffix}.bin`,
+            Buffer.concat(arrays.map((a) => Buffer.from(a.buffer))),
+          )
+        }
+        save('bucket', constant(385, 256, 0.25))
+        save('head', head)
+        const meta = { version: 1, target: 'turn-start/per-river-v1', inputs: 65, headShape: shape }
+        writeFileSync(`${stem}.json`, JSON.stringify(meta))
+        const model = loadTurnResidualNetwork(stem)
+        expect(model.residual.layers.map((l) => l.rows)).toEqual([64, 64, 1])
+        const board = keys('2s 7s Kh Qc'),
+          ranks = legalRanks(board)
+        const cards = turnCardFeatures(board, ranks)
+        const ranges = [Float32Array.from(ranks), Float32Array.from(ranks)] as const
+        const local = turnResidualInputs(cards, ranges, new Float32Array(256).fill(0.25), 20, 10)
+        const actual = turnResidualValues(model, cards, ranges, 20, 10)
+        expect(valueNetworkBackend(model.residual)).toBe(backend)
+        // Scalar reference traverses original tensors, independently of loader/batch/WASM.
+        for (const p of [0, 1] as const)
+          for (const h of [holding('As Js'), holding('4h 5h'), holding('Ac Ad')]) {
+            const at = (p * COMBOS + h) * TURN_RESIDUAL_INPUTS
+            const expected =
+              0.25 + (forward(head, local.slice(at, at + TURN_RESIDUAL_INPUTS))[0] as number)
+            expect(Math.abs((actual[p][h] as number) - expected)).toBeLessThan(1e-5)
+          }
+        writeFileSync(`${stem}.json`, JSON.stringify({ ...meta, headShape: [65, 16, 1] }))
+        expect(() => loadTurnResidualNetwork(stem)).toThrow('head shape')
+        // Existing part-1 metadata without headShape remains supported.
+        writeFileSync(`${stem}.json`, JSON.stringify({ ...meta, headShape: undefined }))
+        expect(loadTurnResidualNetwork(stem).residual.layers).toHaveLength(3)
+      } finally {
+        if (prior === undefined) delete process.env.RIVER_VALUE_BACKEND
+        else process.env.RIVER_VALUE_BACKEND = prior
+        rmSync(folder, { recursive: true })
+      }
+    },
+  )
+
   it('pins the historical unseen split without changing splits between seeds', () => {
     const { order, sha256 } = historicalOrder()
     expect(new Set(order).size).toBe(53550)
@@ -194,3 +275,6 @@ describe('D8 turn-start residual', () => {
     expect(first[0][holding('As Js')]).toBeCloseTo(0.85, 7)
   })
 })
+
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'

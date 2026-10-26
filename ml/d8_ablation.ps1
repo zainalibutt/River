@@ -42,7 +42,9 @@ try {
   Invoke-D8Step 'python-tests' $Python @('-m','unittest','discover','-s','ml','-p','test_turn_residual.py')
   foreach ($d8Seed in @(0,1,2)) {
     foreach ($d8Model in @('baseline','residual')) {
-      Invoke-D8Step "$d8Model-$d8Seed" $Python @('ml/train_turn_residual.py','--out',$d8Out,'--model',$d8Model,'--seed',"$d8Seed")
+      $d8FitArgs = @('ml/train_turn_residual.py','--out',$d8Out,'--model',$d8Model,'--seed',"$d8Seed",'--max-seconds','540')
+      if ($d8Model -eq 'residual') { $d8FitArgs += @('--bucket-model',$BucketModel,'--joint') }
+      Invoke-D8Step "$d8Model-$d8Seed" $Python $d8FitArgs
     }
     Invoke-D8Step "export-parity-$d8Seed" $Python @('ml/export_turn_residual_parity.py','--out',$d8Out,'--seed',"$d8Seed")
     foreach ($d8Backend in @('ts','wasm')) {

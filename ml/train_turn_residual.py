@@ -1,8 +1,8 @@
 """Matched D8 experiment. All writes remain in the worktree; no git operations.
 
-First run the TS diagnose/prepare commands in ml/D8.md. Train one model per
-process; the 540-second wall deadline stops BEFORE ten minutes, with incomplete
-runs recorded as failures (never accepted as a matched 50-epoch ablation).
+Reuse the TS diagnose/prepare cache described in ml/D8.md. Train one model per
+process with two CPU threads. The default 300-second fit deadline includes GPU
+transfer, epoch selection and exact held-hand scoring; a timeout fails the fit.
 """
 from __future__ import annotations
 import os
@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import nn
-from turn_residual import INPUTS, TurnResidual, export_mlp, residual_features, static_features
+from turn_residual import INPUTS, TurnResidual, export_mlp, load_mlp, residual_features, static_features
 from river_value_data import RECORD
 from train_river_buckets import bucket_features
 
@@ -75,11 +75,11 @@ def feature_parity(out):
     return worst
 
 
-def exact_evaluation(model, out, split, device):
+def exact_evaluation(model, out, split, device, reference=None):
     """Report every legal holding, range-weighted; never sampled-cache test MAE."""
     snapshot = json.loads((out / 'snapshot.json').read_text())
     selected = set(split['test'])
-    metrics = {}
+    metrics, baseline = {}, {}
     offset = 0
     model.eval()
     with torch.no_grad():
@@ -104,6 +104,10 @@ def exact_evaluation(model, out, split, device):
                 b = torch.from_numpy(np.tile(np.maximum(ids, 0)[None, None, :], (1, 2, 1))).to(device)
                 predicted = model(x, f, b).cpu().numpy()[0]
                 error = np.abs(predicted - row['values'])
+                base_error = None
+                if reference is not None:
+                    values = reference(x).reshape(-1, 2, 128).gather(2, b.long()).cpu().numpy()[0]
+                    base_error = np.abs(values - row['values'])
                 weights = row['ranges'].astype(np.float64) * (ids >= 0)[None, :]
                 weights /= np.maximum(weights.sum(axis=1, keepdims=True), 1e-300)
                 masks = {'all': ids >= 0, 'flush-draw': static[:, 4] > 0, 'straight-draw': static[:, 5] > 0,
@@ -117,13 +121,22 @@ def exact_evaluation(model, out, split, device):
                 for name, mask in masks.items():
                     total, mass = metrics.get(name, (0., 0.))
                     metrics[name] = (total + float((error * weights * mask).sum()), mass + float((weights * mask).sum()))
-    return {name: 100 * total / mass for name, (total, mass) in metrics.items() if mass > 0}
+                    if base_error is not None:
+                        total, mass = baseline.get(name, (0., 0.))
+                        baseline[name] = (total + float((base_error * weights * mask).sum()), mass + float((weights * mask).sum()))
+    score = lambda data: {name: 100 * total / mass for name, (total, mass) in data.items() if mass > 0}
+    return score(metrics), score(baseline)
 
 
 def train(args):
     out = inside(args.out)
-    feature_error = feature_parity(out)
-    split = json.loads((out / 'split.json').read_text())
+    out.mkdir(parents=True, exist_ok=True)
+    stem = out / f'{args.model}-{args.seed}'
+    stem.with_suffix('.result.json').unlink(missing_ok=True)
+    (out / f'{args.model}-{args.seed}-timeout.json').unlink(missing_ok=True)
+    cache = inside(args.cache or out)
+    feature_error = feature_parity(cache)
+    split = json.loads((cache / 'split.json').read_text())
     order = np.random.default_rng(0).permutation(53550)
     if (hashlib.sha256(order.astype('<i8').tobytes()).hexdigest() != split['splitSHA256']
         or split['test'] != order[:5355].tolist()
@@ -132,36 +145,54 @@ def train(args):
         raise ValueError('frozen split changed')
     if args.seed not in split['seeds']:
         raise ValueError('use the frozen seeds')
-    data = read_cache(out)
+    if args.model == 'residual' and args.bucket_model is None:
+        raise ValueError('--bucket-model is required for residual fits (frozen or joint)')
+    data = read_cache(cache)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if args.require_cuda and device.type != 'cuda':
+        raise RuntimeError('this sweep requires CUDA; refusing a slow CPU fit')
     if device.type == 'cuda':
         torch.backends.cuda.matmul.allow_tf32 = False
     torch.use_deterministic_algorithms(True)
     torch.manual_seed(args.seed)
-    model = TurnResidual(args.model == 'residual').to(device)
+    model = TurnResidual(args.model == 'residual', args.hidden, args.layers, args.dropout, args.joint).to(device)
+    reference, bucket_sha = None, None
+    if args.bucket_model is not None:
+        reference = load_mlp(args.bucket_model).to(device).requires_grad_(False)
+        if reference[0].in_features != 385 or reference[-1].out_features != 256:
+            raise ValueError('requires a 385-input, 256-output bucket model')
+        model.bucket.load_state_dict(reference.state_dict())
+        bucket_sha = hashlib.sha256(args.bucket_model.with_suffix('.bin').read_bytes() + args.bucket_model.with_suffix('.json').read_bytes()).hexdigest()
     # Fit clock includes transfer, epoch selection and exact test scoring.
     # Independent watchdog enforces a hard process bound even during a slow op.
     started = time.monotonic()
     def timeout():
-        (out / f'{args.model}-{args.seed}-timeout.json').write_text(json.dumps({'complete': False, 'deadlineSeconds': 540}))
+        (out / f'{args.model}-{args.seed}-timeout.json').write_text(json.dumps({'complete': False, 'deadlineSeconds': args.max_seconds}))
         os._exit(124)
-    timer = threading.Timer(540, timeout)
+    timer = threading.Timer(args.max_seconds, timeout)
     timer.daemon = True
     timer.start()
     data = {key: value.to(device) for key, value in data.items()}
+    # Frozen trunk predictions are constant across epochs, so compute them once.
+    data_base = None
+    if args.model == 'residual' and not args.joint:
+        with torch.no_grad():
+            data_base = torch.cat([model.bucket(data['x'][start:start+512]).reshape(-1, 2, 128).gather(
+                2, data['bucket'][start:start+512].long()) for start in range(0, len(data['x']), 512)])
     train_index = torch.tensor(split['training'], device=device)
     valid = torch.tensor(split['calibration'], device=device)
-    optimiser = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimiser = torch.optim.Adam((p for p in model.parameters() if p.requires_grad), lr=args.lr)
     steps_per_epoch = (len(train_index) + 511) // 512
-    schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, 50 * steps_per_epoch)
+    schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, args.epochs * steps_per_epoch)
     generator = torch.Generator(device=device).manual_seed(args.seed + 12345)
     loss_fn = nn.SmoothL1Loss(beta=0.1)
     best, state, best_epoch = float('inf'), None, None
-    for epoch in range(1, 51):
+    for epoch in range(1, args.epochs + 1):
         model.train()
         order = train_index[torch.randperm(len(train_index), generator=generator, device=device)]
         for index in order.split(512):
-            prediction = model(data['x'][index], data['holding'][index], data['bucket'][index])
+            prediction = model(data['x'][index], data['holding'][index], data['bucket'][index],
+                               None if data_base is None else data_base[index])
             loss = loss_fn(prediction, data['y'][index])
             optimiser.zero_grad(set_to_none=True)
             loss.backward()
@@ -171,7 +202,8 @@ def train(args):
         total, count = 0., 0
         with torch.no_grad():
             for index in valid.split(512):
-                errors = (model(data['x'][index], data['holding'][index], data['bucket'][index]) - data['y'][index]).abs()
+                errors = (model(data['x'][index], data['holding'][index], data['bucket'][index],
+                                None if data_base is None else data_base[index]) - data['y'][index]).abs()
                 total += errors.sum().item()
                 count += errors.numel()
         error = total / count
@@ -182,15 +214,20 @@ def train(args):
             print(f'{args.model} seed {args.seed} epoch {epoch}: calibration {100*error:.4f}%, {time.monotonic()-started:.1f}s', flush=True)
     model.load_state_dict(state)
     stem = out / f'{args.model}-{args.seed}'
-    metadata = dict(seed=args.seed, epochs=50, splitSHA256=split['splitSHA256'], target='turn-start/per-river-v1')
+    metadata = dict(seed=args.seed, epochs=args.epochs, hidden=args.hidden, layers=args.layers,
+                    dropout=args.dropout, lr=args.lr, joint=args.joint, bucketSHA256=bucket_sha,
+                    splitSHA256=split['splitSHA256'], target='turn-start/per-river-v1')
     export_mlp(model.bucket, Path(str(stem) + '-bucket'), **metadata)
     if model.head is not None:
         export_mlp(model.head, Path(str(stem) + '-head'), **metadata)
-        stem.with_suffix('.json').write_text(json.dumps(dict(version=1, inputs=INPUTS, **metadata), indent=2) + '\n')
-    del data
-    result = dict(model=args.model, seed=args.seed, epochs=50, bestEpoch=best_epoch,
+        stem.with_suffix('.json').write_text(json.dumps(dict(version=1, inputs=INPUTS,
+            headShape=[INPUTS] + [args.hidden] * args.layers + [1], **metadata), indent=2) + '\n')
+    del data, data_base
+    metrics, baseline = exact_evaluation(model, cache, split, device, reference)
+    result = dict(model=args.model, **metadata, bestEpoch=best_epoch,
                   calibrationMAE=100*best, featureParityMax=feature_error, complete=True,
-                  splitSHA256=split['splitSHA256'], device=str(device), metrics=exact_evaluation(model, out, split, device), seconds=time.monotonic()-started)
+                  device=str(device), metrics=metrics, baselineMetrics=baseline,
+                  seconds=time.monotonic()-started)
     stem.with_suffix('.result.json').write_text(json.dumps(result, indent=2) + '\n')
     timer.cancel()
     print(json.dumps(result), flush=True)
@@ -217,8 +254,20 @@ if __name__ == '__main__':
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--model', choices=['baseline', 'residual'])
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--cache', type=Path, help='reuse prepared part-1 cache without copying')
+    parser.add_argument('--bucket-model', type=Path, help='export stem to load before freezing/fine-tuning')
+    parser.add_argument('--hidden', type=int, default=16)
+    parser.add_argument('--layers', type=int, choices=(1, 2, 3), default=1)
+    parser.add_argument('--dropout', type=float, default=0.)
+    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--joint', action='store_true', help='fine-tune the supplied bucket network too')
+    parser.add_argument('--max-seconds', type=int, default=300, help='hard fit deadline, including exact scoring')
+    parser.add_argument('--require-cuda', action='store_true')
     parser.add_argument('--summary', action='store_true')
     args = parser.parse_args()
+    if args.hidden < 1 or not 0 <= args.dropout < 1 or args.epochs < 1 or not 0 < args.lr < float('inf') or args.max_seconds < 1:
+        parser.error('invalid training hyperparameters')
     if args.summary:
         summarise(args.out)
     elif args.model:

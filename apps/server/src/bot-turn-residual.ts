@@ -298,6 +298,7 @@ export function loadTurnResidualNetwork(stem: string): TurnResidualNetwork {
     version: number
     target: string
     inputs: number
+    headShape?: number[]
   }
   if (
     meta.version !== TURN_RESIDUAL_VERSION ||
@@ -315,6 +316,13 @@ export function loadTurnResidualNetwork(stem: string): TurnResidualNetwork {
     residual.layers.at(-1)?.rows !== 1
   )
     throw new Error('incompatible D8 tensor dimensions')
+  const shape = [residual.layers[0]?.columns, ...residual.layers.map((layer) => layer.rows)]
+  if (
+    residual.layers.some((layer, i) => i > 0 && layer.columns !== residual.layers[i - 1]?.rows) ||
+    (meta.headShape !== undefined &&
+      (meta.headShape.length !== shape.length || meta.headShape.some((n, i) => n !== shape[i])))
+  )
+    throw new Error('incompatible D8 head shape')
   return { bucket, residual }
 }
 

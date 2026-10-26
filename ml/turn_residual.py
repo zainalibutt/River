@@ -136,25 +136,41 @@ def residual_features(static: np.ndarray, ranges: np.ndarray, bucket_values: np.
 
 
 class TurnResidual(nn.Module):
-    def __init__(self, residual: bool):
+    def __init__(self, residual: bool, hidden=16, layers=1, dropout=0., joint=False):
         super().__init__()
+        if hidden < 1 or layers not in (1, 2, 3) or not 0 <= dropout < 1:
+            raise ValueError('hidden > 0, layers 1-3, dropout in [0, 1) required')
         self.bucket = mlp(385, 256, 512, 3)
-        self.head = mlp(INPUTS, 1, 16, 1) if residual else None
+        self.bucket.requires_grad_(not residual or joint)
+        modules = []
+        for layer in range(layers):
+            modules.extend([nn.Linear(INPUTS if layer == 0 else hidden, hidden), nn.PReLU()])
+            if dropout:
+                modules.append(nn.Dropout(dropout))
+        modules.append(nn.Linear(hidden, 1))
+        self.head = nn.Sequential(*modules) if residual else None
         if self.head is not None:
             nn.init.zeros_(self.head[-1].weight)
             nn.init.zeros_(self.head[-1].bias)
 
-    def forward(self, x, features, ids):
-        values = self.bucket(x).reshape(-1, 2, 128)
-        base = values.gather(2, ids.long())
+    def forward(self, x, features, ids, cached_base=None):
+        if cached_base is None:
+            values = self.bucket(x).reshape(-1, 2, 128)
+            base = values.gather(2, ids.long())
+        else:
+            if any(p.requires_grad for p in self.bucket.parameters()):
+                raise ValueError('cached base is only valid for a frozen bucket network')
+            base = cached_base
         if self.head is None:
             return base
-        # The trunk and residual are trained jointly. No detached base prediction.
+        # requires_grad controls freezing; joint mode retains both gradient paths.
         local = torch.cat((base[..., None], features[..., 1:]), dim=-1)
         return base + self.head(local).squeeze(-1)
 
 
 def export_mlp(model: nn.Sequential, stem: Path, **metadata) -> None:
+    # Dropout is training-only. Compact indices retain the existing TS Linear/PReLU ABI.
+    model = nn.Sequential(*(layer for layer in model if not isinstance(layer, nn.Dropout)))
     tensors, arrays, offset = [], [], 0
     for name, value in model.state_dict().items():
         array = value.detach().cpu().numpy().astype('<f4')
@@ -162,4 +178,29 @@ def export_mlp(model: nn.Sequential, stem: Path, **metadata) -> None:
         arrays.append(array.ravel())
         offset += array.nbytes
     np.concatenate(arrays).tofile(stem.with_suffix('.bin'))
-    stem.with_suffix('.json').write_text(json.dumps(dict(format='float32-le', buckets=128, tensors=tensors, bytes=offset, **metadata), indent=2) + '\n')
+    shape = [model[0].in_features] + [layer.out_features for layer in model if isinstance(layer, nn.Linear)]
+    stem.with_suffix('.json').write_text(json.dumps(dict(format='float32-le', buckets=128, tensors=tensors, bytes=offset, **metadata, shape=shape), indent=2) + '\n')
+
+
+def load_mlp(stem: Path) -> nn.Sequential:
+    """Load exported Linear/PReLU tensors of any width/depth, including legacy exports."""
+    meta = json.loads(stem.with_suffix('.json').read_text())
+    raw = np.fromfile(stem.with_suffix('.bin'), dtype='<f4')
+    tensors = {t['name'].removeprefix('net.'): t for t in meta['tensors']}
+    modules, state = [], {}
+    index = 0
+    while f'{index}.bias' in tensors:
+        shape = tensors[f'{index}.weight']['shape']
+        modules.append(nn.Linear(shape[1], shape[0]))
+        if f'{index + 1}.weight' in tensors:
+            modules.append(nn.PReLU())
+        index += 2
+    model = nn.Sequential(*modules)
+    for name, tensor in tensors.items():
+        start = tensor['offset'] // 4
+        n = int(np.prod(tensor['shape']))
+        state[name] = torch.from_numpy(raw[start:start+n].reshape(tensor['shape']).copy())
+    model.load_state_dict(state, strict=True)
+    if model[0].in_features < 1:
+        raise ValueError('invalid network dimensions')
+    return model.eval()
