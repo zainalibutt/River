@@ -159,9 +159,9 @@ pins `flop2-ck50`, `turnstart-c1-53k-e50`, and `night1-buckets` exports by
 JSON and binary SHA-256, as well as the recipe and source files. The
 enumerable toy remains unbiased (18 paths; expectation difference
 1.25e-16 chips), and a bounded inference smoke passed on all three streets
-using `<models>` (`results/aivat-v2-smoke.json`). That smoke
+using a local models folder (`results/aivat-v2-smoke.json`). That smoke
 checks wiring and centering, not precision or strength. A 16k v9go sample was
-not run because the PC2 share inbox for `v9go-1`
+not run because the share the fleet share
 returned access denied in this environment.
 
 Twelve historical v9b-versus-v8z duplicate pieces contain 4,800 pairs across

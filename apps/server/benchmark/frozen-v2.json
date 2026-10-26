@@ -4,10 +4,7 @@
   "frozenDate": "2026-10-26",
   "selection": "one equilibrium candidate and one exploitation candidate, locked before play",
   "reference": "v9g",
-  "comparators": [
-    "v8z",
-    "v9go"
-  ],
+  "comparators": ["v8z", "v9go"],
   "referenceModels": {
     "RIVER_TURN_NETWORK": {
       "label": "turnend-6",
@@ -37,11 +34,7 @@
     "alternatives": "v2 and v4 are separately identified diagnostics, not interchangeable with v3"
   },
   "units": "bb/100; shark results are opponent winnings",
-  "primaryTables": [
-    "heads-up-value",
-    "heads-up-camouflaged",
-    "heads-up-reverse-sizing"
-  ],
+  "primaryTables": ["heads-up-value", "heads-up-camouflaged", "heads-up-reverse-sizing"],
   "diagnosticTables": [
     "heads-up-balanced",
     "heads-up-overbluff",
@@ -60,22 +53,14 @@
     "comparison": "paired same deals baseline/candidate; never pool tables before computing style estimates"
   },
   "duplicate": {
-    "seedPrefixes": [
-      "d8-duplicate-s0",
-      "d8-duplicate-s1",
-      "d8-duplicate-s2"
-    ],
+    "seedPrefixes": ["d8-duplicate-s0", "d8-duplicate-s1", "d8-duplicate-s2"],
     "seedSuffix": "-h2h",
     "sessionsPerSeed": 100,
     "handsPerSession": 100,
     "score": "(forward A score - mirrored B score)/2; preserve pair then cluster by seed/session"
   },
   "shark": {
-    "seeds": [
-      "d8-shark-s0",
-      "d8-shark-s1",
-      "d8-shark-s2"
-    ],
+    "seeds": ["d8-shark-s0", "d8-shark-s1", "d8-shark-s2"],
     "sessionsPerSeed": 1000,
     "handsPerSession": 100,
     "runner": "bot-lbr-run.ts",
@@ -83,17 +68,10 @@
     "pairedAgainstReference": true
   },
   "shark2Fast": {
-    "seeds": [
-      "d8-shark2f-s0",
-      "d8-shark2f-s1",
-      "d8-shark2f-s2"
-    ],
+    "seeds": ["d8-shark2f-s0", "d8-shark2f-s1", "d8-shark2f-s2"],
     "sessionsPerSeed": 100,
     "handsPerSession": 100,
-    "flags": [
-      "--shark2",
-      "--shark2-fast"
-    ],
+    "flags": ["--shark2", "--shark2-fast"],
     "role": "additional veto and diagnostic, never a global exploitability bound"
   },
   "slumbot": {
@@ -110,21 +88,8 @@
     "handsPerSeed": 2000,
     "confirmationHands": 48000,
     "confirmationSeedTemplate": "d8-slum-confirm-b{batch}-s{shard}",
-    "confirmationBatchIndices": [
-      0,
-      1,
-      2
-    ],
-    "confirmationShardIndices": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7
-    ],
+    "confirmationBatchIndices": [0, 1, 2],
+    "confirmationShardIndices": [0, 1, 2, 3, 4, 5, 6, 7],
     "confirmation": "three predeclared 16000-hand batches; publish all; no early stopping",
     "cast": "rotation",
     "reads": false,
@@ -135,12 +100,7 @@
     "seedMeaning": "our action RNG only; Slumbot controls deals"
   },
   "estimators": {
-    "report": [
-      "raw",
-      "all-in-valued",
-      "AIVAT-v1",
-      "AIVAT-v2"
-    ],
+    "report": ["raw", "all-in-valued", "AIVAT-v1", "AIVAT-v2"],
     "primaryStrength": "raw",
     "aivat": "raw plus exact action controls; singleton partitions; omit unsupported nodes with explicit coverage; exact late-board chance controls when both holes are known for every hand",
     "heuristic": "pot-share-uniform-32-v1",
@@ -150,10 +110,7 @@
     "biasGate": "absolute exact enumerable-game expectation difference < 1e-12",
     "clustering": "session for duplicate/styles/shark; run for adaptive Slumbot, hand for no-memory Slumbot",
     "missingness": "failures, missing strategy mass, replay disagreements and missing provenance prevent qualification",
-    "heuristics": [
-      "pot-share-uniform-32-v1",
-      "tracked-range-value-networks-v2"
-    ],
+    "heuristics": ["pot-share-uniform-32-v1", "tracked-range-value-networks-v2"],
     "v2": {
       "id": "tracked-range-value-networks-v2",
       "models": {
