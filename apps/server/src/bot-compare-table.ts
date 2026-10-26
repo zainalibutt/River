@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type BotPolicy, championPersonality } from '@river/engine'
+import { beginBenchmark } from './bot-benchmark-provenance.js'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import {
   headsUpButtonGuardPolicy,
@@ -241,6 +242,7 @@ const common = {
   table,
   focalPersonalities: cast,
   allInAdjustment: true,
+  aivat: table.entrants.length === 2,
 }
 interface ComparePiece {
   readonly table: string
@@ -272,6 +274,18 @@ function cachedBaseline(directory: string, tableName: string) {
   throw new Error(`no ${baselinePolicyName} hands for ${tableName} from ${first} in ${directory}`)
 }
 const started = Date.now()
+const provenance = beginBenchmark(out, 'compare-table', {
+  policies: [baselinePolicyName ?? 'unknown', candidateName ?? 'unknown'],
+  seeds: [common.seed],
+  plannedHands: sessions * common.handsPerSession,
+  settings: {
+    table: table.name,
+    cast: castLabel,
+    first,
+    sessions,
+    handsPerSession: common.handsPerSession,
+  },
+})
 const cached = baselineCache === undefined ? undefined : cachedBaseline(baselineCache, table.name)
 const baseHands =
   cached?.hands ??
@@ -310,10 +324,21 @@ const adjusted = summarise(
     return (after.adjustedChips ?? after.focalChips) - (before.adjustedChips ?? before.focalChips)
   }),
 )
+const aivatAvailable =
+  baseHands.every((hand) => hand.aivatChips !== undefined) &&
+  next.hands.every((hand) => hand.aivatChips !== undefined)
+const aivat = aivatAvailable
+  ? summarise(
+      next.hands.map(
+        (hand, index) => (hand.aivatChips as number) - (baseHands[index]?.aivatChips as number),
+      ),
+    )
+  : null
 writeFileSync(
   out,
   JSON.stringify({
     table: table.name,
+    provenance: provenance.provenance,
     prefix,
     cast: castLabel,
     baseline: baselinePolicyName,
@@ -325,6 +350,8 @@ writeFileSync(
     estimate: raw.estimate,
     perSessionAdjusted: adjusted.perSession,
     estimateAdjusted: adjusted.estimate,
+    aivat,
+    candidateHands: next.hands,
     baseMs,
     nextMs,
     river: riverStats,
@@ -335,6 +362,7 @@ writeFileSync(
     baselineHands: baseHands,
   }),
 )
+provenance.finish(pairs.length)
 const shown = (estimate: typeof raw.estimate) =>
   `${estimate.bigBlindsPer100.toFixed(1)} (${estimate.interval95.map((v) => v.toFixed(1)).join(' to ')})`
 process.stdout.write(

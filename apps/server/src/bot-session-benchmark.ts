@@ -18,6 +18,8 @@ import {
   summariseOpponentModel,
   updateOpponentModel,
 } from '@river/engine'
+import { type AivatDecision, aivatChips } from './bot-aivat.js'
+import { lateBoardCorrection } from './bot-aivat-chance.js'
 import { allInEquityChips } from './bot-allin-equity.js'
 import { type BoardDeal, chanceLuck } from './bot-chance-luck.js'
 import { releasePolicyHand } from './bot-policy-hand.js'
@@ -108,6 +110,8 @@ export interface SessionRunOptions {
    * the board cards dealt while the betting was open.
    */
   readonly chanceCorrection?: boolean
+  /** Opt-in exact action controls and exact late-board chance controls in HU. */
+  readonly aivat?: boolean
 }
 
 /**
@@ -157,6 +161,8 @@ export interface SessionHandResult {
   readonly adjustedChips?: number
   /** `adjustedChips` (or `focalChips`) less the cards' luck; two-seat hands only. */
   readonly correctedChips?: number
+  readonly aivatChips?: number
+  readonly aivatDecisions?: readonly AivatDecision[]
 }
 
 export interface OpponentEvidenceYield {
@@ -302,10 +308,11 @@ function playHand(
   let beforeLast: RoomView | undefined
   // Two-seat hands only: both holdings are then every card dealt.
   const holes =
-    options.chanceCorrection === true && entrants.length === 2
+    (options.chanceCorrection === true || options.aivat === true) && entrants.length === 2
       ? ids.map((id) => room.viewFor(id).seats.find((seat) => seat.playerId === id)?.hole ?? null)
       : null
   const deals: BoardDeal[] = []
+  const aivatDecisions: AivatDecision[] = []
   let board: readonly Card[] = []
   for (let step = 0; step < MAX_ACTIONS_PER_HAND; step += 1) {
     const publicView = room.viewFor('')
@@ -359,6 +366,18 @@ function playHand(
           depth: depthClass(Math.min(buyIns[0] as number, othersDepth) / DEFAULT_STAKE.bigBlind),
           handClass: handClassOf(focalHole),
           ...(adjustedChips === undefined ? {} : { adjustedChips }),
+          ...(options.aivat === true && focalCards?.length === 2 && otherCards?.length === 2
+            ? {
+                aivatChips:
+                  aivatChips(
+                    focalChips,
+                    aivatDecisions.flatMap((decision) =>
+                      decision.control === null ? [] : [decision.control],
+                    ),
+                  ) + lateBoardCorrection(focalCards, otherCards, deals),
+                aivatDecisions,
+              }
+            : {}),
           ...(focalCards?.length === 2 && otherCards?.length === 2
             ? {
                 correctedChips:
@@ -400,7 +419,17 @@ function playHand(
       }
     }
     beforeLast = publicView
-    actOnce(room, ids, entrants, actionRngs, options.focalPolicy, focalOptions, entrantOptions)
+    actOnce(
+      room,
+      ids,
+      entrants,
+      actionRngs,
+      options.focalPolicy,
+      options.aivat === true
+        ? { ...focalOptions, aivat: (decision) => aivatDecisions.push(decision) }
+        : focalOptions,
+      entrantOptions,
+    )
   }
   throw new Error('session hand exceeded action limit')
 }

@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { type BotPolicy, championPersonality, personalityPool } from '@river/engine'
+import { beginBenchmark } from './bot-benchmark-provenance.js'
 import { alwaysCallPolicy, alwaysFoldPolicy, localBestResponse } from './bot-lbr.js'
 import { localBestResponse2, shark2Arguments } from './bot-lbr2.js'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
@@ -236,6 +237,17 @@ const shark2 = shark.enabled
   : undefined
 const probe = shark2 ?? localBestResponse(focal, { onChoice })
 const started = Date.now()
+const benchmark = beginBenchmark(out, 'lbr', {
+  policies: [focalName],
+  seeds: [seed],
+  plannedHands: sessions * handsPerSession,
+  settings: {
+    sessions,
+    firstSession,
+    handsPerSession,
+    probe: shark.fast ? 'shark2-fast' : shark.enabled ? 'shark2' : 'shark',
+  },
+})
 const run = runSessions({
   seed,
   sessions,
@@ -293,6 +305,7 @@ writeFileSync(
   out,
   `${JSON.stringify({
     focal: focalName,
+    provenance: benchmark.provenance,
     seed,
     sessions,
     firstSession,
@@ -325,6 +338,7 @@ writeFileSync(
   })}\n`,
 )
 const [low, high] = estimate.interval95
+benchmark.finish(run.hands.length)
 process.stdout.write(
   `${focalName}: probe wins ${estimate.bigBlindsPer100.toFixed(1)} (${low.toFixed(1)} to ${high.toFixed(1)}) bb/100 over ${run.hands.length} hands in ${((Date.now() - started) / 1000).toFixed(0)}s\n`,
 )

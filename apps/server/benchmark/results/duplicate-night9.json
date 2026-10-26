@@ -1,0 +1,190 @@
+{
+  "toy": {
+    "deals": 6,
+    "paths": 18,
+    "probability": 1,
+    "exactExpectation": -0.008333333333333276,
+    "aivatExpectation": -0.008333333333333401,
+    "bias": -1.249000902703301e-16,
+    "rawVariance": 1.7149305555555556,
+    "aivatVariance": 0.7719305555555556
+  },
+  "result": {
+    "kind": "duplicate",
+    "inputs": [
+      {
+        "name": "piece-0.json",
+        "sha256": "323eb9b794d5de6c5bcfa8895a6621e5903c2998425c7b9fdf38c2fca7e2b28a"
+      },
+      {
+        "name": "piece-12.json",
+        "sha256": "ea5fcb98dc476bd3b1234eb4dfa12b4d2062570e4a795ca8302bd61f5a4cf3ae"
+      },
+      {
+        "name": "piece-16.json",
+        "sha256": "cc8ab43df6a3fd264161bd4e21e1f6fbeae4c29289451d46b4c060141864ffa5"
+      },
+      {
+        "name": "piece-20.json",
+        "sha256": "6fdf47b85b5e4a36166f0c6205149508804efca671caf6ffb6d531e1bae14415"
+      },
+      {
+        "name": "piece-24.json",
+        "sha256": "278b6c47ab4980cbf8917cdf3a1a7df27ef415f0847f031a37354d6e3911cb00"
+      },
+      {
+        "name": "piece-28.json",
+        "sha256": "08d1b6b784f0d61b2ecc54ea0d9220ea6341d6e8835ad7695973ac72f3129f61"
+      },
+      {
+        "name": "piece-32.json",
+        "sha256": "f51b78b24a8c10ffe8ce9b454deac0b120fab42a685ac0cdc04dc6ea9e86dca4"
+      },
+      {
+        "name": "piece-36.json",
+        "sha256": "41bc544306e697b12da39d717dfe6a478012d40ed71af805a9702ddc40f463e1"
+      },
+      {
+        "name": "piece-4.json",
+        "sha256": "188ee49a2364123ba7cc65da7424c787254144be00457a2b2a3ff2eb48735836"
+      },
+      {
+        "name": "piece-40.json",
+        "sha256": "a92368a017be02e912f7313a12843f16b9a3cb86876db73b8d881c4e357f1eb0"
+      },
+      {
+        "name": "piece-44.json",
+        "sha256": "19b7b1f85aa9dd724aa4ab656da496d34cb7ad519690f9e7f28ff03c3c3d47de"
+      },
+      {
+        "name": "piece-8.json",
+        "sha256": "b61f1ca880c2add16b9da5c863ddb1789281823a12e3ce7b9802c25f5bc1f1fc"
+      }
+    ],
+    "pairs": 4800,
+    "clusters": 48,
+    "raw": null,
+    "valued": {
+      "hands": 4800,
+      "sessions": 48,
+      "bigBlindsPer100": 2.716844696969698,
+      "interval95": [-15.260145177107038, 20.693834571046438],
+      "standardError": 8.936039486013886
+    },
+    "aivat": null,
+    "historicalChanceCorrected": null,
+    "aivatUnavailableReason": "Pieces contain scores only, without exact action records or replay states",
+    "varianceGatePassed": false,
+    "provenance": {
+      "schema": "river-benchmark-provenance-v1",
+      "benchmark": "d8-frozen-v1",
+      "specificationSha256": "63c687e6081e34deb47c1e2f4df68707c653a2934699d360e2f729710eeed097",
+      "runner": "aivat-replay-duplicate",
+      "startedAt": "2026-10-26T00:09:58.337Z",
+      "commit": "ea36ee39df85e5fe1483b955dc467e8034d4626f",
+      "sourceSha256": "eeaf5ed75de91351fea855ec5c53808f44ff3f5296794a324f49f58b257d8c6d",
+      "engineRuntimeSha256": "9d655a1daac401a9abaff83bc87c3dd93b0ab56b2e11ea528666c9a16d9605d3",
+      "lockfileSha256": "171c26948b1943a3cff5ec09deb5db9580218a8e7a3ceccfcff2b76d7177ed43",
+      "models": {
+        "RIVER_FLOP_NETWORK": null,
+        "RIVER_TURN_NETWORK": null,
+        "RIVER_TURN_START_NETWORK": null,
+        "RIVER_RIVER_NETWORK": null
+      },
+      "preflop": {
+        "version": "v3",
+        "files": [
+          {
+            "depth": 100,
+            "sha256": "36090daa61b214019ac2b4317357d5a53e275e48ff28d220bd84d50893ba1414"
+          },
+          {
+            "depth": 200,
+            "sha256": "847c70afa14e725933f0b60214cdb99235e3415a20333f54aed50b2f888a2ace"
+          }
+        ]
+      },
+      "environment": {
+        "node": "v24.13.0",
+        "platform": "win32",
+        "arch": "x64",
+        "RIVER_VALUE_BACKEND": null,
+        "RIVER_VALUE_THREADS": "1",
+        "RIVER_COMPARE_HANDS": null,
+        "RIVER_PREFLOP_PACK": null,
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "UV_THREADPOOL_SIZE": "1"
+      },
+      "heuristic": "pot-share-uniform-32-v1",
+      "policies": ["v9b", "v8z"],
+      "seeds": [
+        "night9",
+        "night9",
+        "night9",
+        "night9",
+        "night9",
+        "night9",
+        "night9",
+        "night9",
+        "night9",
+        "night9",
+        "night9",
+        "night9"
+      ],
+      "plannedHands": 4800,
+      "settings": {
+        "inputs": [
+          {
+            "name": "piece-0.json",
+            "sha256": "323eb9b794d5de6c5bcfa8895a6621e5903c2998425c7b9fdf38c2fca7e2b28a"
+          },
+          {
+            "name": "piece-12.json",
+            "sha256": "ea5fcb98dc476bd3b1234eb4dfa12b4d2062570e4a795ca8302bd61f5a4cf3ae"
+          },
+          {
+            "name": "piece-16.json",
+            "sha256": "cc8ab43df6a3fd264161bd4e21e1f6fbeae4c29289451d46b4c060141864ffa5"
+          },
+          {
+            "name": "piece-20.json",
+            "sha256": "6fdf47b85b5e4a36166f0c6205149508804efca671caf6ffb6d531e1bae14415"
+          },
+          {
+            "name": "piece-24.json",
+            "sha256": "278b6c47ab4980cbf8917cdf3a1a7df27ef415f0847f031a37354d6e3911cb00"
+          },
+          {
+            "name": "piece-28.json",
+            "sha256": "08d1b6b784f0d61b2ecc54ea0d9220ea6341d6e8835ad7695973ac72f3129f61"
+          },
+          {
+            "name": "piece-32.json",
+            "sha256": "f51b78b24a8c10ffe8ce9b454deac0b120fab42a685ac0cdc04dc6ea9e86dca4"
+          },
+          {
+            "name": "piece-36.json",
+            "sha256": "41bc544306e697b12da39d717dfe6a478012d40ed71af805a9702ddc40f463e1"
+          },
+          {
+            "name": "piece-4.json",
+            "sha256": "188ee49a2364123ba7cc65da7424c787254144be00457a2b2a3ff2eb48735836"
+          },
+          {
+            "name": "piece-40.json",
+            "sha256": "a92368a017be02e912f7313a12843f16b9a3cb86876db73b8d881c4e357f1eb0"
+          },
+          {
+            "name": "piece-44.json",
+            "sha256": "19b7b1f85aa9dd724aa4ab656da496d34cb7ad519690f9e7f28ff03c3c3d47de"
+          },
+          {
+            "name": "piece-8.json",
+            "sha256": "b61f1ca880c2add16b9da5c863ddb1789281823a12e3ce7b9802c25f5bc1f1fc"
+          }
+        ]
+      }
+    }
+  }
+}

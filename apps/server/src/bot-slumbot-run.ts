@@ -1,4 +1,4 @@
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, existsSync } from 'node:fs'
 import {
   type BotPolicy,
   championPersonality,
@@ -6,6 +6,8 @@ import {
   parseCard,
   seedFromString,
 } from '@river/engine'
+import type { AivatDecision } from './bot-aivat.js'
+import { beginBenchmark } from './bot-benchmark-provenance.js'
 import { pokerGuardPolicy, v5GuardPolicy } from './bot-poker-guard.js'
 import { releasePolicyHand } from './bot-policy-hand.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
@@ -107,6 +109,13 @@ if (
     'usage: <v5|v6|v8z|v9a|v9g|v9go|v9gp|v9gz> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
   )
 }
+if (existsSync(out)) throw new Error('refusing to append a new run to an existing Slumbot log')
+const record = beginBenchmark(out, 'slumbot', {
+  policies: [focalName ?? ''],
+  seeds: [runSeed],
+  plannedHands: hands,
+  settings: { cast: castName, reads: readsName === 'reads', dealSeedsControlled: false },
+})
 const policy = make()
 const memory = readsName === 'reads' ? slumbotMemory() : null
 let unobserved = 0
@@ -158,6 +167,7 @@ for (let hand = 0; hand < hands; hand += 1) {
   const rng = mulberry32(seedFromString(`slumbot:${runSeed}:${hand}`))
   let state: SlumbotResponse | undefined
   let incr = ''
+  const aivatDecisions: AivatDecision[] = []
   const remembered = memory?.options() ?? {}
   try {
     state = await post('new_hand', token === undefined ? {} : { token })
@@ -174,13 +184,14 @@ for (let hand = 0; hand < hands; hand += 1) {
         policy,
         personality,
         rng,
-        remembered,
+        { ...remembered, aivat: (decision) => aivatDecisions.push(decision) },
       )
       state = await post('act', { token, incr })
       token = state.token ?? token
     }
   } catch (error) {
     failed += 1
+    record.progress(hand - failed + 1, failed + unobserved)
     // Every Slumbot hand is replayed as hand 1 of room 'slumbot', so release it here.
     releasePolicyHand(policy, 'slumbot', 1)
     appendFileSync(
@@ -230,9 +241,12 @@ for (let hand = 0; hand < hands; hand += 1) {
       board: state.board,
       action: state.action,
       winnings: state.winnings,
+      aivatDecisions,
+      provenanceSha256: record.provenance.sourceSha256,
     })}\n`,
   )
   if ((hand + 1) % 50 === 0 || hand + 1 === hands) {
+    record.progress(hand + 1 - failed, failed + unobserved)
     const seconds = Math.round((Date.now() - started) / 1000)
     if (offTree !== undefined) process.stderr.write(`off tree: ${JSON.stringify(offTree)}\n`)
     if (riverStats !== undefined) process.stderr.write(`river: ${JSON.stringify(riverStats)}\n`)
@@ -247,3 +261,4 @@ for (let hand = 0; hand < hands; hand += 1) {
     )
   }
 }
+record.finish(hands - failed, failed + unobserved)

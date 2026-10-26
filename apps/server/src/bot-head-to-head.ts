@@ -1,11 +1,13 @@
 import { writeFileSync } from 'node:fs'
 import { type BotPersonality, type BotPolicy, championPersonality } from '@river/engine'
+import { beginBenchmark } from './bot-benchmark-provenance.js'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
 import { runSessions, type SessionHandResult } from './bot-session-benchmark.js'
 import { clusteredEstimate } from './bot-session-evaluation.js'
 import { solvedFlopPolicy, solvedTurnPolicy } from './bot-turn-policy.js'
+import { v9gPolicy } from './bot-v9g-policy.js'
 import { loadValueNetwork, turnNetworkFromEnvironment } from './bot-value-network.js'
 
 // Usage: tsx bot-head-to-head.ts <A> <B> <seed prefix> <sessions> <out.json> [first session] [hands a session]
@@ -20,6 +22,9 @@ const [nameA, nameB, prefix, sessionsText, out, firstText = '0', handsText = '10
 
 /** A fresh instance of a named policy, so the two runs share no caches. */
 export function headToHeadPolicy(name: string): BotPolicy | undefined {
+  if (name === 'v9g') return v9gPolicy().policy
+  if (name === 'v9go') return v9gPolicy({ offTree: 'resolve' }).policy
+  if (name === 'v9gp') return v9gPolicy({ offTree: 'resolve', preflopTables: true }).policy
   const v8z = () =>
     riverSolverPolicy(pokerGuardPolicy, 'river-solver', 1, RIVER_CANDIDATE_TUNING).policy
   if (name === 'v8z') return v8z()
@@ -68,6 +73,7 @@ export function playDeals(
     focalPolicy: first,
     allInAdjustment: true,
     chanceCorrection: true,
+    aivat: true,
   }).hands
 }
 
@@ -75,7 +81,7 @@ export function playDeals(
 export function duplicateScores(
   forward: readonly SessionHandResult[],
   mirrored: readonly SessionHandResult[],
-): { session: number; value: number; corrected?: number }[] {
+): { session: number; value: number; raw: number; corrected?: number; aivat?: number }[] {
   if (forward.length !== mirrored.length) throw new Error('the two runs played different hands')
   return forward.map((hand, index) => {
     const other = mirrored[index] as SessionHandResult
@@ -89,12 +95,30 @@ export function duplicateScores(
     return {
       session: hand.session,
       value: (a - b) / 2,
+      raw: (hand.focalChips - other.focalChips) / 2,
+      ...(hand.aivatChips === undefined || other.aivatChips === undefined
+        ? {}
+        : {
+            aivat: (hand.aivatChips - other.aivatChips) / 2,
+          }),
       ...(ca === undefined || cb === undefined ? {} : { corrected: (ca - cb) / 2 }),
     }
   })
 }
 
 if (process.argv[1]?.endsWith('bot-head-to-head.ts')) {
+  const record = out
+    ? beginBenchmark(out, 'duplicate', {
+        policies: [nameA ?? '', nameB ?? ''],
+        seeds: [`${prefix}-h2h`],
+        plannedHands: Number(sessionsText) * Number(handsText),
+        settings: {
+          first: Number(firstText),
+          sessions: Number(sessionsText),
+          handsPerSession: Number(handsText),
+        },
+      })
+    : undefined
   const a = headToHeadPolicy(nameA ?? '')
   const b = headToHeadPolicy(nameB ?? '')
   const mirrorA = headToHeadPolicy(nameA ?? '')
@@ -132,8 +156,20 @@ if (process.argv[1]?.endsWith('bot-head-to-head.ts')) {
       estimate,
       corrected,
       scores,
+      forward,
+      mirrored,
+      provenance: record?.provenance,
+      raw: clusteredEstimate(
+        scores.map((row) => ({ session: row.session - first, value: row.raw })),
+        sessions,
+      ),
+      aivat: clusteredEstimate(
+        scores.map((row) => ({ session: row.session - first, value: row.aivat ?? row.raw })),
+        sessions,
+      ),
     }),
   )
+  record?.finish(scores.length)
   process.stdout.write(
     `${nameA} vs ${nameB}, sessions ${first}-${first + sessions - 1}: ${estimate.bigBlindsPer100.toFixed(1)} bb/100 (${estimate.interval95.map((v) => v.toFixed(1)).join(' to ')}), ${Math.round((Date.now() - started) / 1000)} s\n`,
   )

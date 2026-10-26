@@ -9,6 +9,7 @@ import {
   mulberry32,
   seedFromString,
 } from '@river/engine'
+import { captureCumulativeStrategy } from './bot-aivat.js'
 import type { WeightedHolding } from './bot-lbr-range.js'
 import { type HandAwareBotPolicy, HandSolveCache, releasePolicyHand } from './bot-policy-hand.js'
 import type { PreflopAction, PreflopNode } from './bot-preflop-solve-tree.js'
@@ -335,10 +336,15 @@ export function tablePreflopPolicy(
       }
       record(observation, trace)
       stats.decisions++
-      const index = samplePreflopAction(
-        tableRow(trace.pack, trace.node, observation.actor.hole),
+      const row = tableRow(trace.pack, trace.node, observation.actor.hole)
+      const actions = trace.node.actions
+      captureCumulativeStrategy(
         context.rng,
+        row,
+        (index) => preflopLiveAction(actions[index] as PreflopAction, observation, trace.bb),
+        row.reduce((sum, value) => sum + value, 0),
       )
+      const index = samplePreflopAction(row, context.rng)
       return {
         policyId: policy.id,
         policyVersion: 1,

@@ -26,6 +26,12 @@ import {
   pickPersonalitiesForPreset,
   seedFromString,
 } from '@river/engine'
+import {
+  AIVAT_HEURISTIC,
+  type AivatDecision,
+  actionControl,
+  withStrategyCapture,
+} from './bot-aivat.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import type { RoomView } from './protocol.js'
 
@@ -304,6 +310,7 @@ export interface BotTiltContext {
 export type BotTiltSource = (context: BotTiltContext) => BotTiltState
 
 export interface BotActionOptions {
+  readonly aivat?: (decision: AivatDecision) => void
   readonly policy?: BotPolicy
   readonly tilt?: BotTiltState
   readonly trace?: BotDecisionTraceSink
@@ -351,9 +358,30 @@ export function actionFor(
     tilt: observation.tilt,
     rng,
   }
-  const envelope = decideWithFallback(options.policy ?? pokerGuardPolicy, context)
+  const captured =
+    options.aivat === undefined
+      ? undefined
+      : withStrategyCapture(rng, () =>
+          decideWithFallback(options.policy ?? pokerGuardPolicy, context),
+        )
+  const envelope =
+    captured?.result ?? decideWithFallback(options.policy ?? pokerGuardPolicy, context)
   const action = legalise(envelope.decision, legal, actorSeat.stack, actorSeat.betStreet)
   if (action === null) return null
+  if (options.aivat !== undefined) {
+    const choices = envelope.fallbackReason === null ? captured?.choices : undefined
+    options.aivat({
+      heuristic: AIVAT_HEURISTIC,
+      observation,
+      control:
+        choices === undefined
+          ? null
+          : actionControl(observation, choices, action, (decision) =>
+              legalise(decision, legal, actorSeat.stack, actorSeat.betStreet),
+            ),
+      reason: choices === undefined ? (envelope.fallbackReason ?? 'strategy-unavailable') : null,
+    })
+  }
   emitTrace(options.trace, {
     roomId: options.roomId ?? 'local',
     handNumber: view.handNumber,
