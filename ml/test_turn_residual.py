@@ -1,0 +1,52 @@
+"""Meaningful independent D8 feature and mutation checks, bounded to two CPU threads."""
+import unittest
+import numpy as np
+import torch
+from turn_residual import CARDS, INPUTS, TurnResidual, residual_features, static_features
+
+
+def index(a, b):
+    return int(np.flatnonzero((CARDS == sorted((a, b))).all(axis=1))[0])
+
+
+class TurnResidualTests(unittest.TestCase):
+    def setUp(self):
+        # 2s 7s Kh Qc, As Js
+        self.board = np.array([0, 5, 24, 49])
+        self.ranks = np.where(np.isin(CARDS, self.board).any(axis=1), 0, 1).astype(np.uint16)
+        self.static = static_features(self.board, self.ranks)
+
+    def test_flush_draw_and_blocker_inclusion_exclusion(self):
+        h = index(12, 9)
+        self.assertEqual(self.static[h, 4], 1)
+        self.assertAlmostEqual(float(self.static[h, 15]), 9/46, places=7)
+        ranges = np.zeros((2, 1326))
+        ranges[0, h] = 1
+        ranges[1, index(12, 38)] = .6  # As Ad
+        ranges[1, index(9, 8)] = .4   # Js Ts
+        features = residual_features(self.static, ranges, np.zeros(256), np.where(self.ranks > 0, 64, -1), 10, 10)
+        np.testing.assert_allclose(features[0, h, 22:25], [.6, .4, 1.], atol=1e-7)
+        self.assertEqual(features.shape, (2, 1326, INPUTS))
+
+    def test_already_made_straight_flush_survives_off_suit_rivers(self):
+        board = np.array([12, 11, 10, 9])
+        ranks = np.where(np.isin(CARDS, board).any(axis=1), 0, 1).astype(np.uint16)
+        static = static_features(board, ranks)
+        self.assertEqual(static[index(8, 39), 1], 1)
+        self.assertEqual(static[index(8, 39), 2], 0)
+
+    def test_dropping_head_changes_values(self):
+        torch.manual_seed(3)
+        model = TurnResidual(True)
+        with torch.no_grad():
+            model.head[-1].bias.fill_(.125)
+            x = torch.zeros(1, 385)
+            local = torch.zeros(1, 2, 2, INPUTS)
+            ids = torch.zeros(1, 2, 2, dtype=torch.long)
+            full = model(x, local, ids)
+            base = model.bucket(x).reshape(1, 2, 128).gather(2, ids)
+        torch.testing.assert_close(full - base, torch.full_like(base, .125), atol=1e-7, rtol=0)
+
+
+if __name__ == '__main__':
+    unittest.main()
