@@ -4,7 +4,10 @@ import { type AivatControl, aivatChips } from './bot-aivat.js'
  * bet 1; the unknown opponent may fold or call. Enumerate all ordered deals,
  * BOTH hero actions and BOTH opponent replies with their true probabilities.
  * Deliberately imperfect, frozen heuristic; no target-game fitting. */
-export function enumerableAivatToy() {
+export function enumerableAivatToy(
+  value: (hero: number, action: 'check' | 'bet') => number = (hero, action) =>
+    action === 'check' ? (hero - 1) * 0.7 : (hero - 1) * 1.2 + 0.2,
+) {
   const deals: { hero: number; other: number }[] = []
   for (let hero = 0; hero < 3; hero++) {
     for (let other = 0; other < 3; other++) if (hero !== other) deals.push({ hero, other })
@@ -24,8 +27,8 @@ export function enumerableAivatToy() {
       kind: 'action',
       taken,
       choices: [
-        { action: 'check', probability: 1 - bet, value: (hero - 1) * 0.7 },
-        { action: 'bet', probability: bet, value: (hero - 1) * 1.2 + 0.2 },
+        { action: 'check', probability: 1 - bet, value: value(hero, 'check') },
+        { action: 'bet', probability: bet, value: value(hero, 'bet') },
       ],
     })
     for (const [probability, raw, action] of [

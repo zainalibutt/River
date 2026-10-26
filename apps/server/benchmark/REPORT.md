@@ -25,9 +25,13 @@ are diagnostics. These styles were held out for the historical comparison;
 future evaluations require fresh locked seeds and must acknowledge prior
 exposure to their behavior.
 
-AIVAT uses exact own-action probabilities and a frozen deterministic
-pot-share heuristic, with singleton history partitions. Exact turn/river
-chance controls are added only with both holdings available for every hand.
+AIVAT v1 uses exact own-action probabilities and a frozen deterministic
+pot-share heuristic, with singleton history partitions. AIVAT v2 uses the
+frozen flop, turn-start, and river value-network exports with solver ranges
+conditioned on the public path. Both versions use exact legalised action
+probabilities; the frozen spec records their recipes and hashes. Exact
+turn/river chance controls are added only with both holdings available for
+every hand.
 The implementation and conditional-expectation argument are in the companion
 README. Hidden-holding imaginary-observation aggregation is future work.
 Raw payoff is the primary strength endpoint; valued and AIVAT results are
@@ -133,15 +137,32 @@ clusters. SEs and 95% intervals below are in bb/100.
 | Raw | -25.4883 | 14.8452 | -54.5865 to +3.6100 |
 | All-in valued | -22.9484 | 12.7778 | -47.9943 to +2.0975 |
 | Exact late-board chance controls only | -27.3615 | 13.6483 | -54.1137 to -0.6094 |
-| Action AIVAT | unavailable | unavailable | unavailable |
+| Action AIVAT v1 | unavailable | unavailable | unavailable |
+| Action AIVAT v2 | unavailable | unavailable | unavailable |
 
 The chance-only SE improvement is **1.0877x versus raw**, and **0.9362x versus
-all-in valued**, meaning it is worse than the latter. The requested **2x SE
-target is not achieved**. The chance-only result is not promoted to the
-primary endpoint based on its interval. Historical exact strategy records,
-model hashes and action RNG seeds are absent; today's policy cannot safely
-be substituted. Original collection failures remain unknown; zero failures
-here means zero failures of replay, not proof of failure-free collection.
+all-in valued**, so it is less precise than the latter. The requested **2x SE
+target is not achieved**. This run replays the four fixed v9g logs (16,000
+hands, 16,000 independent hand clusters); payout validation passed for every
+hand. The recorded rows contain no historical action distributions or v2
+tracked ranges. Therefore the requested v1 and v2 action-AIVAT means and SEs
+are unavailable, and chance-only is reported separately rather than
+misidentified as either version. Re-querying today's policy would not recover
+the historical probabilities. Original collection failures remain unknown;
+zero failures here means zero failures of replay, not proof of failure-free
+collection. The run artifact and input hashes are in
+`results/slumbot-v9g-v2.json` and its provenance sidecar.
+
+The v2 implementation is frozen as `d8-frozen-v2` in `frozen-v2.json`; v1
+remains available as `frozen-v1.json` and the default heuristic. The v2 spec
+pins `flop2-ck50`, `turnstart-c1-53k-e50`, and `night1-buckets` exports by
+JSON and binary SHA-256, as well as the recipe and source files. The
+enumerable toy remains unbiased (18 paths; expectation difference
+1.25e-16 chips), and a bounded inference smoke passed on all three streets
+using `<models>` (`results/aivat-v2-smoke.json`). That smoke
+checks wiring and centering, not precision or strength. A 16k v9go sample was
+not run because the PC2 share inbox for `v9go-1`
+returned access denied in this environment.
 
 Twelve historical v9b-versus-v8z duplicate pieces contain 4,800 pairs across
 48 sessions. Their pooled valued result is +2.7168 (-15.2601 to +20.6938), SE

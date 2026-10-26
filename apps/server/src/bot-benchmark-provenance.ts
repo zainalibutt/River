@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { AIVAT_HEURISTIC } from './bot-aivat.js'
+import { AIVAT_HEURISTIC, AIVAT_V2_HEURISTIC } from './bot-aivat.js'
 
 const root = fileURLToPath(new URL('../../..', import.meta.url))
-const specification = fileURLToPath(new URL('../benchmark/frozen-v1.json', import.meta.url))
+const specification = fileURLToPath(new URL('../benchmark/frozen-v2.json', import.meta.url))
 const digest = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex')
 
 /** Read refs without invoking git or changing its index, locks, refs or config. */
@@ -102,7 +102,7 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
   )
   return {
     schema: 'river-benchmark-provenance-v1',
-    benchmark: 'd8-frozen-v1',
+    benchmark: 'd8-frozen-v2',
     specificationSha256: digest(readFileSync(specification)),
     runner,
     startedAt: new Date().toISOString(),
@@ -115,7 +115,7 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
     models,
     preflop: { version: pack, files: preflop },
     environment: { node: process.version, platform: process.platform, arch: process.arch, ...env },
-    heuristic: AIVAT_HEURISTIC,
+    heuristic: process.env.RIVER_AIVAT_HEURISTIC === 'v2' ? AIVAT_V2_HEURISTIC : AIVAT_HEURISTIC,
     ...workload,
   }
 }

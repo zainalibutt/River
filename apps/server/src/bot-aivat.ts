@@ -9,9 +9,28 @@ import {
   seedFromString,
   type TurnAction,
 } from '@river/engine'
+import type { RangeCombo } from './bot-river-solver.js'
 
 /** Frozen before evaluation. No fitted parameters or evaluation outcomes. */
 export const AIVAT_HEURISTIC = 'pot-share-uniform-32-v1'
+export const AIVAT_V2_HEURISTIC = 'tracked-range-value-networks-v2'
+export type AivatHeuristicId = typeof AIVAT_HEURISTIC | typeof AIVAT_V2_HEURISTIC
+
+/** Pre-action reaches, out of position first. Never inferred from future cards. */
+export interface AivatRangeState {
+  readonly actorPlayer: 0 | 1
+  readonly ranges: readonly [readonly RangeCombo[], readonly RangeCombo[]]
+}
+
+export interface AivatValueHeuristic {
+  readonly id: AivatHeuristicId
+  readonly specificationSha256: string
+  readonly value: (
+    observation: BotObservationV1,
+    action: TurnAction,
+    state: AivatRangeState | undefined,
+  ) => number
+}
 
 export interface AivatChoice {
   readonly action: string
@@ -26,7 +45,9 @@ export interface AivatControl {
 }
 
 export interface AivatDecision {
-  readonly heuristic: typeof AIVAT_HEURISTIC
+  readonly heuristic: AivatHeuristicId
+  readonly specificationSha256?: string
+  readonly rangeState?: AivatRangeState
   readonly observation: BotObservationV1
   readonly control: AivatControl | null
   readonly reason: string | null
@@ -69,19 +90,30 @@ export interface StrategyChoice {
   readonly decision: BotDecision
   readonly probability: number
 }
-const captures = new WeakMap<() => number, (choices: readonly StrategyChoice[]) => void>()
+const captures = new WeakMap<
+  () => number,
+  {
+    includeState: boolean
+    sink: (choices: readonly StrategyChoice[], state?: AivatRangeState) => void
+  }
+>()
 
 /** Scope uses the actual policy RNG identity; hypothetical range queries cannot
  * overwrite this decision's record. Never invokes the policy an extra time. */
-export function withStrategyCapture<T>(rng: () => number, run: () => T) {
+export function withStrategyCapture<T>(rng: () => number, run: () => T, includeState = false) {
   let choices: readonly StrategyChoice[] | undefined
+  let state: AivatRangeState | undefined
   const previous = captures.get(rng)
-  captures.set(rng, (row) => {
-    choices = row
+  captures.set(rng, {
+    includeState,
+    sink: (row, ranges) => {
+      choices = row
+      state = ranges
+    },
   })
   try {
     const result = run()
-    return { result, choices }
+    return { result, choices, state }
   } finally {
     if (previous) captures.set(rng, previous)
     else captures.delete(rng)
@@ -95,6 +127,7 @@ export function captureCumulativeStrategy(
   weights: ArrayLike<number>,
   decision: (index: number) => BotDecision,
   total = 1,
+  state?: () => AivatRangeState,
 ): void {
   const sink = captures.get(rng)
   if (!sink) return
@@ -110,7 +143,7 @@ export function captureCumulativeStrategy(
     choices.push({ decision: decision(index), probability: boundary - previous })
     previous = boundary
   }
-  sink(choices)
+  sink.sink(choices, sink.includeState ? state?.() : undefined)
 }
 
 export function actionKey(action: TurnAction): string {
@@ -146,8 +179,9 @@ export function actionControl(
   choices: readonly StrategyChoice[],
   taken: TurnAction,
   legalise: (decision: BotDecision) => TurnAction | null,
+  valueForAction?: (action: TurnAction) => number,
 ): AivatControl {
-  const share = frozenPotShare(observation.actor.hole, observation.board)
+  const share = valueForAction ? 0 : frozenPotShare(observation.actor.hole, observation.board)
   const actor = observation.seats.find((seat) => seat.seat === observation.actor.seat)
   if (!actor) throw new Error('AIVAT actor missing')
   const keyFor = (action: TurnAction) => {
@@ -169,8 +203,11 @@ export function actionControl(
           : action.kind === 'raiseTo'
             ? action.to - actor.betStreet
             : 0
-    const value =
-      action.kind === 'fold' ? -actor.betHand : share * (pot + cost) - actor.betHand - cost
+    const value = valueForAction
+      ? valueForAction(action)
+      : action.kind === 'fold'
+        ? -actor.betHand
+        : share * (pot + cost) - actor.betHand - cost
     merged.set(key, {
       action: key,
       value,

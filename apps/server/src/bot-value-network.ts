@@ -355,7 +355,9 @@ export function bucketInputs(
 }
 
 /** A spot's ranges as weights by `comboIndex52`. */
-export function rangeWeights(spot: RiverSpot): readonly [Float64Array, Float64Array] {
+export function rangeWeights(
+  spot: Pick<RiverSpot, 'ranges'>,
+): readonly [Float64Array, Float64Array] {
   const weights = [new Float64Array(COMBOS), new Float64Array(COMBOS)] as const
   for (const player of [0, 1] as const) {
     const row = weights[player]

@@ -17,6 +17,7 @@ import {
   type RateEstimate,
 } from '@river/engine'
 import { captureCumulativeStrategy } from './bot-aivat.js'
+import { aivatSolverState } from './bot-aivat-state.js'
 import { type LbrQueryPolicy, policyMoveShares } from './bot-lbr-query.js'
 import {
   decisionClass,
@@ -383,8 +384,12 @@ function solverDecision(
     comboIndex(hands, hole as [Card, Card]) ?? nearestStrength(hands, hole, observation.board)
   const width = node.actions.length
   const row = table.subarray(index * width, (index + 1) * width)
-  captureCumulativeStrategy(context.rng, row, (index) =>
-    decisionFor(node, node.actions[index] as string, solved.spot, observation),
+  captureCumulativeStrategy(
+    context.rng,
+    row,
+    (index) => decisionFor(node, node.actions[index] as string, solved.spot, observation),
+    1,
+    () => aivatSolverState(solved.spot, solved.tree, solved.strategy, node, self),
   )
   const roll = context.rng()
   let pick = row.length - 1

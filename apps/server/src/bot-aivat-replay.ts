@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { DEFAULT_STAKE, parseCard } from '@river/engine'
-import { type AivatDecision, aivatChips } from './bot-aivat.js'
+import { AIVAT_HEURISTIC, AIVAT_V2_HEURISTIC, type AivatDecision, aivatChips } from './bot-aivat.js'
 import { lateBoardCorrection } from './bot-aivat-chance.js'
 import { enumerableAivatToy } from './bot-aivat-toy.js'
 import { allInEquityChips } from './bot-allin-equity.js'
@@ -91,11 +91,26 @@ export function replaySlumbotHand(hand: AivatLoggedHand, chanceAvailable: boolea
   }
   const controls =
     hand.aivatDecisions?.flatMap((decision) => (decision.control ? [decision.control] : [])) ?? []
+  const version = hand.aivatDecisions?.[0]?.heuristic
+  if (hand.aivatDecisions?.some((decision) => decision.heuristic !== version))
+    throw new Error('mixed AIVAT heuristic versions in hand')
+  if (version === AIVAT_V2_HEURISTIC) {
+    const specHash = createHash('sha256')
+      .update(readFileSync(new URL('../benchmark/frozen-v2.json', import.meta.url)))
+      .digest('hex')
+    for (const decision of hand.aivatDecisions ?? []) {
+      if (decision.specificationSha256 !== specHash)
+        throw new Error('AIVAT v2 recorded specification hash mismatch')
+      if (decision.control && decision.observation.street !== 'preflop' && !decision.rangeState)
+        throw new Error('AIVAT v2 recorded tracked ranges missing')
+    }
+  }
   return {
     raw: hand.winnings,
     valued,
     chanceOnly: hand.winnings + chance,
     aivat: aivatChips(hand.winnings, controls) + chance,
+    heuristic: version ?? null,
     knownActions: controls.length,
     missingActions:
       hand.aivatDecisions?.filter((decision) => decision.control === null).length ?? null,
@@ -173,6 +188,7 @@ if (process.argv[1]?.endsWith('bot-aivat-replay.ts')) {
     }[] = []
     let known = 0
     let missing = 0
+    const versions = new Set<string>()
     for (let run = 0; run < runs.length; run++) {
       const seen = new Set<number>()
       for (const hand of runs[run] ?? []) {
@@ -180,6 +196,7 @@ if (process.argv[1]?.endsWith('bot-aivat-replay.ts')) {
         if (seen.has(hand.hand)) throw new Error('duplicate hand in a run')
         seen.add(hand.hand)
         const replay = replaySlumbotHand(hand, chanceAvailable)
+        if (replay.heuristic) versions.add(replay.heuristic)
         known += replay.knownActions
         missing += replay.missingActions ?? 0
         rows.push({ session: hasReads ? run : rows.length, ...replay })
@@ -195,7 +212,10 @@ if (process.argv[1]?.endsWith('bot-aivat-replay.ts')) {
     const raw = summary('raw')
     const valued = summary('valued')
     const chanceOnly = summary('chanceOnly')
-    const aivat = recorded ? summary('aivat') : null
+    if (versions.size > 1) throw new Error('mixed AIVAT heuristic versions across runs')
+    const aivat = recorded && versions.size === 1 ? summary('aivat') : null
+    const aivatV1 = versions.has(AIVAT_HEURISTIC) ? aivat : null
+    const aivatV2 = versions.has(AIVAT_V2_HEURISTIC) ? aivat : null
     result = {
       kind: 'slumbot',
       inputs: identity,
@@ -205,6 +225,26 @@ if (process.argv[1]?.endsWith('bot-aivat-replay.ts')) {
       valued,
       chanceOnly,
       aivat,
+      aivatV1,
+      aivatV2,
+      supportedControlsOnly: {
+        v1: aivatV1 ?? chanceOnly,
+        v2: aivatV2 ?? chanceOnly,
+        qualification:
+          'Missing action records contribute zero action correction; this is not a network precision measurement',
+      },
+      heuristic: [...versions][0] ?? null,
+      networkEvaluations: versions.has(AIVAT_V2_HEURISTIC)
+        ? hands.reduce(
+            (sum, hand) =>
+              sum +
+              (hand.aivatDecisions?.filter(
+                (decision) =>
+                  decision.control !== null && decision.observation.street !== 'preflop',
+              ).length ?? 0),
+            0,
+          )
+        : 0,
       knownActions: known,
       missingActions: recorded ? missing : null,
       chanceAvailable,
