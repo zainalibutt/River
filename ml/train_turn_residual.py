@@ -75,10 +75,14 @@ def feature_parity(out):
     return worst
 
 
-def exact_evaluation(model, out, split, device, reference=None):
+def exact_evaluation(model, out, split, device, reference=None, test_sets=None):
     """Report every legal holding, range-weighted; never sampled-cache test MAE."""
     snapshot = json.loads((out / 'snapshot.json').read_text())
-    selected = set(split['test'])
+    groups = test_sets or {'test': split['test']}
+    membership = {index: name for name, indices in groups.items() for index in indices}
+    if len(membership) != sum(len(indices) for indices in groups.values()):
+        raise ValueError('overlapping test cohorts')
+    selected = set(membership)
     metrics, baseline = {}, {}
     offset = 0
     model.eval()
@@ -96,6 +100,7 @@ def exact_evaluation(model, out, split, device, reference=None):
             records = np.frombuffer(raw, dtype=RECORD)[keep].copy()
             base = bucket_features(records, 128)
             for i, row in enumerate(records):
+                cohort = membership[offset - n + keep[i]]
                 static = static_features(row['board'][:4], row['strength_rank'])
                 ids = base['bucket'][i]
                 features = residual_features(static, row['ranges'], np.zeros(256), ids, float(row['stack']), float(row['pot']))
@@ -119,12 +124,16 @@ def exact_evaluation(model, out, split, device, reference=None):
                 if float(row['stack'] / row['pot']) > 10:
                     masks['over10pots'] = ids >= 0
                 for name, mask in masks.items():
-                    total, mass = metrics.get(name, (0., 0.))
-                    metrics[name] = (total + float((error * weights * mask).sum()), mass + float((weights * mask).sum()))
+                    key = (cohort, name)
+                    total, mass = metrics.get(key, (0., 0.))
+                    metrics[key] = (total + float((error * weights * mask).sum()), mass + float((weights * mask).sum()))
                     if base_error is not None:
-                        total, mass = baseline.get(name, (0., 0.))
-                        baseline[name] = (total + float((base_error * weights * mask).sum()), mass + float((weights * mask).sum()))
-    score = lambda data: {name: 100 * total / mass for name, (total, mass) in data.items() if mass > 0}
+                        total, mass = baseline.get(key, (0., 0.))
+                        baseline[key] = (total + float((base_error * weights * mask).sum()), mass + float((weights * mask).sum()))
+    def score(data):
+        result = {cohort: {name: 100 * total / mass for (group, name), (total, mass) in data.items()
+                           if group == cohort and mass > 0} for cohort in groups}
+        return result if test_sets is not None else result['test']
     return score(metrics), score(baseline)
 
 
