@@ -124,6 +124,11 @@ class SimdNetwork {
         last ? this.mask.byteOffset : 0,
       )
       const target = buffers[i] as Float32Array
+      if (!last || outputRows === undefined) {
+        target.set(out.subarray(0, batch * layer.rows))
+        current = out
+        continue
+      }
       for (let b = 0; b < batch; b += 1) {
         for (let r = 0; r < layer.rows; r += 1) {
           if (last && this.mask[r] === 0) continue

@@ -5,6 +5,8 @@ import {
   loadTurnResidualNetwork,
   TURN_RESIDUAL_INPUTS,
   turnCardFeatures,
+  turnResidualInputs,
+  turnResidualPools,
   turnResidualValues,
 } from './bot-turn-residual.js'
 import {
@@ -61,8 +63,16 @@ const model = trained
 const cards = turnCardFeatures(c.board, Uint16Array.from(c.ranks))
 const input = bucketInputs(cards.layout, c.ranges, c.stack, c.pot)
 const buffers = model.bucket.layers.map((l) => new Float32Array(l.rows))
+const base = forwardBatch(model.bucket, input, 1, buffers)
+const pooled = turnResidualPools(cards, c.ranges)
+const local = turnResidualInputs(cards, c.ranges, base, c.stack, c.pot)
+const headBuffers = model.residual.layers.map((l) => new Float32Array(2652 * l.rows))
+const compact = turnResidualInputs(cards, c.ranges, base, c.stack, c.pot, undefined, pooled, true)
+const compactBuffers = model.residual.layers.map(
+  (l) => new Float32Array(2 * cards.layout.live * l.rows),
+)
 function measure(fn: () => unknown) {
-  for (let i = 0; i < 10; i++) fn()
+  for (let i = 0; i < 100; i++) fn()
   const times = []
   for (let i = 0; i < 50; i++) {
     const t = performance.now()
@@ -79,18 +89,43 @@ function measure(fn: () => unknown) {
 const bucket = measure(() => forwardBatch(model.bucket, input, 1, buffers))
 const residual = measure(() => turnResidualValues(model, cards, c.ranges, c.stack, c.pot))
 const prepareCards = measure(() => turnCardFeatures(c.board, Uint16Array.from(c.ranks)))
+const pools = measure(() => turnResidualPools(cards, c.ranges))
+const features = measure(() =>
+  turnResidualInputs(cards, c.ranges, base, c.stack, c.pot, local, pooled),
+)
+const headMatmuls = measure(() => forwardBatch(model.residual, local, 2652, headBuffers))
+const compactHeadMatmuls = measure(() =>
+  forwardBatch(model.residual, compact, 2 * cards.layout.live, compactBuffers),
+)
+const fullResidual = measure(() => {
+  const b = forwardBatch(
+    model.bucket,
+    bucketInputs(cards.layout, c.ranges, c.stack, c.pot),
+    1,
+    buffers,
+  )
+  turnResidualInputs(cards, c.ranges, b, c.stack, c.pot, local)
+  forwardBatch(model.residual, local, 2652, headBuffers)
+})
+const bucketFeatures = measure(() => bucketInputs(cards.layout, c.ranges, c.stack, c.pot))
 const report = {
   trainedResidual: trained,
   backend: valueNetworkBackend(model.residual),
   bucketBackend: valueNetworkBackend(model.bucket),
   threads: valueNetworkThreads(model.residual),
   headShape: [model.residual.layers[0]?.columns, ...model.residual.layers.map((l) => l.rows)],
-  warmups: 10,
+  warmups: 100,
   iterations: 50,
-  note: 'Microseconds per spot on the first fixture. One CPU inference thread. Bucket: forward only. Residual: all 2652 holdings, range features, pools and both forwards with card features cached. Card preparation excludes existing expected-strength rank computation. CPU timings depend on host hardware.',
+  note: 'Microseconds per spot on the first real fixture. At most two CPU cores, one inference participant. Residual: both players, all legal holdings, pools and both forwards with card features cached. fullResidual: uncompressed 2652-row reference, current kernel. Card preparation excludes existing expected-strength rank computation. CPU timings depend on host hardware.',
   bucket,
   residual,
   prepareCards,
+  pools,
+  features,
+  headMatmuls,
+  compactHeadMatmuls,
+  fullResidual,
+  bucketFeatures,
 }
 const json = `${JSON.stringify(report, null, 2)}\n`
 if (reportPath) {

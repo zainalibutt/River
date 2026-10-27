@@ -224,17 +224,9 @@ export function normaliseTurnRanges(
   }) as unknown as readonly [Float64Array, Float64Array]
 }
 
-export function turnResidualInputs(
-  cards: TurnCardFeatures,
-  ranges: TurnRanges,
-  bucketValues: ArrayLike<number>,
-  stack: number,
-  pot: number,
-  buffer?: Float32Array,
-): Float32Array {
+export function turnResidualPools(cards: TurnCardFeatures, ranges: TurnRanges) {
   const weights = normaliseTurnRanges(cards, ranges)
   const pool = [new Float64Array(TURN_STATIC), new Float64Array(TURN_STATIC)] as const
-  // Per card: all mass, top-decile strength mass, drawing mass.
   const mass = [new Float64Array(156), new Float64Array(156)] as const
   for (const p of [0, 1] as const)
     for (let h = 0; h < COMBOS; h++) {
@@ -251,11 +243,28 @@ export function turnResidualInputs(
         mass[p][104 + k] = (mass[p][104 + k] as number) + w * draw
       }
     }
-  const out = buffer ?? new Float32Array(2 * COMBOS * TURN_RESIDUAL_INPUTS)
-  if (out.length !== 2 * COMBOS * TURN_RESIDUAL_INPUTS)
+  return { weights, pool, mass }
+}
+
+export function turnResidualInputs(
+  cards: TurnCardFeatures,
+  ranges: TurnRanges,
+  bucketValues: ArrayLike<number>,
+  stack: number,
+  pot: number,
+  buffer?: Float32Array,
+  pooled = turnResidualPools(cards, ranges),
+  compact = false,
+): Float32Array {
+  const { weights, pool, mass } = pooled
+  const count = compact ? cards.layout.live : COMBOS
+  const out = buffer ?? new Float32Array(2 * count * TURN_RESIDUAL_INPUTS)
+  if (out.length !== 2 * count * TURN_RESIDUAL_INPUTS)
     throw new Error('invalid residual input buffer')
-  out.fill(0)
+  if (!compact) out.fill(0)
   const logSPR = Math.log(Math.min(50, Math.max(0.05, stack / pot)))
+  const pool32 = pool.map((p) => Float32Array.from(p))
+  let row = 0
   for (const p of [0, 1] as const)
     for (let h = 0; h < COMBOS; h++) {
       const b = cards.layout.bucketOf[h] as number
@@ -263,7 +272,7 @@ export function turnResidualInputs(
       const opp = p === 0 ? 1 : 0
       const [a, c] = HOLDING_CARDS[h] as readonly [number, number]
       const f = h * TURN_STATIC
-      let at = (p * COMBOS + h) * TURN_RESIDUAL_INPUTS
+      let at = (compact ? row++ : p * COMBOS + h) * TURN_RESIDUAL_INPUTS
       out[at++] = bucketValues[p * 128 + b] as number
       out[at++] = p
       out[at++] = logSPR
@@ -282,8 +291,8 @@ export function turnResidualInputs(
         (mass[opp][104 + a] as number) +
         (mass[opp][104 + c] as number) -
         own * Math.max(cards.holding[f + 4] as number, cards.holding[f + 5] as number)
-      out.set(pool[p], at)
-      out.set(pool[opp], at + TURN_STATIC)
+      out.set(pool32[p] as Float32Array, at)
+      out.set(pool32[opp] as Float32Array, at + TURN_STATIC)
     }
   return out
 }
@@ -353,18 +362,19 @@ export function turnResidualValues(
   let delta: Float32Array | undefined
   if (!dropResidual) {
     let buffer = featureScratch.get(network)
-    if (buffer === undefined) {
-      buffer = new Float32Array(2 * COMBOS * TURN_RESIDUAL_INPUTS)
+    if (buffer === undefined || buffer.length !== 2 * cards.layout.live * TURN_RESIDUAL_INPUTS) {
+      buffer = new Float32Array(2 * cards.layout.live * TURN_RESIDUAL_INPUTS)
       featureScratch.set(network, buffer)
     }
-    const input = turnResidualInputs(cards, ranges, bucket, stack, pot, buffer)
-    delta = batch(network.residual, input, 2 * COMBOS)
+    const input = turnResidualInputs(cards, ranges, bucket, stack, pot, buffer, undefined, true)
+    delta = batch(network.residual, input, 2 * cards.layout.live)
   }
   const out = [new Float32Array(COMBOS), new Float32Array(COMBOS)] as const
+  let row = 0
   for (const p of [0, 1] as const)
     for (let h = 0; h < COMBOS; h++) {
       const b = cards.layout.bucketOf[h] as number
-      if (b >= 0) out[p][h] = (bucket[p * 128 + b] as number) + (delta?.[p * COMBOS + h] ?? 0)
+      if (b >= 0) out[p][h] = (bucket[p * 128 + b] as number) + (delta?.[row++] ?? 0)
     }
   return out
 }

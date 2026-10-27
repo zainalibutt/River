@@ -101,11 +101,34 @@ describe('D8 turn-start residual', () => {
         expect(valueNetworkBackend(model.residual)).toBe(backend)
         // Scalar reference traverses original tensors, independently of loader/batch/WASM.
         for (const p of [0, 1] as const)
-          for (const h of [holding('As Js'), holding('4h 5h'), holding('Ac Ad')]) {
+          for (let h = 0; h < COMBOS; h++) {
+            if (!ranks[h]) {
+              expect(actual[p][h]).toBe(0)
+              continue
+            }
             const at = (p * COMBOS + h) * TURN_RESIDUAL_INPUTS
             const expected =
               0.25 + (forward(head, local.slice(at, at + TURN_RESIDUAL_INPUTS))[0] as number)
             expect(Math.abs((actual[p][h] as number) - expected)).toBeLessThan(1e-5)
+          }
+        const packed = turnResidualInputs(
+          cards,
+          ranges,
+          new Float32Array(256).fill(0.25),
+          20,
+          10,
+          undefined,
+          undefined,
+          true,
+        )
+        let row = 0
+        for (const p of [0, 1] as const)
+          for (let h = 0; h < COMBOS; h++) {
+            if (!ranks[h]) continue
+            const at = (p * COMBOS + h) * TURN_RESIDUAL_INPUTS
+            expect(packed.slice(row * TURN_RESIDUAL_INPUTS, ++row * TURN_RESIDUAL_INPUTS)).toEqual(
+              local.slice(at, at + TURN_RESIDUAL_INPUTS),
+            )
           }
         writeFileSync(`${stem}.json`, JSON.stringify({ ...meta, headShape: [65, 16, 1] }))
         expect(() => loadTurnResidualNetwork(stem)).toThrow('head shape')
