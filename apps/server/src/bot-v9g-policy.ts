@@ -1,3 +1,4 @@
+import type { TurnStartLeafOptions } from './bot-flop-turn-leaves.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { tablePreflopPolicy } from './bot-preflop-tables.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
@@ -22,6 +23,8 @@ export interface V9gOptions {
   readonly safeTurnExploit?: boolean
   readonly safeTurnExploitConfig?: Partial<SafeTurnExploitConfig>
   readonly safeExploitConfig?: Partial<SafeExploitConfig>
+  /** Default absent: production batching and weights are unchanged. */
+  readonly turnStartLeaf?: TurnStartLeafOptions
 }
 
 /** Only immutable inference weights are shared; each construction owns its solves. */
@@ -44,6 +47,7 @@ export function v9gPolicy(
     safeTurnExploit = false,
     safeTurnExploitConfig,
     safeExploitConfig,
+    turnStartLeaf,
   }: V9gOptions = {},
   sharedNetworks?: V9gNetworks,
 ) {
@@ -62,6 +66,7 @@ export function v9gPolicy(
     riverNetwork: networks.river,
     scheme: 'dcfr',
     iterations: 40,
+    ...(turnStartLeaf === undefined ? {} : { turnStartLeaf }),
     boundedReads,
     ...(safeExploitV2 ? { safeExploitV2, safeExploitConfig } : {}),
     ...(safeTurnExploit ? { safeTurnExploit, safeTurnExploitConfig } : {}),

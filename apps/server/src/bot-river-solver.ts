@@ -41,6 +41,8 @@ export interface CfrOptions {
 
 export interface CfrVisit {
   readonly history: string
+  /** One-based iteration, reset for each solve; absent when reading final values. */
+  readonly iteration?: number
   /** New sample coefficient after this iteration's discount. */
   readonly weight: number
   /** Multiply previous sums by this before adding the new sample. */
@@ -214,7 +216,7 @@ type Compiled =
   | {
       readonly kind: 'terminal'
       readonly node: Exclude<RiverNode, { kind: 'action' }>
-      readonly visit: { history: string; weight: number; discount: number }
+      readonly visit: { history: string; weight: number; discount: number; iteration?: number }
       readonly out: readonly [Float64Array, Float64Array]
     }
   | {
@@ -344,11 +346,13 @@ export function solveRiver(
   let positiveDiscount = 1
   let negativeDiscount = 1
   let averageWeight = 0
+  let currentIteration = 0
   // End-of-iteration discount: S_t = d_t (S_(t-1) + x_t).
   // A sample s has coefficient product_(u=s..T) (u/(u+1))^gamma
   // = (s/(T+1))^gamma. Use this recurrence for strategy, CFVs, reach,
   // and gadget follow sums, so their normalized weights are identical.
   const beginIteration = (t: number) => {
+    currentIteration = t
     discount = dcfr ? (t / (t + 1)) ** gamma : 1
     const positive = t ** alpha
     const negative = t ** beta
@@ -385,6 +389,7 @@ export function solveRiver(
         reach = combined
       }
       if (showdown !== undefined && node.node.kind === 'showdown') {
+        node.visit.iteration = currentIteration
         node.visit.weight = weight
         node.visit.discount = discount
         showdown(node.node, traverser, hands, self, reach, out, node.visit)

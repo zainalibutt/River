@@ -98,6 +98,13 @@ describe('D8 turn-start residual', () => {
         const ranges = [Float32Array.from(ranks), Float32Array.from(ranks)] as const
         const local = turnResidualInputs(cards, ranges, new Float32Array(256).fill(0.25), 20, 10)
         const actual = turnResidualValues(model, cards, ranges, 20, 10)
+        for (const player of [0, 1] as const) {
+          const selected = turnResidualValues(model, cards, ranges, 20, 10, false, player)
+          for (let h = 0; h < COMBOS; h++) {
+            expect(selected[player][h]).toBeCloseTo(actual[player][h] as number, 6)
+            expect(selected[player === 0 ? 1 : 0][h]).toBe(0)
+          }
+        }
         expect(valueNetworkBackend(model.residual)).toBe(backend)
         // Scalar reference traverses original tensors, independently of loader/batch/WASM.
         for (const p of [0, 1] as const)

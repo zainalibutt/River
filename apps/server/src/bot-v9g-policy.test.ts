@@ -13,6 +13,23 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
+it('forwards only the explicit turn-start leaf opt-in', () => {
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+  const turnStartLeaf = { network, earlyNetwork: network, lastIterations: 5 }
+  v9gPolicy(
+    { offTree: 'resolve', turnStartLeaf },
+    {
+      turn: network,
+      flop: network,
+      river: network,
+      turnStart: network,
+    },
+  )
+  expect(construct.mock.calls[0]?.[2]?.turnStartLeaf).toBe(turnStartLeaf)
+})
+
 it('shares injected inference weights while giving each query seat independent solve state', () => {
   const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
   vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')

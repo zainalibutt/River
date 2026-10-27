@@ -11,7 +11,7 @@ import {
 import { captureCumulativeStrategy } from './bot-aivat.js'
 import { aivatSolverState } from './bot-aivat-state.js'
 import { solveFlop } from './bot-flop-solver.js'
-import { perTurnShowdown } from './bot-flop-turn-leaves.js'
+import { perTurnShowdown, type TurnStartLeafOptions } from './bot-flop-turn-leaves.js'
 import { type LbrQueryPolicy, memoLbrSolve, policyMoveShares } from './bot-lbr-query.js'
 import { decisionClass, type MoveClass } from './bot-lbr-range.js'
 import {
@@ -99,6 +99,7 @@ export interface TurnPolicyTuning extends CfrOptions {
   readonly carry?: 'per-river' | 'per-turn' | 'both'
   readonly riverNetwork?: RiverValueNetwork
   readonly turnStartNetwork?: RiverValueNetwork
+  readonly turnStartLeaf?: TurnStartLeafOptions
   /** Bet and raise sizes as shares of the pot, beside all-in. */
   readonly betSizes: readonly number[]
   readonly maxRaises: number
@@ -914,7 +915,18 @@ function solveTurnSpot(
       preparedLeaves === undefined
         ? perRiver
           ? perRiverShowdown(target, leafNetwork, record)
-          : perTurnShowdown(target, leafNetwork, record)
+          : perTurnShowdown(
+              target,
+              leafNetwork,
+              record,
+              undefined,
+              tuning.turnStartLeaf === undefined
+                ? undefined
+                : {
+                    ...tuning.turnStartLeaf,
+                    iterations: tuning.iterations,
+                  },
+            )
         : preparedLeaves.withRecord(record)
     preparedLeaves = showdown
     // Opponent models contain arbitrary strategy closures, which cannot form
@@ -924,7 +936,7 @@ function solveTurnSpot(
         ? memoLbrSolve
         : <T>(_owner: object, _input: unknown, compute: (memoized: boolean) => T) => compute(false)
     const saved = memo(
-      leafNetwork,
+      perTurn ? (tuning.turnStartLeaf ?? leafNetwork) : leafNetwork,
       [
         street.street,
         target,

@@ -255,17 +255,20 @@ export function turnResidualInputs(
   buffer?: Float32Array,
   pooled = turnResidualPools(cards, ranges),
   compact = false,
+  player?: 0 | 1,
 ): Float32Array {
   const { weights, pool, mass } = pooled
   const count = compact ? cards.layout.live : COMBOS
-  const out = buffer ?? new Float32Array(2 * count * TURN_RESIDUAL_INPUTS)
-  if (out.length !== 2 * count * TURN_RESIDUAL_INPUTS)
+  if (player !== undefined && !compact) throw new Error('selected player needs compact inputs')
+  const players = player === undefined ? 2 : 1
+  const out = buffer ?? new Float32Array(players * count * TURN_RESIDUAL_INPUTS)
+  if (out.length !== players * count * TURN_RESIDUAL_INPUTS)
     throw new Error('invalid residual input buffer')
   if (!compact) out.fill(0)
   const logSPR = Math.log(Math.min(50, Math.max(0.05, stack / pot)))
   const pool32 = pool.map((p) => Float32Array.from(p))
   let row = 0
-  for (const p of [0, 1] as const)
+  for (const p of player === undefined ? ([0, 1] as const) : [player])
     for (let h = 0; h < COMBOS; h++) {
       const b = cards.layout.bucketOf[h] as number
       if (b < 0) continue
@@ -357,21 +360,34 @@ export function turnResidualValues(
   stack: number,
   pot: number,
   dropResidual = false,
+  /** Exact output pruning: unrequested player is zero; pools still use both ranges. */
+  player?: 0 | 1,
 ): readonly [Float32Array, Float32Array] {
   const bucket = batch(network.bucket, bucketInputs(cards.layout, ranges, stack, pot), 1)
   let delta: Float32Array | undefined
   if (!dropResidual) {
+    const rows = (player === undefined ? 2 : 1) * cards.layout.live
     let buffer = featureScratch.get(network)
-    if (buffer === undefined || buffer.length !== 2 * cards.layout.live * TURN_RESIDUAL_INPUTS) {
-      buffer = new Float32Array(2 * cards.layout.live * TURN_RESIDUAL_INPUTS)
+    if (buffer === undefined || buffer.length !== rows * TURN_RESIDUAL_INPUTS) {
+      buffer = new Float32Array(rows * TURN_RESIDUAL_INPUTS)
       featureScratch.set(network, buffer)
     }
-    const input = turnResidualInputs(cards, ranges, bucket, stack, pot, buffer, undefined, true)
-    delta = batch(network.residual, input, 2 * cards.layout.live)
+    const input = turnResidualInputs(
+      cards,
+      ranges,
+      bucket,
+      stack,
+      pot,
+      buffer,
+      undefined,
+      true,
+      player,
+    )
+    delta = batch(network.residual, input, rows)
   }
   const out = [new Float32Array(COMBOS), new Float32Array(COMBOS)] as const
   let row = 0
-  for (const p of [0, 1] as const)
+  for (const p of player === undefined ? ([0, 1] as const) : [player])
     for (let h = 0; h < COMBOS; h++) {
       const b = cards.layout.bucketOf[h] as number
       if (b >= 0) out[p][h] = (bucket[p * 128 + b] as number) + (delta?.[row++] ?? 0)
@@ -390,7 +406,7 @@ export function permuteHolding(h: number, suits: readonly number[]): number {
 /** Opt-in adapter accepted directly by perTurnShowdown; no production default changes. */
 export function turnResidualLeaf(network: TurnResidualNetwork): RiverLeafEvaluator {
   const prepared = new Map<string, TurnCardFeatures>()
-  return (spot, ranks) => {
+  return (spot, ranks, player) => {
     const board = spot.board.map(cardKey)
     const key = board.join(',')
     let cards = prepared.get(key)
@@ -399,6 +415,14 @@ export function turnResidualLeaf(network: TurnResidualNetwork): RiverLeafEvaluat
       prepared.set(key, cards)
       if (prepared.size > 64) prepared.delete(prepared.keys().next().value as string)
     }
-    return turnResidualValues(network, cards, rangeWeights(spot), spot.stack, spot.pot)
+    return turnResidualValues(
+      network,
+      cards,
+      rangeWeights(spot),
+      spot.stack,
+      spot.pot,
+      false,
+      player,
+    )
   }
 }

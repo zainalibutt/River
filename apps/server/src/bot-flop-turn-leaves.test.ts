@@ -49,6 +49,115 @@ const half: TurnLeafEvaluator = () => [
 const meets = (a: RangeCombo, b: RangeCombo) =>
   new Set([...a.hole, ...b.hole].map(cardKey)).size === 4
 
+it('switches on exact CFR iterations, resets for gadget solves and uses final leaf for value reads', () => {
+  const spot = { ...spotOf(), betSizes: [] }
+  let earlyCalls = 0,
+    lateCalls = 0
+  const early: TurnLeafEvaluator = () => {
+    earlyCalls++
+    return half(spot, new Uint16Array())
+  }
+  const late: TurnLeafEvaluator = () => {
+    lateCalls++
+    return half(spot, new Uint16Array())
+  }
+  const record = createTurnPromiseRecord()
+  const leaves = perTurnShowdown(spot, early, record, 1, {
+    network: late,
+    lastIterations: 1,
+    iterations: 4,
+  })
+  const solve = (gadget?: Parameters<typeof solveRiverBase>[4]) =>
+    solveRiverBase(spot, 4, undefined, leaves, gadget, undefined, { scheme: 'dcfr' })
+  const solution = solve()
+  expect(earlyCalls).toBe(3 * 2 * 49)
+  expect(lateCalls).toBe(2 * 49)
+  expect([...record.leaves.values()][0]?.weight[0]).toBeCloseTo((1 + 4 + 9 + 16) / 25)
+  riverValues(solution)
+  expect(earlyCalls).toBe(3 * 2 * 49)
+  expect(lateCalls).toBe(4 * 49)
+  earlyCalls = lateCalls = 0
+  solveRiverBase(
+    spot,
+    4,
+    undefined,
+    leaves.withRecord(createTurnPromiseRecord()),
+    {
+      player: 1,
+      promises: new Float64Array(3).fill(50),
+    },
+    undefined,
+    { scheme: 'dcfr' },
+  )
+  expect(earlyCalls).toBe(3 * 2 * 49)
+  expect(lateCalls).toBe(2 * 49)
+  for (const lastIterations of [-1, 1.5, 5]) {
+    expect(() =>
+      perTurnShowdown(spot, half, undefined, 1, {
+        network: half,
+        iterations: 4,
+        lastIterations,
+      }),
+    ).toThrow('lastIterations')
+  }
+})
+
+it('all-late schedule preserves strategy and carried samples exactly', () => {
+  const spot = spotOf()
+  const baseRecord = createTurnPromiseRecord(),
+    scheduledRecord = createTurnPromiseRecord()
+  const base = solveRiverBase(
+    spot,
+    3,
+    undefined,
+    perTurnShowdown(spot, half, baseRecord),
+    undefined,
+    undefined,
+    { scheme: 'dcfr' },
+  )
+  const scheduled = solveRiverBase(
+    spot,
+    3,
+    undefined,
+    perTurnShowdown(spot, half, scheduledRecord, undefined, {
+      network: half,
+      lastIterations: 3,
+      iterations: 3,
+    }),
+    undefined,
+    undefined,
+    { scheme: 'dcfr' },
+  )
+  expect(scheduled.strategy).toEqual(base.strategy)
+  expect(scheduledRecord).toEqual(baseRecord)
+})
+
+it('keeps exact all-ins outside both scheduled evaluators', () => {
+  const spot = spotOf()
+  const hands = handsOf(spot)
+  const never: TurnLeafEvaluator = () => {
+    throw new Error('all-in must not call a network')
+  }
+  const scheduled = perTurnShowdown(spot, never, undefined, 1, {
+    network: never,
+    lastIterations: 1,
+    iterations: 4,
+  })
+  const reference = perTurnShowdown(spot, never, undefined, 1)
+  const node = { kind: 'showdown', paid: [spot.stack, spot.stack] } as const
+  for (const iteration of [1, 4]) {
+    const actual = new Float64Array(hands[0].combos.length)
+    const expected = new Float64Array(actual.length)
+    scheduled(node, 0, hands, hands[0].weights, hands[1].weights, actual, {
+      history: 'a/c',
+      weight: 1,
+      iteration,
+    })
+    reference(node, 0, hands, hands[0].weights, hands[1].weights, expected)
+    expect(actual).toEqual(expected)
+  }
+})
+
 describe.each(['cfr+', 'dcfr'] as const)('%s averaging', (scheme) => {
   const solveRiver = (...args: Parameters<typeof solveRiverBase>) => {
     args[6] = { scheme }

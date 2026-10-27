@@ -15,6 +15,8 @@ import {
 export type RiverLeafEvaluator = (
   spot: RiverSpot,
   ranks: Uint16Array,
+  /** Only this player's outputs are consumed on a CFR traversal. */
+  player?: Player,
 ) => readonly [ArrayLike<number>, ArrayLike<number>]
 
 interface CarriedLeaf {
@@ -39,6 +41,13 @@ export function createPromiseRecord(): PromiseRecord {
 /** Sequential solves of one street root share preparation, never CFR samples. */
 export interface PerCardShowdown extends ShowdownValues {
   readonly withRecord: (record?: PromiseRecord) => PerCardShowdown
+}
+
+/** Opt-in wall time for leaf inputs/inference, excluding chance integration and CFR. */
+export interface LeafProfile {
+  calls: number
+  queries: number
+  ms: number
 }
 
 /**
@@ -85,6 +94,7 @@ export function perCardShowdown(
   chanceCards: number,
   allIn: ShowdownValues,
   record?: PromiseRecord,
+  profile?: LeafProfile,
 ): PerCardShowdown {
   const prepared = cards.map((river) => ({
     ...river,
@@ -212,6 +222,7 @@ export function perCardShowdown(
       }
       let batchValues: Float32Array | undefined
       if (typeof riverNetwork !== 'function' && networkBuffers !== undefined) {
+        const started = profile === undefined ? 0 : performance.now()
         const columns = 3 * riverNetwork.buckets + 1
         for (let r = 0; r < prepared.length; r += 1) {
           const river = prepared[r] as (typeof prepared)[number]
@@ -246,6 +257,10 @@ export function perCardShowdown(
         ) {
           batchValues = previous.values
         } else {
+          if (profile !== undefined) {
+            profile.calls++
+            profile.queries += prepared.length
+          }
           batchValues = forwardBatch(
             riverNetwork,
             networkBuffers.input,
@@ -263,6 +278,7 @@ export function perCardShowdown(
             previous.values.set(batchValues)
           }
         }
+        if (profile !== undefined) profile.ms += performance.now() - started
       }
       for (let r = 0; r < prepared.length; r += 1) {
         const river = prepared[r] as (typeof prepared)[number]
@@ -278,6 +294,7 @@ export function perCardShowdown(
         masses(traverser, restricted[other].subarray(0, opponent.length), met)
         let values: readonly [ArrayLike<number>, ArrayLike<number>] | undefined
         if (typeof riverNetwork === 'function') {
+          const started = profile === undefined ? 0 : performance.now()
           const without = (player: Player) =>
             hands[player].combos.flatMap((combo, h) =>
               (river.ranks[holdingIds[player][h] as number] as number) > 0
@@ -293,7 +310,13 @@ export function perCardShowdown(
               ranges: [without(0), without(1)],
             },
             river.ranks,
+            traverser,
           )
+          if (profile !== undefined) {
+            profile.calls++
+            profile.queries++
+            profile.ms += performance.now() - started
+          }
         }
         let sums: readonly [Float64Array, Float64Array] | undefined
         if (leaf !== undefined) {

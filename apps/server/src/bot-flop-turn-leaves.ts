@@ -6,6 +6,7 @@ import { expectedStrengthRanks, turnRivers } from './bot-turn-end-data.js'
 import {
   carriedPromises,
   createPromiseRecord,
+  type LeafProfile,
   type PerCardShowdown,
   type PromiseRecord,
   perCardShowdown,
@@ -18,6 +19,15 @@ export type TurnLeafEvaluator = RiverLeafEvaluator
 export type TurnPromiseRecord = PromiseRecord
 export const createTurnPromiseRecord = createPromiseRecord
 export const carriedTurnPromises = carriedPromises
+
+/** Constructor opt-in. Final value reads always use network, even with K=0. */
+export interface TurnStartLeafOptions {
+  readonly network: RiverValueNetwork | TurnLeafEvaluator
+  readonly earlyNetwork?: RiverValueNetwork | TurnLeafEvaluator
+  readonly lastIterations?: number
+  readonly profile?: LeafProfile
+  readonly earlyProfile?: LeafProfile
+}
 
 // Layout ranks depend only on the public board, not ranges, paid chips or the
 // network. Bound this small cache; repeated decisions on a flop reuse it.
@@ -58,6 +68,52 @@ export function perTurnShowdown(
   network: RiverValueNetwork | TurnLeafEvaluator,
   record?: TurnPromiseRecord,
   runouts = FLOP_ALL_IN_RUNOUTS,
+  options?: TurnStartLeafOptions & { readonly iterations: number },
+): PerCardShowdown {
+  if (options !== undefined) {
+    const { lastIterations, iterations } = options
+    if (!Number.isSafeInteger(iterations) || iterations < 1)
+      throw new Error('iterations must be a positive integer')
+    if (
+      lastIterations !== undefined &&
+      (!Number.isSafeInteger(lastIterations) || lastIterations < 0 || lastIterations > iterations)
+    )
+      throw new Error('lastIterations must be an integer between zero and iterations')
+    // Attach profiling to the actual batched and callback inference paths.
+    const build = (source: RiverValueNetwork | TurnLeafEvaluator, profile?: LeafProfile) =>
+      perTurnShowdownProfiled(spot, source, record, runouts, profile)
+    const expensive = build(options.network, options.profile)
+    const early =
+      lastIterations === undefined || lastIterations === iterations
+        ? expensive
+        : build(options.earlyNetwork ?? network, options.earlyProfile)
+    const withRecord = (nextRecord?: TurnPromiseRecord): PerCardShowdown => {
+      const final = expensive.withRecord(nextRecord)
+      const initial = early.withRecord(nextRecord)
+      return Object.assign(
+        (...args: Parameters<PerCardShowdown>) => {
+          const iteration = args[6]?.iteration
+          const useEarly =
+            lastIterations !== undefined &&
+            iteration !== undefined &&
+            iteration <= iterations - lastIterations &&
+            spot.stack > Math.max(...args[0].paid)
+          return (useEarly ? initial : final)(...args)
+        },
+        { withRecord },
+      )
+    }
+    return withRecord(record)
+  }
+  return perTurnShowdownProfiled(spot, network, record, runouts)
+}
+
+function perTurnShowdownProfiled(
+  spot: RiverSpot,
+  network: RiverValueNetwork | TurnLeafEvaluator,
+  record?: TurnPromiseRecord,
+  runouts = FLOP_ALL_IN_RUNOUTS,
+  profile?: LeafProfile,
 ): PerCardShowdown {
   if (spot.board.length !== 3) throw new Error('per-turn flop leaves need three board cards')
   if (
@@ -89,5 +145,6 @@ export function perTurnShowdown(
       )
     },
     record,
+    profile,
   )
 }
