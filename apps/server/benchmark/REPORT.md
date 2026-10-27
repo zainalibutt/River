@@ -160,9 +160,61 @@ JSON and binary SHA-256, as well as the recipe and source files. The
 enumerable toy remains unbiased (18 paths; expectation difference
 1.25e-16 chips), and a bounded inference smoke passed on all three streets
 using a local models folder (`results/aivat-v2-smoke.json`). That smoke
-checks wiring and centering, not precision or strength. A 16k v9go sample was
-not run because the share the fleet share
-returned access denied in this environment.
+checks wiring and centering, not precision or strength.
+
+#### Decision-recorded v9go Slumbot replay, 2026-10-27
+
+All twelve `slumbot-v9go-a*.jsonl` inputs were replayed, with a separate replay
+of a1-a8. The first eight files each contain 4,000 hands; a9-a12 contain
+1,656, 1,646, 1,580 and 1,494 hands respectively. All hands have both private
+holdings, `reads: false`, and `aivatDecisions`. Estimates use independent
+hand clusters and a 100-chip big blind. Means and SEs are in bb/100.
+`SE/raw` means estimator SE divided by raw SE; `raw/SE` is the reciprocal
+precision improvement (larger is better).
+
+| Inputs | Estimator | Hands used | Mean | SE | SE/raw | raw/SE |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| a1-a12 | Raw | 38,376 | -10.3889 | 9.2375 | 1.0000 | 1.0000 |
+| a1-a12 | All-in valued | 38,376 | -12.4005 | 7.9788 | 0.8637 | 1.1578 |
+| a1-a12 | AIVAT v1 | 38,376 | -18.2201 | 8.9544 | 0.9694 | 1.0316 |
+| a1-a12 | AIVAT v2 | 0 | unavailable | unavailable | unavailable | unavailable |
+| a1-a12 | Chance controls only (diagnostic) | 38,376 | -14.5506 | 8.4203 | 0.9115 | 1.0971 |
+| a1-a8 | Raw | 32,000 | -7.7744 | 9.9737 | 1.0000 | 1.0000 |
+| a1-a8 | All-in valued | 32,000 | -11.0712 | 8.7122 | 0.8735 | 1.1448 |
+| a1-a8 | AIVAT v1 | 32,000 | -16.8102 | 9.6079 | 0.9633 | 1.0381 |
+| a1-a8 | AIVAT v2 | 0 | unavailable | unavailable | unavailable | unavailable |
+| a1-a8 | Chance controls only (diagnostic) | 32,000 | -12.7884 | 9.0210 | 0.9045 | 1.1056 |
+
+Payout validation passed for every hand in both replays: zero replay failures
+and zero skipped hands. Original collection failures remain unknown. AIVAT v1
+uses 48,894 supported action controls across all files, with 41,413 decisions
+explicitly marked `strategy-unavailable`; a1-a8 have 40,820 supported controls
+and 34,552 unsupported decisions. Unsupported decisions contribute zero
+action correction without excluding their hands. All-in valuation is a
+separate estimator, not an additional correction stacked on action AIVAT.
+
+**V2 measurement and its raw-versus-v2 unbiasedness sanity check are
+unavailable, not passed.** Every one of the 90,307 recorded decisions
+(75,372 in a1-a8) identifies `pot-share-uniform-32-v1`; none records a
+`rangeState`. There are zero v2 network evaluations. The probabilities make
+v1 measurable, but cannot recover the frozen v2 pre-action tracked ranges or
+network Q values. No policy was re-solved and no substitute ranges were
+invented. The replay's `aivatV2` field is null. Its
+`supportedControlsOnly.v2` fallback contains chance-only results, which must
+not be presented as a v2 measurement. A `d8-frozen-v2` provenance label
+identifies the benchmark specification, not the logged action heuristic.
+
+V1 does not meet the 2x SE gate on either sample: raw/v1 SE ratios are
+1.0316 and 1.0381, while valued/v1 ratios are 0.8910 and 0.9068 respectively.
+The v2 precision gate remains unmeasured. The a1-a8 analysis is a nested
+subset of the full analysis, not independent confirmation.
+
+Both replay commands exited 0, using one compute worker per process and
+finishing within the 500-second replay budget (the subset additionally used
+the 540-second process-tree wrapper). No live matches or training were run.
+Full summaries, input-content hashes and complete provenance sidecars are
+retained in `results/slumbot-v9go-a1-a12.json` and
+`results/slumbot-v9go-a1-a8.json`.
 
 Twelve historical v9b-versus-v8z duplicate pieces contain 4,800 pairs across
 48 sessions. Their pooled valued result is +2.7168 (-15.2601 to +20.6938), SE
@@ -201,5 +253,7 @@ too weak to reach the precision target.
 - Existing turn-certificate implementation report: v9gz2 smoke measurements.
 - Replay artifacts from this work: 16,000 Slumbot hands and 4,800 duplicate pairs,
   with input hashes, uncertainty and explicit unavailable-estimator fields.
+- Decision-recorded v9go replay: 38,376 Slumbot hands and the nested 32,000-hand
+  a1-a8 subset, with input hashes, v1 measurements and explicit v2 unavailability.
 - [Burch et al. (2018), AIVAT](https://ojs.aaai.org/index.php/AAAI/article/view/11481):
   estimator methodology; this report claims no transfer of its empirical gains.

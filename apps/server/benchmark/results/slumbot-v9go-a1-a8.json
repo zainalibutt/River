@@ -1,0 +1,226 @@
+{
+  "toy": {
+    "deals": 6,
+    "paths": 18,
+    "probability": 1,
+    "exactExpectation": -0.008333333333333276,
+    "aivatExpectation": -0.008333333333333401,
+    "bias": -1.249000902703301e-16,
+    "rawVariance": 1.7149305555555556,
+    "aivatVariance": 0.7719305555555556
+  },
+  "result": {
+    "kind": "slumbot",
+    "inputs": [
+      {
+        "name": "slumbot-v9go-a1.jsonl",
+        "sha256": "4c7d56ff740d0ef91705d000ba3bb564bd88552b743321ffbdba8a108e43b417"
+      },
+      {
+        "name": "slumbot-v9go-a2.jsonl",
+        "sha256": "6fcc1492b5017d81e65b488ccd2abd12deaf66e4dddb8e166c634d95ad987a35"
+      },
+      {
+        "name": "slumbot-v9go-a3.jsonl",
+        "sha256": "e0b540a8bc9f08ab0f0717ad92e55ce14d7ecb53fcce6232c31891181110c4df"
+      },
+      {
+        "name": "slumbot-v9go-a4.jsonl",
+        "sha256": "3f6d9dcb3cb2e521601367158443bce377186ba1edcdfb8b5f00154684c74375"
+      },
+      {
+        "name": "slumbot-v9go-a5.jsonl",
+        "sha256": "2ee8f564f876454f7c67897327eddd93ab42c8edbe629dfd6413c8d63daec904"
+      },
+      {
+        "name": "slumbot-v9go-a6.jsonl",
+        "sha256": "28a06ff1c009633801cf7685ec26b1387fbcb0fadeabf384350858c2e4281ee8"
+      },
+      {
+        "name": "slumbot-v9go-a7.jsonl",
+        "sha256": "1127385fc603456248f0dbc04aac97ce20c7ec1be353d50ba6b637454af05681"
+      },
+      {
+        "name": "slumbot-v9go-a8.jsonl",
+        "sha256": "28ef4d7ce1dc8f4aa0ed10d911c0c740d8d3e0c010ca15b21ba8e69940f836f7"
+      }
+    ],
+    "hands": 32000,
+    "clusters": 32000,
+    "raw": {
+      "hands": 32000,
+      "sessions": 32000,
+      "bigBlindsPer100": -7.774375,
+      "interval95": [
+        -27.323252818732797,
+        11.774502818732799
+      ],
+      "standardError": 9.973723181318666
+    },
+    "valued": {
+      "hands": 32000,
+      "sessions": 32000,
+      "bigBlindsPer100": -11.071223169191915,
+      "interval95": [
+        -28.14749153845019,
+        6.005045200066361
+      ],
+      "standardError": 8.712212294952595
+    },
+    "chanceOnly": {
+      "hands": 32000,
+      "sessions": 32000,
+      "bigBlindsPer100": -12.788416777146413,
+      "interval95": [
+        -30.46998715138045,
+        4.893153597087625
+      ],
+      "standardError": 9.021033839324843
+    },
+    "aivat": {
+      "hands": 32000,
+      "sessions": 32000,
+      "bigBlindsPer100": -16.810163863374175,
+      "interval95": [
+        -35.64196737865271,
+        2.021639651904355
+      ],
+      "standardError": 9.607876063678162
+    },
+    "aivatV1": {
+      "hands": 32000,
+      "sessions": 32000,
+      "bigBlindsPer100": -16.810163863374175,
+      "interval95": [
+        -35.64196737865271,
+        2.021639651904355
+      ],
+      "standardError": 9.607876063678162
+    },
+    "aivatV2": null,
+    "supportedControlsOnly": {
+      "v1": {
+        "hands": 32000,
+        "sessions": 32000,
+        "bigBlindsPer100": -16.810163863374175,
+        "interval95": [
+          -35.64196737865271,
+          2.021639651904355
+        ],
+        "standardError": 9.607876063678162
+      },
+      "v2": {
+        "hands": 32000,
+        "sessions": 32000,
+        "bigBlindsPer100": -12.788416777146413,
+        "interval95": [
+          -30.46998715138045,
+          4.893153597087625
+        ],
+        "standardError": 9.021033839324843
+      },
+      "qualification": "Missing action records contribute zero action correction; this is not a network precision measurement"
+    },
+    "heuristic": "pot-share-uniform-32-v1",
+    "networkEvaluations": 0,
+    "knownActions": 40820,
+    "missingActions": 34552,
+    "chanceAvailable": true,
+    "replayFailures": 0,
+    "sourceRunFailures": null,
+    "qualification": "retrospective-analysis-only",
+    "aivatUnavailableReason": null,
+    "standardErrorReduction": {
+      "rawToChanceOnly": 1.1056075566240338,
+      "valuedToChanceOnly": 0.9657665019472578,
+      "rawToAivat": 1.0380778348113338,
+      "valuedToAivat": 0.906778172117399
+    },
+    "varianceGatePassed": false,
+    "provenance": {
+      "schema": "river-benchmark-provenance-v1",
+      "benchmark": "d8-frozen-v2",
+      "specificationSha256": "63cc42a3465163afdfa69600f583247c2fac693bd488bfe19de5d2c9835562b6",
+      "runner": "aivat-replay-slumbot",
+      "startedAt": "2026-10-27T11:06:01.662Z",
+      "commit": "1c2b3327e4ae050f7dc12c4615013a6beca89e95",
+      "sourceSha256": "5a0867247ca5d3cefaa7d89d03b0129ce1725e50917159d62d767addfeda7300",
+      "engineRuntimeSha256": "9d655a1daac401a9abaff83bc87c3dd93b0ab56b2e11ea528666c9a16d9605d3",
+      "lockfileSha256": "171c26948b1943a3cff5ec09deb5db9580218a8e7a3ceccfcff2b76d7177ed43",
+      "models": {
+        "RIVER_FLOP_NETWORK": null,
+        "RIVER_TURN_NETWORK": null,
+        "RIVER_TURN_START_NETWORK": null,
+        "RIVER_RIVER_NETWORK": null
+      },
+      "preflop": {
+        "version": "v3",
+        "files": [
+          {
+            "depth": 100,
+            "sha256": "36090daa61b214019ac2b4317357d5a53e275e48ff28d220bd84d50893ba1414"
+          },
+          {
+            "depth": 200,
+            "sha256": "847c70afa14e725933f0b60214cdb99235e3415a20333f54aed50b2f888a2ace"
+          }
+        ]
+      },
+      "environment": {
+        "node": "v24.13.0",
+        "platform": "win32",
+        "arch": "x64",
+        "RIVER_VALUE_BACKEND": null,
+        "RIVER_VALUE_THREADS": "1",
+        "RIVER_COMPARE_HANDS": null,
+        "RIVER_PREFLOP_PACK": null,
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "UV_THREADPOOL_SIZE": "1"
+      },
+      "heuristic": "pot-share-uniform-32-v1",
+      "policies": [
+        "v9go"
+      ],
+      "seeds": [],
+      "plannedHands": 32000,
+      "settings": {
+        "inputs": [
+          {
+            "name": "slumbot-v9go-a1.jsonl",
+            "sha256": "4c7d56ff740d0ef91705d000ba3bb564bd88552b743321ffbdba8a108e43b417"
+          },
+          {
+            "name": "slumbot-v9go-a2.jsonl",
+            "sha256": "6fcc1492b5017d81e65b488ccd2abd12deaf66e4dddb8e166c634d95ad987a35"
+          },
+          {
+            "name": "slumbot-v9go-a3.jsonl",
+            "sha256": "e0b540a8bc9f08ab0f0717ad92e55ce14d7ecb53fcce6232c31891181110c4df"
+          },
+          {
+            "name": "slumbot-v9go-a4.jsonl",
+            "sha256": "3f6d9dcb3cb2e521601367158443bce377186ba1edcdfb8b5f00154684c74375"
+          },
+          {
+            "name": "slumbot-v9go-a5.jsonl",
+            "sha256": "2ee8f564f876454f7c67897327eddd93ab42c8edbe629dfd6413c8d63daec904"
+          },
+          {
+            "name": "slumbot-v9go-a6.jsonl",
+            "sha256": "28a06ff1c009633801cf7685ec26b1387fbcb0fadeabf384350858c2e4281ee8"
+          },
+          {
+            "name": "slumbot-v9go-a7.jsonl",
+            "sha256": "1127385fc603456248f0dbc04aac97ce20c7ec1be353d50ba6b637454af05681"
+          },
+          {
+            "name": "slumbot-v9go-a8.jsonl",
+            "sha256": "28ef4d7ce1dc8f4aa0ed10d911c0c740d8d3e0c010ca15b21ba8e69940f836f7"
+          }
+        ],
+        "historical": true
+      }
+    }
+  }
+}
