@@ -16,12 +16,19 @@ import json
 from pathlib import Path
 import numpy as np
 import torch
+
+# Configure interop once on import, before any other Torch setup or local imports.
+# An embedding process may already have configured it or started parallel work.
+try:
+    torch.set_num_interop_threads(1)
+except RuntimeError:
+    pass
+torch.set_num_threads(2)
+
 from torch import nn
 from river_value_data import COMBOS, combo_cards
 from train_river_buckets import mlp
 
-torch.set_num_threads(2)
-torch.set_num_interop_threads(1)
 STATIC = 19
 INPUTS = 65
 CARDS = combo_cards()

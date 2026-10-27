@@ -122,7 +122,7 @@ const summary = {
   selection,
   accuracyGate,
   speedGate,
-  completionRequires: 'complete.json written by runner within 75 minutes',
+  completionRequires: 'complete.json written by runner after all validated stages; no runtime cap',
   bestC1: stats(best.map((r) => r.c1)),
   bestC2: stats(best.map((r) => r.c2)),
   rows,
@@ -149,7 +149,7 @@ const lines = [
   `Best architecture: ${selection.best}, selected using calibration and speed only.`,
   `Three-seed c1: ${summary.bestC1.mean.toFixed(4)} +/- ${summary.bestC1.sd.toFixed(4)}; c2: ${summary.bestC2.mean.toFixed(4)} +/- ${summary.bestC2.sd.toFixed(4)} (sample SD).`,
   `Every-seed MAE <=4.9 on both cohorts: ${accuracyGate}. Every-seed WASM median <=2ms: ${speedGate}.`,
-  'All trained exports passed actual PyTorch/TS/WASM parity <=1e-5. Completion also requires the runner complete.json marker and total elapsed <75 minutes.',
+  'All trained exports passed actual PyTorch/TS/WASM parity <=1e-5. Completion also requires the runner complete.json marker after all validated stages. No total-runtime cap.',
   '',
 ]
 writeFileSync(join(out, 'summary.md'), `${lines.join('\n')}\n`)

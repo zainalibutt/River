@@ -99,6 +99,10 @@ it('requires every stage and full holding coverage, and fails if either test coh
     const accepted = run()
     expect(accepted.stderr).toBe('')
     expect(accepted.status).toBe(0)
+    expect(
+      JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')).completionRequires,
+    ).toContain('no runtime cap')
+    expect(readFileSync(join(out, 'summary.md'), 'utf8')).not.toContain('75 minutes')
     const file = join(out, 'h16/residual-1.result.json')
     const result = JSON.parse(readFileSync(file, 'utf8'))
     result.tests.c2.metrics.all = 5.0

@@ -49,10 +49,40 @@ def features(local, shared):
 def distillation_loss(student, teacher, x, solver, alpha=1.):
     with torch.no_grad():
         target = teacher(x).squeeze(-1)
+    return cached_distillation_loss(student, x, solver, target, alpha)
+
+
+def cached_distillation_loss(student, x, solver, target, alpha=1.):
     delta = student(x).squeeze(-1)
     loss = nn.functional.smooth_l1_loss(delta, target, beta=.1)
     loss = alpha * loss + nn.functional.smooth_l1_loss(x[..., 0] + delta, solver, beta=.1)
     return loss
+
+
+def row_features(local, shared, rows):
+    """Vectorised flat (spot, player, holding) rows, built entirely on device."""
+    legal = local.shape[1]
+    spot = rows // (2 * legal)
+    player = rows // legal % 2
+    holding = rows % legal
+    values = local[spot, holding]
+    bucket = values[:, 33].long()
+    x = torch.empty((len(rows), INPUTS), dtype=local.dtype, device=local.device)
+    x[:, 0] = shared[spot, 39 + player * 128 + bucket]
+    x[:, 1] = player
+    x[:, 2] = shared[spot, 0]
+    x[:, 3:22] = values[:, :19]
+    x[:, 22:27] = values.gather(1, 19 + player[:, None] * 5 + torch.arange(5, device=rows.device))
+    pools = torch.arange(19, device=rows.device)
+    x[:, 27:46] = shared[spot[:, None], 1 + player[:, None] * 19 + pools]
+    x[:, 46:] = shared[spot[:, None], 1 + (1-player[:, None]) * 19 + pools]
+    solver = values.gather(1, (29 + player)[:, None]).squeeze(1)
+    return x, solver
+
+
+def stripe_rows(spots, epoch, passes, device, legal=1128):
+    holdings = torch.as_tensor(holding_partition(epoch, passes, legal), device=device)
+    return (torch.arange(spots * 2, device=device)[:, None] * legal + holdings).flatten()
 
 
 class PackedCache:
@@ -84,9 +114,62 @@ class PackedCache:
                 raise ValueError(f'packed array changed: {key}')
             self.arrays[key] = np.memmap(path, mode='r', dtype='<f4', shape=shape)
 
+    def training_chunk(self, start, stop, ids, device):
+        """Read each contiguous disk span once; pin and transfer in bulk."""
+        selected = ids[np.searchsorted(ids, start):np.searchsorted(ids, stop)] - start
+        if not len(selected):
+            return None
+        index = torch.as_tensor(selected, device=device)
+        result = []
+        for key in ('local', 'shared'):
+            host = torch.from_numpy(np.array(self.arrays[key][start:stop], copy=True))
+            if device.type == 'cuda':
+                host = host.pin_memory()
+            result.append(host.to(device, non_blocking=True).index_select(0, index))
+        return tuple(result)
+
+    def teacher_targets(self, teacher, local, shared, start, stop, batch_rows):
+        """One persistent target shard per contiguous chunk; JSON commits it last.
+
+        Training split, teacher and packed hashes bind the cache. No target disk
+        access or teacher inference occurs inside a student's pass/batch loop.
+        """
+        root = self.root / 'teacher-targets-v2'
+        root.mkdir(exist_ok=True)
+        stem = root / f'{start:08d}-{stop:08d}'
+        data, manifest = stem.with_suffix('.bin'), stem.with_suffix('.json')
+        rows = len(local) * 2 * 1128
+        identity = dict(version=2, start=start, stop=stop, rows=rows,
+                        splitSHA256=self.meta['splitSHA256'], teacherSHA256=self.meta['teacherSHA256'],
+                        packedSHA256=self.meta['sha256'])
+        try:
+            info = json.loads(manifest.read_text())
+            if (all(info.get(k) == v for k, v in identity.items()) and
+                    data.stat().st_size == rows * 4 and file_sha(data) == info['sha256']):
+                host = torch.from_numpy(np.fromfile(data, dtype='<f4'))
+                if local.device.type == 'cuda':
+                    host = host.pin_memory()
+                return host.to(local.device, non_blocking=True), False
+        except (OSError, ValueError, KeyError):
+            pass
+        targets = torch.empty(rows, device=local.device)
+        with torch.no_grad():
+            for offset in range(0, rows, batch_rows):
+                indices = torch.arange(offset, min(offset + batch_rows, rows), device=local.device)
+                x, _ = row_features(local, shared, indices)
+                targets[offset:offset+len(indices)] = teacher(x).squeeze(-1)
+        if not torch.isfinite(targets).all():
+            raise ValueError('nonfinite teacher targets')
+        temp = stem.with_suffix('.tmp')
+        targets.cpu().numpy().astype('<f4', copy=False).tofile(temp)
+        temp.replace(data)
+        temp = stem.with_suffix('.json.tmp')
+        temp.write_text(json.dumps(dict(**identity, sha256=file_sha(data))) + '\n')
+        temp.replace(manifest)
+        return targets, True
+
     def batch(self, ids, holdings, device):
-        # Select the stripe BEFORE copying. A 512-spot stripe is about 5 MB,
-        # rather than copying 78 MB of all holdings on every pass.
+        # Evaluation-only small gathers; training uses contiguous chunks above.
         ids = np.asarray(ids)
         local = self.arrays['local'][ids[:, None], np.asarray(holdings)[None, :], :]
         shared = self.arrays['shared'][ids]
