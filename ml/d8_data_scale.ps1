@@ -2,6 +2,7 @@ param(
   [Parameter(Mandatory)] [string]$Python,
   [Parameter(Mandatory)] [string]$C1Cache,
   [Parameter(Mandatory)] [string]$BucketModel,
+  [string]$TeacherModel,
   [Parameter(Mandatory)] [string[]]$C2Data,
   [string]$Cache = 'art/out/d8-expanded',
   [string]$Out = 'art/out/d8-data-scale',
@@ -19,8 +20,12 @@ $scaleProcess = Get-Process -Id $PID
 $scaleOldAffinity = $scaleProcess.ProcessorAffinity
 Push-Location $scaleRoot
 try {
+  function Get-ScalePath([string]$Path) {
+    if (-not [IO.Path]::IsPathRooted($Path)) { $Path = Join-Path $scaleRoot $Path }
+    return [IO.Path]::GetFullPath($Path)
+  }
   function Get-ScaleOutput([string]$Path) {
-    $full = [IO.Path]::GetFullPath($Path)
+    $full = Get-ScalePath $Path
     if (-not $full.StartsWith($scaleRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Output/cache must be below this worktree' }
     return $full
   }
@@ -29,8 +34,15 @@ try {
   }
   $scaleOut = Get-ScaleOutput $Out
   $scaleCache = Get-ScaleOutput $Cache
-  $scaleC1 = [IO.Path]::GetFullPath($C1Cache)
-  $scaleProtected = @($scaleC1, [IO.Path]::GetFullPath($Part2), (Split-Path ([IO.Path]::GetFullPath($BucketModel)) -Parent)) + @($C2Data | ForEach-Object { [IO.Path]::GetFullPath($_) })
+  $scaleC1 = Get-ScalePath $C1Cache
+  $Part2 = Get-ScalePath $Part2
+  $BucketModel = Get-ScalePath $BucketModel
+  $C2Data = @($C2Data | ForEach-Object { Get-ScalePath $_ })
+  $scaleProtected = @($scaleC1, $Part2, (Split-Path $BucketModel -Parent)) + $C2Data
+  if ($TeacherModel) {
+    $TeacherModel = Get-ScalePath $TeacherModel
+    $scaleProtected += Split-Path $TeacherModel -Parent
+  }
   if (Test-ScaleOverlap $scaleOut $scaleCache) { throw 'Use separate output and cache directories' }
   foreach ($scalePath in $scaleProtected) {
     if ((Test-ScaleOverlap $scaleOut $scalePath) -or (Test-ScaleOverlap $scaleCache $scalePath)) { throw 'Outputs/cache must not overlap source caches, checkpoints or data' }
@@ -103,7 +115,9 @@ try {
     if ($code -ne 0) { throw "$Name failed, exit $code; see its log in $Out" }
   }
   if (-not (Test-Path -LiteralPath (Join-Path $scaleCache 'cache.json'))) {
-    Invoke-ScaleStep 'prepare' $env:ComSpec (@('/c','npx','tsx','apps/server/src/bot-turn-residual-expanded-run.ts',$scaleC1,$scaleCache,$BucketModel) + $C2Data)
+    $scalePrepareArgs = @('/c','npx','tsx','apps/server/src/bot-turn-residual-expanded-run.ts',$scaleC1,$scaleCache,$BucketModel) + $C2Data
+    if ($TeacherModel) { $scalePrepareArgs += @('--teacher-model',$TeacherModel) }
+    Invoke-ScaleStep 'prepare' $env:ComSpec $scalePrepareArgs
   }
   # Freeze source membership on reuse; individual byte hashes are checked by Python.
   $scaleSnapshot = Get-Content -Raw (Join-Path $scaleCache 'snapshot.json') | ConvertFrom-Json

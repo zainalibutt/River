@@ -84,11 +84,29 @@ export function claimSpot(seen: Set<string>, contents: Set<string>, seed: string
   contents.add(content)
 }
 
+export function expandedTeacherHash(network: string, teacherModel?: string) {
+  if (teacherModel !== undefined) {
+    // Manifests can originate on another OS; compare portable checkpoint identities.
+    const components = (stem: string) => stem.split(/[\\/]+/).filter(Boolean)
+    const original = components(network)
+    const local = components(teacherModel)
+    if (
+      original.length < 2 ||
+      local.length < 2 ||
+      original.slice(-2).join('/') !== local.slice(-2).join('/')
+    )
+      throw new Error('teacher model must match manifest network last two path components')
+  }
+  const stem = teacherModel ?? network
+  return sha(Buffer.concat([readFileSync(`${stem}.json`), readFileSync(`${stem}.bin`)]))
+}
+
 export function prepareExpanded(
   c1Cache: string,
   outArg: string,
   c2Sources: string[],
   bucketStem: string,
+  teacherModel?: string,
 ) {
   const out = resolve(outArg)
   const rel = relative(process.cwd(), out)
@@ -123,7 +141,11 @@ export function prepareExpanded(
   )
   const paths = [...c1Paths, ...c2Paths]
   const directories = [...new Set(paths.map((p) => dirname(resolve(p))))]
-  for (const source of [...directories, dirname(resolve(bucketStem))])
+  for (const source of [
+    ...directories,
+    dirname(resolve(bucketStem)),
+    ...(teacherModel === undefined ? [] : [dirname(resolve(teacherModel))]),
+  ])
     if (overlap(source, out) || overlap(out, source))
       throw new Error('cache must not overlap source data/checkpoints')
   const manifestHashes = new Map(
@@ -148,9 +170,7 @@ export function prepareExpanded(
       if (JSON.stringify(m[key]) !== JSON.stringify(reference[key]))
         throw new Error(`incompatible ${key}`)
     if (m.teacher !== 'per-river') throw new Error('wrong teacher')
-    const hash = sha(
-      Buffer.concat([readFileSync(`${m.network}.json`), readFileSync(`${m.network}.bin`)]),
-    )
+    const hash = expandedTeacherHash(m.network, teacherModel)
     if (teacherHash && teacherHash !== hash) throw new Error('teacher checkpoint changed')
     teacherHash = hash
   }

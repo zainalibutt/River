@@ -1,9 +1,44 @@
+import { createHash } from 'node:crypto'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RIVER_RECORD_BYTES } from './bot-river-value-data.js'
-import { checkHistoricalSplit, claimSpot, expandedSplit } from './bot-turn-residual-expanded.js'
+import {
+  checkHistoricalSplit,
+  claimSpot,
+  expandedSplit,
+  expandedTeacherHash,
+} from './bot-turn-residual-expanded.js'
 import { historicalOrder } from './bot-turn-residual-split.js'
 
 describe('D8 expanded data isolation', () => {
+  it('hashes a remapped teacher and rejects a different checkpoint name or parent', () => {
+    const root = mkdtempSync(join(process.cwd(), '.expanded-teacher-test-'))
+    try {
+      const directory = join(root, 'night1-buckets')
+      mkdirSync(directory)
+      const stem = join(directory, 'river-buckets-128')
+      const metadata = '{"fixture":true}'
+      const weights = Buffer.from([1, 2, 3])
+      writeFileSync(`${stem}.json`, metadata)
+      writeFileSync(`${stem}.bin`, weights)
+      const expected = createHash('sha256').update(metadata).update(weights).digest('hex')
+      for (const separator of ['/', '\\']) {
+        const remote = ['generator', 'night1-buckets', 'river-buckets-128'].join(separator)
+        expect(expandedTeacherHash(remote, stem)).toBe(expected)
+        expect(() => expandedTeacherHash(`${remote}-other`, stem)).toThrow(
+          'last two path components',
+        )
+        expect(() => expandedTeacherHash(remote.replace('night1', 'night2'), stem)).toThrow(
+          'last two path components',
+        )
+      }
+      expect(expandedTeacherHash(stem)).toBe(expected)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('keeps historical c1 membership and independently holds out c2', () => {
     const split = expandedSplit(173025)
     const c1 = historicalOrder()
