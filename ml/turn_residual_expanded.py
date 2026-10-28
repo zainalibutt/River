@@ -1,4 +1,4 @@
-"""Version-2 D8 cache: verified memory maps, only one minibatch copied to CUDA."""
+"""Version-2 D8 cache: verified RAM arrays, only one minibatch copied to CUDA."""
 from __future__ import annotations
 import hashlib
 import json
@@ -41,7 +41,7 @@ def validate_split(split, spots):
 
 
 class ExpandedCache:
-    def __init__(self, root, verify_sources=True):
+    def __init__(self, root, verify_sources=True, load_into_ram=True):
         self.root = Path(root)
         self.meta = json.loads((self.root / 'cache.json').read_text())
         if self.meta.get('version') != 2 or self.meta.get('samples') != 16 or self.meta.get('inputs') != 65:
@@ -68,7 +68,13 @@ class ExpandedCache:
             dtype = np.dtype('u1' if key == 'bucket' else '<f4')
             if path.stat().st_size != int(np.prod(shape)) * dtype.itemsize or file_sha(path) != self.meta['sha256'][key]:
                 raise ValueError(f'cache changed: {key}')
-            self.arrays[key] = np.memmap(path, mode='r', dtype=dtype, shape=shape)
+            if load_into_ram:
+                # Sequential reads avoid random HDD faults during shuffled batches.
+                array = np.fromfile(path, dtype=dtype).reshape(shape)
+                array.flags.writeable = False
+                self.arrays[key] = array
+            else:
+                self.arrays[key] = np.memmap(path, mode='r', dtype=dtype, shape=shape)
         if verify_sources:
             for shard in self.snapshot['shards']:
                 if Path(shard['path']).stat().st_size != shard['rows'] * 23900 or file_sha(shard['path']) != shard['sha256']:
@@ -78,6 +84,6 @@ class ExpandedCache:
                     raise ValueError('source manifest changed')
 
     def batch(self, indices, device):
-        # Fancy indexing copies ONLY this batch from read-only maps; no full-data
-        # concatenate, pinning, tensor conversion or GPU-resident feature cache.
+        # Fancy indexing copies only this batch from read-only host arrays (RAM
+        # by default); tensor conversion and device transfer stay batch-sized.
         return {key: torch.from_numpy(array[indices]).to(device) for key, array in self.arrays.items()}

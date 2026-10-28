@@ -4,12 +4,13 @@ import hashlib
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import numpy as np
 import torch
 from river_value_data import RECORD
 from turn_residual import CARDS
-from turn_residual_expanded import C1_SHA, ExpandedCache, file_sha, validate_split
+from turn_residual_expanded import C1_SHA, C1_SPOTS, ExpandedCache, file_sha, validate_split
 from train_turn_residual import ROOT, exact_evaluation
 from summarise_turn_residual_expanded import summarise
 
@@ -85,25 +86,52 @@ class ExpandedTests(unittest.TestCase):
         self.assertEqual(split['testSets']['c2'][:5], [153463, 208736, 111500, 79490, 143402])
         validate_split(split, 226575)
 
-    def test_readonly_maps_copy_only_selected_batch(self):
+    def test_ram_cache_matches_readonly_maps_and_selected_batches(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as folder:
             root = Path(folder)
-            cache = ExpandedCache.__new__(ExpandedCache)
-            cache.arrays = {}
+            hashes = {}
             for key, shape in dict(x=(9, 385), holding=(9, 2, 16, 65), bucket=(9, 2, 16), y=(9, 2, 16)).items():
                 path = root / f'{key}.bin'
-                source = np.arange(np.prod(shape)).astype(np.uint8 if key == 'bucket' else np.float32).reshape(shape)
+                source = np.arange(np.prod(shape)).astype('u1' if key == 'bucket' else '<f4').reshape(shape)
                 source.tofile(path)
-                cache.arrays[key] = np.memmap(path, mode='r', dtype=source.dtype, shape=shape)
-            before = file_sha(root / 'x.bin')
-            batch = cache.batch(np.array([7, 1]), torch.device('cpu'))
-            np.testing.assert_array_equal(batch['x'].numpy(), cache.arrays['x'][[7, 1]])
-            self.assertEqual(tuple(batch['holding'].shape), (2, 2, 16, 65))
-            batch['x'].zero_()
-            self.assertEqual(file_sha(root / 'x.bin'), before)
-            # Windows cannot remove open mmap files.
-            for array in cache.arrays.values():
-                array._mmap.close()
+                hashes[key] = file_sha(path)
+            snapshot = dict(spots=9, c1Spots=C1_SPOTS, splitSHA256='fixture',
+                            target='turn-start/per-river-v1', historicalSplitSHA256=C1_SHA,
+                            shards=[dict(rows=9)])
+            for name, value in [('snapshot', snapshot), ('split', dict(splitSHA256='fixture')),
+                                ('feature-cases', {})]:
+                (root / f'{name}.json').write_text(json.dumps(value))
+            meta = dict(version=2, samples=16, inputs=65, spots=9, sha256=hashes,
+                        snapshotSHA256=file_sha(root / 'snapshot.json'),
+                        splitFileSHA256=file_sha(root / 'split.json'),
+                        featureSHA256=file_sha(root / 'feature-cases.json'))
+            (root / 'cache.json').write_text(json.dumps(meta))
+            # Keep the existing nine-row fixture; historical split checks are tested separately.
+            with patch('turn_residual_expanded.validate_split'):
+                ram = ExpandedCache(root, verify_sources=False)
+                mapped = ExpandedCache(root, verify_sources=False, load_into_ram=False)
+            try:
+                for key, array in ram.arrays.items():
+                    with self.subTest(key=key):
+                        self.assertNotIsInstance(array, np.memmap)
+                        self.assertIsInstance(mapped.arrays[key], np.memmap)
+                        self.assertFalse(array.flags.writeable)
+                        self.assertEqual(array.dtype, mapped.arrays[key].dtype)
+                        np.testing.assert_array_equal(array, mapped.arrays[key])
+                        self.assertEqual(array.tobytes(), mapped.arrays[key].tobytes())
+                for indices in (np.random.default_rng(12345).permutation(9), np.array([7, 1, 7])):
+                    batch = ram.batch(indices, torch.device('cpu'))
+                    expected = mapped.batch(indices, torch.device('cpu'))
+                    for key in batch:
+                        self.assertEqual(batch[key].numpy().tobytes(), expected[key].numpy().tobytes())
+                    self.assertEqual(tuple(batch['holding'].shape), (len(indices), 2, 16, 65))
+                    batch['x'].zero_()
+                    np.testing.assert_array_equal(ram.arrays['x'], mapped.arrays['x'])
+                self.assertEqual(file_sha(root / 'x.bin'), hashes['x'])
+            finally:
+                # Windows cannot remove open mmap files.
+                for array in mapped.arrays.values():
+                    array._mmap.close()
 
     def test_exact_scores_separate_cohorts_and_legacy_api(self):
         class Zero(torch.nn.Module):
