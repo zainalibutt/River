@@ -18,6 +18,7 @@ import {
 } from './bot-river-solver.js'
 import { COMBOS, comboIndex52 } from './bot-river-value-data.js'
 import { expectedStrengthRanks, turnEndValues, turnRivers } from './bot-turn-end-data.js'
+import { TURN_RESIDUAL_INPUTS, turnResidualLeaf } from './bot-turn-residual.js'
 import { allInFromTable, allInShowdown, runoutShowdownTable } from './bot-turn-solver.js'
 import { type RiverValueNetwork, riverHoldingValues } from './bot-value-network.js'
 
@@ -586,3 +587,74 @@ describe.each(['cfr+', 'dcfr'] as const)('%s averaging', (scheme) => {
     })
   })
 })
+
+it('preserves exact strategies and carried promises with batched residuals', () => {
+  const spot = { ...spotOf(), betSizes: [] }
+  const make = (columns: number, rows: number): RiverValueNetwork => ({
+    buckets: 128,
+    layers: [
+      {
+        columns,
+        rows,
+        weight: Float32Array.from({ length: columns * rows }, (_, k) => ((k % 9) - 4) / 100),
+        bias: new Float32Array(rows).fill(0.3),
+        slope: null,
+      },
+    ],
+  })
+  const model = { bucket: make(385, 256), residual: make(TURN_RESIDUAL_INPUTS, 1) }
+  const adapter = turnResidualLeaf(model)
+  const scalar: TurnLeafEvaluator = (...args) => adapter(...args)
+  const run = (leaf: TurnLeafEvaluator) => {
+    const record = createTurnPromiseRecord()
+    const profile = { calls: 0, queries: 0, ms: 0 }
+    const solution = solveRiverBase(
+      spot,
+      2,
+      undefined,
+      perTurnShowdown(spot, leaf, record, 1, {
+        network: leaf,
+        profile,
+        iterations: 2,
+      }),
+      undefined,
+      undefined,
+      { scheme: 'dcfr' },
+    )
+    riverValues(solution)
+    return { strategy: solution.strategy, record, profile }
+  }
+  const reference = run(scalar)
+  for (const leaf of [adapter]) {
+    const actual = run(leaf)
+    expect(actual.strategy).toEqual(reference.strategy)
+    expect(actual.record).toEqual(reference.record)
+    expect(actual.profile.queries).toBe(reference.profile.queries)
+    expect(actual.profile.calls * 49).toBe(reference.profile.calls)
+  }
+}, 30_000)
+
+it('shares a correction across traversers and resets it on withRecord', () => {
+  const spot = { ...spotOf(), betSizes: [] }
+  const constant = (columns: number, rows: number): RiverValueNetwork => ({
+    buckets: 128,
+    layers: [
+      {
+        columns,
+        rows,
+        weight: new Float32Array(columns * rows),
+        bias: new Float32Array(rows).fill(0.25),
+        slope: null,
+      },
+    ],
+  })
+  const model = { bucket: constant(385, 256), residual: constant(TURN_RESIDUAL_INPUTS, 1) }
+  const profile = { bucketCalls: 0, headCalls: 0 }
+  const leaf = turnResidualLeaf(model, { refreshIterations: 'never', profile })
+  const showdown = perTurnShowdown(spot, leaf)
+  const solve = (values: typeof showdown) => solveRiverBase(spot, 2, undefined, values)
+  riverValues(solve(showdown))
+  expect(profile.headCalls).toBe(1)
+  riverValues(solve(showdown.withRecord(createTurnPromiseRecord())))
+  expect(profile.headCalls).toBe(2)
+}, 30_000)

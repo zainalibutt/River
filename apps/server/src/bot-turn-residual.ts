@@ -343,13 +343,18 @@ const featureScratch = new WeakMap<TurnResidualNetwork, Float32Array>()
 
 // Like the existing WASM backend, scratch is synchronous and non-reentrant.
 // Returned holding values are fresh arrays and stay valid after later calls.
-function batch(network: RiverValueNetwork, input: Float32Array, n: number): Float32Array {
+function batch(
+  network: RiverValueNetwork,
+  input: Float32Array,
+  n: number,
+  outputRows?: Uint8Array,
+): Float32Array {
   let scratch = layerScratch.get(network)
   if (scratch === undefined || scratch.n !== n) {
     scratch = { n, layers: network.layers.map((l) => new Float32Array(n * l.rows)) }
     layerScratch.set(network, scratch)
   }
-  return forwardBatch(network, input, n, scratch.layers)
+  return forwardBatch(network, input, n, scratch.layers, outputRows)
 }
 
 /** Prepared card features are reusable across every range visit to this turn board. */
@@ -403,11 +408,33 @@ export function permuteHolding(h: number, suits: readonly number[]): number {
   )
 }
 
-/** Opt-in adapter accepted directly by perTurnShowdown; no production default changes. */
-export function turnResidualLeaf(network: TurnResidualNetwork): RiverLeafEvaluator {
+export interface TurnResidualLeafOptions {
+  /** Omit for exact evaluation; freeze the head between refreshes otherwise. */
+  readonly refreshIterations?: number | 'never' | undefined
+  readonly profile?: { bucketCalls: number; headCalls: number }
+}
+
+/**
+ * One bucket forward and one head forward across all boards and requested players.
+ * Exact traversals prune unconsumed rows; correction refreshes batch both players.
+ * Corrections are scoped to solve/terminal. Both traversals share the first visit
+ * in each refresh interval, intentionally freezing its range features. Final reads reuse the latest correction; withRecord starts a new scope.
+ * Cached head features (including pooled ranges, blockers and bucket prediction)
+ * go stale. The bucket baseline always uses current ranges. No online learning.
+ */
+export function turnResidualLeaf(
+  network: TurnResidualNetwork,
+  options: TurnResidualLeafOptions = {},
+): RiverLeafEvaluator {
+  const refresh = options.refreshIterations
+  if (
+    refresh !== undefined &&
+    refresh !== 'never' &&
+    (!Number.isSafeInteger(refresh) || refresh < 1)
+  )
+    throw new Error('refreshIterations must be a positive integer or never')
   const prepared = new Map<string, TurnCardFeatures>()
-  return (spot, ranks, player) => {
-    const board = spot.board.map(cardKey)
+  const prepare = (board: readonly number[], ranks: Uint16Array) => {
     const key = board.join(',')
     let cards = prepared.get(key)
     if (cards === undefined) {
@@ -415,14 +442,106 @@ export function turnResidualLeaf(network: TurnResidualNetwork): RiverLeafEvaluat
       prepared.set(key, cards)
       if (prepared.size > 64) prepared.delete(prepared.keys().next().value as string)
     }
-    return turnResidualValues(
+    return cards
+  }
+  const cached = new WeakMap<object, WeakMap<object, { epoch: number; delta: Float32Array }>>()
+  const scalar: RiverLeafEvaluator = (spot, ranks, player) =>
+    turnResidualValues(
       network,
-      cards,
+      prepare(spot.board.map(cardKey), ranks),
       rangeWeights(spot),
       spot.stack,
       spot.pot,
       false,
       player,
     )
-  }
+  return Object.assign(scalar, {
+    batch: ((boards, ranges, stack, pot, context) => {
+      const cards = boards.map((b) => prepare(b.board.map(cardKey), b.ranks))
+      const inputs = new Float32Array(cards.length * 385)
+      cards.forEach((c, i) => {
+        bucketInputs(
+          c.layout,
+          ranges,
+          stack,
+          pot,
+          undefined,
+          'live',
+          inputs.subarray(i * 385, (i + 1) * 385),
+        )
+      })
+      let nodes = cached.get(context.solve)
+      if (nodes === undefined) {
+        nodes = new WeakMap()
+        cached.set(context.solve, nodes)
+      }
+      const previous = nodes.get(context.node)
+      const epoch =
+        refresh === 'never' ? 0 : Math.floor(((context.iteration ?? 1) - 1) / (refresh ?? 1))
+      const reuse =
+        refresh !== undefined &&
+        previous !== undefined &&
+        (context.iteration === undefined || previous.epoch === epoch)
+      // On cached visits only the traverser's current baseline is consumed.
+      // Refresh visits still batch both players' head rows and baseline outputs.
+      // Preserve the scalar adapter's exact traverser-only output pruning.
+      // A correction refresh always computes both players for subsequent sharing.
+      const selectedPlayer = refresh === undefined ? context.player : undefined
+      const mask =
+        (reuse || selectedPlayer !== undefined) && context.player !== undefined
+          ? Uint8Array.from({ length: 256 }, (_, i) =>
+              Number(Math.floor(i / 128) === context.player),
+            )
+          : undefined
+      const bucket = batch(network.bucket, inputs, cards.length, mask)
+      if (options.profile) options.profile.bucketCalls++
+      let delta: Float32Array
+      if (reuse) delta = previous.delta
+      else {
+        const players = selectedPlayer === undefined ? 2 : 1
+        const rows = cards.reduce((sum, c) => sum + players * c.layout.live, 0)
+        let buffer = featureScratch.get(network)
+        if (buffer === undefined || buffer.length !== rows * TURN_RESIDUAL_INPUTS) {
+          buffer = new Float32Array(rows * TURN_RESIDUAL_INPUTS)
+          featureScratch.set(network, buffer)
+        }
+        let row = 0
+        cards.forEach((c, i) => {
+          const end = row + players * c.layout.live
+          turnResidualInputs(
+            c,
+            ranges,
+            bucket.subarray(i * 256, (i + 1) * 256),
+            stack,
+            pot,
+            buffer.subarray(row * TURN_RESIDUAL_INPUTS, end * TURN_RESIDUAL_INPUTS),
+            undefined,
+            true,
+            selectedPlayer,
+          )
+          row = end
+        })
+        delta = batch(network.residual, buffer, rows)
+        if (options.profile) options.profile.headCalls++
+        if (refresh !== undefined) {
+          delta = delta.slice()
+          nodes.set(context.node, { epoch, delta })
+        }
+      }
+      let row = 0
+      return cards.map((c, i) => {
+        const out = [new Float32Array(COMBOS), new Float32Array(COMBOS)] as const
+        for (const p of selectedPlayer === undefined ? ([0, 1] as const) : [selectedPlayer])
+          for (let h = 0; h < COMBOS; h++) {
+            const b = c.layout.bucketOf[h] as number
+            if (b >= 0) {
+              const correction = delta[row++] as number
+              if (!reuse || context.player === undefined || p === context.player)
+                out[p][h] = (bucket[i * 256 + p * 128 + b] as number) + correction
+            }
+          }
+        return out
+      })
+    }) satisfies NonNullable<RiverLeafEvaluator['batch']>,
+  })
 }

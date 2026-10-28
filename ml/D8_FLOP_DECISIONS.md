@@ -1,5 +1,8 @@
 # D8 turn-start leaves inside v9go flop decisions
 
+Follow-up: [batched leaves and cached corrections](D8_FLOP_BATCHED.md). The
+measurements below describe the original scalar residual implementation.
+
 Implementation and validation are complete. The benchmark is partial: 77 of 210
 requested policy/spot decisions completed under the run budget. Plain has 30 spots;
 h32 and h32x2 have ten each; all-teacher, K=5 and K=10 have seven each; K=20 has six.

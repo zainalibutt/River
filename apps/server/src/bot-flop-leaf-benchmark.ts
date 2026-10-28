@@ -33,7 +33,7 @@ import {
   valueNetworkThreads,
 } from './bot-value-simd.js'
 
-const outputRoot = 'art/out/d8-flop-decisions'
+const outputRoot = 'art/out/d8-flop-batched'
 const teacherStem = 'art/out/d8-data-scale/frozen/residual-0'
 export const leafStems = {
   plain: `${teacherStem}-bucket`,
@@ -41,6 +41,34 @@ export const leafStems = {
   h32x2: 'art/out/d8-distill/h32x2/residual-0',
   teacher: teacherStem,
 } as const
+
+export const benchmarkVariants = [
+  'plain',
+  ...(['h32', 'h32x2', 'teacher'] as const).flatMap((v) => [
+    v,
+    `${v}-once`,
+    `${v}-r10`,
+    `${v}-r20`,
+  ]),
+]
+
+export function residualVariant(variant: string) {
+  if (!benchmarkVariants.includes(variant)) throw new Error('unknown leaf variant')
+  const [name, schedule] = variant.split('-')
+  return {
+    name: name as keyof typeof leafStems,
+    refreshIterations:
+      schedule === 'once' ? ('never' as const) : schedule ? Number(schedule.slice(1)) : undefined,
+  }
+}
+
+/** Main plus one worker, assigned to the dominant network's dense workload. */
+export function benchmarkThreads(variant: string) {
+  const { name, refreshIterations } = residualVariant(variant)
+  const bucket =
+    variant === 'plain' || (refreshIterations !== undefined && name !== 'teacher') ? 2 : 1
+  return { bucket, head: variant === 'plain' ? null : bucket === 2 ? 1 : 2 }
+}
 
 interface Fixture {
   seed: string
@@ -54,6 +82,8 @@ interface Sample {
   leafMs: number
   calls: number
   queries: number
+  bucketCalls?: number
+  headCalls?: number
   forwardCalls?: number
   expensive: LeafProfile
   early: LeafProfile
@@ -144,19 +174,9 @@ async function main() {
     return
   }
   if (variant === 'summarize') {
-    const variants = [
-      'plain',
-      'h32',
-      'h32x2',
-      'teacher',
-      'teacher-k5',
-      'teacher-k10',
-      'teacher-k20',
-    ]
+    const variants = benchmarkVariants
     const batches = readdirSync(outputRoot)
-      .filter((p) =>
-        /^(plain|h32|h32x2|teacher|teacher-k5|teacher-k10|teacher-k20)-\d+\.json$/.test(p),
-      )
+      .filter((p) => /-\d+\.json$/.test(p))
       .map((p) => JSON.parse(readFileSync(`${outputRoot}/${p}`, 'utf8')) as Batch)
     const hashes = new Set(batches.map((b) => b.fixtureSHA256))
     if (hashes.size !== 1) throw new Error('fixture changed across batches')
@@ -184,6 +204,8 @@ async function main() {
             (s) => s.forwardCalls ?? s.expensive.calls * (v === 'plain' ? 1 : 2) + s.early.calls,
           ),
         ),
+        bucketCalls: quantiles(samples.map((s) => s.bucketCalls ?? s.calls)),
+        headCalls: quantiles(samples.map((s) => s.headCalls ?? 0)),
         leafShare: samples.reduce((sum, s) => sum + s.leafMs, 0) / totalMs,
         pairedTeacherSpots: pairs.length,
         meanRootTV: pairs.length
@@ -195,6 +217,8 @@ async function main() {
           : null,
         over8s: samples.filter((s) => s.decisionMs > 8000).length,
         marginAtP95Ms: 8000 - decision.p95,
+        worstMarginMs: 8000 - decision.max,
+        atLeast2sMargin: samples.length > 0 && decision.max <= 6000,
       }
     }
     const summary = variants.map((v) => summarize(v, all.get(v) ?? []))
@@ -209,7 +233,10 @@ async function main() {
     )
     save(`${outputRoot}/summary.json`, {
       fixtureSHA256: [...hashes][0],
-      complete: summary.every((s) => s.n === 30),
+      complete: summary.every((s) => s.n >= 6 && (s.decisionMs.p50 > 8000 || s.n === 30)),
+      allVariantsThirty: summary.every((s) => s.n === 30),
+      requestedCoverage: 'at least six common spots; thirty for variants with p50 <= 8s',
+
       summary,
       commonIndices,
       commonSummary,
@@ -217,9 +244,7 @@ async function main() {
     console.log(JSON.stringify(summary, null, 2))
     return
   }
-  const lastIterations = variant.startsWith('teacher-k') ? Number(variant.slice(9)) : undefined
-  if (!(variant in leafStems) && ![5, 10, 20].includes(lastIterations ?? -1))
-    throw new Error('variant: plain|h32|h32x2|teacher|teacher-k5|teacher-k10|teacher-k20')
+  const { name, refreshIterations } = residualVariant(variant)
   const first = Number(firstText),
     count = Number(countText)
   if (
@@ -234,19 +259,12 @@ async function main() {
   const fixture: Fixture = JSON.parse(raw.toString())
   const fixtureSHA256 = createHash('sha256').update(raw).digest('hex')
   process.env.RIVER_VALUE_BACKEND = 'wasm'
-  // Only one inference worker may exist. Residual bucket calls have batch=1:
-  // initialise them with one participant; the head uses main + one worker.
-  process.env.RIVER_VALUE_THREADS = variant === 'plain' ? '2' : '1'
+  const threads = benchmarkThreads(variant)
+  process.env.RIVER_VALUE_THREADS = String(threads.bucket)
   const model =
     variant === 'plain'
       ? undefined
-      : loadTurnResidualNetwork(
-          leafStems[
-            lastIterations === undefined
-              ? (variant as Exclude<keyof typeof leafStems, 'plain'>)
-              : 'teacher'
-          ],
-        )
+      : loadTurnResidualNetwork(leafStems[name as Exclude<keyof typeof leafStems, 'plain'>])
   const bucket = model?.bucket ?? loadValueNetwork(leafStems.plain)
   const dummyRanks = new Uint16Array(1326).fill(1)
   const layout = bucketsFromRanks(dummyRanks, 128)
@@ -261,7 +279,7 @@ async function main() {
     1,
     bucket.layers.map((l) => new Float32Array(l.rows)),
   )
-  process.env.RIVER_VALUE_THREADS = '2'
+  process.env.RIVER_VALUE_THREADS = String(threads.head ?? 1)
   if (model) {
     // Warm the worker and WASM buffers, excluding model load/JIT from samples.
     forwardBatch(
@@ -272,16 +290,18 @@ async function main() {
     )
   }
   process.env.RIVER_FLOP_NETWORK = leafStems.plain // Required even with shared weights.
-  const leaf = model ? turnResidualLeaf(model) : bucket
+  const forwards = { bucketCalls: 0, headCalls: 0 }
+  const leaf = model ? turnResidualLeaf(model, { refreshIterations, profile: forwards }) : bucket
   const profile: LeafProfile = { calls: 0, queries: 0, ms: 0 }
   const earlyProfile: LeafProfile = { calls: 0, queries: 0, ms: 0 }
   const samples = []
   const started = performance.now()
   try {
     for (let index = first; index < first + count; index++) {
-      if (performance.now() - started > 780_000) throw new Error('13 minute batch limit')
+      if (performance.now() - started > 3_300_000) throw new Error('55 minute batch limit')
       const point = fixture.spots[index]
       if (!point) throw new Error('missing spot')
+      forwards.bucketCalls = forwards.headCalls = 0
       profile.calls = profile.queries = profile.ms = 0
       earlyProfile.calls = earlyProfile.queries = earlyProfile.ms = 0
       // These street weights are unused: this fixture never requests turn/river
@@ -293,7 +313,6 @@ async function main() {
             network: leaf,
             profile,
             earlyProfile,
-            ...(lastIterations === undefined ? {} : { lastIterations, earlyNetwork: bucket }),
           },
         },
         { turn: bucket, flop: bucket, turnStart: bucket, river: bucket },
@@ -325,7 +344,9 @@ async function main() {
         leafMs: profile.ms + earlyProfile.ms,
         calls: profile.calls + earlyProfile.calls,
         queries: profile.queries + earlyProfile.queries,
-        forwardCalls: profile.calls * (model ? 2 : 1) + earlyProfile.calls,
+        forwardCalls: model ? forwards.bucketCalls + forwards.headCalls : profile.calls,
+        bucketCalls: model ? forwards.bucketCalls : profile.calls,
+        headCalls: forwards.headCalls,
         expensive: { ...profile },
         early: { ...earlyProfile },
         history: explanation.history,
@@ -348,14 +369,16 @@ async function main() {
         cpu: cpus()[0]?.model,
         models: model
           ? {
-              bucket: `${lastIterations === undefined ? leafStems[variant as Exclude<keyof typeof leafStems, 'plain'>] : teacherStem}-bucket`,
-              head: `${lastIterations === undefined ? leafStems[variant as Exclude<keyof typeof leafStems, 'plain'>] : teacherStem}-head`,
+              bucket: `${leafStems[name as Exclude<keyof typeof leafStems, 'plain'>]}-bucket`,
+              head: `${leafStems[name as Exclude<keyof typeof leafStems, 'plain'>]}-head`,
             }
           : { bucket: leafStems.plain },
         bucketThreads: valueNetworkThreads(bucket),
         headThreads: model ? valueNetworkThreads(model.residual) : null,
         iterations: 40,
-        outputPruning: 'exact traverser-only residual rows; both ranges retained in features',
+        batching: '49 boards; exact traverser rows, shared correction refreshes for both players',
+        correctionScope: 'per-solve terminal; both players share the first range snapshot',
+        refreshIterations: refreshIterations ?? null,
         samples,
         timing: quantiles(samples.map((s) => s.decisionMs)),
       })

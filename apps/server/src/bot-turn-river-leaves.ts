@@ -12,12 +12,26 @@ import {
 } from './bot-value-network.js'
 
 /** An injectable river evaluator, with the same units and indexing as riverHoldingValues. */
-export type RiverLeafEvaluator = (
+export type RiverLeafEvaluator = ((
   spot: RiverSpot,
   ranks: Uint16Array,
   /** Only this player's outputs are consumed on a CFR traversal. */
   player?: Player,
-) => readonly [ArrayLike<number>, ArrayLike<number>]
+) => readonly [ArrayLike<number>, ArrayLike<number>]) & {
+  /** Dense ranges are in combo order; each board masks its own blocked cards. */
+  readonly batch?: (
+    cards: readonly { readonly board: readonly Card[]; readonly ranks: Uint16Array }[],
+    ranges: readonly [Float64Array, Float64Array],
+    stack: number,
+    pot: number,
+    context: {
+      readonly solve: object
+      readonly node: object
+      readonly player?: Player
+      readonly iteration?: number | undefined
+    },
+  ) => readonly (readonly [ArrayLike<number>, ArrayLike<number>])[]
+}
 
 interface CarriedLeaf {
   readonly pot: number
@@ -129,6 +143,7 @@ export function perCardShowdown(
   // shared terminal objects, so these entries also serve subsequent solves.
   const predictions = new WeakMap<object, { input: Float32Array; values: Float32Array }[]>()
   const withRecord = (record?: PromiseRecord): PerCardShowdown => {
+    const solve = {}
     const showdown: ShowdownValues = (node, traverser, hands, self, opponent, out, visit) => {
       // Preparation depends on holding order, but not range weights. The initial
       // blueprint, root gadget and widened solves keep this order and may change
@@ -205,7 +220,10 @@ export function perCardShowdown(
       // averaging sample (including its discount) without evaluating a network
       // whose predictions would all be multiplied by zero. Own zero reach still
       // uses the full-range fallback above: those deviations need regrets.
-      if (typeof riverNetwork !== 'function' && opponent.every((weight) => weight === 0)) {
+      if (
+        (typeof riverNetwork !== 'function' || riverNetwork.batch !== undefined) &&
+        opponent.every((weight) => weight === 0)
+      ) {
         if (leaf !== undefined && visit !== undefined)
           for (const river of prepared) {
             let sums = leaf.cards.get(river.key)
@@ -221,6 +239,29 @@ export function perCardShowdown(
         return
       }
       let batchValues: Float32Array | undefined
+      let holdingValues: ReturnType<NonNullable<RiverLeafEvaluator['batch']>> | undefined
+      if (typeof riverNetwork === 'function' && riverNetwork.batch !== undefined) {
+        const started = profile === undefined ? 0 : performance.now()
+        reach[0].fill(0)
+        reach[1].fill(0)
+        for (const player of [0, 1] as const) {
+          const source = player === traverser ? ownRange : opponent
+          for (let h = 0; h < source.length; h++)
+            reach[player][indices[player][h] as number] = source[h] as number
+        }
+        holdingValues = riverNetwork.batch(prepared, reach, behind, total, {
+          solve,
+          node,
+          player: traverser,
+          iteration: visit?.iteration,
+        })
+        if (holdingValues.length !== prepared.length) throw new Error('invalid leaf batch length')
+        if (profile !== undefined) {
+          profile.calls++
+          profile.queries += prepared.length
+          profile.ms += performance.now() - started
+        }
+      }
       if (typeof riverNetwork !== 'function' && networkBuffers !== undefined) {
         const started = profile === undefined ? 0 : performance.now()
         const columns = 3 * riverNetwork.buckets + 1
@@ -292,8 +333,8 @@ export function perCardShowdown(
           }
         }
         masses(traverser, restricted[other].subarray(0, opponent.length), met)
-        let values: readonly [ArrayLike<number>, ArrayLike<number>] | undefined
-        if (typeof riverNetwork === 'function') {
+        let values: readonly [ArrayLike<number>, ArrayLike<number>] | undefined = holdingValues?.[r]
+        if (typeof riverNetwork === 'function' && holdingValues === undefined) {
           const started = profile === undefined ? 0 : performance.now()
           const without = (player: Player) =>
             hands[player].combos.flatMap((combo, h) =>

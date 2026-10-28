@@ -9,6 +9,7 @@ import {
   TURN_STATIC,
   turnCardFeatures,
   turnResidualInputs,
+  turnResidualLeaf,
   turnResidualValues,
 } from './bot-turn-residual.js'
 import { historicalOrder } from './bot-turn-residual-split.js'
@@ -308,3 +309,130 @@ describe('D8 turn-start residual', () => {
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+
+it.each(['ts', 'wasm'])(
+  'batches both players and boards exactly, including zero ranges (%s)',
+  (backend) => {
+    const prior = process.env.RIVER_VALUE_BACKEND
+    process.env.RIVER_VALUE_BACKEND = backend
+    try {
+      for (const depth of [1, 2]) {
+        const model = {
+          bucket: constant(385, 256, 0.25),
+          residual: {
+            buckets: 128,
+            layers: [TURN_RESIDUAL_INPUTS, ...Array<number>(depth).fill(4), 1]
+              .slice(1)
+              .map((rows, i, shape) => {
+                const columns = i === 0 ? TURN_RESIDUAL_INPUTS : (shape[i - 1] as number)
+                return {
+                  rows,
+                  columns,
+                  slope: i === depth ? null : 0.125,
+                  weight: Float32Array.from(
+                    { length: rows * columns },
+                    (_, k) => ((k % 11) - 5) / 20,
+                  ),
+                  bias: new Float32Array(rows).fill(0.01),
+                }
+              }),
+          },
+        }
+        const boards = ['2s 7s Kh Qc', '2s 7s Kh Ad'].map((text) => ({
+          board: text.split(' ').map(parseCard),
+          ranks: legalRanks(keys(text)),
+        }))
+        const ranges = [
+          Float64Array.from({ length: COMBOS }, (_, h) => h % 7),
+          new Float64Array(COMBOS),
+        ] as const
+        const leaf = turnResidualLeaf(model)
+        const actual = leaf.batch?.(boards, ranges, 30, 10, { solve: {}, node: {} })
+        boards.forEach((board, i) => {
+          const expected = turnResidualValues(
+            model,
+            turnCardFeatures(board.board.map(cardKey), board.ranks),
+            ranges,
+            30,
+            10,
+          )
+          expect(actual?.[i]).toEqual(expected)
+          for (const player of [0, 1] as const) {
+            const selected = leaf.batch?.(boards, ranges, 30, 10, { solve: {}, node: {}, player })
+            const reference = turnResidualValues(
+              model,
+              turnCardFeatures(board.board.map(cardKey), board.ranks),
+              ranges,
+              30,
+              10,
+              false,
+              player,
+            )
+            expect(selected?.[i]).toEqual(reference)
+          }
+        })
+      }
+    } finally {
+      if (prior === undefined) delete process.env.RIVER_VALUE_BACKEND
+      else process.env.RIVER_VALUE_BACKEND = prior
+    }
+  },
+)
+
+it('refreshes only the correction at configured iterations, retains live baseline and isolates solve/node while sharing both players', () => {
+  const board = keys('2s 7s Kh Qc')
+  const boards = [{ board: board.map((k) => makeDeck()[k] as Card), ranks: legalRanks(board) }]
+  const bucket = constant(385, 256, 0.25)
+  // Make every bucket output depend on current own bucket mass.
+  for (let r = 0; r < 256; r++) bucket.layers[0]?.weight.set([1 / 256], r * 385 + 65)
+  const head = constant(TURN_RESIDUAL_INPUTS, 1, 0)
+  head.layers[0]?.weight.set([1], 0) // Residual also sees then-current baseline.
+  const model = { bucket, residual: head }
+  const ranges = [new Float64Array(COMBOS), new Float64Array(COMBOS)] as const
+  ranges[0][holding('As Js')] = ranges[1][holding('Ac Jc')] = 1
+  const next = [new Float64Array(COMBOS), ranges[1]] as const
+  const solve = {},
+    node = {}
+  const h = holding('As Js')
+  for (const refreshIterations of ['never', 10, 20] as const) {
+    const profile = { bucketCalls: 0, headCalls: 0 }
+    const leaf = turnResidualLeaf(model, { refreshIterations, profile })
+    const call = (
+      iteration: number | undefined,
+      range = next,
+      scope = solve,
+      terminal = node,
+      player: 0 | 1 = 0,
+    ) =>
+      leaf.batch?.(boards, range, 30, 10, {
+        solve: scope,
+        node: terminal,
+        player,
+        iteration,
+      })?.[0]?.[0][h] as number
+    const first = call(1, ranges)
+    const second = call(2)
+    expect(second).not.toBe(first)
+    const cards = turnCardFeatures(board, boards[0]?.ranks as Uint16Array)
+    const live = turnResidualValues(model, cards, next, 30, 10, true)[0][h] as number
+    expect(second).toBe(Math.fround(live + first / 2))
+    call(undefined)
+    expect(profile.headCalls).toBe(1)
+    if (refreshIterations !== 'never') {
+      call(refreshIterations)
+      expect(profile.headCalls).toBe(1)
+      expect(call(refreshIterations + 1)).toBe(Math.fround(2 * live))
+      expect(profile.headCalls).toBe(2)
+    } else {
+      call(40)
+      expect(profile.headCalls).toBe(1)
+    }
+    const before = profile.headCalls
+    call(1, next, {})
+    call(1, next, solve, {})
+    call(undefined, next, solve, node, 1)
+    expect(profile.headCalls).toBe(before + 2)
+  }
+  for (const refreshIterations of [0, -1, 1.5, Number.NaN])
+    expect(() => turnResidualLeaf(model, { refreshIterations })).toThrow('refreshIterations')
+})
