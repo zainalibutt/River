@@ -6,6 +6,11 @@ import type { SafeExploitConfig } from './bot-safe-exploitation.js'
 import type { SafeTurnExploitConfig } from './bot-safe-turn-exploitation.js'
 import { predictableHybridPolicy, solvedFlopPolicy } from './bot-turn-policy.js'
 import {
+  loadTurnResidualNetwork,
+  type TurnResidualNetwork,
+  turnResidualLeaf,
+} from './bot-turn-residual.js'
+import {
   loadValueNetwork,
   type RiverValueNetwork,
   riverNetworkFromEnvironment,
@@ -33,6 +38,22 @@ export interface V9gNetworks {
   readonly flop: RiverValueNetwork
   readonly turnStart: RiverValueNetwork
   readonly river: RiverValueNetwork
+  readonly turnResidual?: TurnResidualNetwork
+}
+
+/** Keep the export stem verbatim; the loader owns the bucket/head suffixes. */
+export function turnResidualOptionsFromEnvironment(env: NodeJS.ProcessEnv = process.env) {
+  const stem = env.RIVER_TURN_RESIDUAL
+  const refresh = env.RIVER_TURN_RESIDUAL_REFRESH ?? 'never'
+  if (
+    refresh !== 'never' &&
+    (!/^[0-9]+$/.test(refresh) || !Number.isSafeInteger(Number(refresh)) || Number(refresh) < 1)
+  )
+    throw new Error('RIVER_TURN_RESIDUAL_REFRESH must be never or a positive integer')
+  if (stem === undefined) return undefined
+  if (stem.length === 0 || stem.trim() !== stem)
+    throw new Error('RIVER_TURN_RESIDUAL must be a nonempty export stem')
+  return { stem, refreshIterations: refresh === 'never' ? ('never' as const) : Number(refresh) }
 }
 
 /** Shared table/shark construction for the carried chain and its opt-in variants. */
@@ -51,22 +72,36 @@ export function v9gPolicy(
   }: V9gOptions = {},
   sharedNetworks?: V9gNetworks,
 ) {
+  const residual = turnResidualOptionsFromEnvironment()
   const flop = process.env.RIVER_FLOP_NETWORK
   if (!flop) throw new Error('v9g needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
   const preflop = preflopTables ? tablePreflopPolicy(pokerGuardPolicy) : undefined
-  const networks = sharedNetworks ?? {
+  const loadedNetworks = sharedNetworks ?? {
     turn: turnNetworkFromEnvironment(),
     flop: loadValueNetwork(flop),
     turnStart: turnStartNetworkFromEnvironment(),
     river: riverNetworkFromEnvironment(),
   }
+  const networks =
+    residual !== undefined && loadedNetworks.turnResidual === undefined
+      ? { ...loadedNetworks, turnResidual: loadTurnResidualNetwork(residual.stem) }
+      : loadedNetworks
+  const leaf =
+    turnStartLeaf ??
+    (residual === undefined || networks.turnResidual === undefined
+      ? undefined
+      : {
+          network: turnResidualLeaf(networks.turnResidual, {
+            refreshIterations: residual.refreshIterations,
+          }),
+        })
   const chain = solvedFlopPolicy(networks.turn, networks.flop, {
     carry: 'both',
     turnStartNetwork: networks.turnStart,
     riverNetwork: networks.river,
     scheme: 'dcfr',
     iterations: 40,
-    ...(turnStartLeaf === undefined ? {} : { turnStartLeaf }),
+    ...(leaf === undefined ? {} : { turnStartLeaf: leaf }),
     boundedReads,
     ...(safeExploitV2 ? { safeExploitV2, safeExploitConfig } : {}),
     ...(safeTurnExploit ? { safeTurnExploit, safeTurnExploitConfig } : {}),

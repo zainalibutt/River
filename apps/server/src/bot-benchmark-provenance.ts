@@ -84,6 +84,20 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
         )
       : null
   }
+  const residual = process.env.RIVER_TURN_RESIDUAL
+  models.RIVER_TURN_RESIDUAL = residual
+    ? Object.fromEntries(
+        [
+          `${residual}.json`,
+          `${residual}-bucket.json`,
+          `${residual}-bucket.bin`,
+          `${residual}-head.json`,
+          `${residual}-head.bin`,
+        ]
+          .filter(existsSync)
+          .map((path) => [basename(path), digest(readFileSync(path))]),
+      )
+    : null
   const pack = process.env.RIVER_PREFLOP_PACK ?? 'v3'
   const preflop = [100, 200].map((depth) => {
     const path = join(dirname(specification), '..', 'preflop', pack, `${depth}bb.json`)
@@ -95,6 +109,8 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
       'RIVER_VALUE_THREADS',
       'RIVER_COMPARE_HANDS',
       'RIVER_PREFLOP_PACK',
+      'RIVER_TURN_RESIDUAL',
+      'RIVER_TURN_RESIDUAL_REFRESH',
       'OMP_NUM_THREADS',
       'OPENBLAS_NUM_THREADS',
       'UV_THREADPOOL_SIZE',

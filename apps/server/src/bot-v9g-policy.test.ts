@@ -1,16 +1,110 @@
 import { championPersonality, mulberry32, parseCard } from '@river/engine'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as preflop from './bot-preflop-tables.js'
 import * as river from './bot-river-policy.js'
 import { observationFor, profileFor } from './bot-service.js'
 import { slumbotRoom } from './bot-slumbot.js'
 import * as chain from './bot-turn-policy.js'
-import { v9gPolicy } from './bot-v9g-policy.js'
+import * as residual from './bot-turn-residual.js'
+import { turnResidualOptionsFromEnvironment, v9gPolicy } from './bot-v9g-policy.js'
 import * as networks from './bot-value-network.js'
+
+beforeEach(() => {
+  vi.stubEnv('RIVER_TURN_RESIDUAL', undefined)
+  vi.stubEnv('RIVER_TURN_RESIDUAL_REFRESH', undefined)
+})
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
+})
+
+it('keeps the residual opt-in absent when its stem is unset', () => {
+  expect(turnResidualOptionsFromEnvironment({})).toBeUndefined()
+  expect(turnResidualOptionsFromEnvironment({ RIVER_TURN_RESIDUAL_REFRESH: '20' })).toBeUndefined()
+})
+
+it.each([
+  [undefined, 'never'],
+  ['never', 'never'],
+  ['20', 20],
+] as const)('parses residual refresh %s as %s', (refresh, expected) => {
+  expect(
+    turnResidualOptionsFromEnvironment({
+      RIVER_TURN_RESIDUAL: 'fixture/residual-0',
+      RIVER_TURN_RESIDUAL_REFRESH: refresh,
+    }),
+  ).toEqual({ stem: 'fixture/residual-0', refreshIterations: expected })
+})
+
+it.each(['', '0', '-1', '1.5', '20x', 'NaN', 'Infinity', ' 20', '2e1', '9007199254740992'])(
+  'rejects invalid refresh %s at construction, even without a stem',
+  (refresh) => {
+    vi.stubEnv('RIVER_TURN_RESIDUAL_REFRESH', refresh)
+    expect(() => v9gPolicy()).toThrow('RIVER_TURN_RESIDUAL_REFRESH')
+  },
+)
+
+it.each(['', ' ', ' fixture'])('rejects invalid residual stem %s', (stem) => {
+  expect(() => turnResidualOptionsFromEnvironment({ RIVER_TURN_RESIDUAL: stem })).toThrow(
+    'RIVER_TURN_RESIDUAL',
+  )
+})
+
+it.each(['never', '20'])(
+  'shares residual weights but owns leaf caches with refresh %s',
+  (refresh) => {
+    const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+    const weights = { bucket: network, residual: network }
+    vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+    vi.stubEnv('RIVER_TURN_RESIDUAL', 'fixture/residual-0')
+    vi.stubEnv('RIVER_TURN_RESIDUAL_REFRESH', refresh)
+    const load = vi.spyOn(residual, 'loadTurnResidualNetwork').mockReturnValue(weights)
+    const leaf = vi.spyOn(residual, 'turnResidualLeaf')
+    const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+    const live = v9gPolicy(
+      { offTree: 'resolve' },
+      { turn: network, flop: network, turnStart: network, river: network },
+    )
+    const query = v9gPolicy({ offTree: 'resolve' }, live.networks)
+    expect(load).toHaveBeenCalledExactlyOnceWith('fixture/residual-0')
+    expect(query.networks).toBe(live.networks)
+    expect(live.networks.turnResidual).toBe(weights)
+    expect(leaf).toHaveBeenCalledTimes(2)
+    for (const call of leaf.mock.calls)
+      expect(call).toEqual([weights, { refreshIterations: refresh === 'never' ? 'never' : 20 }])
+    const first = construct.mock.calls[0]?.[2]?.turnStartLeaf?.network
+    const second = construct.mock.calls[1]?.[2]?.turnStartLeaf?.network
+    expect(first).toBe(leaf.mock.results[0]?.value)
+    expect(second).toBe(leaf.mock.results[1]?.value)
+    expect(first).not.toBe(second)
+  },
+)
+
+it('does not load residual weights or add leaf options when unset', () => {
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  const load = vi.spyOn(residual, 'loadTurnResidualNetwork')
+  const leaf = vi.spyOn(residual, 'turnResidualLeaf')
+  const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+  const shared = { turn: network, flop: network, turnStart: network, river: network }
+  const result = v9gPolicy({ offTree: 'resolve' }, shared)
+  expect(result.networks).toBe(shared)
+  expect(load).not.toHaveBeenCalled()
+  expect(leaf).not.toHaveBeenCalled()
+  expect(construct.mock.calls[0]).toEqual([
+    network,
+    network,
+    {
+      carry: 'both',
+      turnStartNetwork: network,
+      riverNetwork: network,
+      scheme: 'dcfr',
+      iterations: 40,
+      boundedReads: false,
+      offTree: 'resolve',
+    },
+  ])
 })
 
 it('forwards only the explicit turn-start leaf opt-in', () => {
