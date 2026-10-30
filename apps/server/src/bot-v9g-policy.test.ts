@@ -4,14 +4,64 @@ import * as preflop from './bot-preflop-tables.js'
 import * as river from './bot-river-policy.js'
 import { observationFor, profileFor } from './bot-service.js'
 import { slumbotRoom } from './bot-slumbot.js'
+import * as explicit from './bot-turn-explicit-leaf.js'
 import * as chain from './bot-turn-policy.js'
 import * as residual from './bot-turn-residual.js'
-import { turnResidualOptionsFromEnvironment, v9gPolicy } from './bot-v9g-policy.js'
+import {
+  turnExplicitOptionsFromEnvironment,
+  turnResidualOptionsFromEnvironment,
+  v9gPolicy,
+} from './bot-v9g-policy.js'
 import * as networks from './bot-value-network.js'
 
 beforeEach(() => {
+  vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL_REFRESH', undefined)
+})
+
+it('keeps explicit leaves opt-in and rejects conflicts with residual leaves', () => {
+  expect(turnExplicitOptionsFromEnvironment({})).toBeUndefined()
+  expect(turnExplicitOptionsFromEnvironment({ RIVER_TURN_EXPLICIT_LEAF: 'never' })).toEqual({
+    refreshIterations: 'never',
+  })
+  expect(turnExplicitOptionsFromEnvironment({ RIVER_TURN_EXPLICIT_LEAF: '20' })).toEqual({
+    refreshIterations: 20,
+  })
+  vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', 'never')
+  vi.stubEnv('RIVER_TURN_RESIDUAL', 'fixture')
+  expect(() => v9gPolicy()).toThrow('mutually exclusive')
+})
+
+it.each(['', '0', '-1', '1.5', '2x', ' 2', '2e1', '9007199254740992'])(
+  'rejects invalid explicit leaf refresh %s before loading models',
+  (refresh) => {
+    vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', refresh)
+    expect(() => v9gPolicy()).toThrow('RIVER_TURN_EXPLICIT_LEAF')
+  },
+)
+
+it('constructs separate explicit caches with the live turn configuration', () => {
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  const shared = { turn: network, flop: network, turnStart: network, river: network }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', 'never')
+  const leaf = vi.spyOn(explicit, 'explicitTurnSolveLeaf')
+  const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+  v9gPolicy({}, shared)
+  v9gPolicy({ resolveIterationMultiplier: 10 }, shared)
+  expect(leaf.mock.calls.map((call) => call[2])).toEqual(
+    [40, 400].map((iterations) => ({
+      refreshIterations: 'never',
+      iterations,
+      betSizes: chain.TURN_POLICY_TUNING.betSizes,
+      maxRaises: chain.TURN_POLICY_TUNING.maxRaises,
+      allIn: true,
+      scheme: 'dcfr',
+    })),
+  )
+  expect(construct.mock.calls[0]?.[2]?.turnStartLeaf?.network).toBe(leaf.mock.results[0]?.value)
+  expect(leaf.mock.results[0]?.value).not.toBe(leaf.mock.results[1]?.value)
 })
 
 afterEach(() => {

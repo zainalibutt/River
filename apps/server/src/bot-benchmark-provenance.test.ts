@@ -14,6 +14,7 @@ import { beginBenchmark, benchmarkProvenance } from './bot-benchmark-provenance.
 let directory: string | undefined
 
 beforeEach(() => {
+  vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL_REFRESH', undefined)
   vi.stubEnv('RIVER_OPPONENT_PREFLOP_PRIOR', undefined)
@@ -37,10 +38,22 @@ it('records unset residual environment values without model hashes', () => {
   expect(record.environment).toMatchObject({
     RIVER_TURN_RESIDUAL: null,
     RIVER_TURN_RESIDUAL_REFRESH: null,
+    RIVER_TURN_EXPLICIT_LEAF: null,
   })
   expect(record.models.RIVER_TURN_RESIDUAL).toBeNull()
   expect(record.environment).toMatchObject({ RIVER_OPPONENT_PREFLOP_PRIOR: null })
   expect(record.models.RIVER_OPPONENT_PREFLOP_PRIOR).toBeNull()
+})
+
+it.each(['never', '20'])('records explicit turn leaf refresh %s in provenance', (refresh) => {
+  vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', refresh)
+  const record = benchmarkProvenance('flop-replay', {
+    policies: ['v9gp'],
+    seeds: ['smoke'],
+    plannedHands: 2,
+  })
+  expect(record.environment).toMatchObject({ RIVER_TURN_EXPLICIT_LEAF: refresh })
+  expect(record.models.RIVER_TURN_RESIDUAL).toBeNull()
 })
 
 it.each(['lbr', 'slumbot'])(

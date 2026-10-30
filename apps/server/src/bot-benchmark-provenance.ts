@@ -119,6 +119,7 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
       'RIVER_OPPONENT_PREFLOP_PRIOR',
       'RIVER_TURN_RESIDUAL',
       'RIVER_TURN_RESIDUAL_REFRESH',
+      'RIVER_TURN_EXPLICIT_LEAF',
       'OMP_NUM_THREADS',
       'OPENBLAS_NUM_THREADS',
       'UV_THREADPOOL_SIZE',

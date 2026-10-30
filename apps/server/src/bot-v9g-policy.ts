@@ -4,7 +4,8 @@ import { tablePreflopPolicy } from './bot-preflop-tables.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
 import type { SafeExploitConfig } from './bot-safe-exploitation.js'
 import type { SafeTurnExploitConfig } from './bot-safe-turn-exploitation.js'
-import { predictableHybridPolicy, solvedFlopPolicy } from './bot-turn-policy.js'
+import { explicitTurnSolveLeaf } from './bot-turn-explicit-leaf.js'
+import { predictableHybridPolicy, solvedFlopPolicy, TURN_POLICY_TUNING } from './bot-turn-policy.js'
 import {
   loadTurnResidualNetwork,
   type TurnResidualNetwork,
@@ -58,6 +59,19 @@ export function turnResidualOptionsFromEnvironment(env: NodeJS.ProcessEnv = proc
   return { stem, refreshIterations: refresh === 'never' ? ('never' as const) : Number(refresh) }
 }
 
+export function turnExplicitOptionsFromEnvironment(env: NodeJS.ProcessEnv = process.env) {
+  const refresh = env.RIVER_TURN_EXPLICIT_LEAF
+  if (refresh === undefined) return undefined
+  if (env.RIVER_TURN_RESIDUAL !== undefined)
+    throw new Error('RIVER_TURN_EXPLICIT_LEAF and RIVER_TURN_RESIDUAL are mutually exclusive')
+  if (
+    refresh !== 'never' &&
+    (!/^[0-9]+$/.test(refresh) || !Number.isSafeInteger(Number(refresh)) || Number(refresh) < 1)
+  )
+    throw new Error('RIVER_TURN_EXPLICIT_LEAF must be never or a positive integer')
+  return { refreshIterations: refresh === 'never' ? ('never' as const) : Number(refresh) }
+}
+
 /** Shared table/shark construction for the carried chain and its opt-in variants. */
 export function v9gPolicy(
   {
@@ -81,6 +95,7 @@ export function v9gPolicy(
     !Number.isSafeInteger(40 * resolveIterationMultiplier)
   )
     throw new Error('resolveIterationMultiplier must be a positive safe integer')
+  const explicit = turnExplicitOptionsFromEnvironment()
   const residual = turnResidualOptionsFromEnvironment()
   const flop = process.env.RIVER_FLOP_NETWORK
   if (!flop) throw new Error('v9g needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
@@ -97,13 +112,24 @@ export function v9gPolicy(
       : loadedNetworks
   const leaf =
     turnStartLeaf ??
-    (residual === undefined || networks.turnResidual === undefined
-      ? undefined
-      : {
-          network: turnResidualLeaf(networks.turnResidual, {
-            refreshIterations: residual.refreshIterations,
+    (explicit !== undefined
+      ? {
+          network: explicitTurnSolveLeaf(networks.turnStart, networks.river, {
+            ...explicit,
+            iterations: 40 * resolveIterationMultiplier,
+            betSizes: TURN_POLICY_TUNING.betSizes,
+            maxRaises: TURN_POLICY_TUNING.maxRaises,
+            allIn: true,
+            scheme: 'dcfr',
           }),
-        })
+        }
+      : residual === undefined || networks.turnResidual === undefined
+        ? undefined
+        : {
+            network: turnResidualLeaf(networks.turnResidual, {
+              refreshIterations: residual.refreshIterations,
+            }),
+          })
   const chain = solvedFlopPolicy(networks.turn, networks.flop, {
     carry: 'both',
     turnStartNetwork: networks.turnStart,
