@@ -1,15 +1,31 @@
-import { appendFileSync, createReadStream, readFileSync, writeFileSync } from 'node:fs'
-import { isAbsolute, relative, resolve } from 'node:path'
+import {
+  appendFileSync,
+  createReadStream,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
-import { championPersonality, mulberry32, parseCard, seedFromString } from '@river/engine'
+import {
+  cardKey,
+  championPersonality,
+  makeDeck,
+  mulberry32,
+  parseCard,
+  seedFromString,
+} from '@river/engine'
 import type { AivatDecision } from './bot-aivat.js'
 import { showdownShare } from './bot-allin-equity.js'
+import { beginBenchmark } from './bot-benchmark-provenance.js'
 import { releasePolicyHand } from './bot-policy-hand.js'
+import { COMBOS, comboIndex52 } from './bot-river-value-data.js'
 import { actionFor } from './bot-service.js'
 import { focalRotation } from './bot-session-campaign.js'
 import { SLUMBOT_STAKE, slumbotMoves, slumbotRoom } from './bot-slumbot.js'
+import type { TurnExplanation } from './bot-turn-policy.js'
 import { v9gPolicy } from './bot-v9g-policy.js'
 
 // tsx apps/server/src/bot-flop-defence-replay.ts --spots 2 --seed example
@@ -50,6 +66,116 @@ export interface ReplayRow extends Spot {
   maxChoiceAbsDifference: number
   /** Policy construction, replay through target, and release; excludes equity enumeration. */
   ms: number
+  /** Maximum individual flop solve invocation, including off-tree widening. */
+  maxFlopResolveMs?: number
+}
+
+export const flopDumpHeader = () => ({
+  type: 'header',
+  schema: 'river-flop-root-v1',
+  units: {
+    chipsPerBigBlind: SLUMBOT_STAKE.bigBlind,
+    pot: 'chips',
+    stacks: 'chips',
+    actionSizes: 'street-total chips',
+  },
+  perspective:
+    'Player 0 = OOP, player 1 = IP. Root precedes all flop actions. Both ranges are raw solver root weights, not decision-conditioned; blocked/absent combos are zero. No conditioning on either known hole.',
+  comboOrder:
+    'Lexicographic (a,b), 0 <= a < b < 52; card key = suitIndex*13 + rankIndex; suits s,h,d,c; ranks 23456789TJQKA. Index = a*51-a*(a-1)/2+b-a-1.',
+  cards: makeDeck().map((c) => `${c.rank}${c.suit}`),
+  limitations:
+    'Full range strategy exposed; solver action values are not retained and are null. Own-hand AIVAT values are heuristic, not solver EV. Leaf networks, root gadget promises and fixed prefix strategies are not exported: this reconstructs the public game and root ranges, not an identical internal re-solve.',
+})
+
+/** Refuse traversal and symlink/junction escapes before opening any output. */
+export function replayOutputPath(file: string) {
+  const cwd = realpathSync(process.cwd())
+  const destination = resolve(file)
+  const inside = (path: string) => {
+    const rel = relative(cwd, path)
+    return (
+      rel !== '' &&
+      rel !== '..' &&
+      !rel.startsWith(`..\\`) &&
+      !rel.startsWith('../') &&
+      !isAbsolute(rel)
+    )
+  }
+  if (!inside(destination) || !inside(resolve(realpathSync(dirname(destination)), 'output')))
+    throw new Error('output must be inside cwd')
+  return destination
+}
+
+export function flopDumpSpot(
+  log: ReplayHand,
+  spot: Spot,
+  explanation: TurnExplanation,
+  captured: AivatDecision,
+) {
+  const { players, self, rangeStrategy } = explanation
+  if (!players || self === undefined || !rangeStrategy)
+    throw new Error('full flop strategy unavailable')
+  const o = captured.observation
+  const root = explanation.spot
+  const ranges = root.ranges.map((range) => {
+    const weights = Array<number>(COMBOS).fill(0)
+    const blocked = new Set(root.board.map(cardKey))
+    for (const combo of range) {
+      if (combo.weight > 0 && combo.hole.every((c) => !blocked.has(cardKey(c)))) {
+        const index = comboIndex52(cardKey(combo.hole[0]), cardKey(combo.hole[1]))
+        weights[index] = (weights[index] as number) + combo.weight
+      }
+    }
+    return weights
+  })
+  return {
+    type: 'spot',
+    ...spot,
+    board: root.board.map((c) => `${c.rank}${c.suit}`),
+    players,
+    inPosition: 1,
+    self,
+    hole: log.hole,
+    root: {
+      pot: root.pot,
+      stacks: players.map((id) => {
+        const seat = o.seats.find((s) => s.playerId === id)
+        if (!seat) throw new Error('missing root seat')
+        return seat.stack + seat.betStreet
+      }),
+      effectiveStack: root.stack,
+      ranges,
+      betSizes: root.betSizes,
+      allIn: root.allIn,
+      maxRaises: root.maxRaises,
+    },
+    actionLine: (o.actions ?? [])
+      .filter((move) => move.street === 'flop')
+      .map((move) => ({
+        player: players.indexOf(o.seats.find((s) => s.seat === move.seat)?.playerId ?? ''),
+        action: move.action,
+      })),
+    decision: {
+      history: explanation.history,
+      pot: o.pot,
+      toCall: o.amountToCall,
+      actions: explanation.actions,
+      strategyCoverage: 'every combo in our positive-weight unblocked root range',
+      strategy: rangeStrategy.map((row) => ({
+        combo: comboIndex52(
+          cardKey(parseCard(row.hole[0] as string)),
+          cardKey(parseCard(row.hole[1] as string)),
+        ),
+        probabilities: row.probabilities,
+        actionValues: null,
+      })),
+      ownHandInRange: explanation.inRange,
+      ownHandStandIn: explanation.standIn,
+      ownHandChoices: captured.control?.choices,
+      ownHandValueSource: captured.heuristic,
+    },
+  }
 }
 
 /** Attribution's increment / pot-after-call sizing, restricted to a first bet. */
@@ -122,6 +248,7 @@ export function replaySpot(
   spot: Spot,
   variant: 'prod' | 'big',
   runSeed: string,
+  dump?: (row: ReturnType<typeof flopDumpSpot>) => void,
 ): ReplayRow {
   const personality = [...focalRotation(), championPersonality()].find(
     (p) => p.id === log.personality,
@@ -130,11 +257,12 @@ export function replaySpot(
   const target = log.aivatDecisions[spot.decision]
   if (!target?.control || !log.slumbotHole) throw new Error('missing target control/cards')
   const started = performance.now()
-  const { policy } = v9gPolicy({
+  const solver = v9gPolicy({
     offTree: 'resolve',
     preflopTables: true,
     ...(variant === 'big' ? { resolveIterationMultiplier: 10 } : {}),
   })
+  const { policy } = solver
   const rng = mulberry32(seedFromString(`slumbot:${runSeed}:${log.hand}`))
   const moves = slumbotMoves(log.action)
   let captured: AivatDecision | undefined
@@ -179,6 +307,11 @@ export function replaySpot(
         throw new Error(`reconstructed observation differs at decision ${index}`)
       if (index === spot.decision && captured.control === null)
         throw new Error(`strategy unavailable: ${captured.reason}`)
+      if (index === spot.decision && dump) {
+        const explanation = solver.explain(o, personality, true)
+        if (typeof explanation === 'string') throw new Error(explanation)
+        dump(flopDumpSpot(log, spot, explanation, captured))
+      }
     }
   } finally {
     releasePolicyHand(policy, 'slumbot', 1)
@@ -208,6 +341,7 @@ export function replaySpot(
     loggedChoices,
     variantChoices,
     ms,
+    maxFlopResolveMs: solver.stats?.maxSolveMs,
     foldAbsDifference: Math.abs(fold(variantChoices) - fold(loggedChoices)),
     maxChoiceAbsDifference: Math.max(
       ...[...actions].map((action) =>
@@ -298,7 +432,7 @@ export async function main(args: string[]) {
       continue
     }
     if (
-      !['--spots', '--seed', '--variant', '--shard', '--out'].includes(arg) ||
+      !['--spots', '--seed', '--variant', '--shard', '--out', '--dump'].includes(arg) ||
       options.has(arg) ||
       !args[i + 1]
     )
@@ -313,15 +447,10 @@ export async function main(args: string[]) {
     throw new Error(
       'usage: --spots N --seed S --variant prod|big --shard k/K --out file.jsonl <hands.jsonl ...>',
     )
-  const destination = relative(process.cwd(), resolve(out))
-  if (
-    !destination ||
-    destination === '..' ||
-    destination.startsWith('..\\') ||
-    destination.startsWith('../') ||
-    isAbsolute(destination)
-  )
-    throw new Error('--out must be inside the worktree')
+  const destination = replayOutputPath(out)
+  const dumpFile = options.get('--dump')
+  const dumpDestination = dumpFile === undefined ? undefined : replayOutputPath(dumpFile)
+  if (dumpDestination === destination) throw new Error('--dump and --out must differ')
   const candidates: Spot[] = []
   for (const file of [...new Set(files)].sort()) {
     for await (const { value, line } of jsonLines<ReplayHand>(file))
@@ -348,17 +477,36 @@ export async function main(args: string[]) {
     if (!runSeed) throw new Error(`missing provenance run seed for ${file}`)
     seeds.set(file, runSeed)
   }
-  writeFileSync(out, '', { flag: 'wx' })
+  if (dumpDestination)
+    writeFileSync(dumpDestination, `${JSON.stringify(flopDumpHeader())}\n`, { flag: 'wx' })
+  writeFileSync(destination, '', { flag: 'wx' })
+  const benchmark = beginBenchmark(out, 'flop-replay', {
+    policies: ['v9gp'],
+    seeds: [seed],
+    plannedHands: selected.length,
+    settings: { variant, selected },
+  })
+  let completed = 0
   for (const spot of selected) {
     const log = hands.get(JSON.stringify([spot.file, spot.line]))
     const runSeed = seeds.get(spot.file)
     if (!log || !runSeed) throw new Error('selected hand disappeared')
-    const row = replaySpot(log, spot, variant, runSeed)
+    const row = replaySpot(
+      log,
+      spot,
+      variant,
+      runSeed,
+      dumpDestination === undefined
+        ? undefined
+        : (snapshot) => appendFileSync(dumpDestination, `${JSON.stringify(snapshot)}\n`),
+    )
     appendFileSync(out, `${JSON.stringify(row)}\n`)
+    benchmark.progress(++completed)
     console.error(
       JSON.stringify({ hand: spot.hand, ms: row.ms, foldAbsDifference: row.foldAbsDifference }),
     )
   }
+  benchmark.finish(completed)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

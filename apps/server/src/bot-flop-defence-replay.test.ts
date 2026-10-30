@@ -1,20 +1,79 @@
-import { type BotPolicyContextV1, parseCard } from '@river/engine'
+import { type BotPolicyContextV1, cardKey, parseCard } from '@river/engine'
 import { afterEach, expect, it, vi } from 'vitest'
 import { type AivatDecision, captureCumulativeStrategy } from './bot-aivat.js'
 import {
+  flopDumpHeader,
+  flopDumpSpot,
   flopSpots,
   type ReplayHand,
   type ReplayRow,
+  replayOutputPath,
   replaySpot,
   type Spot,
   selectSpots,
   summarise,
 } from './bot-flop-defence-replay.js'
+import { comboIndex52 } from './bot-river-value-data.js'
 import { observationFor } from './bot-service.js'
 import { slumbotRoom } from './bot-slumbot.js'
 import * as v9g from './bot-v9g-policy.js'
 
 afterEach(() => vi.restoreAllMocks())
+
+it('dumps raw flop-root weights, chip sizes and all exposed combo strategies on a fixture', () => {
+  const log = fixture()
+  const target = log.aivatDecisions[0] as AivatDecision
+  const spot = flopSpots(log, 'fixture.jsonl', 1)[0] as Spot
+  const hole = ['As', 'Kh'].map(parseCard) as [
+    ReturnType<typeof parseCard>,
+    ReturnType<typeof parseCard>,
+  ]
+  const index = comboIndex52(...(hole.map(cardKey) as [number, number]))
+  const dump = flopDumpSpot(
+    log,
+    spot,
+    {
+      history: 'kb200',
+      pot: 400,
+      stack: 19800,
+      ranges: [1, 1],
+      inRange: true,
+      standIn: 'As Kh',
+      actions: ['f', 'c'],
+      row: [0.25, 0.75],
+      players: ['bot:jules', 'bot:slumbot'],
+      self: 0,
+      rangeStrategy: [{ hole: ['As', 'Kh'], probabilities: [0.25, 0.75] }],
+      spot: {
+        board: target.observation.board,
+        pot: 400,
+        stack: 19800,
+        ranges: [[{ hole, weight: 0.37 }], [{ hole, weight: 0.21 }]],
+        betSizes: [0.5, 0.66],
+        allIn: true,
+        maxRaises: 1,
+      },
+    },
+    target,
+  )
+  expect(dump.root.pot).toBe(400)
+  expect(dump.root.stacks).toEqual([19800, 19800])
+  expect(dump.root.ranges.map((r) => r.length)).toEqual([1326, 1326])
+  expect(dump.root.ranges.map((r) => r[index])).toEqual([0.37, 0.21])
+  expect(dump.root.ranges[0]?.filter((w) => w > 0)).toEqual([0.37])
+  expect(dump.actionLine).toEqual([
+    { player: 0, action: { kind: 'check' } },
+    { player: 1, action: { kind: 'raiseTo', to: 200 } },
+  ])
+  expect(dump.decision.strategy).toEqual([
+    { combo: index, probabilities: [0.25, 0.75], actionValues: null },
+  ])
+  expect(flopDumpHeader().units.chipsPerBigBlind).toBe(100)
+  expect(flopDumpHeader().cards.slice(0, 3)).toEqual(['2s', '3s', '4s'])
+  expect(flopDumpHeader().limitations).toContain('not solver EV')
+  expect(() => replayOutputPath('../escape.jsonl')).toThrow('inside cwd')
+  expect(() => replayOutputPath('.')).toThrow('inside cwd')
+})
 
 function fixture(action = 'b200c/kb200', clientPos: 0 | 1 = 0): ReplayHand {
   const room = slumbotRoom(

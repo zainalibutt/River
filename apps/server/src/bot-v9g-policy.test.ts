@@ -1,13 +1,16 @@
-import { championPersonality, mulberry32, parseCard } from '@river/engine'
+import { type Card, championPersonality, mulberry32, parseCard } from '@river/engine'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { pokerGuardPolicy } from './bot-poker-guard.js'
 import * as preflop from './bot-preflop-tables.js'
 import * as river from './bot-river-policy.js'
+import * as solver from './bot-river-solver.js'
 import { observationFor, profileFor } from './bot-service.js'
 import { slumbotRoom } from './bot-slumbot.js'
 import * as explicit from './bot-turn-explicit-leaf.js'
 import * as chain from './bot-turn-policy.js'
 import * as residual from './bot-turn-residual.js'
 import {
+  flopBetSizesFromEnvironment,
   turnExplicitOptionsFromEnvironment,
   turnResidualOptionsFromEnvironment,
   v9gPolicy,
@@ -15,10 +18,140 @@ import {
 import * as networks from './bot-value-network.js'
 
 beforeEach(() => {
+  vi.stubEnv('RIVER_FLOP_BET_SIZES', undefined)
   vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL_REFRESH', undefined)
 })
+
+it('keeps flop sizes absent by default and forwards the explicit list', () => {
+  expect(flopBetSizesFromEnvironment({})).toBeUndefined()
+  expect(flopBetSizesFromEnvironment({ RIVER_FLOP_BET_SIZES: '0.33,0.5,0.66,1' })).toEqual([
+    0.33, 0.5, 0.66, 1,
+  ])
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  vi.stubEnv('RIVER_FLOP_BET_SIZES', '0.33,0.5,0.66,1')
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+  v9gPolicy({}, { turn: network, flop: network, turnStart: network, river: network })
+  expect(construct.mock.calls[0]?.[2]?.flopBetSizes).toEqual([0.33, 0.5, 0.66, 1])
+  expect(construct.mock.calls[0]?.[2]?.betSizes).toBeUndefined()
+})
+
+it.each([
+  '',
+  ' ',
+  '0',
+  '-1',
+  'NaN',
+  'Infinity',
+  '0.5,',
+  '0.5,0.5',
+  '1,0.5',
+  '0.1,0.2,0.3,0.4,0.5,0.6',
+])('rejects invalid flop sizes %s before loading models', (raw) => {
+  vi.stubEnv('RIVER_FLOP_BET_SIZES', raw)
+  expect(() => v9gPolicy()).toThrow('RIVER_FLOP_BET_SIZES')
+})
+
+it('uses flop sizes in initial and exact-size widened trees, leaving later streets at production sizes', () => {
+  const network: networks.RiverValueNetwork = {
+    buckets: 1,
+    layers: [
+      {
+        rows: 2,
+        columns: 4,
+        slope: null,
+        weight: new Float32Array(8),
+        bias: Float32Array.of(0.5, 0.5),
+      },
+    ],
+  }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  vi.stubEnv('RIVER_FLOP_BET_SIZES', '0.33,0.5,0.66,1')
+  const table = preflop.tablePreflopPolicy(pokerGuardPolicy)
+  vi.spyOn(preflop, 'tablePreflopPolicy').mockReturnValue({
+    ...table,
+    ranges: () => [
+      ['As Kh', 'Ac Kd'].map((h) => ({
+        hole: h.split(' ').map(parseCard) as [Card, Card],
+        weight: 0.5,
+      })),
+      ['Qs Jh', 'Qc Jd'].map((h) => ({
+        hole: h.split(' ').map(parseCard) as [Card, Card],
+        weight: 0.5,
+      })),
+    ],
+  })
+  const calls = vi.spyOn(solver, 'solveRiver')
+  const bot = v9gPolicy(
+    { offTree: 'resolve', preflopTables: true },
+    {
+      turn: network,
+      flop: network,
+      turnStart: network,
+      river: network,
+    },
+  )
+  const room = slumbotRoom(
+    {
+      action: 'b200c/kb172',
+      clientPos: 0,
+      hole: ['As', 'Kh'].map(parseCard),
+      board: ['2h', '7d', 'Ts'].map(parseCard),
+    },
+    { ours: 'a', theirs: 'b' },
+  )
+  const o = observationFor(room.viewFor('a'), 'a', undefined, room.id, room.currentActions())
+  if (!o) throw new Error('missing observation')
+  const explanation = bot.explain(o, championPersonality(), true)
+  if (typeof explanation === 'string') throw new Error(explanation)
+  expect(explanation.history).toBe('kb172')
+  expect(explanation.spot.betSizes).toEqual([0.33, 0.5, 0.66, 1])
+  expect(explanation.rangeStrategy).toHaveLength(2)
+  expect(bot.stats.offTree.resolves).toBe(1)
+  expect(bot.stats.maxSolveMs).toBeGreaterThan(0)
+  expect(calls.mock.calls.every(([spot]) => spot.betSizes.join(',') === '0.33,0.5,0.66,1')).toBe(
+    true,
+  )
+  expect(calls.mock.calls.at(-1)?.[5]).toBeDefined()
+  // An isolated turn using the same overrides still receives the default sizes.
+  const turnRoom = slumbotRoom(
+    {
+      action: 'b200c/kk/',
+      clientPos: 0,
+      hole: ['As', 'Kh'].map(parseCard),
+      board: ['2h', '7d', 'Ts', '3c'].map(parseCard),
+    },
+    { ours: 'a', theirs: 'b' },
+  )
+  const turnView = observationFor(
+    turnRoom.viewFor('a'),
+    'a',
+    undefined,
+    turnRoom.id,
+    turnRoom.currentActions(),
+  )
+  if (!turnView) throw new Error('missing turn observation')
+  const turnSpots: solver.RiverSpot[] = []
+  const turn = chain.turnSolverPolicy(
+    table.policy,
+    network,
+    'fixture',
+    1,
+    { flopBetSizes: [0.33, 0.5, 0.66, 1] },
+    {
+      ...chain.TURN_STREET,
+      solve: (spot) => {
+        turnSpots.push(spot)
+        return solver.solveRiver(spot, 1)
+      },
+    },
+  )
+  turn.explain(turnView, championPersonality())
+  expect(turnSpots[0]?.betSizes).toEqual([0.66])
+  expect(bot.river.solves).toBe(0)
+}, 60000)
 
 it('keeps explicit leaves opt-in and rejects conflicts with residual leaves', () => {
   expect(turnExplicitOptionsFromEnvironment({})).toBeUndefined()

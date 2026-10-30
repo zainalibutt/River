@@ -14,6 +14,7 @@ import { beginBenchmark, benchmarkProvenance } from './bot-benchmark-provenance.
 let directory: string | undefined
 
 beforeEach(() => {
+  vi.stubEnv('RIVER_FLOP_BET_SIZES', undefined)
   vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL_REFRESH', undefined)
@@ -39,10 +40,19 @@ it('records unset residual environment values without model hashes', () => {
     RIVER_TURN_RESIDUAL: null,
     RIVER_TURN_RESIDUAL_REFRESH: null,
     RIVER_TURN_EXPLICIT_LEAF: null,
+    RIVER_FLOP_BET_SIZES: null,
   })
   expect(record.models.RIVER_TURN_RESIDUAL).toBeNull()
   expect(record.environment).toMatchObject({ RIVER_OPPONENT_PREFLOP_PRIOR: null })
   expect(record.models.RIVER_OPPONENT_PREFLOP_PRIOR).toBeNull()
+})
+
+it('records the explicit flop tree environment', () => {
+  vi.stubEnv('RIVER_FLOP_BET_SIZES', '0.33,0.5,0.66,1')
+  expect(
+    benchmarkProvenance('flop-replay', { policies: ['v9gp'], seeds: ['s'], plannedHands: 3 })
+      .environment,
+  ).toMatchObject({ RIVER_FLOP_BET_SIZES: '0.33,0.5,0.66,1' })
 })
 
 it.each(['never', '20'])('records explicit turn leaf refresh %s in provenance', (refresh) => {

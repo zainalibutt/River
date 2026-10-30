@@ -44,6 +44,24 @@ export interface V9gNetworks {
   readonly turnResidual?: TurnResidualNetwork
 }
 
+/** Strictly increasing, unique pot fractions; unset preserves the production tree. */
+export function flopBetSizesFromEnvironment(env: NodeJS.ProcessEnv = process.env) {
+  const raw = env.RIVER_FLOP_BET_SIZES
+  if (raw === undefined) return undefined
+  const sizes = raw.split(',').map((part) => (part.trim() === '' ? Number.NaN : Number(part)))
+  if (
+    sizes.length > 5 ||
+    sizes.some(
+      (size, i) =>
+        !Number.isFinite(size) || size <= 0 || (i > 0 && size <= (sizes[i - 1] as number)),
+    )
+  )
+    throw new Error(
+      'RIVER_FLOP_BET_SIZES must contain 1 to 5 finite positive, sorted, unique pot fractions',
+    )
+  return sizes
+}
+
 /** Keep the export stem verbatim; the loader owns the bucket/head suffixes. */
 export function turnResidualOptionsFromEnvironment(env: NodeJS.ProcessEnv = process.env) {
   const stem = env.RIVER_TURN_RESIDUAL
@@ -96,6 +114,7 @@ export function v9gPolicy(
   )
     throw new Error('resolveIterationMultiplier must be a positive safe integer')
   const explicit = turnExplicitOptionsFromEnvironment()
+  const flopBetSizes = flopBetSizesFromEnvironment()
   const residual = turnResidualOptionsFromEnvironment()
   const flop = process.env.RIVER_FLOP_NETWORK
   if (!flop) throw new Error('v9g needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
@@ -136,6 +155,7 @@ export function v9gPolicy(
     riverNetwork: networks.river,
     scheme: 'dcfr',
     iterations: 40 * resolveIterationMultiplier,
+    ...(flopBetSizes === undefined ? {} : { flopBetSizes }),
     ...(leaf === undefined ? {} : { turnStartLeaf: leaf }),
     boundedReads,
     ...(safeExploitV2 ? { safeExploitV2, safeExploitConfig } : {}),

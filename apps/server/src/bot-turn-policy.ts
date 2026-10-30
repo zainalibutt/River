@@ -102,6 +102,8 @@ export interface TurnPolicyTuning extends CfrOptions {
   readonly turnStartLeaf?: TurnStartLeafOptions
   /** Bet and raise sizes as shares of the pot, beside all-in. */
   readonly betSizes: readonly number[]
+  /** Flop-only override; inherited by exact-size off-tree widening. */
+  readonly flopBetSizes?: readonly number[]
   readonly maxRaises: number
   readonly iterations: number
   /** Completed-spot limit without carry; carry solves stay pinned until the hand settles. */
@@ -134,6 +136,7 @@ export interface TurnPolicyStats {
   solves: number
   trackMs: number
   solveMs: number
+  maxSolveMs: number
 }
 
 /**
@@ -236,6 +239,7 @@ export function turnSolverPolicy(
   readonly explain: (
     observation: BotObservationV1,
     personality: BotPersonality,
+    fullRange?: boolean,
   ) => TurnExplanation | string
 } {
   const tuning: TurnPolicyTuning = { ...TURN_POLICY_TUNING, ...overrides }
@@ -260,6 +264,7 @@ export function turnSolverPolicy(
     solves: 0,
     trackMs: 0,
     solveMs: 0,
+    maxSolveMs: 0,
   }
   const cache = new HandSolveCache<SolvedTurn | string>(
     tuning.safeTurnExploit === true || tuning.carry !== undefined || tuning.offTree === 'resolve',
@@ -410,7 +415,11 @@ export function turnSolverPolicy(
       return share
     }
   }
-  const explain = (observation: BotObservationV1, personality: BotPersonality) => {
+  const explain = (
+    observation: BotObservationV1,
+    personality: BotPersonality,
+    fullRange = false,
+  ) => {
     const found = locate(observation, personality, base, network, tuning, cache, stats, street)
     if (typeof found === 'string') return found
     const { solved, node, self } = found
@@ -431,6 +440,17 @@ export function turnSolverPolicy(
       row:
         table === undefined ? [] : Array.from(table.subarray(index * width, (index + 1) * width)),
       spot: solved.spot,
+      ...(fullRange
+        ? {
+            players: solved.players,
+            self,
+            rangeStrategy: hands.combos.map((combo, h) => ({
+              hole: combo.hole.map(cardToString),
+              probabilities:
+                table === undefined ? [] : Array.from(table.subarray(h * width, (h + 1) * width)),
+            })),
+          }
+        : {}),
     }
   }
   const carried: RiverCarrySource = (observation, personality, history, players) => {
@@ -503,6 +523,9 @@ export function turnSolverPolicy(
 
 /** What the solve says at one turn decision, for reading a hand by hand. */
 export interface TurnExplanation {
+  readonly players?: readonly [string, string]
+  readonly self?: Player
+  readonly rangeStrategy?: readonly { hole: readonly string[]; probabilities: readonly number[] }[]
   readonly history: string
   readonly pot: number
   readonly stack: number
@@ -894,86 +917,92 @@ function solveTurnSpot(
     options: CfrOptions = tuning,
     valuesNeeded = false,
   ) => {
-    const perRiver =
-      street.street === 'turn' && (tuning.carry === 'per-river' || tuning.carry === 'both')
-    const perTurn =
-      street.street === 'flop' && (tuning.carry === 'per-turn' || tuning.carry === 'both')
-    if (!perRiver && !perTurn) {
-      if (tree !== undefined)
-        throw new Error('off-tree flop/turn resolving requires per-card carry')
-      return street.solve(target, tuning.iterations, network, opponentModel, gadget, tuning)
-    }
-    const leafNetwork = perRiver ? tuning.riverNetwork : tuning.turnStartNetwork
-    if (leafNetwork === undefined)
-      throw new Error(
-        perRiver
-          ? 'per-river carry needs a river network'
-          : 'per-turn carry needs a turn-start network',
-      )
-    record = createRiverPromiseRecord()
-    const showdown =
-      preparedLeaves === undefined
-        ? perRiver
-          ? perRiverShowdown(target, leafNetwork, record)
-          : perTurnShowdown(
-              target,
-              leafNetwork,
-              record,
-              undefined,
-              tuning.turnStartLeaf === undefined
-                ? undefined
-                : {
-                    ...tuning.turnStartLeaf,
-                    iterations: tuning.iterations,
-                  },
-            )
-        : preparedLeaves.withRecord(record)
-    preparedLeaves = showdown
-    // Opponent models contain arbitrary strategy closures, which cannot form
-    // a complete numeric cache key. Keep those solves outside the memo.
-    const memo =
-      opponentModel === undefined
-        ? memoLbrSolve
-        : <T>(_owner: object, _input: unknown, compute: (memoized: boolean) => T) => compute(false)
-    const saved = memo(
-      perTurn ? (tuning.turnStartLeaf ?? leafNetwork) : leafNetwork,
-      [
-        street.street,
-        target,
-        tuning.iterations,
-        opponentModel,
-        gadget,
-        tree,
-        options.scheme,
-        options.alpha,
-        options.beta,
-        options.gamma,
-        options.fixedStrategies,
-        valuesNeeded,
-      ],
-      (memoized) => {
-        const result = solveRiver(
+    const solveStarted = performance.now()
+    try {
+      const perRiver =
+        street.street === 'turn' && (tuning.carry === 'per-river' || tuning.carry === 'both')
+      const perTurn =
+        street.street === 'flop' && (tuning.carry === 'per-turn' || tuning.carry === 'both')
+      if (!perRiver && !perTurn) {
+        if (tree !== undefined)
+          throw new Error('off-tree flop/turn resolving requires per-card carry')
+        return street.solve(target, tuning.iterations, network, opponentModel, gadget, tuning)
+      }
+      const leafNetwork = perRiver ? tuning.riverNetwork : tuning.turnStartNetwork
+      if (leafNetwork === undefined)
+        throw new Error(
+          perRiver
+            ? 'per-river carry needs a river network'
+            : 'per-turn carry needs a turn-start network',
+        )
+      record = createRiverPromiseRecord()
+      const showdown =
+        preparedLeaves === undefined
+          ? perRiver
+            ? perRiverShowdown(target, leafNetwork, record)
+            : perTurnShowdown(
+                target,
+                leafNetwork,
+                record,
+                undefined,
+                tuning.turnStartLeaf === undefined
+                  ? undefined
+                  : {
+                      ...tuning.turnStartLeaf,
+                      iterations: tuning.iterations,
+                    },
+              )
+          : preparedLeaves.withRecord(record)
+      preparedLeaves = showdown
+      // Opponent models contain arbitrary strategy closures, which cannot form
+      // a complete numeric cache key. Keep those solves outside the memo.
+      const memo =
+        opponentModel === undefined
+          ? memoLbrSolve
+          : <T>(_owner: object, _input: unknown, compute: (memoized: boolean) => T) =>
+              compute(false)
+      const saved = memo(
+        perTurn ? (tuning.turnStartLeaf ?? leafNetwork) : leafNetwork,
+        [
+          street.street,
           target,
           tuning.iterations,
           opponentModel,
-          showdown,
           gadget,
           tree,
-          options,
-        )
-        // Showdown is a mutable scratch closure, recreated above in every branch.
-        const { showdown: _showdown, ...numeric } = result
-        // Root bounds read the solution once more after CFR. On a cache hit,
-        // recomputing them would rebuild expensive all-in showdown tables in
-        // a fresh scratch closure, despite reusing the strategy itself.
-        const values = memoized && valuesNeeded ? riverValues(result).values : undefined
-        return { numeric, record, values }
-      },
-    )
-    record = saved.record
-    const result = { ...saved.numeric, showdown }
-    if (saved.values) queryValues.set(result, saved.values)
-    return result
+          options.scheme,
+          options.alpha,
+          options.beta,
+          options.gamma,
+          options.fixedStrategies,
+          valuesNeeded,
+        ],
+        (memoized) => {
+          const result = solveRiver(
+            target,
+            tuning.iterations,
+            opponentModel,
+            showdown,
+            gadget,
+            tree,
+            options,
+          )
+          // Showdown is a mutable scratch closure, recreated above in every branch.
+          const { showdown: _showdown, ...numeric } = result
+          // Root bounds read the solution once more after CFR. On a cache hit,
+          // recomputing them would rebuild expensive all-in showdown tables in
+          // a fresh scratch closure, despite reusing the strategy itself.
+          const values = memoized && valuesNeeded ? riverValues(result).values : undefined
+          return { numeric, record, values }
+        },
+      )
+      record = saved.record
+      const result = { ...saved.numeric, showdown }
+      if (saved.values) queryValues.set(result, saved.values)
+      return result
+    } finally {
+      stats.maxSolveMs = Math.max(stats.maxSolveMs, performance.now() - solveStarted)
+    }
   }
   let solution = solve(
     spot,
@@ -1116,7 +1145,10 @@ export function solvedFlopPolicy(
     'flop-solver',
     1,
     overrides.carry === 'per-turn' || overrides.carry === 'both'
-      ? overrides
+      ? {
+          ...overrides,
+          ...(overrides.flopBetSizes === undefined ? {} : { betSizes: overrides.flopBetSizes }),
+        }
       : {
           scheme: overrides.scheme ?? 'cfr+',
           ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
