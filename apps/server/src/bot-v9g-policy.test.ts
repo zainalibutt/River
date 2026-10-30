@@ -24,6 +24,34 @@ it('keeps the residual opt-in absent when its stem is unset', () => {
   expect(turnResidualOptionsFromEnvironment({ RIVER_TURN_RESIDUAL_REFRESH: '20' })).toBeUndefined()
 })
 
+it('keeps production iterations at 40 and scales only flop/turn on explicit replay opt-in', () => {
+  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+  const shared = { turn: network, flop: network, turnStart: network, river: network }
+  const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+  const rivers = vi.spyOn(river, 'riverSolverPolicy')
+  v9gPolicy({}, shared)
+  v9gPolicy({ resolveIterationMultiplier: 1 }, shared)
+  v9gPolicy({ resolveIterationMultiplier: 10, offTree: 'resolve' }, shared)
+  expect(construct.mock.calls[0]).toEqual(construct.mock.calls[1])
+  expect(construct.mock.calls.map((call) => call[2]?.iterations)).toEqual([40, 40, 400])
+  expect(construct.mock.calls[2]?.[2]).toMatchObject({ offTree: 'resolve', scheme: 'dcfr' })
+  expect(rivers.mock.calls.map((call) => call[3]?.iterations)).toEqual([
+    river.RIVER_CANDIDATE_TUNING.iterations,
+    river.RIVER_CANDIDATE_TUNING.iterations,
+    river.RIVER_CANDIDATE_TUNING.iterations,
+  ])
+})
+
+it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER])(
+  'rejects iteration multiplier %s',
+  (multiplier) => {
+    expect(() => v9gPolicy({ resolveIterationMultiplier: multiplier })).toThrow(
+      'resolveIterationMultiplier',
+    )
+  },
+)
+
 it.each([
   [undefined, 'never'],
   ['never', 'never'],

@@ -19,6 +19,8 @@ import {
 } from './bot-value-network.js'
 
 export interface V9gOptions {
+  /** Offline replay opt-in; scales flop/turn solves, including off-tree re-solves. */
+  readonly resolveIterationMultiplier?: number
   readonly offTree?: 'resolve'
   readonly boundedReads?: boolean
   readonly baselineCaps?: boolean
@@ -69,9 +71,16 @@ export function v9gPolicy(
     safeTurnExploitConfig,
     safeExploitConfig,
     turnStartLeaf,
+    resolveIterationMultiplier = 1,
   }: V9gOptions = {},
   sharedNetworks?: V9gNetworks,
 ) {
+  if (
+    !Number.isSafeInteger(resolveIterationMultiplier) ||
+    resolveIterationMultiplier < 1 ||
+    !Number.isSafeInteger(40 * resolveIterationMultiplier)
+  )
+    throw new Error('resolveIterationMultiplier must be a positive safe integer')
   const residual = turnResidualOptionsFromEnvironment()
   const flop = process.env.RIVER_FLOP_NETWORK
   if (!flop) throw new Error('v9g needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
@@ -100,7 +109,7 @@ export function v9gPolicy(
     turnStartNetwork: networks.turnStart,
     riverNetwork: networks.river,
     scheme: 'dcfr',
-    iterations: 40,
+    iterations: 40 * resolveIterationMultiplier,
     ...(leaf === undefined ? {} : { turnStartLeaf: leaf }),
     boundedReads,
     ...(safeExploitV2 ? { safeExploitV2, safeExploitConfig } : {}),
