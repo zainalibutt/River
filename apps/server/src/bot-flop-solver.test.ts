@@ -44,7 +44,9 @@ describe('flop runouts', () => {
       prepare(flop.ranges[0], flop.board),
       prepare(flop.ranges[1], flop.board),
     ] as const
-    const table = runoutShowdownTable(flopRunouts(flop.board, 2000), hands)
+    const runouts = flopRunouts(flop.board, 1176)
+    expect(runouts).toHaveLength(1176)
+    const table = runoutShowdownTable(runouts, hands)
     // Brute force: Qc Jc against Kc Qh over every turn and river they both leave.
     const blocked = new Set([...flop.board, ...cards('Qc Jc Kc Qh')].map(cardKey))
     const live = makeDeck().filter((card) => !blocked.has(cardKey(card)))
@@ -75,10 +77,13 @@ describe('flop runouts', () => {
 describe('a flop solved with a network valuing the turn', () => {
   it('gives every holding a strategy, and the same one each time', () => {
     const first = solveFlop(flop, 30, network)
-    const again = solveFlop(flop, 30, network)
+    const again = solveFlop(flop, 30, network, undefined, 60)
     expect(first.strategy.size).toBeGreaterThan(1)
     for (const [history, table] of first.strategy) {
       expect([...(again.strategy.get(history) ?? [])]).toEqual([...table])
+      expect(Buffer.from((again.strategy.get(history) as Float64Array).buffer)).toEqual(
+        Buffer.from(table.buffer),
+      )
       const width = table.length / 4
       for (let h = 0; h < 4; h += 1) {
         let sum = 0

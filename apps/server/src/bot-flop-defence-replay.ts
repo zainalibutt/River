@@ -83,9 +83,11 @@ export const flopDumpHeader = () => ({
     'Player 0 = OOP, player 1 = IP. Root precedes all flop actions. Both ranges are raw solver root weights, not decision-conditioned; blocked/absent combos are zero. No conditioning on either known hole.',
   comboOrder:
     'Lexicographic (a,b), 0 <= a < b < 52; card key = suitIndex*13 + rankIndex; suits s,h,d,c; ranks 23456789TJQKA. Index = a*51-a*(a-1)/2+b-a-1.',
+  decisionReach:
+    "rootCheck is the OOP root check probability used by the solve. reach and ipBetReach are raw OOP and IP reaches through the final prefix strategy; gadget follow replaces that player's root weights. Arrays use comboOrder, with blocked/absent combos zero. actionsLabel retains chip-total b labels for raises and a for all-in.",
   cards: makeDeck().map((c) => `${c.rank}${c.suit}`),
   limitations:
-    'Full range strategy exposed; solver action values are not retained and are null. Own-hand AIVAT values are heuristic, not solver EV. Leaf networks, root gadget promises and fixed prefix strategies are not exported: this reconstructs the public game and root ranges, not an identical internal re-solve.',
+    'Full range strategy, root check probabilities and decision reaches exposed; solver action values are not retained and are null. Own-hand AIVAT values are heuristic, not solver EV. Leaf networks, root gadget promises and other fixed prefix strategies are not exported: this reconstructs the public game and root ranges, not an identical internal re-solve.',
 })
 
 /** Refuse traversal and symlink/junction escapes before opening any output. */
@@ -113,8 +115,8 @@ export function flopDumpSpot(
   explanation: TurnExplanation,
   captured: AivatDecision,
 ) {
-  const { players, self, rangeStrategy } = explanation
-  if (!players || self === undefined || !rangeStrategy)
+  const { players, self, rangeStrategy, rootCheck, reach, ipBetReach } = explanation
+  if (!players || self === undefined || !rangeStrategy || !rootCheck || !reach || !ipBetReach)
     throw new Error('full flop strategy unavailable')
   const o = captured.observation
   const root = explanation.spot
@@ -161,6 +163,10 @@ export function flopDumpSpot(
       pot: o.pot,
       toCall: o.amountToCall,
       actions: explanation.actions,
+      actionsLabel: explanation.actions,
+      rootCheck,
+      reach,
+      ipBetReach,
       strategyCoverage: 'every combo in our positive-weight unblocked root range',
       strategy: rangeStrategy.map((row) => ({
         combo: comboIndex52(

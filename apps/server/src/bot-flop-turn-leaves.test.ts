@@ -1,5 +1,5 @@
 import { type Card, cardKey, makeDeck, parseCard } from '@river/engine'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { flopRunouts } from './bot-flop-solver.js'
 import {
   carriedTurnPromises,
@@ -23,6 +23,7 @@ import { allInFromTable, allInShowdown, runoutShowdownTable } from './bot-turn-s
 import { type RiverValueNetwork, riverHoldingValues } from './bot-value-network.js'
 
 const cards = (text: string) => text.split(' ').map(parseCard)
+afterEach(() => vi.unstubAllEnvs())
 const combo = (text: string, weight = 1): RangeCombo => ({
   hole: cards(text) as [Card, Card],
   weight,
@@ -532,7 +533,8 @@ describe.each(['cfr+', 'dcfr'] as const)('%s averaging', (scheme) => {
       expect(() => carriedTurnPromises(record, 'b30c', key('Ah'), 0)).toThrow()
     })
 
-    it('keeps all-ins exact and out of the carried record', () => {
+    it.each([undefined, '61'])('keeps all-ins exact and unrecorded with runouts %s', (raw) => {
+      vi.stubEnv('RIVER_DIAG_ALLIN_RUNOUTS', raw)
       const spot = spotOf()
       const hands = handsOf(spot)
       const record = createTurnPromiseRecord()
@@ -543,7 +545,10 @@ describe.each(['cfr+', 'dcfr'] as const)('%s averaging', (scheme) => {
         },
         record,
       )
-      const exact = allInFromTable(hands, runoutShowdownTable(flopRunouts(spot.board, 60), hands))
+      const exact = allInFromTable(
+        hands,
+        runoutShowdownTable(flopRunouts(spot.board, raw === undefined ? 60 : Number(raw)), hands),
+      )
       for (const player of [0, 1] as const) {
         const other = player === 0 ? 1 : 0
         const out = new Float64Array(hands[player].combos.length)

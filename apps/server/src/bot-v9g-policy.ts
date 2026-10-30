@@ -1,3 +1,4 @@
+import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
 import type { TurnStartLeafOptions } from './bot-flop-turn-leaves.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { tablePreflopPolicy } from './bot-preflop-tables.js'
@@ -114,6 +115,7 @@ export function v9gPolicy(
   )
     throw new Error('resolveIterationMultiplier must be a positive safe integer')
   const explicit = turnExplicitOptionsFromEnvironment()
+  flopDiagnosticsFromEnvironment()
   const flopBetSizes = flopBetSizesFromEnvironment()
   const residual = turnResidualOptionsFromEnvironment()
   const flop = process.env.RIVER_FLOP_NETWORK

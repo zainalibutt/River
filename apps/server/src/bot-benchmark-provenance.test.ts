@@ -14,6 +14,9 @@ import { beginBenchmark, benchmarkProvenance } from './bot-benchmark-provenance.
 let directory: string | undefined
 
 beforeEach(() => {
+  vi.stubEnv('RIVER_DIAG_GADGET', undefined)
+  vi.stubEnv('RIVER_DIAG_IP_JAM_OVER_RAISE', undefined)
+  vi.stubEnv('RIVER_DIAG_ALLIN_RUNOUTS', undefined)
   vi.stubEnv('RIVER_FLOP_BET_SIZES', undefined)
   vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL', undefined)
@@ -41,6 +44,9 @@ it('records unset residual environment values without model hashes', () => {
     RIVER_TURN_RESIDUAL_REFRESH: null,
     RIVER_TURN_EXPLICIT_LEAF: null,
     RIVER_FLOP_BET_SIZES: null,
+    RIVER_DIAG_GADGET: null,
+    RIVER_DIAG_IP_JAM_OVER_RAISE: null,
+    RIVER_DIAG_ALLIN_RUNOUTS: null,
   })
   expect(record.models.RIVER_TURN_RESIDUAL).toBeNull()
   expect(record.environment).toMatchObject({ RIVER_OPPONENT_PREFLOP_PRIOR: null })
@@ -54,6 +60,28 @@ it('records the explicit flop tree environment', () => {
       .environment,
   ).toMatchObject({ RIVER_FLOP_BET_SIZES: '0.33,0.5,0.66,1' })
 })
+
+it.each([
+  ['RIVER_DIAG_GADGET', 'off'],
+  ['RIVER_DIAG_IP_JAM_OVER_RAISE', '1'],
+  ['RIVER_DIAG_ALLIN_RUNOUTS', '1176'],
+])('records the explicit flop diagnostic %s', (name, value) => {
+  vi.stubEnv(name, value)
+  expect(
+    benchmarkProvenance('flop-replay', { policies: ['v9gp'], seeds: ['s'], plannedHands: 1 })
+      .environment,
+  ).toMatchObject({ [name]: value })
+})
+
+it.each(['RIVER_DIAG_GADGET', 'RIVER_DIAG_IP_JAM_OVER_RAISE', 'RIVER_DIAG_ALLIN_RUNOUTS'])(
+  'rejects invalid diagnostic %s before recording provenance',
+  (name) => {
+    vi.stubEnv(name, 'bad')
+    expect(() =>
+      benchmarkProvenance('flop-replay', { policies: [], seeds: [], plannedHands: 0 }),
+    ).toThrow(name)
+  },
+)
 
 it.each(['never', '20'])('records explicit turn leaf refresh %s in provenance', (refresh) => {
   vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', refresh)
@@ -69,7 +97,7 @@ it.each(['never', '20'])('records explicit turn leaf refresh %s in provenance', 
 it.each(['lbr', 'slumbot'])(
   'records both env values and all residual file hashes for %s',
   (runner) => {
-    directory = mkdtempSync(join(process.cwd(), 'art/out/residual-provenance-test-'))
+    directory = mkdtempSync(join(process.cwd(), 'apps/server/.residual-provenance-test-'))
     const stem = join(directory, 'residual-0')
     const expected: Record<string, string> = {}
     for (const suffix of ['.json', '-bucket.json', '-bucket.bin', '-head.json', '-head.bin']) {
@@ -99,7 +127,7 @@ it.each(['lbr', 'slumbot'])(
 )
 
 it('records the opponent prior env value and exact file hash', () => {
-  directory = mkdtempSync(join(process.cwd(), 'art/out/opponent-provenance-test-'))
+  directory = mkdtempSync(join(process.cwd(), 'apps/server/.opponent-provenance-test-'))
   const file = join(directory, 'prior.json')
   const content = '{"diagnostic":true}\n'
   writeFileSync(file, content)

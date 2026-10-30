@@ -1,5 +1,6 @@
 import { type Card, cardKey, makeDeck } from '@river/engine'
-import { FLOP_ALL_IN_RUNOUTS, flopRunouts } from './bot-flop-solver.js'
+import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
+import { flopRunouts } from './bot-flop-solver.js'
 import type { RiverSpot } from './bot-river-solver.js'
 import { bufferBytes } from './bot-solver-memory.js'
 import { expectedStrengthRanks, turnRivers } from './bot-turn-end-data.js'
@@ -67,7 +68,7 @@ export function perTurnShowdown(
   spot: RiverSpot,
   network: RiverValueNetwork | TurnLeafEvaluator,
   record?: TurnPromiseRecord,
-  runouts = FLOP_ALL_IN_RUNOUTS,
+  runouts = flopDiagnosticsFromEnvironment().allInRunouts,
   options?: TurnStartLeafOptions & { readonly iterations: number },
 ): PerCardShowdown {
   if (options !== undefined) {
@@ -112,7 +113,7 @@ function perTurnShowdownProfiled(
   spot: RiverSpot,
   network: RiverValueNetwork | TurnLeafEvaluator,
   record?: TurnPromiseRecord,
-  runouts = FLOP_ALL_IN_RUNOUTS,
+  runouts = flopDiagnosticsFromEnvironment().allInRunouts,
   profile?: LeafProfile,
 ): PerCardShowdown {
   if (spot.board.length !== 3) throw new Error('per-turn flop leaves need three board cards')

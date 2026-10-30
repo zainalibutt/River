@@ -10,6 +10,11 @@ import {
 } from '@river/engine'
 import { captureCumulativeStrategy } from './bot-aivat.js'
 import { aivatSolverState } from './bot-aivat-state.js'
+import {
+  flopDecisionReach,
+  flopDiagnosticsFromEnvironment,
+  flopIpJamOverRaise,
+} from './bot-flop-diagnostics.js'
 import { solveFlop } from './bot-flop-solver.js'
 import { perTurnShowdown, type TurnStartLeafOptions } from './bot-flop-turn-leaves.js'
 import { type LbrQueryPolicy, memoLbrSolve, policyMoveShares } from './bot-lbr-query.js'
@@ -199,6 +204,7 @@ interface SolvedTurn {
   readonly hands: readonly [Hands, Hands]
   readonly players: readonly [string, string]
   readonly record?: RiverPromiseRecord
+  readonly gadgetFollow?: { readonly player: Player; readonly share: Float64Array }
 }
 
 export function turnSolverPolicy(
@@ -243,6 +249,7 @@ export function turnSolverPolicy(
   ) => TurnExplanation | string
 } {
   const tuning: TurnPolicyTuning = { ...TURN_POLICY_TUNING, ...overrides }
+  if (street.street === 'flop') flopDiagnosticsFromEnvironment()
   const stats: TurnPolicyStats = {
     safeExploit: {
       eligible: 0,
@@ -444,6 +451,9 @@ export function turnSolverPolicy(
         ? {
             players: solved.players,
             self,
+            ...(street.street === 'flop'
+              ? flopDecisionReach(solved, node.history, solved.gadgetFollow)
+              : {}),
             rangeStrategy: hands.combos.map((combo, h) => ({
               hole: combo.hole.map(cardToString),
               probabilities:
@@ -523,6 +533,9 @@ export function turnSolverPolicy(
 
 /** What the solve says at one turn decision, for reading a hand by hand. */
 export interface TurnExplanation {
+  readonly rootCheck?: readonly number[]
+  readonly reach?: readonly number[]
+  readonly ipBetReach?: readonly number[]
   readonly players?: readonly [string, string]
   readonly self?: Player
   readonly rangeStrategy?: readonly { hole: readonly string[]; probabilities: readonly number[] }[]
@@ -907,6 +920,7 @@ function solveTurnSpot(
       ? undefined
       : readsModel(reads, spot, opponent)
   let record: RiverPromiseRecord | undefined
+  const diagnostics = street.street === 'flop' ? flopDiagnosticsFromEnvironment() : undefined
   let preparedLeaves: ReturnType<typeof perRiverShowdown> | undefined
   const queryValues = new WeakMap<RiverSolution, readonly [Float64Array, Float64Array]>()
   const solve = (
@@ -944,7 +958,7 @@ function solveTurnSpot(
                 target,
                 leafNetwork,
                 record,
-                undefined,
+                diagnostics?.allInRunouts,
                 tuning.turnStartLeaf === undefined
                   ? undefined
                   : {
@@ -976,6 +990,7 @@ function solveTurnSpot(
           options.gamma,
           options.fixedStrategies,
           valuesNeeded,
+          diagnostics?.allInRunouts,
         ],
         (memoized) => {
           const result = solveRiver(
@@ -1053,7 +1068,11 @@ function solveTurnSpot(
             ),
         }
       : undefined
-  const pack = (result: RiverSolution, state?: OffTreeState<SolvedTurn>): SolvedTurn => ({
+  const pack = (
+    result: RiverSolution,
+    state?: OffTreeState<SolvedTurn>,
+    gadget = rootGadget,
+  ): SolvedTurn => ({
     ...(exploit === undefined ? {} : { exploit: Object.assign(exploit, { reference: result }) }),
     ...(state === undefined ? {} : { offTree: state }),
     spot: tuning.offTree === 'resolve' ? result.spot : spot,
@@ -1062,6 +1081,9 @@ function solveTurnSpot(
     hands: [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)],
     players,
     ...(record === undefined ? {} : { record }),
+    ...(gadget !== undefined && 'followShare' in result
+      ? { gadgetFollow: { player: gadget.player, share: result.followShare as Float64Array } }
+      : {}),
   })
   if (tuning.offTree !== 'resolve') return pack(solution)
   // A flop without inherited bounds establishes them once from its blueprint.
@@ -1073,8 +1095,15 @@ function solveTurnSpot(
   const rootSpot = solution.spot
   const state: OffTreeState<SolvedTurn> = {
     failures: new Map(),
-    solve: (tree, fixedStrategies) =>
-      pack(solve(rootSpot, undefined, gadget, tree, { ...tuning, fixedStrategies }), state),
+    solve: (tree, fixedStrategies) => {
+      const activeGadget = diagnostics?.gadgetOff ? undefined : gadget
+      const activeTree = diagnostics?.ipJamOverRaise ? flopIpJamOverRaise(rootSpot, tree) : tree
+      return pack(
+        solve(rootSpot, undefined, activeGadget, activeTree, { ...tuning, fixedStrategies }),
+        state,
+        activeGadget,
+      )
+    },
   }
   return pack(solution, state)
 }

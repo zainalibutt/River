@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AIVAT_HEURISTIC, AIVAT_V2_HEURISTIC } from './bot-aivat.js'
+import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
 
 const root = fileURLToPath(new URL('../../..', import.meta.url))
 const specification = fileURLToPath(new URL('../benchmark/frozen-v2.json', import.meta.url))
@@ -68,6 +69,7 @@ export interface BenchmarkWorkload {
 }
 
 export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload) {
+  flopDiagnosticsFromEnvironment()
   const models: Record<string, Record<string, string> | null> = {}
   for (const name of [
     'RIVER_FLOP_NETWORK',
@@ -121,6 +123,9 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
       'RIVER_TURN_RESIDUAL_REFRESH',
       'RIVER_TURN_EXPLICIT_LEAF',
       'RIVER_FLOP_BET_SIZES',
+      'RIVER_DIAG_GADGET',
+      'RIVER_DIAG_IP_JAM_OVER_RAISE',
+      'RIVER_DIAG_ALLIN_RUNOUTS',
       'OMP_NUM_THREADS',
       'OPENBLAS_NUM_THREADS',
       'UV_THREADPOOL_SIZE',

@@ -43,6 +43,9 @@ it('dumps raw flop-root weights, chip sizes and all exposed combo strategies on 
       row: [0.25, 0.75],
       players: ['bot:jules', 'bot:slumbot'],
       self: 0,
+      rootCheck: Array<number>(1326).fill(0.5),
+      reach: Array<number>(1326).fill(0.185),
+      ipBetReach: Array<number>(1326).fill(0.1),
       rangeStrategy: [{ hole: ['As', 'Kh'], probabilities: [0.25, 0.75] }],
       spot: {
         board: target.observation.board,
@@ -57,6 +60,14 @@ it('dumps raw flop-root weights, chip sizes and all exposed combo strategies on 
     target,
   )
   expect(dump.root.pot).toBe(400)
+  expect(dump.decision.rootCheck).toHaveLength(1326)
+  expect(dump.decision.reach).toHaveLength(1326)
+  expect(dump.decision.ipBetReach).toHaveLength(1326)
+  expect(dump.decision.rootCheck[index]).toBe(0.5)
+  expect(dump.decision.reach[index]).toBe(0.185)
+  expect(dump.decision.ipBetReach[index]).toBe(0.1)
+  expect(dump.decision.actionsLabel).toEqual(['f', 'c'])
+  expect(flopDumpHeader().schema).toBe('river-flop-root-v1')
   expect(dump.root.stacks).toEqual([19800, 19800])
   expect(dump.root.ranges.map((r) => r.length)).toEqual([1326, 1326])
   expect(dump.root.ranges.map((r) => r[index])).toEqual([0.37, 0.21])

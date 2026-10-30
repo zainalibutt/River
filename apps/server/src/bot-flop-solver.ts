@@ -1,5 +1,6 @@
 import { cardKey, makeDeck, mulberry32, seedFromString } from '@river/engine'
 import { flopLayout } from './bot-flop-buckets.js'
+import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
 import {
   type CfrOptions,
   type RiverGadget,
@@ -33,7 +34,7 @@ export function solveFlop(
   iterations: number,
   network: RiverValueNetwork,
   gadget?: RiverGadget,
-  runouts = FLOP_ALL_IN_RUNOUTS,
+  runouts = flopDiagnosticsFromEnvironment().allInRunouts,
   options?: CfrOptions,
 ): RiverSolution & { readonly followShare?: Float64Array } {
   if (spot.board.length !== 3) throw new Error('a flop solve takes a three-card board')
@@ -78,7 +79,7 @@ export function flopRunouts(
 export function flopShowdown(
   spot: RiverSpot,
   network: RiverValueNetwork,
-  runouts = FLOP_ALL_IN_RUNOUTS,
+  runouts = flopDiagnosticsFromEnvironment().allInRunouts,
 ): ShowdownValues {
   if (network.checked !== undefined) {
     throw new Error('the flop solver takes a network without checked-down inputs')
