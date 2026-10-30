@@ -99,6 +99,13 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
       )
     : null
   const pack = process.env.RIVER_PREFLOP_PACK ?? 'v3'
+  const opponentPrior = process.env.RIVER_OPPONENT_PREFLOP_PRIOR
+  models.RIVER_OPPONENT_PREFLOP_PRIOR =
+    opponentPrior === undefined
+      ? null
+      : {
+          [basename(opponentPrior)]: digest(readFileSync(opponentPrior)),
+        }
   const preflop = [100, 200].map((depth) => {
     const path = join(dirname(specification), '..', 'preflop', pack, `${depth}bb.json`)
     return { depth, sha256: existsSync(path) ? digest(readFileSync(path)) : null }
@@ -109,6 +116,7 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
       'RIVER_VALUE_THREADS',
       'RIVER_COMPARE_HANDS',
       'RIVER_PREFLOP_PACK',
+      'RIVER_OPPONENT_PREFLOP_PRIOR',
       'RIVER_TURN_RESIDUAL',
       'RIVER_TURN_RESIDUAL_REFRESH',
       'OMP_NUM_THREADS',

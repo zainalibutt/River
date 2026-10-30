@@ -11,6 +11,11 @@ import {
 } from '@river/engine'
 import { captureCumulativeStrategy } from './bot-aivat.js'
 import type { WeightedHolding } from './bot-lbr-range.js'
+import {
+  type OpponentPrior,
+  opponentPriorFromEnvironment,
+  priorFrequency,
+} from './bot-opponent-prior.js'
 import { type HandAwareBotPolicy, HandSolveCache, releasePolicyHand } from './bot-policy-hand.js'
 import type { PreflopAction, PreflopNode } from './bot-preflop-solve-tree.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
@@ -252,6 +257,7 @@ export function exactPreflopRanges(
   trace: PreflopTrace,
   board: readonly Card[],
   players: readonly [string, string],
+  opponent?: { readonly prior: OpponentPrior; readonly ours: string },
 ): [WeightedHolding[], WeightedHolding[]] {
   const blocked = new Set(board.map(cardKey))
   const deck = makeDeck().filter((c) => !blocked.has(cardKey(c)))
@@ -263,7 +269,21 @@ export function exactPreflopRanges(
       for (const { node, indices } of trace.line) {
         const row = tableRow(trace.pack, node, hole)
         weights[node.player] =
-          (weights[node.player] as number) * indices.reduce((sum, k) => sum + (row[k] as number), 0)
+          (weights[node.player] as number) *
+          indices.reduce(
+            (sum, k) =>
+              sum +
+              (opponent && trace.players[node.player] !== opponent.ours
+                ? (priorFrequency(
+                    opponent.prior,
+                    trace.selection.depth,
+                    node.id,
+                    preflopClass(hole),
+                    k,
+                  ) ?? (row[k] as number))
+                : (row[k] as number)),
+            0,
+          )
       }
       for (const seat of [0, 1] as const) {
         const target = players.indexOf(trace.players[seat])
@@ -278,6 +298,7 @@ export function tablePreflopPolicy(
   base: BotPolicy,
   available = PREFLOP_DEPTHS.map((depth) => loadPreflopPack(depth)),
 ): TablePreflopSource {
+  const prior = opponentPriorFromEnvironment(available)
   const stats: PreflopTableStats = {
     decisions: 0,
     preflopOffTree: 0,
@@ -374,7 +395,12 @@ export function tablePreflopPolicy(
       }
       record(observation, trace)
       stats.exactRanges++
-      return exactPreflopRanges(trace, observation.board, players)
+      return exactPreflopRanges(
+        trace,
+        observation.board,
+        players,
+        prior ? { prior, ours: observation.actor.playerId } : undefined,
+      )
     },
   }
 }
