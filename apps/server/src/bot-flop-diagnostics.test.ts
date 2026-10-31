@@ -41,6 +41,7 @@ it('keeps all flop diagnostics off by default', () => {
     allInRunouts: 60,
     flopAllInRaisesOnly: false,
     iterationsMultiplier: 1,
+    warmStart: false,
   })
 })
 
@@ -52,6 +53,7 @@ it.each([60, 61, 1176])('accepts the diagnostic switches with %s runouts', (runo
       RIVER_DIAG_ALLIN_RUNOUTS: String(runouts),
       RIVER_DIAG_FLOP_RAISES: 'allin',
       RIVER_DIAG_ITERATIONS_MULTIPLIER: '4',
+      RIVER_DIAG_WARM_START: '1',
     }),
   ).toEqual({
     gadgetOff: true,
@@ -59,6 +61,7 @@ it.each([60, 61, 1176])('accepts the diagnostic switches with %s runouts', (runo
     allInRunouts: runouts,
     flopAllInRaisesOnly: true,
     iterationsMultiplier: 4,
+    warmStart: true,
   })
 })
 
@@ -71,6 +74,7 @@ it.each([
   ]),
   ...['', 'sized', 'ALLIN', ' allin'].map((raw) => ['RIVER_DIAG_FLOP_RAISES', raw]),
   ...['', '0', '11', '1.5', '4 ', 'x'].map((raw) => ['RIVER_DIAG_ITERATIONS_MULTIPLIER', raw]),
+  ...['', '0', 'true', 'off', '1 '].map((raw) => ['RIVER_DIAG_WARM_START', raw]),
 ])('rejects %s=%s', (name, raw) => {
   expect(() => flopDiagnosticsFromEnvironment({ [name as string]: raw })).toThrow(name)
 })

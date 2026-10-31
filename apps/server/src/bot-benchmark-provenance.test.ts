@@ -17,6 +17,7 @@ beforeEach(() => {
   vi.stubEnv('RIVER_DIAG_GADGET', undefined)
   vi.stubEnv('RIVER_DIAG_IP_JAM_OVER_RAISE', undefined)
   vi.stubEnv('RIVER_DIAG_ALLIN_RUNOUTS', undefined)
+  vi.stubEnv('RIVER_DIAG_WARM_START', undefined)
   vi.stubEnv('RIVER_FLOP_BET_SIZES', undefined)
   vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', undefined)
   vi.stubEnv('RIVER_TURN_RESIDUAL', undefined)
@@ -47,6 +48,7 @@ it('records unset residual environment values without model hashes', () => {
     RIVER_DIAG_GADGET: null,
     RIVER_DIAG_IP_JAM_OVER_RAISE: null,
     RIVER_DIAG_ALLIN_RUNOUTS: null,
+    RIVER_DIAG_WARM_START: null,
   })
   expect(record.models.RIVER_TURN_RESIDUAL).toBeNull()
   expect(record.environment).toMatchObject({ RIVER_OPPONENT_PREFLOP_PRIOR: null })
@@ -65,6 +67,7 @@ it.each([
   ['RIVER_DIAG_GADGET', 'off'],
   ['RIVER_DIAG_IP_JAM_OVER_RAISE', '1'],
   ['RIVER_DIAG_ALLIN_RUNOUTS', '1176'],
+  ['RIVER_DIAG_WARM_START', '1'],
 ])('records the explicit flop diagnostic %s', (name, value) => {
   vi.stubEnv(name, value)
   expect(
@@ -73,15 +76,17 @@ it.each([
   ).toMatchObject({ [name]: value })
 })
 
-it.each(['RIVER_DIAG_GADGET', 'RIVER_DIAG_IP_JAM_OVER_RAISE', 'RIVER_DIAG_ALLIN_RUNOUTS'])(
-  'rejects invalid diagnostic %s before recording provenance',
-  (name) => {
-    vi.stubEnv(name, 'bad')
-    expect(() =>
-      benchmarkProvenance('flop-replay', { policies: [], seeds: [], plannedHands: 0 }),
-    ).toThrow(name)
-  },
-)
+it.each([
+  'RIVER_DIAG_GADGET',
+  'RIVER_DIAG_IP_JAM_OVER_RAISE',
+  'RIVER_DIAG_ALLIN_RUNOUTS',
+  'RIVER_DIAG_WARM_START',
+])('rejects invalid diagnostic %s before recording provenance', (name) => {
+  vi.stubEnv(name, 'bad')
+  expect(() =>
+    benchmarkProvenance('flop-replay', { policies: [], seeds: [], plannedHands: 0 }),
+  ).toThrow(name)
+})
 
 it.each(['never', '20'])('records explicit turn leaf refresh %s in provenance', (refresh) => {
   vi.stubEnv('RIVER_TURN_EXPLICIT_LEAF', refresh)

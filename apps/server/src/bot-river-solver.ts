@@ -37,6 +37,9 @@ export type Player = 0 | 1
 
 /** Brown & Sandholm (2019); omitted options preserve linear-average CFR+. */
 export interface CfrOptions {
+  /** Diagnostic only: retain numeric learning state for a later root solve. */
+  readonly captureState?: boolean
+  readonly warmStart?: CfrState
   /** Already played own decisions retain their complete per-holding strategy. */
   readonly fixedStrategies?: ReadonlyMap<string, Float64Array>
   readonly scheme?: 'cfr+' | 'dcfr'
@@ -47,8 +50,10 @@ export interface CfrOptions {
 
 export interface CfrVisit {
   readonly history: string
-  /** One-based iteration, reset for each solve; absent when reading final values. */
+  /** One-based learning iteration (continued by warm starts); absent on final reads. */
   readonly iteration?: number
+  /** Local solve iteration for leaf schedules when the learning clock continues. */
+  readonly localIteration?: number
   /** New sample coefficient after this iteration's discount. */
   readonly weight: number
   /** Multiply previous sums by this before adding the new sample. */
@@ -94,6 +99,8 @@ export interface Hands {
 }
 
 export interface RiverSolution {
+  /** Absent unless explicitly captured; never mutated by a subsequent solve. */
+  readonly cfrState?: CfrState
   readonly tree: RiverNode
   /**
    * Average strategy per decision history: a row of action probabilities for
@@ -108,6 +115,32 @@ export interface RiverSolution {
    * is settled on the board. Values read from the solution use the same rule.
    */
   readonly showdown?: ShowdownValues
+}
+
+interface CfrInfoState {
+  readonly player: Player
+  readonly actions: readonly string[]
+  readonly regret: Float64Array
+  readonly sum: Float64Array
+}
+
+/** Numeric snapshot; rows are identified by unordered card pairs, not range positions. */
+export interface CfrState {
+  readonly iterations: number
+  readonly scheme: 'cfr+' | 'dcfr'
+  readonly alpha: number
+  readonly beta: number
+  readonly gamma: number
+  readonly holdings: readonly [ReadonlyMap<number, number>, ReadonlyMap<number, number>]
+  readonly infos: ReadonlyMap<string, CfrInfoState>
+  readonly gadget?: {
+    readonly player: Player
+    readonly promises: Float64Array
+    readonly followRegret: Float64Array
+    readonly takeRegret: Float64Array
+    readonly followSum: Float64Array
+    readonly averageWeight: number
+  }
 }
 
 /** The betting tree for a spot: checks, bets and raises by the spot's sizes, capped. */
@@ -229,7 +262,13 @@ type Compiled =
   | {
       readonly kind: 'terminal'
       readonly node: Exclude<RiverNode, { kind: 'action' }>
-      readonly visit: { history: string; weight: number; discount: number; iteration?: number }
+      readonly visit: {
+        history: string
+        weight: number
+        discount: number
+        iteration?: number
+        localIteration?: number
+      }
       readonly out: readonly [Float64Array, Float64Array]
     }
   | {
@@ -257,6 +296,7 @@ function compile(
   model: RiverOpponentModel | undefined,
   history = '',
   locked?: ReadonlyMap<string, Float64Array>,
+  warm?: CfrState,
 ): Compiled {
   const out = [
     new Float64Array(hands[0].combos.length),
@@ -267,20 +307,43 @@ function compile(
   const width = node.actions.length
   const count = hands[node.player].combos.length
   const modelled = model !== undefined && model.player === node.player
+  const regret = new Float64Array(count * width)
+  const sum = new Float64Array(count * width)
+  const previous = warm?.infos.get(node.history)
+  if (previous?.player === node.player && warm !== undefined) {
+    const oldWidth = previous.actions.length
+    const actions = node.actions.map((action) => previous.actions.indexOf(action))
+    for (const [pair, h] of hands[node.player].byPair) {
+      const old = warm.holdings[node.player].get(pair)
+      if (old === undefined) continue
+      for (const [a, before] of actions.entries()) {
+        if (before < 0) continue
+        regret[h * width + a] = previous.regret[old * oldWidth + before] as number
+        sum[h * width + a] = previous.sum[old * oldWidth + before] as number
+      }
+    }
+  }
   return {
     kind: 'action',
     history: node.history,
     player: node.player,
     width,
     count,
-    regret: new Float64Array(count * width),
-    sum: new Float64Array(count * width),
+    regret,
+    sum,
     strategy: new Float64Array(count * width),
     reach: node.actions.map(() => new Float64Array(count)),
     values: new Array<Float64Array>(width),
     out,
     children: node.children.map((child, action) =>
-      compile(child, hands, model, `${node.history}${node.actions[action] as string}`, locked),
+      compile(
+        child,
+        hands,
+        model,
+        `${node.history}${node.actions[action] as string}`,
+        locked,
+        warm,
+      ),
     ),
     fixed: modelled ? model.strategy(node, hands[node.player]) : null,
     fixedReach: modelled ? node.actions.map(() => new Float64Array(count)) : [],
@@ -355,11 +418,22 @@ export function solveRiver(
   const dcfr = options.scheme === 'dcfr'
   const { alpha = 1.5, beta = 0, gamma = 2 } = options
   if (![alpha, beta, gamma].every(Number.isFinite)) throw new Error('finite CFR exponents required')
+  const warm = options.warmStart
+  if (
+    warm !== undefined &&
+    (model !== undefined ||
+      warm.scheme !== (dcfr ? 'dcfr' : 'cfr+') ||
+      warm.alpha !== alpha ||
+      warm.beta !== beta ||
+      warm.gamma !== gamma)
+  )
+    throw new Error('warm start requires the same CFR discounts and no opponent model')
+  const completed = warm?.iterations ?? 0
   let discount = 1
   let positiveDiscount = 1
   let negativeDiscount = 1
   let averageWeight = 0
-  let currentIteration = 0
+  let currentIteration = completed
   // End-of-iteration discount: S_t = d_t (S_(t-1) + x_t).
   // A sample s has coefficient product_(u=s..T) (u/(u+1))^gamma
   // = (s/(T+1))^gamma. Use this recurrence for strategy, CFVs, reach,
@@ -380,7 +454,7 @@ export function solveRiver(
     return dcfr ? next * (next >= 0 ? positiveDiscount : negativeDiscount) : Math.max(0, next)
   }
   const scratch = scratchFor(hands)
-  const root = compile(tree, hands, model, '', options.fixedStrategies)
+  const root = compile(tree, hands, model, '', options.fixedStrategies, warm)
   const combined = new Float64Array(Math.max(hands[0].combos.length, hands[1].combos.length))
   // `fixed` is the modelled player's reach while they follow the model; it is
   // only carried while the other player is the one learning.
@@ -403,6 +477,7 @@ export function solveRiver(
       }
       if (showdown !== undefined && node.node.kind === 'showdown') {
         node.visit.iteration = currentIteration
+        if (warm !== undefined) node.visit.localIteration = currentIteration - completed
         node.visit.weight = weight
         node.visit.discount = discount
         showdown(node.node, traverser, hands, self, reach, out, node.visit)
@@ -498,9 +573,10 @@ export function solveRiver(
   const [free1, fixed1] = split(1)
   const [free0, fixed0] = split(0)
   let followShareOut: Float64Array | undefined
+  let gadgetState: CfrState['gadget']
   if (gadget === undefined) {
     for (let iteration = 1; iteration <= iterations; iteration += 1) {
-      const weight = beginIteration(iteration)
+      const weight = beginIteration(completed + iteration)
       walk(root, 0, hands[0].weights, free1, fixed1, weight)
       walk(root, 1, hands[1].weights, free0, fixed0, weight)
     }
@@ -514,11 +590,29 @@ export function solveRiver(
     const takeRegret = new Float64Array(count)
     const followSum = new Float64Array(count)
     const follow = new Float64Array(count)
+    const previous = warm?.gadget
+    // An introduced/changed gadget has no historical samples. Its denominator
+    // starts at zero even though the shared subtree continues its DCFR clock.
+    if (previous?.player === resolved && warm !== undefined) {
+      const rows = hands[resolved].combos.map((combo) =>
+        warm.holdings[resolved].get(pairKey(cardKey(combo.hole[0]), cardKey(combo.hole[1]))),
+      )
+      if (
+        rows.every((old, h) => old !== undefined && previous.promises[old] === gadget.promises[h])
+      ) {
+        rows.forEach((old, h) => {
+          followRegret[h] = previous.followRegret[old as number] as number
+          takeRegret[h] = previous.takeRegret[old as number] as number
+          followSum[h] = previous.followSum[old as number] as number
+        })
+        averageWeight = previous.averageWeight
+      }
+    }
     // A promise is per deal; the solver works in values summed over the other
     // player's reach, so each is scaled by the reach that holding can meet.
     const meets = compatibleMasses(hands[resolved], hands[other], hands[other].weights)
     for (let iteration = 1; iteration <= iterations; iteration += 1) {
-      const weight = beginIteration(iteration)
+      const weight = beginIteration(completed + iteration)
       for (let o = 0; o < count; o += 1) {
         const up = Math.max(0, followRegret[o] as number)
         const down = Math.max(0, takeRegret[o] as number)
@@ -539,12 +633,29 @@ export function solveRiver(
       }
     }
     followShareOut = Float64Array.from(followSum, (sum) => sum / averageWeight)
+    if (options.captureState)
+      gadgetState = {
+        player: resolved,
+        promises: gadget.promises.slice(),
+        followRegret,
+        takeRegret,
+        followSum,
+        averageWeight,
+      }
   }
   // One table per decision, not an array per combo: solutions are cached, and
   // a small array costs several times the numbers it holds.
   const strategy = new Map<string, Float64Array>()
-  const collect = (node: Compiled) => {
+  const infos = options.captureState ? new Map<string, CfrInfoState>() : undefined
+  const collect = (node: Compiled, tree: RiverNode) => {
     if (node.kind !== 'action') return
+    if (tree.kind !== 'action') throw new Error('compiled tree mismatch')
+    infos?.set(node.history, {
+      player: node.player,
+      actions: tree.actions,
+      regret: node.regret,
+      sum: node.sum,
+    })
     const { width, count, sum } = node
     const table = new Float64Array(count * width)
     for (let h = 0; h < count; h += 1) {
@@ -558,12 +669,29 @@ export function solveRiver(
       }
     }
     strategy.set(node.history, table)
-    node.children.forEach(collect)
+    node.children.forEach((child, a) => {
+      collect(child, tree.children[a] as RiverNode)
+    })
   }
-  collect(root)
+  collect(root, tree)
   const solved =
     showdown === undefined ? { tree, strategy, spot } : { tree, strategy, spot, showdown }
-  return followShareOut === undefined ? solved : { ...solved, followShare: followShareOut }
+  const result = followShareOut === undefined ? solved : { ...solved, followShare: followShareOut }
+  return infos === undefined
+    ? result
+    : {
+        ...result,
+        cfrState: {
+          iterations: currentIteration,
+          scheme: dcfr ? 'dcfr' : 'cfr+',
+          alpha,
+          beta,
+          gamma,
+          holdings: [hands[0].byPair, hands[1].byPair],
+          infos,
+          ...(gadgetState === undefined ? {} : { gadget: gadgetState }),
+        },
+      }
 }
 
 /** A decision's strategy as one row per combo (views into its table), found by its history. */

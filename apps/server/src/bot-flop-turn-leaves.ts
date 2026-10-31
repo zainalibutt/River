@@ -112,7 +112,7 @@ export function perTurnShowdown(
       const initial = early.withRecord(nextRecord)
       return Object.assign(
         (...args: Parameters<PerCardShowdown>) => {
-          const iteration = args[6]?.iteration
+          const iteration = args[6]?.localIteration ?? args[6]?.iteration
           const useEarly =
             lastIterations !== undefined &&
             iteration !== undefined &&

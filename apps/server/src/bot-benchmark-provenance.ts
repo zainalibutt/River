@@ -128,6 +128,7 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
       'RIVER_DIAG_ALLIN_RUNOUTS',
       'RIVER_DIAG_FLOP_RAISES',
       'RIVER_DIAG_ITERATIONS_MULTIPLIER',
+      'RIVER_DIAG_WARM_START',
       'OMP_NUM_THREADS',
       'OPENBLAS_NUM_THREADS',
       'UV_THREADPOOL_SIZE',

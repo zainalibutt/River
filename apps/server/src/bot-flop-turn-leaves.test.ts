@@ -104,6 +104,41 @@ it('switches on exact CFR iterations, resets for gadget solves and uses final le
   }
 })
 
+it('keeps the early/late leaf schedule local while a warm start continues DCFR discounts', () => {
+  const spot = { ...spotOf(), betSizes: [] }
+  let earlyCalls = 0
+  let lateCalls = 0
+  const early: TurnLeafEvaluator = (...args) => {
+    earlyCalls++
+    return half(...args)
+  }
+  const late: TurnLeafEvaluator = (...args) => {
+    lateCalls++
+    return half(...args)
+  }
+  const record = createTurnPromiseRecord()
+  const leaves = perTurnShowdown(spot, early, record, 1, {
+    network: late,
+    lastIterations: 1,
+    iterations: 4,
+  })
+  const root = solveRiverBase(spot, 4, undefined, leaves, undefined, undefined, {
+    scheme: 'dcfr',
+    captureState: true,
+  })
+  if (!root.cfrState) throw new Error('missing root state')
+  earlyCalls = lateCalls = 0
+  const copied = structuredClone(record)
+  solveRiverBase(spot, 4, undefined, leaves.withRecord(copied), undefined, root.tree, {
+    scheme: 'dcfr',
+    warmStart: root.cfrState,
+  })
+  expect(earlyCalls).toBe(3 * 2 * 49)
+  expect(lateCalls).toBe(2 * 49)
+  expect(record.leaves.get('kk')?.weight[0]).toBeCloseTo(30 / 25, 12)
+  expect(copied.leaves.get('kk')?.weight[0]).toBeCloseTo(204 / 81, 12)
+})
+
 it('all-late schedule preserves strategy and carried samples exactly', () => {
   const spot = spotOf()
   const baseRecord = createTurnPromiseRecord(),

@@ -927,6 +927,8 @@ function solveTurnSpot(
       : readsModel(reads, spot, opponent)
   let record: RiverPromiseRecord | undefined
   const diagnostics = street.street === 'flop' ? flopDiagnosticsFromEnvironment() : undefined
+  let warmRecord: RiverPromiseRecord | undefined
+  const rootOptions = diagnostics?.warmStart ? { ...tuning, captureState: true } : tuning
   let preparedLeaves: ReturnType<typeof perRiverShowdown> | undefined
   const queryValues = new WeakMap<RiverSolution, readonly [Float64Array, Float64Array]>()
   const solve = (
@@ -955,7 +957,10 @@ function solveTurnSpot(
             ? 'per-river carry needs a river network'
             : 'per-turn carry needs a turn-start network',
         )
-      record = createRiverPromiseRecord()
+      // Shared histories keep the same CFR averaging samples as the seeded
+      // strategy sums. New terminal histories are created lazily with zeros.
+      record =
+        options.warmStart && warmRecord ? structuredClone(warmRecord) : createRiverPromiseRecord()
       const showdown =
         preparedLeaves === undefined
           ? perRiver
@@ -977,7 +982,7 @@ function solveTurnSpot(
       // Opponent models contain arbitrary strategy closures, which cannot form
       // a complete numeric cache key. Keep those solves outside the memo.
       const memo =
-        opponentModel === undefined
+        opponentModel === undefined && options.warmStart === undefined
           ? memoLbrSolve
           : <T>(_owner: object, _input: unknown, compute: (memoized: boolean) => T) =>
               compute(false)
@@ -997,6 +1002,7 @@ function solveTurnSpot(
           options.fixedStrategies,
           valuesNeeded,
           diagnostics?.allInRunouts,
+          ...(diagnostics?.warmStart ? [options.captureState] : []),
         ],
         (memoized) => {
           const result = solveRiver(
@@ -1030,7 +1036,7 @@ function solveTurnSpot(
     model,
     carry?.gadget,
     undefined,
-    tuning,
+    rootOptions,
     (safe && carry === null) || (tuning.offTree === 'resolve' && carry === null),
   )
   let rootGadget = carry?.gadget
@@ -1044,7 +1050,7 @@ function solveTurnSpot(
       player: opponent,
       promises,
     }
-    solution = solve({ ...spot, ranges }, undefined, rootGadget)
+    solution = solve({ ...spot, ranges }, undefined, rootGadget, undefined, rootOptions)
   }
   stats.solveMs += performance.now() - tracked
   stats.solves += 1
@@ -1099,6 +1105,11 @@ function solveTurnSpot(
     promises: (queryValues.get(solution) ?? riverValues(solution).values)[opponent],
   }
   const rootSpot = solution.spot
+  if (diagnostics?.warmStart && !solution.cfrState)
+    throw new Error('warm-start flop root is missing captured CFR state')
+  if (diagnostics?.warmStart) warmRecord = record
+  const warmOptions: CfrOptions =
+    solution.cfrState && diagnostics?.warmStart ? { warmStart: solution.cfrState } : {}
   const state: OffTreeState<SolvedTurn> = {
     failures: new Map(),
     solve: (tree, fixedStrategies) => {
@@ -1115,6 +1126,7 @@ function solveTurnSpot(
               solve(rootSpot, undefined, undefined, activeTree, {
                 ...tuning,
                 fixedStrategies: locked,
+                ...warmOptions,
               }),
           }),
           state,
@@ -1122,7 +1134,11 @@ function solveTurnSpot(
         )
       }
       return pack(
-        solve(rootSpot, undefined, activeGadget, activeTree, { ...tuning, fixedStrategies }),
+        solve(rootSpot, undefined, activeGadget, activeTree, {
+          ...tuning,
+          fixedStrategies,
+          ...warmOptions,
+        }),
         state,
         activeGadget,
       )

@@ -26,6 +26,9 @@ export function flopDiagnosticsFromEnvironment(env: NodeJS.ProcessEnv = process.
   const jam = env.RIVER_DIAG_IP_JAM_OVER_RAISE
   if (jam !== undefined && jam !== '1')
     throw new Error('RIVER_DIAG_IP_JAM_OVER_RAISE must be 1 when set')
+  const warm = env.RIVER_DIAG_WARM_START
+  if (warm !== undefined && warm !== '1')
+    throw new Error('RIVER_DIAG_WARM_START must be 1 when set')
   const raw = env.RIVER_DIAG_ALLIN_RUNOUTS
   const runouts = raw === undefined ? 60 : Number(raw)
   if (
@@ -53,6 +56,7 @@ export function flopDiagnosticsFromEnvironment(env: NodeJS.ProcessEnv = process.
     allInRunouts: runouts,
     flopAllInRaisesOnly: raises === 'allin',
     iterationsMultiplier,
+    warmStart: warm === '1',
   }
 }
 

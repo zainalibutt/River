@@ -8,6 +8,7 @@ import {
   personalityPool,
 } from '@river/engine'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import * as flopLeaves from './bot-flop-turn-leaves.js'
 import { followWithResolving, type OffTreeState, offTreeStats } from './bot-off-tree.js'
 import { legacyGuardPolicy } from './bot-poker-guard.js'
 import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
@@ -27,12 +28,15 @@ import {
   solveRiver,
 } from './bot-river-solver.js'
 import { profileFor } from './bot-service.js'
-import { TURN_STREET, turnSolverPolicy } from './bot-turn-policy.js'
+import { FLOP_STREET, TURN_STREET, turnSolverPolicy } from './bot-turn-policy.js'
 import * as leaves from './bot-turn-river-leaves.js'
 import type { RiverValueNetwork } from './bot-value-network.js'
 
 vi.mock('./bot-public-replay.js', () => ({ publicDecisions: vi.fn() }))
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+})
 const cards = (s: string) => s.split(' ').map(parseCard)
 const spot: RiverSpot = {
   board: cards('Ah Kd 7s 2d'),
@@ -128,6 +132,106 @@ const context = (observation: BotObservationV1) => ({
 })
 
 describe('off-tree policy resolving', () => {
+  it.each([false, true])(
+    'wires flop warm start=%s with matching carried averages and played locks',
+    (warm) => {
+      vi.stubEnv('RIVER_DIAG_WARM_START', warm ? '1' : undefined)
+      const records: leaves.PromiseRecord[] = []
+      const seeds: leaves.PromiseRecord[] = []
+      const actual = flopLeaves.perTurnShowdown
+      vi.spyOn(flopLeaves, 'perTurnShowdown').mockImplementation((...args) => {
+        if (args[2]) records.push(args[2])
+        const wrap = (hook: leaves.PerCardShowdown): leaves.PerCardShowdown =>
+          Object.assign((...values: Parameters<leaves.PerCardShowdown>) => hook(...values), {
+            withRecord: (record?: leaves.PromiseRecord) => {
+              if (record) {
+                records.push(record)
+                seeds.push(structuredClone(record))
+              }
+              return wrap(hook.withRecord(record))
+            },
+          })
+        return wrap(actual(...args))
+      })
+      const flopView = (id: string, facing = 0): BotObservationV1 => ({
+        ...view('turn', id, facing),
+        street: 'flop',
+        board: spot.board.slice(0, 3),
+        seats: view('turn', id, facing).seats.map((seat) => ({
+          ...seat,
+          betStreet: seat.playerId === 'b' ? facing : 0,
+        })),
+      })
+      const flopMove = (id: string, action: PublicDecision['taken']['action']): PublicDecision => ({
+        observation: flopView(id),
+        taken: { street: 'flop', seat: id === 'a' ? 0 : 1, action },
+      })
+      vi.mocked(publicDecisions).mockReturnValue([
+        flopMove('a', { kind: 'check' }),
+        flopMove('b', { kind: 'raiseTo', to: 50 }),
+      ])
+      const calls = vi.spyOn(solver, 'solveRiver')
+      const flop = turnSolverPolicy(
+        legacyGuardPolicy,
+        network,
+        'flop-warm',
+        1,
+        {
+          offTree: 'resolve',
+          carry: 'per-turn',
+          turnStartNetwork: network,
+          scheme: 'dcfr',
+          iterations: 4,
+          maxRaises: 0,
+          preflop: {
+            policy: { ...legacyGuardPolicy, releaseHand() {} },
+            stats: {
+              decisions: 0,
+              preflopOffTree: 0,
+              fallbacks: {},
+              rangeFallbacks: 0,
+              exactRanges: 0,
+              packs: {},
+              clampedBelow: 0,
+              clampedAbove: 0,
+            },
+            ranges: () => [[...spot.ranges[0]], [...spot.ranges[1]]],
+          },
+        },
+        FLOP_STREET,
+      )
+      expect(flop.explain(flopView('a', 50), personality)).toMatchObject({ history: 'kb50' })
+      expect(flop.stats.offTree).toMatchObject({ events: 1, resolves: 1, failures: {} })
+      expect(calls).toHaveBeenCalledTimes(2)
+      const root = calls.mock.results[0]?.value as ReturnType<typeof solveRiver>
+      const options = calls.mock.calls[1]?.[6]
+      expect(options?.fixedStrategies?.get('')).toBe(root.strategy.get(''))
+      if (warm) {
+        expect(root.cfrState?.iterations).toBe(4)
+        expect(options?.warmStart).toBe(root.cfrState)
+        expect(seeds[0]).toEqual(records[0])
+        expect(records[1]).not.toBe(records[0])
+      } else {
+        expect(root.cfrState).toBeUndefined()
+        expect(options?.warmStart).toBeUndefined()
+        expect(seeds[0]?.leaves.size).toBe(0)
+      }
+      const weight = (from: number, through: number) =>
+        Array.from(
+          { length: through - from + 1 },
+          (_, i) => ((i + from) / (through + 1)) ** 2,
+        ).reduce((sum, value) => sum + value, 0)
+      expect(records[0]?.leaves.get('kk')?.weight[0]).toBeCloseTo(weight(1, 4), 12)
+      expect(records[1]?.leaves.get('kk')?.weight[0]).toBeCloseTo(weight(1, warm ? 8 : 4), 12)
+      expect(records[1]?.leaves.get('kb50c')?.weight[0]).toBeCloseTo(
+        warm ? weight(5, 8) : weight(1, 4),
+        12,
+      )
+      expect(calls.mock.results[1]?.value.strategy.get('')).toEqual(root.strategy.get(''))
+    },
+    120_000,
+  )
+
   it('keeps inherited bounds, exact chips and replaces the per-card record for the actual turn line', () => {
     vi.mocked(publicDecisions).mockReturnValue([bet])
     const calls = vi.spyOn(solver, 'solveRiver')
