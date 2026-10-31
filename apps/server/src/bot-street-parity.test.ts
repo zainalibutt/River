@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cardKey, parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
+import { perTurnShowdown } from './bot-flop-turn-leaves.js'
 import { type RiverNode, riverTree, solveRiver, strategyRows } from './bot-river-solver.js'
 import { comboIndex52 } from './bot-river-value-data.js'
 import {
@@ -48,9 +49,15 @@ function fixture(overrides: Partial<StreetParitySpec> = {}): StreetParitySpec {
 describe('street parity specs', () => {
   it('validates the public game and both dense ranges', () => {
     expect(validateStreetSpec(fixture()).street).toBe('river')
+    expect(validateStreetSpec(fixture({ street: 'flop', board: board.slice(0, 3) })).street).toBe(
+      'flop',
+    )
     for (const overrides of [
       { n: -1 },
+      { street: 'preflop' },
       { street: 'flop' },
+      { street: 'flop', board: board.slice(0, 4) },
+      { street: 'flop', board: ['Jc', '7h', 'Jc'] },
       { board: board.slice(0, 4) },
       { board: ['Jc', '7h', '6h', '2d', 'Jc'] },
       { board: ['Jc', '7h', '6h', '2d', '9x'] },
@@ -124,6 +131,9 @@ describe('street parity specs', () => {
     expect(makeStreetSpecs(roots, { ...options, street: 'turn', count: 1 })[0]?.board).toHaveLength(
       4,
     )
+    const flop = makeStreetSpecs(roots, { ...options, street: 'flop' })
+    expect(flop.every((row) => row.board.join(',') === roots[0]?.board.join(','))).toBe(true)
+    expect(flop).toEqual(makeStreetSpecs(roots, { ...options, street: 'flop' }))
     expect(() => makeStreetSpecs(roots, { ...options, count: 6 })).toThrow('count exceeds')
   })
 })
@@ -201,9 +211,18 @@ it('writes the requested TexasSolver commands, with no non-all-in raise sizes', 
     ].join('\n'),
   )
   const turn = texasInput(fixture({ street: 'turn', board: board.slice(0, 4) }), '0-turn.json')
-  expect(turn.match(/set_bet_sizes/g)).toHaveLength(8)
+  expect(turn.match(/set_bet_sizes/g)).toHaveLength(9)
   expect(turn).not.toContain(',raise')
   expect(turn).toContain('oop,turn,bet,66')
+  expect(turn.match(/set_bet_sizes .*donk.*\n/g)).toEqual(['set_bet_sizes oop,river,donk,66\n'])
+  const flop = texasInput(fixture({ street: 'flop', board: board.slice(0, 3) }), '0-flop.json')
+  expect(flop.match(/set_bet_sizes/g)).toHaveLength(14)
+  expect(flop).not.toContain(',raise')
+  expect(flop).toContain('set_bet_sizes oop,flop,bet,66\n')
+  expect(flop.match(/set_bet_sizes .*donk.*\n/g)).toEqual([
+    'set_bet_sizes oop,turn,donk,66\n',
+    'set_bet_sizes oop,river,donk,66\n',
+  ])
   const tiny = addRanges(pairRange('A', 1e-12), pairRange('Q', 2e-12))
   const text = texasInput(fixture({ ranges: [tiny, pairRange('K')] }), 'tiny.json')
   expect(text).toContain('AA:1')
@@ -281,6 +300,55 @@ it('runs turn CFR with per-river leaves, with no need for a carry record or turn
   expect(result.nodes).toHaveLength(3)
 })
 
+it('solves a tiny flop with v9g per-turn leaves and all-in runouts on the restricted tree', () => {
+  const seen = new Set<string>()
+  const half = new Float64Array(1326).fill(0.5)
+  const leaf: RiverLeafEvaluator = (spot) => {
+    // Only non-all-in terminals reach the injected turn-start evaluator.
+    expect(spot.board).toHaveLength(4)
+    expect(spot.stack).toBeGreaterThan(0)
+    seen.add(spot.board.map((c) => `${c.rank}${c.suit}`).join(','))
+    return [half, half]
+  }
+  const spec = fixture({ street: 'flop', board: board.slice(0, 3), iterations: 2 })
+  const result = solveStreetParity(spec, 2, leaf)
+  expect(result.street).toBe('flop')
+  expect(result.board).toEqual(spec.board)
+  expect(result.iterations).toBe(4)
+  expect(seen.size).toBe(49)
+  expect(result.nodes.map((node) => node.history)).toEqual(['', 'k', 'kb6.6'])
+  expect(result.nodes.map((node) => node.actions)).toEqual([
+    ['k', 'b6.6', 'a'],
+    ['k', 'b6.6', 'a'],
+    ['f', 'c', 'a'],
+  ])
+  const spot = streetParitySpot(spec)
+  const production = solveRiver(
+    spot,
+    4,
+    undefined,
+    perTurnShowdown(spot, leaf),
+    undefined,
+    undefined,
+    { scheme: 'dcfr' },
+  )
+  for (const node of result.nodes) {
+    expect(node.strategy.map((row) => row.probabilities)).toEqual(
+      strategyRows(production, node.history)?.map((row) => [...row]),
+    )
+    for (const row of node.strategy) {
+      expect(spec.ranges[node.player][row.combo]).toBeGreaterThan(0)
+      expect(row.probabilities.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12)
+      expect(row.probabilities.every((p) => p >= 0 && p <= 1)).toBe(true)
+    }
+  }
+  expect(
+    (result.facingBet.fold ?? Number.NaN) +
+      (result.facingBet.call ?? Number.NaN) +
+      (result.facingBet.allIn ?? Number.NaN),
+  ).toBeCloseTo(1, 12)
+}, 30_000)
+
 it('runs both CLI modes on JSONL and rejects invalid input before opening output', () => {
   const dir = mkdtempSync(join(dirname(fileURLToPath(import.meta.url)), '.parity-test-'))
   try {
@@ -312,6 +380,28 @@ it('runs both CLI modes on JSONL and rejects invalid input before opening output
     ])
     const generated = validateStreetSpec(JSON.parse(readFileSync(spec, 'utf8')))
     expect(generated.iterations).toBe(3)
+    const flopSpec = join(dir, 'flop.jsonl')
+    streetParityMain([
+      '--make-spec',
+      '--dumps',
+      dump,
+      '--count',
+      '1',
+      '--seed',
+      'cli',
+      '--street',
+      'flop',
+      '--pot',
+      '8',
+      '--stack',
+      '196',
+      '--out',
+      flopSpec,
+    ])
+    const generatedFlop = validateStreetSpec(JSON.parse(readFileSync(flopSpec, 'utf8')))
+    expect(generatedFlop.street).toBe('flop')
+    expect(generatedFlop.board).toEqual(board.slice(0, 3))
+    expect(generatedFlop.iterations).toBe(40)
     streetParityMain([
       '--spec',
       spec,

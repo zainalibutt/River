@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { cardKey, makeDeck, mulberry32, parseCard, RANKS, seedFromString } from '@river/engine'
+import { perTurnShowdown } from './bot-flop-turn-leaves.js'
 import {
   type RangeCombo,
   type RiverNode,
@@ -11,11 +12,15 @@ import {
 } from './bot-river-solver.js'
 import { COMBOS } from './bot-river-value-data.js'
 import { perRiverShowdown, type RiverLeafEvaluator } from './bot-turn-river-leaves.js'
-import { type RiverValueNetwork, riverNetworkFromEnvironment } from './bot-value-network.js'
+import {
+  type RiverValueNetwork,
+  riverNetworkFromEnvironment,
+  turnStartNetworkFromEnvironment,
+} from './bot-value-network.js'
 
 export interface StreetParitySpec {
   readonly n: number
-  readonly street: 'turn' | 'river'
+  readonly street: 'flop' | 'turn' | 'river'
   readonly board: readonly string[]
   readonly pot: number
   readonly stack: number
@@ -24,6 +29,7 @@ export interface StreetParitySpec {
   readonly iterations: number
 }
 
+const BOARD_CARDS = { flop: 3, turn: 4, river: 5 } as const
 const deck = makeDeck()
 // The dump's lexicographic (a,b) order, not showdown-strength order.
 const combos = deck.flatMap((a, low) =>
@@ -101,9 +107,9 @@ export function classWeights(range: readonly number[], board: readonly string[])
 export function validateStreetSpec(value: unknown): StreetParitySpec {
   const row = object(value)
   integer(row.n, 'n', 0)
-  if (row.street !== 'turn' && row.street !== 'river')
-    throw new Error('street must be turn or river')
-  const board = boardCards(row.board, row.street === 'turn' ? 4 : 5)
+  if (row.street !== 'flop' && row.street !== 'turn' && row.street !== 'river')
+    throw new Error('street must be flop, turn or river')
+  const board = boardCards(row.board, BOARD_CARDS[row.street])
   positive(row.pot, 'pot')
   positive(row.stack, 'stack')
   if (!Number.isFinite((row.pot as number) + 2 * (row.stack as number)))
@@ -169,12 +175,16 @@ export function solveStreetParity(
   const iterations = integer(spec.iterations * multiplier, 'scaled iterations')
   const spot = streetParitySpot(spec)
   const start = performance.now()
-  // This is v9g's production turn solve path, without a PromiseRecord, gadget,
-  // opponent model or fixed prefix. All-in turn leaves remain exact showdowns.
+  // v9g's initial flop/turn solve uses this core with per-card leaves, not the
+  // solveFlop wrapper (which uses flop-end values). Both accept the restricted
+  // RiverSpot tree unchanged. Omit records, gadget, reads and fixed prefixes;
+  // perTurnShowdown retains production's seeded flop all-in runouts.
   const showdown =
-    spec.street === 'turn'
-      ? perRiverShowdown(spot, network ?? riverNetworkFromEnvironment())
-      : undefined
+    spec.street === 'flop'
+      ? perTurnShowdown(spot, network ?? turnStartNetworkFromEnvironment())
+      : spec.street === 'turn'
+        ? perRiverShowdown(spot, network ?? riverNetworkFromEnvironment())
+        : undefined
   const solution = solveRiver(spot, iterations, undefined, showdown, undefined, undefined, {
     scheme: 'dcfr',
   })
@@ -277,13 +287,17 @@ export function texasInput(value: unknown, dumpPath: string, threads = 8): strin
     `set_range_oop ${texasRange(spec.ranges[0], spec.board)}`,
     `set_range_ip ${texasRange(spec.ranges[1], spec.board)}`,
   ]
-  for (const street of spec.street === 'turn' ? ['turn', 'river'] : ['river']) {
+  const streets = (['flop', 'turn', 'river'] as const).slice(
+    ['flop', 'turn', 'river'].indexOf(spec.street),
+  )
+  for (const street of streets) {
     for (const player of ['oop', 'ip']) {
       lines.push(
         `set_bet_sizes ${player},${street},bet,66`,
         `set_bet_sizes ${player},${street},allin`,
       )
     }
+    if (street !== spec.street) lines.push(`set_bet_sizes oop,${street},donk,66`)
   }
   lines.push(
     'set_allin_threshold 0.67',
@@ -327,7 +341,7 @@ export function makeStreetSpecs(
   options: {
     count: number
     seed: string
-    street: 'turn' | 'river'
+    street: StreetParitySpec['street']
     pot: number
     stack: number
     iterations?: number
@@ -335,8 +349,8 @@ export function makeStreetSpecs(
 ): StreetParitySpec[] {
   integer(options.count, 'count')
   if (options.count > roots.length) throw new Error('count exceeds available dump spots')
-  if (options.street !== 'turn' && options.street !== 'river')
-    throw new Error('street must be turn or river')
+  if (options.street !== 'flop' && options.street !== 'turn' && options.street !== 'river')
+    throw new Error('street must be flop, turn or river')
   const random = mulberry32(seedFromString(options.seed))
   const order = Array.from(roots.keys())
   return Array.from({ length: options.count }, (_, n) => {
@@ -346,7 +360,7 @@ export function makeStreetSpecs(
     const board = [...boardCards(root.board, 3)]
     denseRanges(root.ranges)
     const available = deck.map((c) => `${c.rank}${c.suit}`).filter((c) => !board.includes(c))
-    while (board.length < (options.street === 'turn' ? 4 : 5)) {
+    while (board.length < BOARD_CARDS[options.street]) {
       const at = Math.floor(random() * available.length)
       board.push(available.splice(at, 1)[0] as string)
     }
@@ -390,7 +404,9 @@ function readFlopRoots(files: readonly string[]): FlopRoot[] {
 
 export const STREET_PARITY_USAGE = `Usage (from repository root):
 npx tsx apps/server/src/bot-street-parity.ts --spec <spec.jsonl> --out <result.jsonl> [--iterations-multiplier N] [--texas-dir <dir>] [--threads 8]
-npx tsx apps/server/src/bot-street-parity.ts --make-spec --dumps <dump.jsonl ...> --count N --seed S --street turn|river --pot P --stack S --out <spec.jsonl> [--iterations 40]
+npx tsx apps/server/src/bot-street-parity.ts --make-spec --dumps <dump.jsonl ...> --count N --seed S --street flop|turn|river --pot P --stack S --out <spec.jsonl> [--iterations 40]
+Flop solves use RIVER_TURN_START_NETWORK (export stem without .bin), as v9g's per-turn leaves.
+Flop all-ins use production's seeded runouts (60; RIVER_DIAG_ALLIN_RUNOUTS override).
 Turn solves use RIVER_RIVER_NETWORK (export stem without .bin), as v9g's per-river leaves.
 Texas inputs are <n>-<street>.txt; run each with TexasSolver's cwd set to --texas-dir.
 `
@@ -440,7 +456,7 @@ export function streetParityMain(args: readonly string[]) {
     const specs = makeStreetSpecs(readFlopRoots(values.get('--dumps') as string[]), {
       count: Number(required('--count')),
       seed: required('--seed'),
-      street: required('--street') as 'turn' | 'river',
+      street: required('--street') as StreetParitySpec['street'],
       pot: Number(required('--pot')),
       stack: Number(required('--stack')),
       iterations: Number(values.get('--iterations')?.[0] ?? 40),
@@ -477,10 +493,14 @@ export function streetParityMain(args: readonly string[]) {
           file: join(texasDir, `${spec.n}-${spec.street}.txt`),
           text: texasInput(spec, `${spec.n}-${spec.street}.json`, threads),
         }))
-  const network = specs.some((spec) => spec.street === 'turn')
-    ? riverNetworkFromEnvironment()
-    : undefined
-  const results = specs.map((spec) => solveStreetParity(spec, multiplier, network))
+  const networks = {
+    flop: specs.some((spec) => spec.street === 'flop')
+      ? turnStartNetworkFromEnvironment()
+      : undefined,
+    turn: specs.some((spec) => spec.street === 'turn') ? riverNetworkFromEnvironment() : undefined,
+    river: undefined,
+  }
+  const results = specs.map((spec) => solveStreetParity(spec, multiplier, networks[spec.street]))
   if (texasDir !== undefined) mkdirSync(texasDir, { recursive: true })
   for (const item of texas) writeFileSync(item.file, item.text)
   writeFileSync(output, `${results.map((row) => JSON.stringify(row)).join('\n')}\n`)
