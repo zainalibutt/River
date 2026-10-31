@@ -1,4 +1,7 @@
-import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
+import {
+  type FlopResolveDiagnostic,
+  flopDiagnosticsFromEnvironment,
+} from './bot-flop-diagnostics.js'
 import type { TurnStartLeafOptions } from './bot-flop-turn-leaves.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { tablePreflopPolicy } from './bot-preflop-tables.js'
@@ -21,6 +24,7 @@ import {
 } from './bot-value-network.js'
 
 export interface V9gOptions {
+  readonly flopResolveDiagnostic?: FlopResolveDiagnostic
   /** Offline replay opt-in; scales flop/turn solves, including off-tree re-solves. */
   readonly resolveIterationMultiplier?: number
   readonly offTree?: 'resolve'
@@ -105,6 +109,7 @@ export function v9gPolicy(
     safeExploitConfig,
     turnStartLeaf,
     resolveIterationMultiplier = 1,
+    flopResolveDiagnostic,
   }: V9gOptions = {},
   sharedNetworks?: V9gNetworks,
 ) {
@@ -152,6 +157,7 @@ export function v9gPolicy(
             }),
           })
   const chain = solvedFlopPolicy(networks.turn, networks.flop, {
+    ...(flopResolveDiagnostic === undefined ? {} : { flopResolveDiagnostic }),
     carry: 'both',
     turnStartNetwork: networks.turnStart,
     riverNetwork: networks.river,

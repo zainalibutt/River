@@ -26,7 +26,7 @@ import { actionFor } from './bot-service.js'
 import { focalRotation } from './bot-session-campaign.js'
 import { SLUMBOT_STAKE, slumbotMoves, slumbotRoom } from './bot-slumbot.js'
 import type { TurnExplanation } from './bot-turn-policy.js'
-import { v9gPolicy } from './bot-v9g-policy.js'
+import { type V9gOptions, v9gPolicy } from './bot-v9g-policy.js'
 
 // tsx apps/server/src/bot-flop-defence-replay.ts --spots 2 --seed example
 //   --variant prod --shard 1/1 --out art/out/flop-prod.jsonl <hands.jsonl ...>
@@ -229,7 +229,7 @@ export function selectSpots(spots: readonly Spot[], count: number, seed: string,
   return ordered.slice(0, count).filter((_, index) => index % total === k - 1)
 }
 
-async function* jsonLines<T>(file: string): AsyncGenerator<{ value: T; line: number }> {
+export async function* jsonLines<T>(file: string): AsyncGenerator<{ value: T; line: number }> {
   const input = createReadStream(file, { encoding: 'utf8' })
   const reader = createInterface({ input, crlfDelay: Infinity })
   let line = 0
@@ -255,6 +255,7 @@ export function replaySpot(
   variant: 'prod' | 'big',
   runSeed: string,
   dump?: (row: ReturnType<typeof flopDumpSpot>) => void,
+  diagnostic?: Pick<V9gOptions, 'flopResolveDiagnostic'>,
 ): ReplayRow {
   const personality = [...focalRotation(), championPersonality()].find(
     (p) => p.id === log.personality,
@@ -267,6 +268,7 @@ export function replaySpot(
     offTree: 'resolve',
     preflopTables: true,
     ...(variant === 'big' ? { resolveIterationMultiplier: 10 } : {}),
+    ...diagnostic,
   })
   const { policy } = solver
   const rng = mulberry32(seedFromString(`slumbot:${runSeed}:${log.hand}`))

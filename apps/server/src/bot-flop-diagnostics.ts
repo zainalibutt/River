@@ -9,6 +9,15 @@ import {
 } from './bot-river-solver.js'
 import { COMBOS, comboIndex52 } from './bot-river-value-data.js'
 
+/** Offline-only interception of an exact-size flop re-solve; solve always disables the gadget. */
+export type FlopResolveDiagnostic = (request: {
+  readonly spot: RiverSpot
+  readonly tree: RiverNode
+  readonly blueprint: RiverSolution
+  readonly fixedStrategies: ReadonlyMap<string, Float64Array>
+  readonly solve: (fixedStrategies: ReadonlyMap<string, Float64Array>) => RiverSolution
+}) => RiverSolution
+
 /** Offline overfold diagnostics; absent values preserve the production solve. */
 export function flopDiagnosticsFromEnvironment(env: NodeJS.ProcessEnv = process.env) {
   const gadget = env.RIVER_DIAG_GADGET

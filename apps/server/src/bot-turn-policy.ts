@@ -11,6 +11,7 @@ import {
 import { captureCumulativeStrategy } from './bot-aivat.js'
 import { aivatSolverState } from './bot-aivat-state.js'
 import {
+  type FlopResolveDiagnostic,
   flopDecisionReach,
   flopDiagnosticsFromEnvironment,
   flopIpJamOverRaise,
@@ -92,6 +93,8 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  * response, so a wrong read costs little.
  */
 export interface TurnPolicyTuning extends CfrOptions {
+  /** Explicit offline replay hook; absent in production. */
+  readonly flopResolveDiagnostic?: FlopResolveDiagnostic
   /** River optimization; separately opt in to the one-decision turn envelope. */
   readonly safeExploitV2?: boolean
   readonly safeTurnExploit?: boolean
@@ -1071,7 +1074,7 @@ function solveTurnSpot(
   const pack = (
     result: RiverSolution,
     state?: OffTreeState<SolvedTurn>,
-    gadget = rootGadget,
+    gadget: RiverGadget | null | undefined = rootGadget,
   ): SolvedTurn => ({
     ...(exploit === undefined ? {} : { exploit: Object.assign(exploit, { reference: result }) }),
     ...(state === undefined ? {} : { offTree: state }),
@@ -1081,7 +1084,7 @@ function solveTurnSpot(
     hands: [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)],
     players,
     ...(record === undefined ? {} : { record }),
-    ...(gadget !== undefined && 'followShare' in result
+    ...(gadget != null && 'followShare' in result
       ? { gadgetFollow: { player: gadget.player, share: result.followShare as Float64Array } }
       : {}),
   })
@@ -1098,6 +1101,23 @@ function solveTurnSpot(
     solve: (tree, fixedStrategies) => {
       const activeGadget = diagnostics?.gadgetOff ? undefined : gadget
       const activeTree = diagnostics?.ipJamOverRaise ? flopIpJamOverRaise(rootSpot, tree) : tree
+      if (street.street === 'flop' && tuning.flopResolveDiagnostic) {
+        return pack(
+          tuning.flopResolveDiagnostic({
+            spot: rootSpot,
+            tree: activeTree,
+            blueprint: solution,
+            fixedStrategies,
+            solve: (locked) =>
+              solve(rootSpot, undefined, undefined, activeTree, {
+                ...tuning,
+                fixedStrategies: locked,
+              }),
+          }),
+          state,
+          null,
+        )
+      }
       return pack(
         solve(rootSpot, undefined, activeGadget, activeTree, { ...tuning, fixedStrategies }),
         state,
