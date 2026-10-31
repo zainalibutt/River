@@ -88,7 +88,7 @@ export function texasLookup(node: TexasNode, board: readonly string[]) {
     classes.set(kind, [...(classes.get(kind) ?? []), probabilities])
   }
   const symmetries = boardSymmetries(board)
-  const counts = { direct: 0, isomorphism: 0, class: 0 }
+  const counts = { direct: 0, isomorphism: 0, class: 0, missing: 0 }
   return {
     counts,
     row(a: number, b: number) {
@@ -110,8 +110,11 @@ export function texasLookup(node: TexasNode, board: readonly string[]) {
         }
       }
       const rows = classes.get(handClass(a, b))
-      if (!rows?.length)
-        throw new Error(`no TexasSolver hand-class support for combo ${comboIndex52(a, b)}`)
+      // Combos TexasSolver dropped as near-zero weight keep the bot's own row.
+      if (!rows?.length) {
+        counts.missing++
+        return undefined
+      }
       counts.class++
       return node.actions.map(
         (_, action) => rows.reduce((s, r) => s + (r[action] as number), 0) / rows.length,
@@ -169,8 +172,8 @@ export function buildMatchedLocks(
 ) {
   const fixedStrategies = new Map<string, Float64Array>()
   const counts = {
-    oop: { direct: 0, isomorphism: 0, class: 0 },
-    ip: { direct: 0, isomorphism: 0, class: 0 },
+    oop: { direct: 0, isomorphism: 0, class: 0, missing: 0 },
+    ip: { direct: 0, isomorphism: 0, class: 0, missing: 0 },
   }
   if (mode === 'none') return { fixedStrategies, counts }
   const root = actionNode(baseline.tree, '')
@@ -184,12 +187,16 @@ export function buildMatchedLocks(
     const lookup = texasLookup(texas, board)
     const check = texas.actions.indexOf('CHECK')
     if (check < 0) throw new Error('TexasSolver root has no CHECK')
-    const table = prepare(baseline.spot.ranges[0], baseline.spot.board).combos.flatMap((combo, h) =>
-      lockedRow(
-        root.actions.indexOf('k'),
-        lookup.row(cardKey(combo.hole[0]), cardKey(combo.hole[1]))[check] as number,
-        Array.from(rootFrozen.subarray(h * root.actions.length, (h + 1) * root.actions.length)),
-      ),
+    const table = prepare(baseline.spot.ranges[0], baseline.spot.board).combos.flatMap(
+      (combo, h) => {
+        const frozenRow = Array.from(
+          rootFrozen.subarray(h * root.actions.length, (h + 1) * root.actions.length),
+        )
+        const row = lookup.row(cardKey(combo.hole[0]), cardKey(combo.hole[1]))
+        return row
+          ? lockedRow(root.actions.indexOf('k'), row[check] as number, frozenRow)
+          : frozenRow
+      },
     )
     fixedStrategies.set('', Float64Array.from(table))
     counts.oop = lookup.counts
@@ -213,6 +220,8 @@ export function buildMatchedLocks(
   const lookup = texasLookup(source, board)
   const table = prepare(baseline.spot.ranges[1], baseline.spot.board).combos.flatMap((combo, h) => {
     const probabilities = lookup.row(cardKey(combo.hole[0]), cardKey(combo.hole[1]))
+    if (!probabilities)
+      return Array.from(own.subarray(h * ip.actions.length, (h + 1) * ip.actions.length))
     const weights = ip.actions.map((label, action) => {
       // The selected Texas BET supplies the observed bet; only other Texas actions supply residual weights.
       const match = source.actions.findIndex(
@@ -282,17 +291,23 @@ export function matchedResolve(
     if (mode === 'none') {
       const solution = request.solve(new Map())
       capture(solution, {
-        oop: { direct: 0, isomorphism: 0, class: 0 },
-        ip: { direct: 0, isomorphism: 0, class: 0 },
+        oop: { direct: 0, isomorphism: 0, class: 0, missing: 0 },
+        ip: { direct: 0, isomorphism: 0, class: 0, missing: 0 },
       })
       return solution
     }
     if (!texas) throw new Error('missing TexasSolver input')
-    const baseline = request.solve(request.fixedStrategies)
-    const locks = buildMatchedLocks(mode, baseline, request.fixedStrategies, texas, observedBet)
-    const solution = request.solve(locks.fixedStrategies)
-    capture(solution, locks.counts)
-    return solution
+    // The policy turns a thrown error into a fallback, so report the cause before it is lost.
+    try {
+      const baseline = request.solve(request.fixedStrategies)
+      const locks = buildMatchedLocks(mode, baseline, request.fixedStrategies, texas, observedBet)
+      const solution = request.solve(locks.fixedStrategies)
+      capture(solution, locks.counts)
+      return solution
+    } catch (error) {
+      console.error(error instanceof Error ? (error.stack ?? error.message) : error)
+      throw error
+    }
   }
 }
 

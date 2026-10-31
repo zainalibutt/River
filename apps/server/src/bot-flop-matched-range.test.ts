@@ -52,7 +52,7 @@ it('uses only board-preserving suit permutations before the present hand-class m
     'Ts',
   ])
   expect(mono.row(...parseHandKey('QcKc'))).toEqual([0.2, 0.8])
-  expect(mono.counts).toEqual({ direct: 0, isomorphism: 1, class: 0 })
+  expect(mono.counts).toEqual({ direct: 0, isomorphism: 1, class: 0, missing: 0 })
   const rainbow = texasLookup(
     node(['CHECK', 'BET 2.000000'], {
       KdQd: [0.2, 0.8],
@@ -60,10 +60,11 @@ it('uses only board-preserving suit permutations before the present hand-class m
     }),
     ['2s', '7h', 'Td'],
   )
-  expect(rainbow.row(...parseHandKey('KcQc'))[0]).toBeCloseTo(0.4)
-  expect(rainbow.counts).toEqual({ direct: 0, isomorphism: 0, class: 1 })
+  expect(rainbow.row(...parseHandKey('KcQc'))?.[0]).toBeCloseTo(0.4)
+  expect(rainbow.counts).toEqual({ direct: 0, isomorphism: 0, class: 1, missing: 0 })
   expect(rainbow.row(...parseHandKey('QdKd'))).toEqual([0.2, 0.8])
-  expect(() => rainbow.row(...parseHandKey('AcQc'))).toThrow('hand-class support')
+  expect(rainbow.row(...parseHandKey('AcQc'))).toBeUndefined()
+  expect(rainbow.counts.missing).toBe(1)
   expect(() => texasLookup(node(['CHECK'], { KdKc: [0.5] }), ['2s', '7s', 'Ts'])).toThrow(
     'probabilities',
   )
