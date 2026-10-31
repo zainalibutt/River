@@ -35,7 +35,25 @@ export function flopDiagnosticsFromEnvironment(env: NodeJS.ProcessEnv = process.
     runouts > 1176
   )
     throw new Error('RIVER_DIAG_ALLIN_RUNOUTS must be an integer from 60 to 1176')
-  return { gadgetOff: gadget === 'off', ipJamOverRaise: jam === '1', allInRunouts: runouts }
+  const raises = env.RIVER_DIAG_FLOP_RAISES
+  if (raises !== undefined && raises !== 'allin')
+    throw new Error('RIVER_DIAG_FLOP_RAISES must be allin when set')
+  const rawMultiplier = env.RIVER_DIAG_ITERATIONS_MULTIPLIER
+  const iterationsMultiplier = rawMultiplier === undefined ? 1 : Number(rawMultiplier)
+  if (
+    (rawMultiplier !== undefined && !/^[0-9]+$/.test(rawMultiplier)) ||
+    !Number.isSafeInteger(iterationsMultiplier) ||
+    iterationsMultiplier < 1 ||
+    iterationsMultiplier > 10
+  )
+    throw new Error('RIVER_DIAG_ITERATIONS_MULTIPLIER must be an integer from 1 to 10')
+  return {
+    gadgetOff: gadget === 'off',
+    ipJamOverRaise: jam === '1',
+    allInRunouts: runouts,
+    flopAllInRaisesOnly: raises === 'allin',
+    iterationsMultiplier,
+  }
 }
 
 /** Add only IP's jam after check, IP bet, OOP non-all-in raise. */

@@ -20,6 +20,7 @@ import {
 import type { AivatDecision } from './bot-aivat.js'
 import { showdownShare } from './bot-allin-equity.js'
 import { beginBenchmark } from './bot-benchmark-provenance.js'
+import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
 import { releasePolicyHand } from './bot-policy-hand.js'
 import { COMBOS, comboIndex52 } from './bot-river-value-data.js'
 import { actionFor } from './bot-service.js'
@@ -264,10 +265,12 @@ export function replaySpot(
   const target = log.aivatDecisions[spot.decision]
   if (!target?.control || !log.slumbotHole) throw new Error('missing target control/cards')
   const started = performance.now()
+  const multiplier = flopDiagnosticsFromEnvironment().iterationsMultiplier
   const solver = v9gPolicy({
     offTree: 'resolve',
     preflopTables: true,
     ...(variant === 'big' ? { resolveIterationMultiplier: 10 } : {}),
+    ...(variant !== 'big' && multiplier > 1 ? { resolveIterationMultiplier: multiplier } : {}),
     ...diagnostic,
   })
   const { policy } = solver

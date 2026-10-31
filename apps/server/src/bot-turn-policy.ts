@@ -916,6 +916,9 @@ function solveTurnSpot(
     betSizes: tuning.betSizes,
     allIn: true,
     maxRaises: tuning.maxRaises,
+    ...(street.street === 'flop' && flopDiagnosticsFromEnvironment().flopAllInRaisesOnly
+      ? { allInRaisesOnly: true }
+      : {}),
   }
   if (spot.ranges[0].length === 0 || spot.ranges[1].length === 0) return 'empty range'
   const model =

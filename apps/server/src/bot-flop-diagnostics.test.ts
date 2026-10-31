@@ -39,6 +39,8 @@ it('keeps all flop diagnostics off by default', () => {
     gadgetOff: false,
     ipJamOverRaise: false,
     allInRunouts: 60,
+    flopAllInRaisesOnly: false,
+    iterationsMultiplier: 1,
   })
 })
 
@@ -48,8 +50,16 @@ it.each([60, 61, 1176])('accepts the diagnostic switches with %s runouts', (runo
       RIVER_DIAG_GADGET: 'off',
       RIVER_DIAG_IP_JAM_OVER_RAISE: '1',
       RIVER_DIAG_ALLIN_RUNOUTS: String(runouts),
+      RIVER_DIAG_FLOP_RAISES: 'allin',
+      RIVER_DIAG_ITERATIONS_MULTIPLIER: '4',
     }),
-  ).toEqual({ gadgetOff: true, ipJamOverRaise: true, allInRunouts: runouts })
+  ).toEqual({
+    gadgetOff: true,
+    ipJamOverRaise: true,
+    allInRunouts: runouts,
+    flopAllInRaisesOnly: true,
+    iterationsMultiplier: 4,
+  })
 })
 
 it.each([
@@ -59,8 +69,19 @@ it.each([
     'RIVER_DIAG_ALLIN_RUNOUTS',
     raw,
   ]),
+  ...['', 'sized', 'ALLIN', ' allin'].map((raw) => ['RIVER_DIAG_FLOP_RAISES', raw]),
+  ...['', '0', '11', '1.5', '4 ', 'x'].map((raw) => ['RIVER_DIAG_ITERATIONS_MULTIPLIER', raw]),
 ])('rejects %s=%s', (name, raw) => {
   expect(() => flopDiagnosticsFromEnvironment({ [name as string]: raw })).toThrow(name)
+})
+
+it('drops OOP non-all-in raises at an exact-size bet when raises are all-in only', () => {
+  const narrow = { ...spot, allInRaisesOnly: true }
+  const tree = addRiverAction(narrow, riverTree(narrow), 'k', 200)
+  expect(decisionAt(tree, 'kb200')?.actions).toEqual(['f', 'c', 'a'])
+  expect(decisionAt(addRiverAction(spot, riverTree(spot), 'k', 200), 'kb200')?.actions).toContain(
+    'b728',
+  )
 })
 
 it('adds IP jams over non-all-in OOP raises, including the exact-size bet branch', () => {
