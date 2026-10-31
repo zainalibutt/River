@@ -28,8 +28,15 @@ are supplied in bb, independent of the dump's chip units.
 Specs are JSONL, one game per row:
 
 ```text
-{n, street: "turn"|"river", board: [card strings], pot, stack, ranges: [oop1326, ip1326], betSize: 0.66, iterations}
+{n, street: "flop"|"turn"|"river", board: [card strings], pot, stack, ranges: [oop1326, ip1326], betSize, iterations}
 ```
+
+`betSize` is a share of the pot in (0, 1], used by both players on every street;
+the Texas export writes it as a whole percentage. Two flop-only switches bring
+the standalone game closer to production: `--flop-leaf residual` adds the
+`RIVER_TURN_RESIDUAL` turn-start leaf as v9g configures it, and `--raises sized`
+lets the bot raise to the bet size as well as all-in. The Texas export stays
+all-in raises only, so `--raises sized` is not a like-for-like comparison.
 
 `n` must be a unique nonnegative safe integer. Ranges must have 1326 finite,
 nonnegative weights in lexicographic `(a,b)` order with `a < b`; card key is

@@ -64,7 +64,7 @@ describe('street parity specs', () => {
       { pot: 0 },
       { stack: Number.POSITIVE_INFINITY },
       { iterations: 1.5 },
-      { betSize: 0.5 },
+      { betSize: 1.5 },
       { ranges: [pairRange('A')] },
       { ranges: [[], pairRange('K')] },
       { ranges: [Array(1326).fill(0), pairRange('K')] },
@@ -418,7 +418,7 @@ it('runs both CLI modes on JSONL and rejects invalid input before opening output
     expect(result.iterations).toBe(6)
     expect(result.nodes).toHaveLength(3)
     expect(readFileSync(join(dir, 'texas', '0-river.txt'), 'utf8')).toContain('set_thread_num 2')
-    writeFileSync(spec, `${JSON.stringify({ ...generated, betSize: 0.5 })}\n`)
+    writeFileSync(spec, `${JSON.stringify({ ...generated, betSize: 0 })}\n`)
     writeFileSync(out, 'preserved')
     expect(() => streetParityMain(['--spec', spec, '--out', out])).toThrow('spec row 1')
     expect(readFileSync(out, 'utf8')).toBe('preserved')

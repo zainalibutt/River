@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { cardKey, makeDeck, mulberry32, parseCard, RANKS, seedFromString } from '@river/engine'
-import { perTurnShowdown } from './bot-flop-turn-leaves.js'
+import { perTurnShowdown, type TurnStartLeafOptions } from './bot-flop-turn-leaves.js'
 import {
   type RangeCombo,
   type RiverNode,
@@ -11,7 +11,9 @@ import {
   strategyRows,
 } from './bot-river-solver.js'
 import { COMBOS } from './bot-river-value-data.js'
+import { loadTurnResidualNetwork, turnResidualLeaf } from './bot-turn-residual.js'
 import { perRiverShowdown, type RiverLeafEvaluator } from './bot-turn-river-leaves.js'
+import { turnResidualOptionsFromEnvironment } from './bot-v9g-policy.js'
 import {
   type RiverValueNetwork,
   riverNetworkFromEnvironment,
@@ -25,7 +27,8 @@ export interface StreetParitySpec {
   readonly pot: number
   readonly stack: number
   readonly ranges: readonly [readonly number[], readonly number[]]
-  readonly betSize: 0.66
+  /** Share of the pot; the parity games so far use 0.66, the live spots 0.5. */
+  readonly betSize: number
   readonly iterations: number
 }
 
@@ -114,7 +117,8 @@ export function validateStreetSpec(value: unknown): StreetParitySpec {
   positive(row.stack, 'stack')
   if (!Number.isFinite((row.pot as number) + 2 * (row.stack as number)))
     throw new Error('pot plus both stacks must be finite')
-  if (row.betSize !== 0.66) throw new Error('betSize must be 0.66')
+  if (typeof row.betSize !== 'number' || !(row.betSize > 0 && row.betSize <= 1))
+    throw new Error('betSize must be a share of the pot in (0, 1]')
   integer(row.iterations, 'iterations')
   const ranges = denseRanges(row.ranges)
   const live = liveCombos(board)
@@ -136,7 +140,7 @@ export function validateStreetSpec(value: unknown): StreetParitySpec {
   return row as unknown as StreetParitySpec
 }
 
-export function streetParitySpot(spec: StreetParitySpec): RiverSpot {
+export function streetParitySpot(spec: StreetParitySpec, sizedRaises = false): RiverSpot {
   const live = liveCombos(spec.board)
   const range = (weights: readonly number[]): RangeCombo[] =>
     combos.flatMap((combo, i) =>
@@ -152,7 +156,7 @@ export function streetParitySpot(spec: StreetParitySpec): RiverSpot {
     betSizes: [spec.betSize],
     allIn: true,
     maxRaises: 1,
-    allInRaisesOnly: true,
+    allInRaisesOnly: !sizedRaises,
     allInThreshold: 0.67,
     fractionalBets: true,
   }
@@ -169,19 +173,28 @@ export function solveStreetParity(
   value: unknown,
   multiplier = 1,
   network?: RiverValueNetwork | RiverLeafEvaluator,
+  flopLeaf?: TurnStartLeafOptions,
+  sizedRaises = false,
 ) {
   const spec = validateStreetSpec(value)
   positive(multiplier, 'iterations-multiplier')
   const iterations = integer(spec.iterations * multiplier, 'scaled iterations')
-  const spot = streetParitySpot(spec)
+  const spot = streetParitySpot(spec, sizedRaises)
   const start = performance.now()
   // v9g's initial flop/turn solve uses this core with per-card leaves, not the
   // solveFlop wrapper (which uses flop-end values). Both accept the restricted
   // RiverSpot tree unchanged. Omit records, gadget, reads and fixed prefixes;
-  // perTurnShowdown retains production's seeded flop all-in runouts.
+  // perTurnShowdown retains production's seeded flop all-in runouts. flopLeaf
+  // swaps in production's turn-start leaf (the residual network) when given.
   const showdown =
     spec.street === 'flop'
-      ? perTurnShowdown(spot, network ?? turnStartNetworkFromEnvironment())
+      ? perTurnShowdown(
+          spot,
+          network ?? turnStartNetworkFromEnvironment(),
+          undefined,
+          undefined,
+          flopLeaf === undefined ? undefined : { ...flopLeaf, iterations },
+        )
       : spec.street === 'turn'
         ? perRiverShowdown(spot, network ?? riverNetworkFromEnvironment())
         : undefined
@@ -293,11 +306,12 @@ export function texasInput(value: unknown, dumpPath: string, threads = 8): strin
   for (const street of streets) {
     for (const player of ['oop', 'ip']) {
       lines.push(
-        `set_bet_sizes ${player},${street},bet,66`,
+        `set_bet_sizes ${player},${street},bet,${Math.round(spec.betSize * 100)}`,
         `set_bet_sizes ${player},${street},allin`,
       )
     }
-    if (street !== spec.street) lines.push(`set_bet_sizes oop,${street},donk,66`)
+    if (street !== spec.street)
+      lines.push(`set_bet_sizes oop,${street},donk,${Math.round(spec.betSize * 100)}`)
   }
   lines.push(
     'set_allin_threshold 0.67',
@@ -403,9 +417,11 @@ function readFlopRoots(files: readonly string[]): FlopRoot[] {
 }
 
 export const STREET_PARITY_USAGE = `Usage (from repository root):
-npx tsx apps/server/src/bot-street-parity.ts --spec <spec.jsonl> --out <result.jsonl> [--iterations-multiplier N] [--texas-dir <dir>] [--threads 8]
+npx tsx apps/server/src/bot-street-parity.ts --spec <spec.jsonl> --out <result.jsonl> [--iterations-multiplier N] [--texas-dir <dir>] [--threads 8] [--flop-leaf turnstart|residual] [--raises allin|sized]
 npx tsx apps/server/src/bot-street-parity.ts --make-spec --dumps <dump.jsonl ...> --count N --seed S --street flop|turn|river --pot P --stack S --out <spec.jsonl> [--iterations 40]
 Flop solves use RIVER_TURN_START_NETWORK (export stem without .bin), as v9g's per-turn leaves.
+--raises sized lets the bot raise to the bet size as well as all-in (bot side only; Texas inputs stay all-in).
+--flop-leaf residual adds production's RIVER_TURN_RESIDUAL leaf on top, as v9g configures it.
 Flop all-ins use production's seeded runouts (60; RIVER_DIAG_ALLIN_RUNOUTS override).
 Turn solves use RIVER_RIVER_NETWORK (export stem without .bin), as v9g's per-river leaves.
 Texas inputs are <n>-<street>.txt; run each with TexasSolver's cwd set to --texas-dir.
@@ -430,7 +446,15 @@ export function streetParityMain(args: readonly string[]) {
         '--out',
         '--iterations',
       ]
-    : ['--spec', '--out', '--iterations-multiplier', '--texas-dir', '--threads']
+    : [
+        '--spec',
+        '--out',
+        '--iterations-multiplier',
+        '--texas-dir',
+        '--threads',
+        '--flop-leaf',
+        '--raises',
+      ]
   for (let i = 0; i < args.length; i += 1) {
     const flag = args[i] as string
     if (!allowed.includes(flag) || values.has(flag))
@@ -500,7 +524,25 @@ export function streetParityMain(args: readonly string[]) {
     turn: specs.some((spec) => spec.street === 'turn') ? riverNetworkFromEnvironment() : undefined,
     river: undefined,
   }
-  const results = specs.map((spec) => solveStreetParity(spec, multiplier, networks[spec.street]))
+  const leafKind = values.get('--flop-leaf')?.[0] ?? 'turnstart'
+  if (leafKind !== 'turnstart' && leafKind !== 'residual')
+    throw new Error('--flop-leaf must be turnstart or residual')
+  const residual = leafKind === 'residual' ? turnResidualOptionsFromEnvironment() : undefined
+  if (leafKind === 'residual' && residual === undefined)
+    throw new Error('--flop-leaf residual needs RIVER_TURN_RESIDUAL')
+  const flopLeaf =
+    residual === undefined
+      ? undefined
+      : {
+          network: turnResidualLeaf(loadTurnResidualNetwork(residual.stem), {
+            refreshIterations: residual.refreshIterations,
+          }),
+        }
+  const raises = values.get('--raises')?.[0] ?? 'allin'
+  if (raises !== 'allin' && raises !== 'sized') throw new Error('--raises must be allin or sized')
+  const results = specs.map((spec) =>
+    solveStreetParity(spec, multiplier, networks[spec.street], flopLeaf, raises === 'sized'),
+  )
   if (texasDir !== undefined) mkdirSync(texasDir, { recursive: true })
   for (const item of texas) writeFileSync(item.file, item.text)
   writeFileSync(output, `${results.map((row) => JSON.stringify(row)).join('\n')}\n`)
