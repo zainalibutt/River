@@ -25,6 +25,12 @@ export interface RiverSpot {
   readonly allIn: boolean
   /** Raises allowed after the first bet. */
   readonly maxRaises: number
+  /** Opt-in standalone trees: facing a bet, only the all-in raise is available. */
+  readonly allInRaisesOnly?: boolean
+  /** Opt-in collapse when a sized bet uses at least this fraction of chips behind. */
+  readonly allInThreshold?: number
+  /** Opt-in fractional chip sizes; absent preserves production's whole-chip rounding. */
+  readonly fractionalBets?: boolean
 }
 
 export type Player = 0 | 1
@@ -147,9 +153,16 @@ function buildRiverNode(
   if (canRaise && left > toCall) {
     const potAfterCall = spot.pot + paid[0] + paid[1] + toCall
     const targets = new Set<number>()
-    for (const size of spot.betSizes) {
-      const extra = Math.round(toCall + size * potAfterCall)
-      if (extra < left) targets.add(extra)
+    for (const size of facing && spot.allInRaisesOnly ? [] : spot.betSizes) {
+      const sized = toCall + size * potAfterCall
+      const extra = spot.fractionalBets ? Number(sized.toPrecision(15)) : Math.round(sized)
+      if (
+        spot.allIn &&
+        spot.allInThreshold !== undefined &&
+        extra >= Number((left * spot.allInThreshold).toPrecision(15))
+      )
+        targets.add(left)
+      else if (extra < left) targets.add(extra)
     }
     if (spot.allIn) targets.add(left)
     for (const extra of [...targets].sort((a, b) => a - b)) {
