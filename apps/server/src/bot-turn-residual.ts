@@ -445,6 +445,26 @@ export function turnResidualLeaf(
     return cards
   }
   const cached = new WeakMap<object, WeakMap<object, { epoch: number; delta: Float32Array }>>()
+  const prepareBatch = (boards: Parameters<NonNullable<RiverLeafEvaluator['batch']>>[0]) => {
+    const cards = boards.map((b) => prepare(b.board.map(cardKey), b.ranks))
+    const input = new Float32Array(cards.length * 385)
+    return {
+      cards,
+      input,
+      inputs: cards.map((_, i) => input.subarray(i * 385, (i + 1) * 385)),
+      live: cards.map((c) =>
+        Int32Array.from(
+          Array.from(c.layout.bucketOf.keys()).filter((h) => (c.layout.bucketOf[h] as number) >= 0),
+        ),
+      ),
+      masks: [0, 1].map((p) => Uint8Array.from({ length: 256 }, (_, i) => Number(i >>> 7 === p))),
+      // Only identical f32 inputs and identical output masks may reuse inference.
+      // Each terminal retains at most one query per mask; no CFR samples are cached.
+      predictions: new WeakMap<object, { input: Float32Array; bucket: Float32Array }[]>(),
+    }
+  }
+  // perCardShowdown owns immutable board lists and reuses them across traversals/solves.
+  const batches = new WeakMap<object, ReturnType<typeof prepareBatch>>()
   const scalar: RiverLeafEvaluator = (spot, ranks, player) =>
     turnResidualValues(
       network,
@@ -457,18 +477,14 @@ export function turnResidualLeaf(
     )
   return Object.assign(scalar, {
     batch: ((boards, ranges, stack, pot, context) => {
-      const cards = boards.map((b) => prepare(b.board.map(cardKey), b.ranks))
-      const inputs = new Float32Array(cards.length * 385)
+      let preparedBatch = batches.get(boards)
+      if (preparedBatch === undefined) {
+        preparedBatch = prepareBatch(boards)
+        batches.set(boards, preparedBatch)
+      }
+      const { cards, input: inputs, live, masks, predictions } = preparedBatch
       cards.forEach((c, i) => {
-        bucketInputs(
-          c.layout,
-          ranges,
-          stack,
-          pot,
-          undefined,
-          'live',
-          inputs.subarray(i * 385, (i + 1) * 385),
-        )
+        bucketInputs(c.layout, ranges, stack, pot, undefined, 'live', preparedBatch.inputs[i])
       })
       let nodes = cached.get(context.solve)
       if (nodes === undefined) {
@@ -489,12 +505,28 @@ export function turnResidualLeaf(
       const selectedPlayer = refresh === undefined ? context.player : undefined
       const mask =
         (reuse || selectedPlayer !== undefined) && context.player !== undefined
-          ? Uint8Array.from({ length: 256 }, (_, i) =>
-              Number(Math.floor(i / 128) === context.player),
-            )
+          ? masks[context.player]
           : undefined
-      const bucket = batch(network.bucket, inputs, cards.length, mask)
-      if (options.profile) options.profile.bucketCalls++
+      const maskIndex = mask === undefined ? 2 : (context.player as number)
+      let saved = predictions.get(context.node)
+      if (saved === undefined) {
+        saved = []
+        predictions.set(context.node, saved)
+      }
+      const prediction = saved[maskIndex]
+      let bucket: Float32Array
+      if (prediction !== undefined && inputs.every((v, i) => Object.is(v, prediction.input[i]))) {
+        bucket = prediction.bucket
+      } else {
+        bucket = batch(network.bucket, inputs, cards.length, mask)
+        if (options.profile) options.profile.bucketCalls++
+        if (prediction === undefined)
+          saved[maskIndex] = { input: inputs.slice(), bucket: bucket.slice() }
+        else {
+          prediction.input.set(inputs)
+          prediction.bucket.set(bucket)
+        }
+      }
       let delta: Float32Array
       if (reuse) delta = previous.delta
       else {
@@ -531,15 +563,17 @@ export function turnResidualLeaf(
       let row = 0
       return cards.map((c, i) => {
         const out = [new Float32Array(COMBOS), new Float32Array(COMBOS)] as const
-        for (const p of selectedPlayer === undefined ? ([0, 1] as const) : [selectedPlayer])
-          for (let h = 0; h < COMBOS; h++) {
-            const b = c.layout.bucketOf[h] as number
-            if (b >= 0) {
-              const correction = delta[row++] as number
-              if (!reuse || context.player === undefined || p === context.player)
-                out[p][h] = (bucket[i * 256 + p * 128 + b] as number) + correction
-            }
+        for (const p of selectedPlayer === undefined ? ([0, 1] as const) : [selectedPlayer]) {
+          if (reuse && context.player !== undefined && p !== context.player) {
+            row += c.layout.live
+            continue
           }
+          for (const h of live[i] as Int32Array) {
+            const b = c.layout.bucketOf[h] as number
+            const correction = delta[row++] as number
+            out[p][h] = (bucket[i * 256 + p * 128 + b] as number) + correction
+          }
+        }
         return out
       })
     }) satisfies NonNullable<RiverLeafEvaluator['batch']>,

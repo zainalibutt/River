@@ -135,6 +135,7 @@ export function perCardShowdown(
           ] as const,
         }
   let indices: ReturnType<typeof holdingIndices> | undefined
+  let liveHoldings: (readonly [Int32Array, Int32Array])[] | undefined
   let masses: ReturnType<typeof massesFor> | undefined
   let previousHands: readonly [Hands, Hands] | undefined
   // Network inference is pure for immutable weights and exactly equal f32
@@ -167,6 +168,16 @@ export function perCardShowdown(
       }
       if (indices === undefined) {
         indices = holdingIndices(hands)
+        const holdingIds = indices
+        liveHoldings = prepared.map((river) => {
+          const liveFor = (p: Player) =>
+            Int32Array.from(
+              Array.from(holdingIds[p].keys()).filter(
+                (h) => (river.ranks[holdingIds[p][h] as number] as number) > 0,
+              ),
+            )
+          return [liveFor(0), liveFor(1)] as const
+        })
         if (typeof riverNetwork !== 'function' && networkBuffers !== undefined) {
           for (const player of [0, 1] as const) {
             for (const river of prepared) {
@@ -323,14 +334,15 @@ export function perCardShowdown(
       }
       for (let r = 0; r < prepared.length; r += 1) {
         const river = prepared[r] as (typeof prepared)[number]
+        const live = liveHoldings?.[r] as readonly [Int32Array, Int32Array]
         for (const player of [0, 1] as const) {
+          // Batched evaluators already received both dense ranges; only opponent
+          // restriction is consumed by compatibility masses below.
+          if (player === traverser && (holdingValues !== undefined || batchValues !== undefined))
+            continue
           const source = player === traverser ? ownRange : opponent
-          for (let h = 0; h < source.length; h += 1) {
-            const index = indices[player][h] as number
-            const live = (river.ranks[index] as number) > 0
-            const weight = live ? (source[h] as number) : 0
-            restricted[player][h] = weight
-          }
+          restricted[player].fill(0)
+          for (const h of live[player]) restricted[player][h] = source[h] as number
         }
         masses(traverser, restricted[other].subarray(0, opponent.length), met)
         let values: readonly [ArrayLike<number>, ArrayLike<number>] | undefined = holdingValues?.[r]
@@ -367,9 +379,8 @@ export function perCardShowdown(
             leaf.cards.set(river.key, sums)
           }
         }
-        for (let h = 0; h < out.length; h += 1) {
+        for (const h of live[traverser]) {
           const index = indices[traverser][h] as number
-          if ((river.ranks[index] as number) === 0) continue
           const bucket = river.layout?.bucketOf[index] as number
           const predicted =
             values === undefined

@@ -2,8 +2,9 @@ import { type Card, cardKey, makeDeck } from '@river/engine'
 import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
 import { flopRunouts } from './bot-flop-solver.js'
 import type { RiverSpot } from './bot-river-solver.js'
+import { strengthRanks } from './bot-river-value-data.js'
 import { bufferBytes } from './bot-solver-memory.js'
-import { expectedStrengthRanks, turnRivers } from './bot-turn-end-data.js'
+import { expectedStrengthRanks } from './bot-turn-end-data.js'
 import {
   carriedPromises,
   createPromiseRecord,
@@ -43,13 +44,31 @@ function turnsFor(board: RiverSpot['board']) {
   let turns = turnRanks.get(key)
   if (turns === undefined) {
     const blocked = new Set(board.map(cardKey))
-    turns = makeDeck()
-      .filter((card) => !blocked.has(cardKey(card)))
-      .map((card) => ({
-        card,
-        key: cardKey(card),
-        ranks: expectedStrengthRanks(turnRivers([...board, card])),
-      }))
+    const live = makeDeck().filter((card) => !blocked.has(cardKey(card)))
+    // Swapping the turn and river leaves the exact final showdown ranks unchanged.
+    // Keep each turn's river order, so expected-strength additions still round identically.
+    // This temporary cache is released after preparing this flop (about 3 MB).
+    const runouts = new Map<number, Uint16Array>()
+    turns = live.map((card) => ({
+      card,
+      key: cardKey(card),
+      ranks: expectedStrengthRanks({
+        board: [...board, card],
+        rivers: live
+          .filter((river) => river !== card)
+          .map((river) => {
+            const a = cardKey(card)
+            const b = cardKey(river)
+            const pair = Math.min(a, b) * 52 + Math.max(a, b)
+            let ranks = runouts.get(pair)
+            if (ranks === undefined) {
+              ranks = strengthRanks([...board, card, river])
+              runouts.set(pair, ranks)
+            }
+            return { card: river, key: b, ranks }
+          }),
+      }),
+    }))
     turnRanks.set(key, turns)
     if (turnRanks.size > 8) turnRanks.delete(turnRanks.keys().next().value as string)
   }

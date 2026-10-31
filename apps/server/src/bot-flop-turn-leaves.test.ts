@@ -272,9 +272,11 @@ describe.each(['cfr+', 'dcfr'] as const)('%s averaging', (scheme) => {
               [cardKey(card), expectedStrengthRanks(turnRivers([...spot.board, card]))] as const,
           ),
       )
-      const evaluatorHook = perTurnShowdown(spot, (turn) =>
-        riverHoldingValues(network, turn, independentRanks.get(cardKey(turn.board[3] as Card))),
-      )
+      const evaluatorHook = perTurnShowdown(spot, (turn, ranks) => {
+        const reference = independentRanks.get(cardKey(turn.board[3] as Card))
+        expect(ranks).toEqual(reference)
+        return riverHoldingValues(network, turn, reference)
+      })
       for (const trial of [0, 1, 2]) {
         for (const player of [0, 1] as const) {
           const other = player === 0 ? 1 : 0

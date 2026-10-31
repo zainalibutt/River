@@ -436,3 +436,54 @@ it('refreshes only the correction at configured iterations, retains live baselin
   for (const refreshIterations of [0, -1, 1.5, Number.NaN])
     expect(() => turnResidualLeaf(model, { refreshIterations })).toThrow('refreshIterations')
 })
+
+it.each(['ts', 'wasm'])(
+  'reuses only identical bucket queries while keeping range-dependent heads live (%s)',
+  (backend) => {
+    const prior = process.env.RIVER_VALUE_BACKEND
+    process.env.RIVER_VALUE_BACKEND = backend
+    try {
+      const board = keys('2s 7s Kh Qc')
+      const ranks = legalRanks(board)
+      const boards = [{ board: board.map((k) => makeDeck()[k] as Card), ranks }]
+      const cards = turnCardFeatures(board, ranks)
+      const head = constant(TURN_RESIDUAL_INPUTS, 1, 0)
+      head.layers[0]?.weight.set([1], 3 + TURN_STATIC)
+      const model = { bucket: constant(385, 256, 0.25), residual: head }
+      const profile = { bucketCalls: 0, headCalls: 0 }
+      const leaf = turnResidualLeaf(model, { profile })
+      const own = new Float64Array(COMBOS)
+      const opp = new Float64Array(COMBOS)
+      const next = new Float64Array(COMBOS)
+      own[holding('As Js')] = 1
+      opp[holding('As Ad')] = 1
+      next[holding('Ac Jc')] = 1
+      const solve = {},
+        node = {}
+      const first = leaf.batch?.(boards, [own, opp], 30, 10, { solve, node })
+      const saved = first?.map((values) => values.map((v) => Array.from(v)))
+      // Both opponents occupy the same bucket; the head still sees different blockers.
+      const second = leaf.batch?.(boards, [own, next], 30, 10, { solve, node })
+      expect(profile).toEqual({ bucketCalls: 1, headCalls: 2 })
+      expect(first?.[0]).toEqual(turnResidualValues(model, cards, [own, opp], 30, 10))
+      expect(second?.[0]).toEqual(turnResidualValues(model, cards, [own, next], 30, 10))
+      expect(second?.[0]?.[0][holding('As Js')]).not.toBe(first?.[0]?.[0][holding('As Js')])
+      for (const player of [0, 1] as const) {
+        for (let visit = 0; visit < 2; visit++) {
+          const selected = leaf.batch?.(boards, [own, next], 30, 10, { solve, node, player })
+          expect(selected?.[0]).toEqual(
+            turnResidualValues(model, cards, [own, next], 30, 10, false, player),
+          )
+        }
+      }
+      expect(profile.bucketCalls).toBe(3) // Full, player zero, player one masks are separate.
+      leaf.batch?.(boards, [own, next], 60, 10, { solve, node })
+      leaf.batch?.(boards, [own, next], 30, 10, { solve, node: {} })
+      expect(profile.bucketCalls).toBe(5)
+      expect(first?.map((values) => values.map((v) => Array.from(v)))).toEqual(saved)
+    } finally {
+      if (prior === undefined) delete process.env.RIVER_VALUE_BACKEND
+      else process.env.RIVER_VALUE_BACKEND = prior
+    }
+  },
+)
