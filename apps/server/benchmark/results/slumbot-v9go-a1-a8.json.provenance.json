@@ -40,9 +40,7 @@
     "UV_THREADPOOL_SIZE": "1"
   },
   "heuristic": "pot-share-uniform-32-v1",
-  "policies": [
-    "v9go"
-  ],
+  "policies": ["v9go"],
   "seeds": [],
   "plannedHands": 32000,
   "settings": {

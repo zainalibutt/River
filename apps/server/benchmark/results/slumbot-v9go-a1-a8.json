@@ -51,50 +51,35 @@
       "hands": 32000,
       "sessions": 32000,
       "bigBlindsPer100": -7.774375,
-      "interval95": [
-        -27.323252818732797,
-        11.774502818732799
-      ],
+      "interval95": [-27.323252818732797, 11.774502818732799],
       "standardError": 9.973723181318666
     },
     "valued": {
       "hands": 32000,
       "sessions": 32000,
       "bigBlindsPer100": -11.071223169191915,
-      "interval95": [
-        -28.14749153845019,
-        6.005045200066361
-      ],
+      "interval95": [-28.14749153845019, 6.005045200066361],
       "standardError": 8.712212294952595
     },
     "chanceOnly": {
       "hands": 32000,
       "sessions": 32000,
       "bigBlindsPer100": -12.788416777146413,
-      "interval95": [
-        -30.46998715138045,
-        4.893153597087625
-      ],
+      "interval95": [-30.46998715138045, 4.893153597087625],
       "standardError": 9.021033839324843
     },
     "aivat": {
       "hands": 32000,
       "sessions": 32000,
       "bigBlindsPer100": -16.810163863374175,
-      "interval95": [
-        -35.64196737865271,
-        2.021639651904355
-      ],
+      "interval95": [-35.64196737865271, 2.021639651904355],
       "standardError": 9.607876063678162
     },
     "aivatV1": {
       "hands": 32000,
       "sessions": 32000,
       "bigBlindsPer100": -16.810163863374175,
-      "interval95": [
-        -35.64196737865271,
-        2.021639651904355
-      ],
+      "interval95": [-35.64196737865271, 2.021639651904355],
       "standardError": 9.607876063678162
     },
     "aivatV2": null,
@@ -103,20 +88,14 @@
         "hands": 32000,
         "sessions": 32000,
         "bigBlindsPer100": -16.810163863374175,
-        "interval95": [
-          -35.64196737865271,
-          2.021639651904355
-        ],
+        "interval95": [-35.64196737865271, 2.021639651904355],
         "standardError": 9.607876063678162
       },
       "v2": {
         "hands": 32000,
         "sessions": 32000,
         "bigBlindsPer100": -12.788416777146413,
-        "interval95": [
-          -30.46998715138045,
-          4.893153597087625
-        ],
+        "interval95": [-30.46998715138045, 4.893153597087625],
         "standardError": 9.021033839324843
       },
       "qualification": "Missing action records contribute zero action correction; this is not a network precision measurement"
@@ -179,9 +158,7 @@
         "UV_THREADPOOL_SIZE": "1"
       },
       "heuristic": "pot-share-uniform-32-v1",
-      "policies": [
-        "v9go"
-      ],
+      "policies": ["v9go"],
       "seeds": [],
       "plannedHands": 32000,
       "settings": {
