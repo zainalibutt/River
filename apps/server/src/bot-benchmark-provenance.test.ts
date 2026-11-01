@@ -147,3 +147,22 @@ it('records the opponent prior env value and exact file hash', () => {
     'prior.json': createHash('sha256').update(content).digest('hex'),
   })
 })
+
+it.each([undefined, '1'])('records each named policy warm option with env=%s', (env) => {
+  vi.stubEnv('RIVER_DIAG_WARM_START', env)
+  const record = benchmarkProvenance('duplicate', {
+    policies: ['v9gpw', 'v9gp', 'v9gpw2'],
+    seeds: ['smoke'],
+    plannedHands: 4,
+  })
+  expect(record.policyOptions).toEqual({
+    v9gp: { offTree: 'resolve', preflopTables: true, warmStart: env === '1' },
+    v9gpw: { offTree: 'resolve', preflopTables: true, warmStart: true },
+    v9gpw2: {
+      offTree: 'resolve',
+      preflopTables: true,
+      warmStart: true,
+      resolveIterationMultiplier: 2,
+    },
+  })
+})

@@ -7,7 +7,7 @@ import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js
 import { runSessions, type SessionHandResult } from './bot-session-benchmark.js'
 import { clusteredEstimate } from './bot-session-evaluation.js'
 import { solvedFlopPolicy, solvedTurnPolicy } from './bot-turn-policy.js'
-import { v9gPolicy } from './bot-v9g-policy.js'
+import { V9GP_POLICY_OPTIONS, v9gPolicy } from './bot-v9g-policy.js'
 import { loadValueNetwork, turnNetworkFromEnvironment } from './bot-value-network.js'
 
 // Usage: tsx bot-head-to-head.ts <A> <B> <seed prefix> <sessions> <out.json> [first session] [hands a session]
@@ -16,7 +16,8 @@ import { loadValueNetwork, turnNetworkFromEnvironment } from './bot-value-networ
 // cards the other had. Both play as the champion, with the same public reads of each other.
 // A hand's score for A is half of (A's chips in the first run minus B's chips in the second),
 // all-in valued; the estimate clusters by session. Policies: v8z, v9a, v9b, v9c, and v9d,
-// which also needs RIVER_FLOP_NETWORK, the flop-end network's export without .bin.
+// plus v9g, v9go, v9gp, v9gpw (warm flop re-solves), v9gpw2 (warm, 2x iterations).
+// v9d and the v9g policies also need RIVER_FLOP_NETWORK, the flop-end network's export without .bin.
 const [nameA, nameB, prefix, sessionsText, out, firstText = '0', handsText = '100'] =
   process.argv.slice(2)
 
@@ -24,7 +25,8 @@ const [nameA, nameB, prefix, sessionsText, out, firstText = '0', handsText = '10
 export function headToHeadPolicy(name: string): BotPolicy | undefined {
   if (name === 'v9g') return v9gPolicy().policy
   if (name === 'v9go') return v9gPolicy({ offTree: 'resolve' }).policy
-  if (name === 'v9gp') return v9gPolicy({ offTree: 'resolve', preflopTables: true }).policy
+  if (name === 'v9gp' || name === 'v9gpw' || name === 'v9gpw2')
+    return v9gPolicy(V9GP_POLICY_OPTIONS[name]).policy
   const v8z = () =>
     riverSolverPolicy(pokerGuardPolicy, 'river-solver', 1, RIVER_CANDIDATE_TUNING).policy
   if (name === 'v8z') return v8z()
@@ -128,7 +130,7 @@ if (process.argv[1]?.endsWith('bot-head-to-head.ts')) {
   const hands = Number(handsText)
   if (!a || !b || !mirrorA || !mirrorB || !prefix || !out || !Number.isSafeInteger(sessions)) {
     throw new Error(
-      'usage: <A> <B> <seed prefix> <sessions> <out.json> [first session] [hands a session]; policies v8z, v9a, v9b, v9c, v9d',
+      'usage: <A> <B> <seed prefix> <sessions> <out.json> [first session] [hands a session]; policies v8z, v9a, v9b, v9c, v9d, v9g, v9go, v9gp, v9gpw, v9gpw2',
     )
   }
   const seed = `${prefix}-h2h`

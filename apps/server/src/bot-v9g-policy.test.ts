@@ -1,6 +1,7 @@
 import { type Card, cardKey, championPersonality, mulberry32, parseCard } from '@river/engine'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as flopLeaves from './bot-flop-turn-leaves.js'
+import { headToHeadPolicy } from './bot-head-to-head.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import * as preflop from './bot-preflop-tables.js'
 import * as river from './bot-river-policy.js'
@@ -20,6 +21,7 @@ import {
 import * as networks from './bot-value-network.js'
 
 beforeEach(() => {
+  vi.stubEnv('RIVER_DIAG_WARM_START', undefined)
   vi.stubEnv('RIVER_DIAG_GADGET', undefined)
   vi.stubEnv('RIVER_DIAG_IP_JAM_OVER_RAISE', undefined)
   vi.stubEnv('RIVER_DIAG_ALLIN_RUNOUTS', undefined)
@@ -583,3 +585,90 @@ it('v9gz2 independently enables turn and river while explicit turn-off keeps v9g
   expect(construct.mock.calls[2]?.[2]).toMatchObject({ safeTurnExploit: true, safeExploitV2: true })
   expect(enabled.turn.safeExploit).toMatchObject({ eligible: 0, proposed: 0, accepted: 0 })
 })
+
+it.each([undefined, '1'])(
+  'keeps named warm policies independent of v9gp with warm env=%s',
+  (env) => {
+    vi.stubEnv('RIVER_DIAG_WARM_START', env)
+    vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+    const network: networks.RiverValueNetwork = {
+      buckets: 1,
+      layers: [
+        {
+          rows: 2,
+          columns: 4,
+          slope: null,
+          weight: new Float32Array(8),
+          bias: Float32Array.of(0.5, 0.5),
+        },
+      ],
+    }
+    vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+    vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+    const table = preflop.tablePreflopPolicy(pokerGuardPolicy)
+    vi.spyOn(preflop, 'tablePreflopPolicy').mockReturnValue({
+      ...table,
+      ranges: () => [
+        ['As Kh', 'Ac Kd'].map((h) => ({
+          hole: h.split(' ').map(parseCard) as [Card, Card],
+          weight: 0.5,
+        })),
+        ['Qs Jh', 'Qc Jd'].map((h) => ({
+          hole: h.split(' ').map(parseCard) as [Card, Card],
+          weight: 0.5,
+        })),
+      ],
+    })
+    const room = slumbotRoom(
+      {
+        action: 'b200c/kb172',
+        clientPos: 0,
+        hole: ['As', 'Kh'].map(parseCard),
+        board: ['2h', '7d', 'Ts'].map(parseCard),
+      },
+      { ours: 'a', theirs: 'b' },
+    )
+    const observation = observationFor(
+      room.viewFor('a'),
+      'a',
+      undefined,
+      room.id,
+      room.currentActions(),
+    )
+    if (!observation) throw new Error('missing observation')
+    const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+    const calls = vi.spyOn(solver, 'solveRiver')
+    // Construct both sides before either solves; neither mutates the shared environment.
+    const warm = headToHeadPolicy('v9gpw')
+    const prod = headToHeadPolicy('v9gp')
+    const warm2 = headToHeadPolicy('v9gpw2')
+    expect(warm).toBeDefined()
+    expect(prod).toBeDefined()
+    expect(warm2).toBeDefined()
+    const disabled = v9gPolicy(
+      { offTree: 'resolve', preflopTables: true, warmStart: false },
+      { turn: network, flop: network, turnStart: network, river: network },
+    )
+    const bots = [
+      [construct.mock.results[0]?.value, true, 40],
+      [construct.mock.results[1]?.value, env === '1', 40],
+      [construct.mock.results[2]?.value, true, 80],
+      [disabled, false, 40],
+    ] as const
+    for (const [bot, expectedWarm, iterations] of bots) {
+      calls.mockClear()
+      const explanation = bot.explain(observation, championPersonality(), true)
+      expect(explanation).toMatchObject({ history: 'kb172' })
+      expect(bot.stats.offTree.resolves).toBe(1)
+      expect(calls).toHaveBeenCalledTimes(2)
+      const root = calls.mock.results[0]?.value as solver.RiverSolution
+      expect(root.cfrState !== undefined).toBe(expectedWarm)
+      expect(calls.mock.calls[1]?.[6]?.warmStart).toBe(expectedWarm ? root.cfrState : undefined)
+      expect(calls.mock.calls.map((call) => call[1])).toEqual([iterations, iterations])
+    }
+    expect(process.env.RIVER_DIAG_WARM_START).toBe(env)
+  },
+  60000,
+)

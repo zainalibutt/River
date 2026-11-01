@@ -24,6 +24,8 @@ import {
 } from './bot-value-network.js'
 
 export interface V9gOptions {
+  /** Flop re-solve warm start; absent inherits RIVER_DIAG_WARM_START. */
+  readonly warmStart?: boolean
   readonly flopResolveDiagnostic?: FlopResolveDiagnostic
   /** Offline replay opt-in; scales flop/turn solves, including off-tree re-solves. */
   readonly resolveIterationMultiplier?: number
@@ -39,6 +41,18 @@ export interface V9gOptions {
   /** Default absent: production batching and weights are unchanged. */
   readonly turnStartLeaf?: TurnStartLeafOptions
 }
+
+/** Shared named options for duplicate matches, Slumbot and provenance. */
+export const V9GP_POLICY_OPTIONS = {
+  v9gp: { offTree: 'resolve', preflopTables: true },
+  v9gpw: { offTree: 'resolve', preflopTables: true, warmStart: true },
+  v9gpw2: {
+    offTree: 'resolve',
+    preflopTables: true,
+    warmStart: true,
+    resolveIterationMultiplier: 2,
+  },
+} satisfies Record<string, V9gOptions>
 
 /** Only immutable inference weights are shared; each construction owns its solves. */
 export interface V9gNetworks {
@@ -110,6 +124,7 @@ export function v9gPolicy(
     turnStartLeaf,
     resolveIterationMultiplier = 1,
     flopResolveDiagnostic,
+    warmStart,
   }: V9gOptions = {},
   sharedNetworks?: V9gNetworks,
 ) {
@@ -158,6 +173,7 @@ export function v9gPolicy(
           })
   const chain = solvedFlopPolicy(networks.turn, networks.flop, {
     ...(flopResolveDiagnostic === undefined ? {} : { flopResolveDiagnostic }),
+    ...(warmStart === undefined ? {} : { flopWarmStart: warmStart }),
     carry: 'both',
     turnStartNetwork: networks.turnStart,
     riverNetwork: networks.river,

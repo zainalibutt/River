@@ -93,6 +93,8 @@ import type { RiverValueNetwork } from './bot-value-network.js'
  * response, so a wrong read costs little.
  */
 export interface TurnPolicyTuning extends CfrOptions {
+  /** Flop-only boolean override; CfrOptions.warmStart holds the solver state. */
+  readonly flopWarmStart?: boolean
   /** Explicit offline replay hook; absent in production. */
   readonly flopResolveDiagnostic?: FlopResolveDiagnostic
   /** River optimization; separately opt in to the one-decision turn envelope. */
@@ -928,7 +930,8 @@ function solveTurnSpot(
   let record: RiverPromiseRecord | undefined
   const diagnostics = street.street === 'flop' ? flopDiagnosticsFromEnvironment() : undefined
   let warmRecord: RiverPromiseRecord | undefined
-  const rootOptions = diagnostics?.warmStart ? { ...tuning, captureState: true } : tuning
+  const warmStart = street.street === 'flop' && (tuning.flopWarmStart ?? diagnostics?.warmStart)
+  const rootOptions = warmStart ? { ...tuning, captureState: true } : tuning
   let preparedLeaves: ReturnType<typeof perRiverShowdown> | undefined
   const queryValues = new WeakMap<RiverSolution, readonly [Float64Array, Float64Array]>()
   const solve = (
@@ -1002,7 +1005,7 @@ function solveTurnSpot(
           options.fixedStrategies,
           valuesNeeded,
           diagnostics?.allInRunouts,
-          ...(diagnostics?.warmStart ? [options.captureState] : []),
+          ...(warmStart ? [options.captureState] : []),
         ],
         (memoized) => {
           const result = solveRiver(
@@ -1105,11 +1108,11 @@ function solveTurnSpot(
     promises: (queryValues.get(solution) ?? riverValues(solution).values)[opponent],
   }
   const rootSpot = solution.spot
-  if (diagnostics?.warmStart && !solution.cfrState)
+  if (warmStart && !solution.cfrState)
     throw new Error('warm-start flop root is missing captured CFR state')
-  if (diagnostics?.warmStart) warmRecord = record
+  if (warmStart) warmRecord = record
   const warmOptions: CfrOptions =
-    solution.cfrState && diagnostics?.warmStart ? { warmStart: solution.cfrState } : {}
+    solution.cfrState && warmStart ? { warmStart: solution.cfrState } : {}
   const state: OffTreeState<SolvedTurn> = {
     failures: new Map(),
     solve: (tree, fixedStrategies) => {
@@ -1218,6 +1221,9 @@ export function solvedFlopPolicy(
           ...(overrides.flopBetSizes === undefined ? {} : { betSizes: overrides.flopBetSizes }),
         }
       : {
+          ...(overrides.flopWarmStart === undefined
+            ? {}
+            : { flopWarmStart: overrides.flopWarmStart }),
           scheme: overrides.scheme ?? 'cfr+',
           ...(overrides.alpha === undefined ? {} : { alpha: overrides.alpha }),
           ...(overrides.beta === undefined ? {} : { beta: overrides.beta }),

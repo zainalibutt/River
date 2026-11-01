@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AIVAT_HEURISTIC, AIVAT_V2_HEURISTIC } from './bot-aivat.js'
 import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
+import { V9GP_POLICY_OPTIONS, type V9gOptions } from './bot-v9g-policy.js'
 
 const root = fileURLToPath(new URL('../../..', import.meta.url))
 const specification = fileURLToPath(new URL('../benchmark/frozen-v2.json', import.meta.url))
@@ -69,7 +70,7 @@ export interface BenchmarkWorkload {
 }
 
 export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload) {
-  flopDiagnosticsFromEnvironment()
+  const diagnostics = flopDiagnosticsFromEnvironment()
   const models: Record<string, Record<string, string> | null> = {}
   for (const name of [
     'RIVER_FLOP_NETWORK',
@@ -151,6 +152,16 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
     environment: { node: process.version, platform: process.platform, arch: process.arch, ...env },
     heuristic: process.env.RIVER_AIVAT_HEURISTIC === 'v2' ? AIVAT_V2_HEURISTIC : AIVAT_HEURISTIC,
     ...workload,
+    policyOptions: Object.fromEntries(
+      workload.policies
+        .filter((name) => Object.hasOwn(V9GP_POLICY_OPTIONS, name))
+        .map((name) => {
+          const options = V9GP_POLICY_OPTIONS[
+            name as keyof typeof V9GP_POLICY_OPTIONS
+          ] as V9gOptions
+          return [name, { ...options, warmStart: options.warmStart ?? diagnostics.warmStart }]
+        }),
+    ),
   }
 }
 

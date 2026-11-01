@@ -15,10 +15,11 @@ import { botPlayerId } from './bot-service.js'
 import { focalRotation } from './bot-session-campaign.js'
 import { slumbotIncrement, slumbotMemory } from './bot-slumbot.js'
 import { type TurnPolicyStats, turnSolverPolicy } from './bot-turn-policy.js'
-import { v9gPolicy } from './bot-v9g-policy.js'
+import { V9GP_POLICY_OPTIONS, v9gPolicy } from './bot-v9g-policy.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z|v9a|v9g|v9go|v9gp|v9gz> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
+// Usage: tsx bot-slumbot-run.ts <v5|v6|v8z|v9a|v9g|v9go|v9gp|v9gpw|v9gpw2|v9gz> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]
+// v9gpw warms flop re-solves; v9gpw2 also doubles flop/turn iterations.
 // Plays hands against Slumbot's public heads-up API, one at a time, sending
 // only our own moves; Slumbot deals and reports our cards. Each finished hand
 // is appended to the output file as one JSON line. A hand that fails, on our
@@ -55,7 +56,27 @@ const policies: Record<string, () => BotPolicy> = {
     return chain.policy
   },
   v9gp: () => {
-    const chain = v9gPolicy({ offTree: 'resolve', preflopTables: true })
+    const chain = v9gPolicy(V9GP_POLICY_OPTIONS.v9gp)
+    offTree = {
+      flop: chain.stats.offTree,
+      turn: chain.turn.offTree,
+      river: chain.river.offTree,
+      preflop: chain.preflop,
+    }
+    return chain.policy
+  },
+  v9gpw: () => {
+    const chain = v9gPolicy(V9GP_POLICY_OPTIONS.v9gpw)
+    offTree = {
+      flop: chain.stats.offTree,
+      turn: chain.turn.offTree,
+      river: chain.river.offTree,
+      preflop: chain.preflop,
+    }
+    return chain.policy
+  },
+  v9gpw2: () => {
+    const chain = v9gPolicy(V9GP_POLICY_OPTIONS.v9gpw2)
     offTree = {
       flop: chain.stats.offTree,
       turn: chain.turn.offTree,
@@ -106,7 +127,7 @@ if (
   (readsName !== undefined && readsName !== 'reads')
 ) {
   throw new Error(
-    'usage: <v5|v6|v8z|v9a|v9g|v9go|v9gp|v9gz> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
+    'usage: <v5|v6|v8z|v9a|v9g|v9go|v9gp|v9gpw|v9gpw2|v9gz> <hands> <run seed> <out.jsonl> [rotation|champion] [reads]',
   )
 }
 if (existsSync(out)) throw new Error('refusing to append a new run to an existing Slumbot log')
