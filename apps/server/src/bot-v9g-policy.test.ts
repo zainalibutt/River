@@ -20,6 +20,9 @@ import {
 } from './bot-v9g-policy.js'
 import * as networks from './bot-value-network.js'
 
+/** The v3 pack is private; a fresh clone skips the tests that play it. */
+const v3 = preflop.hasPreflopPack('v3')
+
 beforeEach(() => {
   vi.stubEnv('RIVER_DIAG_WARM_START', undefined)
   vi.stubEnv('RIVER_DIAG_GADGET', undefined)
@@ -69,7 +72,7 @@ it.each([
   expect(() => v9gPolicy()).toThrow('RIVER_FLOP_BET_SIZES')
 })
 
-it.each(['default', 'gadget', 'jam', 'runouts'])(
+it.skipIf(!v3).each(['default', 'gadget', 'jam', 'runouts'])(
   'uses flop sizes and diagnostic %s in exact-size re-solves, preserving later streets',
   (diagnostic) => {
     if (diagnostic === 'gadget') vi.stubEnv('RIVER_DIAG_GADGET', 'off')
@@ -416,51 +419,54 @@ it('shares injected inference weights while giving each query seat independent s
   expect(query.river).not.toBe(live.river)
 })
 
-it('leaves v9go identical with preflopTables absent or false; only v9gp opts in', () => {
-  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
-  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
-  vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
-  vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
-  vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
-  vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
-  const tables = vi.spyOn(preflop, 'tablePreflopPolicy')
-  const construct = vi.spyOn(chain, 'solvedFlopPolicy')
-  const original = v9gPolicy({ offTree: 'resolve' })
-  const disabled = v9gPolicy({ offTree: 'resolve', preflopTables: false })
-  expect(tables).not.toHaveBeenCalled()
-  expect(original.preflop).toBeUndefined()
-  expect(disabled.preflop).toBeUndefined()
-  expect(construct.mock.calls[0]).toEqual(construct.mock.calls[1])
-  const room = slumbotRoom(
-    { action: '', clientPos: 1, hole: ['7h', '2d'].map(parseCard), board: [] },
-    { ours: 'a', theirs: 'b' },
-  )
-  const observation = observationFor(
-    room.viewFor('a'),
-    'a',
-    undefined,
-    room.id,
-    room.currentActions(),
-  )
-  if (!observation) throw new Error('missing observation')
-  const personality = championPersonality()
-  for (let seed = 1; seed <= 100; seed++) {
-    const context = {
-      observation,
-      personality,
-      profile: profileFor(personality),
-      tilt: observation.tilt,
-      rng: mulberry32(seed),
-    }
-    expect(original.policy.decide(context)).toEqual(
-      disabled.policy.decide({ ...context, rng: mulberry32(seed) }),
+it.skipIf(!v3)(
+  'leaves v9go identical with preflopTables absent or false; only v9gp opts in',
+  () => {
+    const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+    vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+    vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+    vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+    const tables = vi.spyOn(preflop, 'tablePreflopPolicy')
+    const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+    const original = v9gPolicy({ offTree: 'resolve' })
+    const disabled = v9gPolicy({ offTree: 'resolve', preflopTables: false })
+    expect(tables).not.toHaveBeenCalled()
+    expect(original.preflop).toBeUndefined()
+    expect(disabled.preflop).toBeUndefined()
+    expect(construct.mock.calls[0]).toEqual(construct.mock.calls[1])
+    const room = slumbotRoom(
+      { action: '', clientPos: 1, hole: ['7h', '2d'].map(parseCard), board: [] },
+      { ours: 'a', theirs: 'b' },
     )
-  }
-  const enabled = v9gPolicy({ offTree: 'resolve', preflopTables: true })
-  expect(tables).toHaveBeenCalledTimes(1)
-  expect(enabled.preflop).toBeDefined()
-  expect(construct.mock.calls[2]?.[2]?.preflop?.stats).toBe(enabled.preflop)
-})
+    const observation = observationFor(
+      room.viewFor('a'),
+      'a',
+      undefined,
+      room.id,
+      room.currentActions(),
+    )
+    if (!observation) throw new Error('missing observation')
+    const personality = championPersonality()
+    for (let seed = 1; seed <= 100; seed++) {
+      const context = {
+        observation,
+        personality,
+        profile: profileFor(personality),
+        tilt: observation.tilt,
+        rng: mulberry32(seed),
+      }
+      expect(original.policy.decide(context)).toEqual(
+        disabled.policy.decide({ ...context, rng: mulberry32(seed) }),
+      )
+    }
+    const enabled = v9gPolicy({ offTree: 'resolve', preflopTables: true })
+    expect(tables).toHaveBeenCalledTimes(1)
+    expect(enabled.preflop).toBeDefined()
+    expect(construct.mock.calls[2]?.[2]?.preflop?.stats).toBe(enabled.preflop)
+  },
+)
 
 it('shares the original v9g construction and forwards only the explicit bounded river opt-in', () => {
   const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
@@ -538,55 +544,64 @@ it('forwards the v9gy baseline-cap opt-in to the carried river without changing 
   expect(result.hybrid).toBeUndefined()
 })
 
-it('v9gz enables only river optimization; flag off has identical v9gp construction', () => {
-  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
-  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
-  vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
-  vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
-  vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
-  vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
-  const rivers = vi.spyOn(river, 'riverSolverPolicy')
-  const turns = vi.spyOn(chain, 'solvedFlopPolicy')
-  const options = { offTree: 'resolve' as const, preflopTables: true }
-  v9gPolicy(options)
-  v9gPolicy({ ...options, safeExploitV2: false })
-  expect(rivers.mock.calls[0]?.[3]).toEqual(rivers.mock.calls[1]?.[3])
-  // Fresh table closures differ by identity; all other chain options match.
-  const { preflop: _a, ...a } = turns.mock.calls[0]?.[2] ?? {}
-  const { preflop: _b, ...b } = turns.mock.calls[1]?.[2] ?? {}
-  expect(a).toEqual(b)
-  const enabled = v9gPolicy({ ...options, safeExploitV2: true })
-  expect(rivers.mock.calls[2]?.[3]).toMatchObject({
-    safeExploitV2: true,
-    safe: true,
-    carry: 'per-river',
-    offTree: 'resolve',
-  })
-  expect(enabled.preflop).toBeDefined()
-  expect(enabled.river.safeExploit).toMatchObject({ eligible: 0, proposed: 0, accepted: 0 })
-  expect(enabled.hybrid).toBeUndefined()
-})
+it.skipIf(!v3)(
+  'v9gz enables only river optimization; flag off has identical v9gp construction',
+  () => {
+    const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+    vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+    vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+    vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+    const rivers = vi.spyOn(river, 'riverSolverPolicy')
+    const turns = vi.spyOn(chain, 'solvedFlopPolicy')
+    const options = { offTree: 'resolve' as const, preflopTables: true }
+    v9gPolicy(options)
+    v9gPolicy({ ...options, safeExploitV2: false })
+    expect(rivers.mock.calls[0]?.[3]).toEqual(rivers.mock.calls[1]?.[3])
+    // Fresh table closures differ by identity; all other chain options match.
+    const { preflop: _a, ...a } = turns.mock.calls[0]?.[2] ?? {}
+    const { preflop: _b, ...b } = turns.mock.calls[1]?.[2] ?? {}
+    expect(a).toEqual(b)
+    const enabled = v9gPolicy({ ...options, safeExploitV2: true })
+    expect(rivers.mock.calls[2]?.[3]).toMatchObject({
+      safeExploitV2: true,
+      safe: true,
+      carry: 'per-river',
+      offTree: 'resolve',
+    })
+    expect(enabled.preflop).toBeDefined()
+    expect(enabled.river.safeExploit).toMatchObject({ eligible: 0, proposed: 0, accepted: 0 })
+    expect(enabled.hybrid).toBeUndefined()
+  },
+)
 
-it('v9gz2 independently enables turn and river while explicit turn-off keeps v9gp construction', () => {
-  const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
-  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
-  vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
-  vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
-  vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
-  vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
-  const construct = vi.spyOn(chain, 'solvedFlopPolicy')
-  const options = { offTree: 'resolve' as const, preflopTables: true }
-  v9gPolicy(options)
-  v9gPolicy({ ...options, safeTurnExploit: false, safeExploitV2: false })
-  const { preflop: _a, ...a } = construct.mock.calls[0]?.[2] ?? {}
-  const { preflop: _b, ...b } = construct.mock.calls[1]?.[2] ?? {}
-  expect(a).toEqual(b)
-  const enabled = v9gPolicy({ ...options, safeTurnExploit: true, safeExploitV2: true })
-  expect(construct.mock.calls[2]?.[2]).toMatchObject({ safeTurnExploit: true, safeExploitV2: true })
-  expect(enabled.turn.safeExploit).toMatchObject({ eligible: 0, proposed: 0, accepted: 0 })
-})
+it.skipIf(!v3)(
+  'v9gz2 independently enables turn and river while explicit turn-off keeps v9gp construction',
+  () => {
+    const network: networks.RiverValueNetwork = { buckets: 1, layers: [] }
+    vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+    vi.spyOn(networks, 'loadValueNetwork').mockReturnValue(network)
+    vi.spyOn(networks, 'turnNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'turnStartNetworkFromEnvironment').mockReturnValue(network)
+    vi.spyOn(networks, 'riverNetworkFromEnvironment').mockReturnValue(network)
+    const construct = vi.spyOn(chain, 'solvedFlopPolicy')
+    const options = { offTree: 'resolve' as const, preflopTables: true }
+    v9gPolicy(options)
+    v9gPolicy({ ...options, safeTurnExploit: false, safeExploitV2: false })
+    const { preflop: _a, ...a } = construct.mock.calls[0]?.[2] ?? {}
+    const { preflop: _b, ...b } = construct.mock.calls[1]?.[2] ?? {}
+    expect(a).toEqual(b)
+    const enabled = v9gPolicy({ ...options, safeTurnExploit: true, safeExploitV2: true })
+    expect(construct.mock.calls[2]?.[2]).toMatchObject({
+      safeTurnExploit: true,
+      safeExploitV2: true,
+    })
+    expect(enabled.turn.safeExploit).toMatchObject({ eligible: 0, proposed: 0, accepted: 0 })
+  },
+)
 
-it.each([undefined, '1'])(
+it.skipIf(!v3).each([undefined, '1'])(
   'keeps named warm policies independent of v9gp with warm env=%s',
   (env) => {
     vi.stubEnv('RIVER_DIAG_WARM_START', env)

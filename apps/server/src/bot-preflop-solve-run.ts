@@ -11,6 +11,7 @@ import {
   parseRealisation,
 } from './bot-preflop-solve-realisation.js'
 import { DEFAULT_REALISATION, preflopTree } from './bot-preflop-solve-tree.js'
+import { type PreflopPackVersion, preflopPackDir } from './bot-preflop-tables.js'
 
 function numberArg(args: readonly string[], flag: string, fallback: number): number {
   const i = args.indexOf(flag)
@@ -63,7 +64,10 @@ export function runPreflop(args = process.argv.slice(2)): void {
   const outputDir = localPath(
     stringArg(args, '--output-dir') ??
       (isHandRealisation(factors)
-        ? `apps/server/preflop/${packVersion ?? treeVersion}`
+        ? relative(
+            process.cwd(),
+            preflopPackDir((packVersion ?? treeVersion) as PreflopPackVersion),
+          )
         : 'out/preflop-solve/flat'),
   )
   const legacyDir = localPath('apps/server/preflop/v1')

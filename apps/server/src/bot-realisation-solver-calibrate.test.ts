@@ -4,7 +4,7 @@ import { type Card, cardKey, makeDeck, mulberry32, parseCard } from '@river/engi
 import { describe, expect, it } from 'vitest'
 import { HAND_CLASSES, scoreSeven } from './bot-preflop-solve-equity.js'
 import { DEFAULT_HAND_REALISATION, realisationFactor } from './bot-preflop-solve-realisation.js'
-import { loadPreflopPack, preflopClass } from './bot-preflop-tables.js'
+import { hasPreflopPack, loadPreflopPack, preflopClass } from './bot-preflop-tables.js'
 import {
   fitRealisation,
   type RealisationObservation,
@@ -24,6 +24,9 @@ import {
   solveRiver,
 } from './bot-river-solver.js'
 import { COMBOS } from './bot-river-value-data.js'
+
+/** The v3 pack is private; a fresh clone skips the tests that play it. */
+const v3 = hasPreflopPack('v3')
 
 const cards = (text: string) => text.split(' ').map(parseCard)
 const held = (text: string, weight: number): RangeCombo => ({
@@ -114,38 +117,42 @@ describe('solver realisation calibration', () => {
     )
   }, 30_000)
 
-  it('reconstructs production table reaches, covers each depth/open size, and separates worker seeds', () => {
-    const terminals = [100, 200].flatMap((d) => calibrationTerminals(loadPreflopPack(d)))
-    const seen = new Set<string>()
-    for (let i = 0; i < 12; i++) {
-      const sample = sampleCalibrationSpot(terminals, 'test', 0, i)
-      expect(sample).toEqual(sampleCalibrationSpot(terminals, 'test', 0, i))
-      expect(sample.spot.board).not.toEqual(
-        sampleCalibrationSpot(terminals, 'test', 1, i).spot.board,
-      )
-      seen.add(`${sample.terminal.depth}:${sample.terminal.stratum}`)
-      const first = sample.spot.ranges[0][0] as RangeCombo
-      let reach = 1
-      for (const { node, indices } of sample.terminal.trace.line)
-        if (node.player === 1) {
-          // Independently multiply the OOP row for this physical holding's class.
-          reach *= sample.terminal.trace.pack.nodes
-            .find((n) => n.id === node.id)
-            ?.classes.find((c) => c.hand === preflopClass(first.hole))?.frequencies[
-            indices[0] as number
-          ] as number
-        }
-      expect(first.weight).toBeCloseTo(reach, 14)
-      expect(
-        sample.spot.ranges.every((r) =>
-          r.every(
-            (h) => !h.hole.some((c) => sample.spot.board.some((b) => cardKey(c) === cardKey(b))),
+  it.skipIf(!v3)(
+    'reconstructs production table reaches, covers each depth/open size, and separates worker seeds',
+    () => {
+      const terminals = [100, 200].flatMap((d) => calibrationTerminals(loadPreflopPack(d)))
+      const seen = new Set<string>()
+      for (let i = 0; i < 12; i++) {
+        const sample = sampleCalibrationSpot(terminals, 'test', 0, i)
+        expect(sample).toEqual(sampleCalibrationSpot(terminals, 'test', 0, i))
+        expect(sample.spot.board).not.toEqual(
+          sampleCalibrationSpot(terminals, 'test', 1, i).spot.board,
+        )
+        seen.add(`${sample.terminal.depth}:${sample.terminal.stratum}`)
+        const first = sample.spot.ranges[0][0] as RangeCombo
+        let reach = 1
+        for (const { node, indices } of sample.terminal.trace.line)
+          if (node.player === 1) {
+            // Independently multiply the OOP row for this physical holding's class.
+            reach *= sample.terminal.trace.pack.nodes
+              .find((n) => n.id === node.id)
+              ?.classes.find((c) => c.hand === preflopClass(first.hole))?.frequencies[
+              indices[0] as number
+            ] as number
+          }
+        expect(first.weight).toBeCloseTo(reach, 14)
+        expect(
+          sample.spot.ranges.every((r) =>
+            r.every(
+              (h) => !h.hole.some((c) => sample.spot.board.some((b) => cardKey(c) === cardKey(b))),
+            ),
           ),
-        ),
-      ).toBe(true)
-    }
-    expect(seen.size).toBe(12)
-  }, 30_000)
+        ).toBe(true)
+      }
+      expect(seen.size).toBe(12)
+    },
+    30_000,
+  )
 
   it('replays the 40-round per-turn production solve and complete shards deterministically', () => {
     const sample = {

@@ -4,7 +4,7 @@ import { type BotPolicy, mulberry32 } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import { HAND_CLASSES } from './bot-preflop-solve-equity.js'
 import { DEFAULT_HAND_REALISATION, realisationFactor } from './bot-preflop-solve-realisation.js'
-import { tablePreflopPolicy } from './bot-preflop-tables.js'
+import { hasPreflopPack, tablePreflopPolicy } from './bot-preflop-tables.js'
 import {
   handSeed,
   handStartNet,
@@ -12,6 +12,9 @@ import {
   writeCalibrationShard,
 } from './bot-realisation-calibrate.js'
 import { fitRealisation, type RealisationObservation } from './bot-realisation-fit.js'
+
+/** The v3 pack is private; a fresh clone skips the tests that play it. */
+const v3 = hasPreflopPack('v3')
 
 const options = {
   seed: 'calibration-test',
@@ -49,7 +52,7 @@ const policies = (base = fold) => {
   }
   return [make(), make()] as const
 }
-describe('realisation collection', () => {
+describe.skipIf(!v3)('realisation collection', () => {
   it('records both positions and later folds with blind-inclusive chip origin', () => {
     const pair = policies()
     const hands = Array.from({ length: 16 }, (_, i) => recordCalibrationHand(options, i, pair))

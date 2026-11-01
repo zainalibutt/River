@@ -13,6 +13,7 @@ import { decisionNodes } from './bot-preflop-solve-tree.js'
 import {
   defaultPreflopPackVersion,
   exactPreflopRanges,
+  hasPreflopPack,
   loadPreflopPack,
   preflopClass,
   preflopLiveAction,
@@ -27,6 +28,9 @@ import * as river from './bot-river-policy.js'
 import { observationFor, profileFor } from './bot-service.js'
 import { solvedFlopPolicy } from './bot-turn-policy.js'
 import { defaultRoomConfig, Room } from './room.js'
+
+/** The v3 pack is private; a fresh clone skips the tests that play it. */
+const v3 = hasPreflopPack('v3')
 
 afterEach(() => vi.restoreAllMocks())
 const person = championPersonality()
@@ -83,7 +87,7 @@ function traced(obs: BotObservationV1) {
   return trace
 }
 
-describe('v9gp public table path', () => {
+describe.skipIf(!v3)('v9gp public table path', () => {
   it('defaults to v3, keeps v2 loadable, and maps every supported open exactly', () => {
     expect(decisionNodes(loadPreflopPack(200).metadata.tree)[0]?.actions.map((a) => a.to)).toEqual([
       0.5, 1, 2, 2.5, 3, 200,

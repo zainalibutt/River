@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   type BotDecision,
   type BotObservationV1,
@@ -62,6 +64,35 @@ export function defaultPreflopPackVersion(
   throw new Error('RIVER_PREFLOP_PACK must be v2, v3 or v4')
 }
 
+/** Packs the strongest bot plays stay out of git; they load from RIVER_PREFLOP_PRIVATE_DIR. */
+export const PRIVATE_PREFLOP_PACKS: readonly PreflopPackVersion[] = ['v3']
+
+/** Every pack on disk, including the retired v1 the solver keeps for comparison. */
+export type StoredPreflopPack = PreflopPackVersion | 'v1'
+
+/** Directory holding one pack's tables, v3 under models/private unless the environment says. */
+export function preflopPackDir(version: StoredPreflopPack): string {
+  if (version === 'v1' || !PRIVATE_PREFLOP_PACKS.includes(version))
+    return fileURLToPath(new URL(`../preflop/${version}`, import.meta.url))
+  const root =
+    process.env.RIVER_PREFLOP_PRIVATE_DIR ||
+    fileURLToPath(new URL('../models/private/preflop', import.meta.url))
+  return join(root, version)
+}
+
+export function preflopPackFile(
+  version: StoredPreflopPack,
+  depth: number,
+  extension: 'json' | 'txt' = 'json',
+): string {
+  return join(preflopPackDir(version), `${depth}bb.${extension}`)
+}
+
+/** False where a private pack is absent, as on a fresh clone; tests skip on it. */
+export function hasPreflopPack(version: StoredPreflopPack): boolean {
+  return PREFLOP_DEPTHS.every((depth) => existsSync(preflopPackFile(version, depth)))
+}
+
 export function loadPreflopPack(
   depth: number,
   version: PreflopPackVersion = defaultPreflopPackVersion(),
@@ -69,9 +100,7 @@ export function loadPreflopPack(
   const key = `${version}:${depth}`
   let pack = packs.get(key)
   if (!pack) {
-    pack = JSON.parse(
-      readFileSync(new URL(`../preflop/${version}/${depth}bb.json`, import.meta.url), 'utf8'),
-    ) as PreflopPack
+    pack = JSON.parse(readFileSync(preflopPackFile(version, depth), 'utf8')) as PreflopPack
     packs.set(key, pack)
   }
   return pack

@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AIVAT_HEURISTIC, AIVAT_V2_HEURISTIC } from './bot-aivat.js'
 import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
+import { type PreflopPackVersion, preflopPackFile } from './bot-preflop-tables.js'
 import { V9GP_POLICY_OPTIONS, type V9gOptions } from './bot-v9g-policy.js'
 
 const root = fileURLToPath(new URL('../../..', import.meta.url))
@@ -110,7 +111,7 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
           [basename(opponentPrior)]: digest(readFileSync(opponentPrior)),
         }
   const preflop = [100, 200].map((depth) => {
-    const path = join(dirname(specification), '..', 'preflop', pack, `${depth}bb.json`)
+    const path = preflopPackFile(pack as PreflopPackVersion, depth)
     return { depth, sha256: existsSync(path) ? digest(readFileSync(path)) : null }
   })
   const env = Object.fromEntries(

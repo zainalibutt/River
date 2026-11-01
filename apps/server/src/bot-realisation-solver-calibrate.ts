@@ -21,6 +21,7 @@ import {
   type PreflopPack,
   type PreflopTrace,
   preflopClass,
+  preflopPackFile,
 } from './bot-preflop-tables.js'
 import {
   fitRealisation,
@@ -397,9 +398,7 @@ export function solverCalibrationMain(args = process.argv.slice(2)) {
   const stem = process.env.RIVER_TURN_START_NETWORK
   if (!stem) throw new Error('missing RIVER_TURN_START_NETWORK')
   const modelHash = hash(Buffer.concat([readFileSync(`${stem}.json`), readFileSync(`${stem}.bin`)]))
-  const tables = [100, 200].map((d) =>
-    hash(readFileSync(new URL(`../preflop/v3/${d}bb.json`, import.meta.url))),
-  )
+  const tables = [100, 200].map((d) => hash(readFileSync(preflopPackFile('v3', d))))
   const sources = [
     'bot-realisation-solver-calibrate',
     'bot-preflop-tables',

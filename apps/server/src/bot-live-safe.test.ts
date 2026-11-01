@@ -4,10 +4,14 @@ import { mulberry32, personalityPool } from '@river/engine'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { liveBotThinker, liveSafeBotPolicy, liveSafeConfig } from './bot-live-safe.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
+import { hasPreflopPack } from './bot-preflop-tables.js'
 import { actionFor, botPlayerId } from './bot-service.js'
 import { openSessionHand } from './bot-session-benchmark.js'
 import type { ThinkRequest } from './bot-thinker.js'
 import { workerRiverThinker } from './bot-thinker.js'
+
+/** The v3 pack is private; a fresh clone skips the tests that play it. */
+const v3 = hasPreflopPack('v3')
 
 vi.mock('./bot-thinker.js', async (original) => ({
   ...(await original<typeof import('./bot-thinker.js')>()),
@@ -173,13 +177,15 @@ describe('live safe policy routing and hard budget', () => {
     }
   })
 
-  it('preempts a genuinely blocked worker rather than waiting for its JS to yield', async () => {
-    const policy = liveSafeBotPolicy(
-      { ...liveSafeConfig(), enabled: true, threads: 1, budgetMs: 200 },
-      {
-        workerFactory: () =>
-          new Worker(
-            `
+  it.skipIf(!v3)(
+    'preempts a genuinely blocked worker rather than waiting for its JS to yield',
+    async () => {
+      const policy = liveSafeBotPolicy(
+        { ...liveSafeConfig(), enabled: true, threads: 1, budgetMs: 200 },
+        {
+          workerFactory: () =>
+            new Worker(
+              `
           const { parentPort } = require('node:worker_threads')
           parentPort.postMessage({ type: 'ready', coldStartMs: 0 })
           parentPort.on('message', (message) => {
@@ -187,20 +193,21 @@ describe('live safe policy routing and hard budget', () => {
             while (true) {}
           })
         `,
-            { eval: true },
-          ),
-      },
-    )
-    try {
-      await policy.ready()
-      const started = performance.now()
-      await expect(policy.think(request(), 200)).resolves.toEqual({ kind: 'call' })
-      expect(performance.now() - started).toBeLessThan(1000)
-      expect(policy.stats.fallbacks.time_budget).toBe(1)
-    } finally {
-      await policy.close()
-    }
-  })
+              { eval: true },
+            ),
+        },
+      )
+      try {
+        await policy.ready()
+        const started = performance.now()
+        await expect(policy.think(request(), 200)).resolves.toEqual({ kind: 'call' })
+        expect(performance.now() - started).toBeLessThan(1000)
+        expect(policy.stats.fallbacks.time_budget).toBe(1)
+      } finally {
+        await policy.close()
+      }
+    },
+  )
 
   it('runs v8z on a free slot while the timed-out affinity worker is still retiring', async () => {
     vi.useFakeTimers()

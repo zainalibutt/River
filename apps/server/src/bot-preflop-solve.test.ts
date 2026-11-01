@@ -30,6 +30,7 @@ import {
   type Seat,
   terminalUtility,
 } from './bot-preflop-solve-tree.js'
+import { hasPreflopPack, preflopPackFile } from './bot-preflop-tables.js'
 
 /** Six-card toy deck Js Jh Qs Qh Ks Kh; three possible pair holdings, deterministic showdown. */
 const toy: DealModel = {
@@ -387,9 +388,10 @@ describe('generated preflop packs', () => {
   ] as const)(
     '%s %i bb is complete, legal, normalised, correctly labelled and certified',
     (version, depth) => {
-      const pack = JSON.parse(
-        readFileSync(new URL(`../preflop/${version}/${depth}bb.json`, import.meta.url), 'utf8'),
-      ) as ReturnType<typeof makePack>
+      if (!hasPreflopPack(version)) return
+      const pack = JSON.parse(readFileSync(preflopPackFile(version, depth), 'utf8')) as ReturnType<
+        typeof makePack
+      >
       expect(pack.version).toBe(`river-hu-preflop-${version}`)
       expect(pack.metadata.effectiveStackBb).toBe(depth)
       expect(pack.metadata.tree).toEqual(
@@ -416,10 +418,7 @@ describe('generated preflop packs', () => {
       expect(pack.metadata.equity.spotChecks['AA-vs-KK']).toBeCloseTo(0.82, 1)
       expect(pack.metadata.equity.spotChecks['AKs-vs-QQ']).toBeCloseTo(0.46, 1)
       expect(pack.metadata.equity.spotChecks['72o-vs-AA']).toBeCloseTo(0.12, 1)
-      const dump = readFileSync(
-        new URL(`../preflop/${version}/${depth}bb.txt`, import.meta.url),
-        'utf8',
-      )
+      const dump = readFileSync(preflopPackFile(version, depth, 'txt'), 'utf8')
       expect(dump).toContain(`river-hu-preflop-${version}`)
       expect(dump).toContain('button/raise-2.5/raise-9')
       expect(pack.headlines.bbVsOpen2_5).not.toBeNull()
