@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readServerConfig } from './config.js'
+import { assertDevelopmentDatabase, isLocalSupabaseUrl, readServerConfig } from './config.js'
 
 describe('server config', () => {
   it('reads the single-origin runtime environment', () => {
@@ -61,5 +61,30 @@ describe('server config', () => {
         HOST_BIND: 'remote.example',
       }),
     ).toThrow('wildcard or loopback')
+  })
+})
+
+describe('the development database', () => {
+  it('counts only a stack on this machine as local', () => {
+    expect(isLocalSupabaseUrl('http://127.0.0.1:54321')).toBe(true)
+    expect(isLocalSupabaseUrl('http://localhost:54321')).toBe(true)
+    expect(isLocalSupabaseUrl('https://river.supabase.co')).toBe(false)
+    expect(isLocalSupabaseUrl('http://127.0.0.1.example.com')).toBe(false)
+    expect(isLocalSupabaseUrl('not a url')).toBe(false)
+  })
+
+  it('keeps a development server off a hosted project unless told otherwise', () => {
+    expect(() =>
+      assertDevelopmentDatabase({ SUPABASE_URL: 'http://127.0.0.1:54321' }),
+    ).not.toThrow()
+    expect(() => assertDevelopmentDatabase({ SUPABASE_URL: 'https://river.supabase.co' })).toThrow(
+      'refuses a hosted Supabase project',
+    )
+    expect(() =>
+      assertDevelopmentDatabase({
+        SUPABASE_URL: 'https://river.supabase.co',
+        RIVER_DEV_REMOTE_DATABASE: '1',
+      }),
+    ).not.toThrow()
   })
 })

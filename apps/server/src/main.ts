@@ -8,7 +8,7 @@ import { serveApiRoutes } from './api-routes.js'
 import { createSupabaseTokenVerifier } from './auth.js'
 import { SupabaseBotOpponentStore } from './bot-opponent-store.js'
 import { workerRiverThinker } from './bot-thinker.js'
-import { readServerConfig } from './config.js'
+import { assertDevelopmentDatabase, readServerConfig } from './config.js'
 import { SupabaseCosmeticStore } from './cosmetic-store.js'
 import { createSupabaseEconomy } from './economy-service.js'
 import { SupabaseLedger } from './ledger.js'
@@ -52,6 +52,7 @@ async function start(): Promise<void> {
   const startedAtMs = Date.now()
   const config = readServerConfig(process.env)
   const development = process.env.NODE_ENV !== 'production'
+  if (development) assertDevelopmentDatabase(process.env)
   const webDirectory = fileURLToPath(new URL('../../web', import.meta.url))
   const application = next({
     dev: development,
