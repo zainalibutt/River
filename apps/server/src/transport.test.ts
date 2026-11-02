@@ -1290,6 +1290,36 @@ describe('buy-ins a crash left behind', () => {
     expect(await ledger.balance(ALICE)).toBe(100_000)
   })
 
+  it('pays back every buy-in when the server dies in the middle of a hand', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new MemoryLedger()
+    const hub = hubOver(ledger, { book: true, deck: ALICE_LOSES })
+    const alice = await sitDown(hub, 'alice', 0)
+    const bob = await sitDown(hub, 'bob', 1)
+    await send(alice, 'deal', { kind: 'startHand' })
+    // Alice's whole stack is in the pot and she has asked to leave once the
+    // hand is over. Bob has not acted, so the hand is still running when the
+    // server dies, with chips in the pot that only its memory knew about.
+    await send(alice, 'shove', { kind: 'act', action: { kind: 'allIn' } })
+    await send(alice, 'alice-leave', { kind: 'leave' })
+    const view = viewOf(bob)
+    expect(view.phase).toBe('hand')
+    expect(view.currentActor?.playerId).toBe(BOB)
+    expect(view.seats[0]).toMatchObject({ playerId: ALICE, stack: 0 })
+    expect(await ledger.balance(ALICE)).toBe(50_000)
+    expect(await ledger.balance(BOB)).toBe(50_000)
+
+    vi.setSystemTime(RESTART)
+    const restarted = hubOver(ledger, { book: true })
+    expect(await restarted.refundCrashedSeatings(RESTART)).toBe(2)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    expect(await ledger.balance(BOB)).toBe(100_000)
+    expect([...ledger.seatings.values()].every((entry) => entry.closed)).toBe(true)
+    expect(await restarted.refundCrashedSeatings(RESTART)).toBe(0)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
+
   it('leaves a seating that was stood up from alone', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(NOON)
