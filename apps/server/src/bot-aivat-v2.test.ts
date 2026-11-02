@@ -4,6 +4,7 @@ import { type BotPolicy, mulberry32, parseCard, type TurnAction } from '@river/e
 import { describe, expect, it } from 'vitest'
 import {
   AIVAT_V2_HEURISTIC,
+  AIVAT_V3_HEURISTIC,
   type AivatRangeState,
   actionControl,
   aivatCorrection,
@@ -66,13 +67,18 @@ const network: RiverValueNetwork = {
   ],
 }
 
+const frozenSpec = (version: 'v2' | 'v3') =>
+  readFileSync(new URL(`../benchmark/frozen-${version}.json`, import.meta.url))
+
 describe('frozen AIVAT v2', () => {
-  it('pins the recipe, implementation and all six export hashes in frozen-v2', () => {
-    const spec = JSON.parse(
-      readFileSync(new URL('../benchmark/frozen-v2.json', import.meta.url), 'utf8'),
-    )
-    expect(spec.estimators.v2.id).toBe(AIVAT_V2_HEURISTIC)
-    expect(spec.estimators.v2.models).toEqual({
+  it.each([
+    ['v2', AIVAT_V2_HEURISTIC],
+    ['v3', AIVAT_V3_HEURISTIC],
+  ] as const)('pins the recipe and all six export hashes in frozen-%s', (version, id) => {
+    const spec = JSON.parse(frozenSpec(version).toString('utf8'))
+    const frozen = spec.estimators[version]
+    expect(frozen.id).toBe(id)
+    expect(frozen.models).toEqual({
       flop: {
         stem: 'flop2-ck50/river-buckets-128',
         jsonSha256: '8b1245ecd2c09040fb9f0862e8a03af297497c5f84cd974d56226a41cdd3ddff',
@@ -89,12 +95,27 @@ describe('frozen AIVAT v2', () => {
         binSha256: '321f35f3fcff24a38a7456d96affc523ff94920e169579712e69686aaff8d330',
       },
     })
-    for (const [file, hash] of Object.entries(spec.estimators.v2.sourceSha256)) {
+    expect(frozen.recipeSha256).toBe(digest(Buffer.from(JSON.stringify(frozen.recipe))))
+  })
+
+  it('pins the v3 implementation to the current sources', () => {
+    const spec = JSON.parse(frozenSpec('v3').toString('utf8'))
+    for (const [file, hash] of Object.entries(spec.estimators.v3.sourceSha256)) {
       expect(digest(readFileSync(new URL(file, import.meta.url))), file).toBe(hash)
     }
-    expect(spec.estimators.v2.recipeSha256).toBe(
-      digest(Buffer.from(JSON.stringify(spec.estimators.v2.recipe))),
+  })
+
+  // v2's sources moved on with the flop re-solve work, so it no longer loads; its
+  // spec stays byte-identical so the runs that recorded it still replay.
+  it('keeps v2 retired but replayable, with v3 the same recipe and models', () => {
+    expect(digest(frozenSpec('v2'))).toBe(
+      '63cc42a3465163afdfa69600f583247c2fac693bd488bfe19de5d2c9835562b6',
     )
+    const v2 = JSON.parse(frozenSpec('v2').toString('utf8'))
+    const v3 = JSON.parse(frozenSpec('v3').toString('utf8'))
+    expect(v3.previousSpecification).toBe('frozen-v2.json')
+    expect(v3.estimators.v3.recipeSha256).toBe(v2.estimators.v2.recipeSha256)
+    expect(v3.estimators.v3.models).toEqual(v2.estimators.v2.models)
   })
 
   it('centers imperfect network Q exactly over every supported action', () => {

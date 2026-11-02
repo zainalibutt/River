@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type BotObservationV1, cardKey, type TurnAction } from '@river/engine'
 import {
-  AIVAT_V2_HEURISTIC,
+  AIVAT_NETWORK_HEURISTICS,
+  type AivatNetworkVersion,
   type AivatRangeState,
   type AivatValueHeuristic,
   frozenPotShare,
@@ -21,7 +22,9 @@ import {
   rangeWeights,
 } from './bot-value-network.js'
 
-const specification = new URL('../benchmark/frozen-v2.json', import.meta.url)
+/** Each network estimator is pinned in the benchmark spec it was frozen with. */
+export const aivatSpecification = (version: AivatNetworkVersion) =>
+  new URL(`../benchmark/frozen-${version}.json`, import.meta.url)
 const sha256 = (data: Uint8Array) => createHash('sha256').update(data).digest('hex')
 const layouts = new WeakMap<RiverValueNetwork, Map<string, BucketLayout>>()
 
@@ -107,13 +110,18 @@ export function networkActionValue(
 }
 
 /** Content-addressed exports. No training, calibration or outcome-dependent
- * coefficients. The spec is read before play and its digest travels in logs. */
-export function frozenNetworkHeuristic(modelRoot: string): AivatValueHeuristic {
-  const bytes = readFileSync(specification)
+ * coefficients. The spec is read before play and its digest travels in logs.
+ * v2 refuses to load once a pinned source changes; v3 is the live freeze. */
+export function frozenNetworkHeuristic(
+  modelRoot: string,
+  version: AivatNetworkVersion = 'v3',
+): AivatValueHeuristic {
+  const id = AIVAT_NETWORK_HEURISTICS[version]
+  const bytes = readFileSync(aivatSpecification(version))
   const spec = JSON.parse(bytes.toString('utf8')) as {
     estimators: {
-      v2: {
-        id: typeof AIVAT_V2_HEURISTIC
+      [key in AivatNetworkVersion]: {
+        id: string
         sourceSha256: Record<string, string>
         recipe: unknown
         recipeSha256: string
@@ -128,26 +136,26 @@ export function frozenNetworkHeuristic(modelRoot: string): AivatValueHeuristic {
       }
     }
   }
-  if (spec.estimators.v2.id !== AIVAT_V2_HEURISTIC) throw new Error('wrong AIVAT v2 spec')
-  const frozen = spec.estimators.v2
+  const frozen = spec.estimators[version]
+  if (frozen?.id !== id) throw new Error(`wrong AIVAT ${version} spec`)
   if (sha256(Buffer.from(JSON.stringify(frozen.recipe))) !== frozen.recipeSha256)
-    throw new Error('AIVAT v2 recipe hash mismatch')
+    throw new Error(`AIVAT ${version} recipe hash mismatch`)
   for (const [file, hash] of Object.entries(frozen.sourceSha256)) {
     if (sha256(readFileSync(new URL(file, import.meta.url))) !== hash)
-      throw new Error('AIVAT v2 source hash mismatch; freeze a new version')
+      throw new Error(`AIVAT ${version} source hash mismatch; freeze a new version`)
   }
   const networks = {} as Record<'flop' | 'turn' | 'river', RiverValueNetwork>
   for (const street of ['flop', 'turn', 'river'] as const) {
-    const model = spec.estimators.v2.models[street]
+    const model = frozen.models[street]
     const stem = join(modelRoot, model.stem)
     for (const extension of ['json', 'bin'] as const) {
       if (sha256(readFileSync(`${stem}.${extension}`)) !== model[`${extension}Sha256`])
-        throw new Error(`AIVAT v2 ${street} ${extension} hash mismatch`)
+        throw new Error(`AIVAT ${version} ${street} ${extension} hash mismatch`)
     }
     networks[street] = loadValueNetwork(stem)
   }
   return Object.freeze({
-    id: AIVAT_V2_HEURISTIC,
+    id,
     specificationSha256: sha256(bytes),
     value(observation, action, state) {
       if (observation.street === 'preflop') {
@@ -166,24 +174,26 @@ export function frozenNetworkHeuristic(modelRoot: string): AivatValueHeuristic {
         const pot = observation.seats.reduce((sum, entry) => sum + entry.betHand, 0)
         return action.kind === 'fold' ? -seat.betHand : share * (pot + cost) - seat.betHand - cost
       }
-      if (!state) throw new Error('AIVAT v2 tracked ranges unavailable')
+      if (!state) throw new Error(`AIVAT ${version} tracked ranges unavailable`)
       return networkActionValue(networks[observation.street], observation, action, state)
     },
   } satisfies AivatValueHeuristic)
 }
 
 let selected: AivatValueHeuristic | undefined
-let selectedRoot: string | undefined
+let selectedKey: string | undefined
 /** Benchmark opt-in; v1 remains the default. Loading happens before a decision. */
 export function aivatHeuristicFromEnvironment(): AivatValueHeuristic | undefined {
   const version = process.env.RIVER_AIVAT_HEURISTIC ?? 'v1'
   if (version === 'v1') return undefined
-  if (version !== 'v2') throw new Error('RIVER_AIVAT_HEURISTIC must be v1 or v2')
+  if (version !== 'v2' && version !== 'v3')
+    throw new Error('RIVER_AIVAT_HEURISTIC must be v1, v2 or v3')
   const root = process.env.RIVER_AIVAT_MODEL_ROOT
-  if (!root) throw new Error('AIVAT v2 needs RIVER_AIVAT_MODEL_ROOT')
-  if (!selected || selectedRoot !== root) {
-    selected = frozenNetworkHeuristic(root)
-    selectedRoot = root
+  if (!root) throw new Error(`AIVAT ${version} needs RIVER_AIVAT_MODEL_ROOT`)
+  const key = `${version}:${root}`
+  if (!selected || selectedKey !== key) {
+    selected = frozenNetworkHeuristic(root, version)
+    selectedKey = key
   }
   return selected
 }

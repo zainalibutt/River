@@ -2,7 +2,15 @@ import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { DEFAULT_STAKE, parseCard } from '@river/engine'
-import { AIVAT_HEURISTIC, AIVAT_V2_HEURISTIC, type AivatDecision, aivatChips } from './bot-aivat.js'
+import {
+  AIVAT_HEURISTIC,
+  AIVAT_NETWORK_HEURISTICS,
+  AIVAT_V2_HEURISTIC,
+  AIVAT_V3_HEURISTIC,
+  type AivatDecision,
+  type AivatNetworkVersion,
+  aivatChips,
+} from './bot-aivat.js'
 import { lateBoardCorrection } from './bot-aivat-chance.js'
 import { enumerableAivatToy } from './bot-aivat-toy.js'
 import { allInEquityChips } from './bot-allin-equity.js'
@@ -94,15 +102,19 @@ export function replaySlumbotHand(hand: AivatLoggedHand, chanceAvailable: boolea
   const version = hand.aivatDecisions?.[0]?.heuristic
   if (hand.aivatDecisions?.some((decision) => decision.heuristic !== version))
     throw new Error('mixed AIVAT heuristic versions in hand')
-  if (version === AIVAT_V2_HEURISTIC) {
+  const network = (Object.keys(AIVAT_NETWORK_HEURISTICS) as AivatNetworkVersion[]).find(
+    (key) => AIVAT_NETWORK_HEURISTICS[key] === version,
+  )
+  if (network) {
+    // Each run replays against the spec it recorded, so v2 logs stay checkable after v3.
     const specHash = createHash('sha256')
-      .update(readFileSync(new URL('../benchmark/frozen-v2.json', import.meta.url)))
+      .update(readFileSync(new URL(`../benchmark/frozen-${network}.json`, import.meta.url)))
       .digest('hex')
     for (const decision of hand.aivatDecisions ?? []) {
       if (decision.specificationSha256 !== specHash)
-        throw new Error('AIVAT v2 recorded specification hash mismatch')
+        throw new Error(`AIVAT ${network} recorded specification hash mismatch`)
       if (decision.control && decision.observation.street !== 'preflop' && !decision.rangeState)
-        throw new Error('AIVAT v2 recorded tracked ranges missing')
+        throw new Error(`AIVAT ${network} recorded tracked ranges missing`)
     }
   }
   return {
@@ -216,6 +228,7 @@ if (process.argv[1]?.endsWith('bot-aivat-replay.ts')) {
     const aivat = recorded && versions.size === 1 ? summary('aivat') : null
     const aivatV1 = versions.has(AIVAT_HEURISTIC) ? aivat : null
     const aivatV2 = versions.has(AIVAT_V2_HEURISTIC) ? aivat : null
+    const aivatV3 = versions.has(AIVAT_V3_HEURISTIC) ? aivat : null
     result = {
       kind: 'slumbot',
       inputs: identity,
@@ -227,24 +240,27 @@ if (process.argv[1]?.endsWith('bot-aivat-replay.ts')) {
       aivat,
       aivatV1,
       aivatV2,
+      aivatV3,
       supportedControlsOnly: {
         v1: aivatV1 ?? chanceOnly,
         v2: aivatV2 ?? chanceOnly,
+        v3: aivatV3 ?? chanceOnly,
         qualification:
           'Missing action records contribute zero action correction; this is not a network precision measurement',
       },
       heuristic: [...versions][0] ?? null,
-      networkEvaluations: versions.has(AIVAT_V2_HEURISTIC)
-        ? hands.reduce(
-            (sum, hand) =>
-              sum +
-              (hand.aivatDecisions?.filter(
-                (decision) =>
-                  decision.control !== null && decision.observation.street !== 'preflop',
-              ).length ?? 0),
-            0,
-          )
-        : 0,
+      networkEvaluations:
+        versions.has(AIVAT_V2_HEURISTIC) || versions.has(AIVAT_V3_HEURISTIC)
+          ? hands.reduce(
+              (sum, hand) =>
+                sum +
+                (hand.aivatDecisions?.filter(
+                  (decision) =>
+                    decision.control !== null && decision.observation.street !== 'preflop',
+                ).length ?? 0),
+              0,
+            )
+          : 0,
       knownActions: known,
       missingActions: recorded ? missing : null,
       chanceAvailable,
