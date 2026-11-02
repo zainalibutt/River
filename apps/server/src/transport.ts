@@ -1327,9 +1327,10 @@ export class RoomHub {
       .viewFor(serverCommand.byPlayerId)
       .seats.find((seat) => seat.playerId === serverCommand.targetPlayerId)
     const stack = targetSeat?.stack ?? 0
+    const seating = state.seatings.get(serverCommand.targetPlayerId)
     if (stack > 0) {
       try {
-        await this.ledger.apply({
+        await this.applyToSeating('close', seating, {
           playerId: serverCommand.targetPlayerId,
           delta: stack,
           reason: 'table_kick_cash_out',
@@ -1350,7 +1351,8 @@ export class RoomHub {
     }
     const result = state.room.submit(serverCommand)
     if (!result.ok && stack > 0) {
-      await this.ledger.apply({
+      // Still seated, so still open.
+      await this.applyToSeating('open', seating, {
         playerId: serverCommand.targetPlayerId,
         delta: -stack,
         reason: 'table_kick_cash_out_refund',
@@ -1371,8 +1373,22 @@ export class RoomHub {
     if (player === null || connection.roomId === null) throw new Error('missing player context')
     const amount = command.kind === 'sit' ? command.buyIn : command.amount
     const reason = command.kind === 'sit' ? 'table_buy_in' : 'table_rebuy'
+    // What the seating will be once this lands: a new one for a sit, the one
+    // already open grown by a rebuy.
+    const before = command.kind === 'rebuy' ? state.seatings.get(player.playerId) : undefined
+    const seating: Seating | undefined =
+      command.kind === 'sit'
+        ? {
+            playerId: player.playerId,
+            ref: `${connection.roomId}:${requestId}`,
+            buyIn: amount,
+            openedAtMs: state.room.config.nowMs(),
+          }
+        : before !== undefined && before.buyIn > 0
+          ? { ...before, buyIn: before.buyIn + amount }
+          : undefined
     try {
-      connection.balance = await this.ledger.apply({
+      connection.balance = await this.applyToSeating('open', seating, {
         playerId: player.playerId,
         delta: -amount,
         reason,
@@ -1392,27 +1408,22 @@ export class RoomHub {
     }
     const result = state.room.submit(serverCommand)
     if (!result.ok) {
-      connection.balance = await this.ledger.apply({
+      const refund = {
         playerId: player.playerId,
         delta: amount,
         reason: `${reason}_refund`,
         ref: `${connection.roomId}:${requestId}:refund`,
-      })
-    } else if (command.kind === 'sit') {
-      const seating: Seating = {
-        playerId: player.playerId,
-        ref: `${connection.roomId}:${requestId}`,
-        buyIn: amount,
-        openedAtMs: state.room.config.nowMs(),
       }
+      // A refused sit never seated anyone; a refused rebuy leaves the seating
+      // the size it was.
+      connection.balance =
+        command.kind === 'sit'
+          ? await this.applyToSeating('close', seating, refund)
+          : await this.applyToSeating('open', before, refund)
+    } else if (command.kind === 'sit' && seating !== undefined) {
       state.seatings.set(player.playerId, seating)
-      this.recordSeating('open', seating)
-    } else {
-      const seating = state.seatings.get(player.playerId)
-      if (seating !== undefined && seating.buyIn > 0) {
-        seating.buyIn += amount
-        this.recordSeating('open', seating)
-      }
+    } else if (before !== undefined && seating !== undefined) {
+      before.buyIn = seating.buyIn
     }
     return result
   }
@@ -1430,8 +1441,9 @@ export class RoomHub {
       .seats.find((item) => item.playerId === player.playerId)
     const amount = seat?.stack ?? 0
     if (amount === 0) return state.room.submit(serverCommand)
+    const seating = state.seatings.get(player.playerId)
     try {
-      connection.balance = await this.ledger.apply({
+      connection.balance = await this.applyToSeating('close', seating, {
         playerId: player.playerId,
         delta: amount,
         reason: serverCommand.kind === 'stand' ? 'table_cash_out' : 'table_leave',
@@ -1451,7 +1463,8 @@ export class RoomHub {
     }
     const result = state.room.submit(serverCommand)
     if (!result.ok) {
-      connection.balance = await this.ledger.apply({
+      // A stand the room refused, mid-hand say, leaves the seat taken and open.
+      connection.balance = await this.applyToSeating('open', seating, {
         playerId: player.playerId,
         delta: -amount,
         reason: serverCommand.kind === 'stand' ? 'table_cash_out_refund' : 'table_leave_refund',
@@ -1598,11 +1611,12 @@ export class RoomHub {
         if (playerId === null || state.botCast.has(playerId)) continue
         if (seat.stack > 0) {
           try {
-            await this.ledger.apply({
+            const ref = this.seatingRef(state, playerId)
+            await this.applyToSeating('close', state.seatings.get(playerId), {
               playerId,
               delta: seat.stack,
               reason: 'table_shutdown_cash_out',
-              ref: `${this.seatingRef(state, playerId)}:shutdown`,
+              ref: `${ref}:shutdown`,
             })
           } catch (error) {
             // One player's failure must not strand the rest of the table. The
@@ -1648,24 +1662,22 @@ export class RoomHub {
     for (const seating of await store.unsettled(startedAtMs)) {
       if (ours.has(seatingKey(seating))) continue
       try {
-        await this.ledger.apply({
-          playerId: seating.playerId,
-          delta: seating.buyIn,
-          reason: 'table_crash_refund',
-          ref: `${seating.ref}:crash-refund`,
-        })
+        // Paid and closed together, under a reference that names the seating,
+        // so a later run pays nothing twice.
+        await store.closeWith(
+          {
+            playerId: seating.playerId,
+            delta: seating.buyIn,
+            reason: 'table_crash_refund',
+            ref: `${seating.ref}:crash-refund`,
+          },
+          seating,
+        )
       } catch (error) {
         this.onError(`crash refund: could not pay back ${seating.ref}`, error)
         continue
       }
       refunded += 1
-      try {
-        await store.close(seating)
-      } catch (error) {
-        // Paid under a reference that names the seating, so a later run that
-        // finds it still open pays nothing twice.
-        this.onError(`crash refund: could not close ${seating.ref}`, error)
-      }
     }
     return refunded
   }
@@ -1762,11 +1774,12 @@ export class RoomHub {
     this.forgetShadowActor(state.room.id, playerId)
     this.broadcast(state, null, result.events)
     if (seat !== undefined && seat.stack > 0) {
-      await this.payOut({
+      const ref = this.seatingRef(state, playerId)
+      await this.payOut(state.seatings.get(playerId), {
         playerId,
         delta: seat.stack,
         reason: 'table_reconnect_expiry_cash_out',
-        ref: `${this.seatingRef(state, playerId)}:expiry`,
+        ref: `${ref}:expiry`,
       })
     }
     this.closeSeatingIfGone(state, playerId)
@@ -1782,18 +1795,43 @@ export class RoomHub {
   }
 
   /**
-   * Return a stack to the bankroll that bought it, retrying until the ledger
-   * takes it. The reference names one seating, so a retry after a lost reply
-   * cannot pay twice.
+   * Return a stack to the bankroll that bought it, closing its seating with
+   * it, retrying until the ledger takes it. The reference names one seating,
+   * so a retry after a lost reply cannot pay twice.
    */
-  private async payOut(entry: LedgerEntry, attempt = 0): Promise<void> {
+  private async payOut(
+    seating: Seating | undefined,
+    entry: LedgerEntry,
+    attempt = 0,
+  ): Promise<void> {
     try {
-      await this.ledger.apply(entry)
+      await this.applyToSeating('close', seating, entry)
     } catch (error) {
       this.onError(`payOut: could not return ${entry.delta} chips`, error)
       if (attempt + 1 >= PAY_OUT_ATTEMPTS) return
-      setTimeout(() => void this.payOut(entry, attempt + 1), retryDelay(attempt))
+      setTimeout(() => void this.payOut(seating, entry, attempt + 1), retryDelay(attempt))
     }
+  }
+
+  /**
+   * Apply a ledger entry for a seat together with what it does to the seat's
+   * seating: open it (a buy-in, a rebuy, a refused stand's credit taken back)
+   * or close it (a stack paid back, a refused buy-in refunded). With seatings
+   * kept, both land in one transaction, so a crash cannot fall between the
+   * chips and the book. A seating that cost nothing known is not in the book,
+   * and its entry goes to the ledger alone.
+   */
+  private applyToSeating(
+    kind: 'open' | 'close',
+    seating: Seating | undefined,
+    entry: LedgerEntry,
+  ): Promise<number> {
+    const store = this.seatingStore
+    if (store === undefined || seating === undefined || seating.buyIn <= 0) {
+      return this.ledger.apply(entry)
+    }
+    const written = { ...seating }
+    return kind === 'open' ? store.openWith(entry, written) : store.closeWith(entry, written)
   }
 
   /**
@@ -1820,31 +1858,30 @@ export class RoomHub {
     const seating = state.seatings.get(playerId)
     if (seating === undefined || seating.buyIn <= 0) return
     if (state.room.viewFor('').seats.some((seat) => seat.playerId === playerId)) return
-    this.recordSeating('close', seating)
+    this.recordSeatingClosed(seating)
   }
 
   /**
-   * Write a seating's opening, or its end, in the seating book, retrying until
-   * the book takes it. Nothing waits on the answer: a seat is taken or given up
+   * Write a seating's end in the seating book, retrying until the book takes
+   * it: a seat that ended with nothing to pay, or, harmlessly again, one whose
+   * payment closed it already. Nothing waits on the answer: a seat is given up
    * whether or not the book is reachable, and what a missing line costs is at
    * most a refund after a crash.
    */
-  private recordSeating(kind: 'open' | 'close', seating: Seating): void {
+  private recordSeatingClosed(seating: Seating): void {
     const store = this.seatingStore
     if (store === undefined || seating.buyIn <= 0) return
     const written = { ...seating }
     const key = seatingKey(written)
-    if (kind === 'close') this.unconfirmedCloses.set(key, written)
+    this.unconfirmedCloses.set(key, written)
     void (async () => {
       for (let attempt = 0; attempt < PAY_OUT_ATTEMPTS; attempt += 1) {
         try {
-          await (kind === 'open' ? store.open(written) : store.close(written))
-          if (kind === 'close' && this.unconfirmedCloses.get(key) === written) {
-            this.unconfirmedCloses.delete(key)
-          }
+          await store.close(written)
+          if (this.unconfirmedCloses.get(key) === written) this.unconfirmedCloses.delete(key)
           return
         } catch (error) {
-          this.onError(`seating book: could not ${kind} ${written.ref}`, error)
+          this.onError(`seating book: could not close ${written.ref}`, error)
           if (attempt + 1 >= PAY_OUT_ATTEMPTS) return
           await new Promise<void>((resolve) => setTimeout(resolve, retryDelay(attempt)).unref())
         }
@@ -2176,11 +2213,12 @@ export class RoomHub {
       if (event.kind !== 'leftAfterHand' || isBotPlayer(event.playerId)) continue
       this.forgetShadowActor(state.room.id, event.playerId)
       if (event.stack > 0) {
-        void this.payOut({
+        const ref = this.seatingRef(state, event.playerId)
+        void this.payOut(state.seatings.get(event.playerId), {
           playerId: event.playerId,
           delta: event.stack,
           reason: 'table_leave',
-          ref: `${this.seatingRef(state, event.playerId)}:leave`,
+          ref: `${ref}:leave`,
         })
       }
       this.closeSeatingIfGone(state, event.playerId)

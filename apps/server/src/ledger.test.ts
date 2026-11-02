@@ -102,21 +102,50 @@ describe('Supabase ledger adapter', () => {
       return { ledger, calls }
     }
 
-    it('writes a seating that opens, or grows, as one row per player and seating', async () => {
-      const { ledger, calls } = recorder()
-      await ledger.open(seating)
-      expect(calls[0]?.url).toBe('https://river.test/rest/v1/table_seatings')
-      expect(calls[0]?.init?.method).toBe('POST')
-      expect(calls[0]?.init?.headers).toMatchObject({
-        apikey: 'service-role',
-        prefer: 'return=minimal,resolution=merge-duplicates',
-      })
-      // No closed_at: writing an open seating again can never reopen a closed one.
+    it('opens a seating and moves its chips in one call', async () => {
+      const { ledger, calls } = recorder(() => Response.json(30_000))
+      const entry = {
+        playerId: PLAYER_ID,
+        delta: -70_000,
+        reason: 'table_buy_in',
+        ref: 'river-one:sit-1:debit',
+      }
+      expect(await ledger.openWith(entry, seating)).toBe(30_000)
+      expect(calls).toHaveLength(1)
+      expect(calls[0]?.url).toBe(
+        'https://river.test/rest/v1/rpc/apply_ledger_entry_opening_seating',
+      )
+      expect(calls[0]?.init?.headers).toMatchObject({ apikey: 'service-role' })
       expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
-        player_id: PLAYER_ID,
-        ref: 'river-one:sit-1',
-        buy_in: 70_000,
-        opened_at: '2026-09-29T12:00:00.000Z',
+        p_player_id: PLAYER_ID,
+        p_delta: -70_000,
+        p_reason: 'table_buy_in',
+        p_ref: 'river-one:sit-1:debit',
+        p_seating_ref: 'river-one:sit-1',
+        p_buy_in: 70_000,
+        p_opened_at: '2026-09-29T12:00:00.000Z',
+      })
+    })
+
+    it('closes a seating and pays out its chips in one call', async () => {
+      const { ledger, calls } = recorder(() => Response.json(100_000))
+      const entry = {
+        playerId: PLAYER_ID,
+        delta: 70_000,
+        reason: 'table_cash_out',
+        ref: 'river-one:stand-1:credit',
+      }
+      expect(await ledger.closeWith(entry, seating)).toBe(100_000)
+      expect(calls).toHaveLength(1)
+      expect(calls[0]?.url).toBe(
+        'https://river.test/rest/v1/rpc/apply_ledger_entry_closing_seating',
+      )
+      expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+        p_player_id: PLAYER_ID,
+        p_delta: 70_000,
+        p_reason: 'table_cash_out',
+        p_ref: 'river-one:stand-1:credit',
+        p_seating_ref: 'river-one:sit-1',
       })
     })
 
