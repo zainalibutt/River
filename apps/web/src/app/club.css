@@ -455,6 +455,7 @@
   font-size: 0.66rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  text-decoration: none;
   cursor: pointer;
   transition: color var(--club-focus) var(--club-glide);
 }
@@ -1297,6 +1298,18 @@
 .club-home-account .club-capsule-links .club-link:hover,
 .club-home-account .club-capsule-links .club-link:focus-visible {
   color: var(--club-brass-bright);
+}
+
+/* The notice's link in a panel: a line of type, with a thumb's worth of target. */
+.club-privacy-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 0;
+  font-size: 12px;
+  text-decoration: underline;
+  text-decoration-color: var(--club-hairline-strong);
+  text-underline-offset: 5px;
 }
 
 .club-home-dialog {

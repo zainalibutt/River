@@ -3365,6 +3365,10 @@ function UpgradePanel({
       <button type="button" onClick={onClose}>
         NOT NOW
       </button>
+      {/* A new tab, so reading it never costs the seat. */}
+      <a className="upgrade-privacy" href="/privacy" target="_blank" rel="noopener">
+        How River uses your email
+      </a>
     </form>
   )
 }

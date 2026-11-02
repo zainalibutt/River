@@ -510,6 +510,9 @@ export function ClubMenu() {
               <button type="button" className="club-link" onClick={() => setFriendsOpen(true)}>
                 Friends
               </button>
+              <button type="button" className="club-link" onClick={() => router.push('/privacy')}>
+                Privacy
+              </button>
             </nav>
           </footer>
         ) : null}
@@ -608,6 +611,9 @@ export function ClubMenu() {
                 >
                   Send sign-in link
                 </button>
+                <a className="club-link club-privacy-link" href="/privacy">
+                  How River uses your email
+                </a>
               </div>
             </div>
           ) : null}
@@ -740,6 +746,9 @@ export function ClubMenu() {
               <div className="club-field">
                 <span className="club-capsule-label">Settings</span>
                 <RiverSettings preferences={preferences} onChange={setPreferences} />
+                <a className="club-link club-privacy-link" href="/privacy">
+                  Privacy
+                </a>
               </div>
             </section>
           ) : null}

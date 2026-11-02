@@ -1,0 +1,67 @@
+/* The notice reads as part of the club: the record's scrolling folio, a little wider
+   because it is prose, with the folio's quiet type for the body. */
+.club-folio.privacy-folio {
+  width: clamp(320px, 36vw, 560px);
+  gap: 0.75rem;
+  color: var(--club-ivory-dim);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.privacy-folio p {
+  margin: 0;
+}
+
+.privacy-folio strong {
+  color: var(--club-ivory);
+  font-weight: 500;
+}
+
+.privacy-folio a {
+  color: var(--club-brass);
+  overflow-wrap: anywhere;
+}
+
+.privacy-folio a:hover,
+.privacy-folio a:focus-visible {
+  color: var(--club-brass-bright);
+}
+
+.privacy-folio code {
+  color: var(--club-ivory);
+  font-size: 0.95em;
+}
+
+.privacy-back {
+  display: none;
+}
+
+.privacy-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.privacy-nav-link {
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  /* The phone's root type is scaled down for the menu; prose needs a size that reads. */
+  .club-folio.privacy-folio {
+    width: auto;
+    font-size: 15px;
+  }
+
+  .privacy-folio .record-heading {
+    font-size: 12px;
+  }
+
+  .privacy-back {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: 12px;
+  }
+}

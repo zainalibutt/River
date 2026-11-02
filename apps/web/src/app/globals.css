@@ -1637,6 +1637,13 @@ button.invite-chip.showing-code {
   border-color: rgb(111 191 139 / 64%);
 }
 
+.upgrade-privacy {
+  justify-self: center;
+  color: var(--river-cream-dim);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
 .hero-card.peeked {
   filter: brightness(1.2);
   transform: translateY(-24px) rotate(-2deg) scale(1.08);
