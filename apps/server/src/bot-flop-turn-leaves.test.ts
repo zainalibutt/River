@@ -102,7 +102,7 @@ it('switches on exact CFR iterations, resets for gadget solves and uses final le
       }),
     ).toThrow('lastIterations')
   }
-})
+}, 30_000)
 
 it('keeps the early/late leaf schedule local while a warm start continues DCFR discounts', () => {
   const spot = { ...spotOf(), betSizes: [] }

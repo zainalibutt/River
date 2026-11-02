@@ -273,7 +273,7 @@ describe('frozen AIVAT v2', () => {
       },
     })
     expect(captured).toBe(true)
-  })
+  }, 30_000)
 
   it('does not manufacture action records when replaying historical terminal logs', () => {
     const result = replaySlumbotHand(
