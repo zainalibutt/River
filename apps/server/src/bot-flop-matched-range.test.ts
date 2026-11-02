@@ -25,6 +25,9 @@ import { slumbotRoom } from './bot-slumbot.js'
 import * as v9g from './bot-v9g-policy.js'
 import type { RiverValueNetwork } from './bot-value-network.js'
 
+/** The v3 pack is private; a fresh checkout skips the tests that play it. */
+const v3 = preflop.hasPreflopPack('v3')
+
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
@@ -236,152 +239,156 @@ it('parses multi-file inputs, lock alias and one-based shards without machine pa
   expect(matchedSpotKey('original/log.jsonl', 3)).toBe(matchedSpotKey('other\\log.jsonl', 3))
 })
 
-it('runs all three CLI modes through production replay on synthetic logs, ranges and networks', async () => {
-  for (const name of [
-    'RIVER_DIAG_GADGET',
-    'RIVER_DIAG_IP_JAM_OVER_RAISE',
-    'RIVER_DIAG_ALLIN_RUNOUTS',
-    'RIVER_FLOP_BET_SIZES',
-    'RIVER_TURN_EXPLICIT_LEAF',
-    'RIVER_TURN_RESIDUAL',
-    'RIVER_TURN_RESIDUAL_REFRESH',
-  ])
-    vi.stubEnv(name, undefined)
-  vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
-  const network: RiverValueNetwork = {
-    buckets: 1,
-    layers: [
-      {
-        rows: 2,
-        columns: 4,
-        slope: null,
-        weight: new Float32Array(8),
-        bias: Float32Array.of(0.5, 0.5),
-      },
-    ],
-  }
-  const original = v9g.v9gPolicy
-  vi.spyOn(v9g, 'v9gPolicy').mockImplementation((options) =>
-    original(options, { turn: network, flop: network, turnStart: network, river: network }),
-  )
-  const table = preflop.tablePreflopPolicy(pokerGuardPolicy)
-  vi.spyOn(preflop, 'tablePreflopPolicy').mockReturnValue({
-    ...table,
-    ranges: () => [
-      [combo('Kd Kc', 0.3), combo('Ad Qd', 0.7)],
-      [combo('Jh Jc', 0.4), combo('Ah Kh', 0.6)],
-    ],
-  })
-  const room = slumbotRoom(
-    { action: 'b200c/kb172', clientPos: 0, hole: cards('Kd Kc'), board: cards('2s 7s Ts') },
-    { ours: 'bot:jules', theirs: 'bot:slumbot' },
-  )
-  const observation = observationFor(
-    room.viewFor('bot:jules'),
-    'bot:jules',
-    undefined,
-    room.id,
-    room.currentActions(),
-  )
-  if (!observation) throw new Error('missing observation')
-  const log: ReplayHand = {
-    hand: 1,
-    focal: 'v9gp',
-    personality: 'jules',
-    clientPos: 0,
-    hole: ['Kd', 'Kc'],
-    slumbotHole: ['Jh', 'Jc'],
-    action: 'b200c/kb172f',
-    aivatDecisions: [
-      {
-        observation,
-        heuristic: 'pot-share-uniform-32-v1',
-        reason: null,
-        control: {
-          kind: 'action',
-          taken: 'fold',
-          choices: [{ action: 'fold', probability: 1, value: 0 }],
+it.skipIf(!v3)(
+  'runs all three CLI modes through production replay on synthetic logs, ranges and networks',
+  async () => {
+    for (const name of [
+      'RIVER_DIAG_GADGET',
+      'RIVER_DIAG_IP_JAM_OVER_RAISE',
+      'RIVER_DIAG_ALLIN_RUNOUTS',
+      'RIVER_FLOP_BET_SIZES',
+      'RIVER_TURN_EXPLICIT_LEAF',
+      'RIVER_TURN_RESIDUAL',
+      'RIVER_TURN_RESIDUAL_REFRESH',
+    ])
+      vi.stubEnv(name, undefined)
+    vi.stubEnv('RIVER_FLOP_NETWORK', 'fixture')
+    const network: RiverValueNetwork = {
+      buckets: 1,
+      layers: [
+        {
+          rows: 2,
+          columns: 4,
+          slope: null,
+          weight: new Float32Array(8),
+          bias: Float32Array.of(0.5, 0.5),
         },
-      },
-    ],
-  }
-  let dump: ReturnType<typeof flopDumpSpot> | undefined
-  replaySpot(
-    log,
-    { file: 'original/log.jsonl', line: 1, hand: 1, decision: 0, fraction: 0.43 },
-    'prod',
-    'fixture',
-    (row) => {
-      dump = row
-    },
-  )
-  if (!dump) throw new Error('missing dump')
-  expect(replaySpotForDump(log, dump).decision).toBe(0)
-  const temporary = mkdtempSync(join(process.cwd(), 'apps/server/matched-fixture-'))
-  try {
-    const index = join(temporary, 'index.jsonl')
-    const spots = join(temporary, 'spots.jsonl')
-    const logs = join(temporary, 'log.jsonl')
-    writeFileSync(
-      index,
-      `${JSON.stringify({ n: 1, file: 'old\\log.jsonl', hand: 1, bet: 1.72, history: 'kb172' })}\n`,
-    )
-    writeFileSync(spots, `${JSON.stringify(dump)}\n`)
-    writeFileSync(logs, `${JSON.stringify(log)}\n`)
-    writeFileSync(join(temporary, 'spot-01.json'), JSON.stringify(texas))
-    for (const mode of ['none', 'ip', 'both']) {
-      const calls = vi.spyOn(solver, 'solveRiver')
-      const out = join(temporary, `${mode}.jsonl`)
-      await main([
-        '--spots',
-        spots,
-        '--index',
-        index,
-        '--solver',
-        temporary,
-        '--logs',
-        logs,
-        '--mode',
-        mode,
-        '--out',
-        out,
-      ])
-      const output = JSON.parse(readFileSync(out, 'utf8'))
-      expect(output).toMatchObject({
-        n: 1,
-        hand: 1,
-        board: dump.board,
-        mode,
-        isomorphismMappedCombos: 0,
-        classMappedCombos: 0,
-      })
-      expect(output.strategy).toHaveLength(2)
-      const last = calls.mock.calls.at(-1)
-      if (!last) throw new Error('no solve')
-      expect(last[1]).toBe(40)
-      expect(last[4]).toBeUndefined()
-      expect(last[5]).toBeDefined()
-      expect([...(last[6]?.fixedStrategies?.keys() ?? [])]).toEqual(
-        mode === 'none' ? [] : ['', 'k'],
-      )
-      const result = calls.mock.results.at(-1)?.value as solver.RiverSolution
-      expect(output.strategy).toEqual(matchedDecision(result, 'kb172').strategy)
-      // Re-run the exact production showdown/tree/iterations with gadget off and no locks.
-      if (mode === 'none') {
-        const independent = solver.solveRiver(
-          last[0],
-          last[1],
-          last[2],
-          last[3],
-          undefined,
-          last[5],
-          { scheme: 'dcfr' },
-        )
-        expect(result.strategy).toEqual(independent.strategy)
-      }
-      calls.mockRestore()
+      ],
     }
-  } finally {
-    rmSync(temporary, { recursive: true, force: true })
-  }
-}, 180_000)
+    const original = v9g.v9gPolicy
+    vi.spyOn(v9g, 'v9gPolicy').mockImplementation((options) =>
+      original(options, { turn: network, flop: network, turnStart: network, river: network }),
+    )
+    const table = preflop.tablePreflopPolicy(pokerGuardPolicy)
+    vi.spyOn(preflop, 'tablePreflopPolicy').mockReturnValue({
+      ...table,
+      ranges: () => [
+        [combo('Kd Kc', 0.3), combo('Ad Qd', 0.7)],
+        [combo('Jh Jc', 0.4), combo('Ah Kh', 0.6)],
+      ],
+    })
+    const room = slumbotRoom(
+      { action: 'b200c/kb172', clientPos: 0, hole: cards('Kd Kc'), board: cards('2s 7s Ts') },
+      { ours: 'bot:jules', theirs: 'bot:slumbot' },
+    )
+    const observation = observationFor(
+      room.viewFor('bot:jules'),
+      'bot:jules',
+      undefined,
+      room.id,
+      room.currentActions(),
+    )
+    if (!observation) throw new Error('missing observation')
+    const log: ReplayHand = {
+      hand: 1,
+      focal: 'v9gp',
+      personality: 'jules',
+      clientPos: 0,
+      hole: ['Kd', 'Kc'],
+      slumbotHole: ['Jh', 'Jc'],
+      action: 'b200c/kb172f',
+      aivatDecisions: [
+        {
+          observation,
+          heuristic: 'pot-share-uniform-32-v1',
+          reason: null,
+          control: {
+            kind: 'action',
+            taken: 'fold',
+            choices: [{ action: 'fold', probability: 1, value: 0 }],
+          },
+        },
+      ],
+    }
+    let dump: ReturnType<typeof flopDumpSpot> | undefined
+    replaySpot(
+      log,
+      { file: 'original/log.jsonl', line: 1, hand: 1, decision: 0, fraction: 0.43 },
+      'prod',
+      'fixture',
+      (row) => {
+        dump = row
+      },
+    )
+    if (!dump) throw new Error('missing dump')
+    expect(replaySpotForDump(log, dump).decision).toBe(0)
+    const temporary = mkdtempSync(join(process.cwd(), 'apps/server/matched-fixture-'))
+    try {
+      const index = join(temporary, 'index.jsonl')
+      const spots = join(temporary, 'spots.jsonl')
+      const logs = join(temporary, 'log.jsonl')
+      writeFileSync(
+        index,
+        `${JSON.stringify({ n: 1, file: 'old\\log.jsonl', hand: 1, bet: 1.72, history: 'kb172' })}\n`,
+      )
+      writeFileSync(spots, `${JSON.stringify(dump)}\n`)
+      writeFileSync(logs, `${JSON.stringify(log)}\n`)
+      writeFileSync(join(temporary, 'spot-01.json'), JSON.stringify(texas))
+      for (const mode of ['none', 'ip', 'both']) {
+        const calls = vi.spyOn(solver, 'solveRiver')
+        const out = join(temporary, `${mode}.jsonl`)
+        await main([
+          '--spots',
+          spots,
+          '--index',
+          index,
+          '--solver',
+          temporary,
+          '--logs',
+          logs,
+          '--mode',
+          mode,
+          '--out',
+          out,
+        ])
+        const output = JSON.parse(readFileSync(out, 'utf8'))
+        expect(output).toMatchObject({
+          n: 1,
+          hand: 1,
+          board: dump.board,
+          mode,
+          isomorphismMappedCombos: 0,
+          classMappedCombos: 0,
+        })
+        expect(output.strategy).toHaveLength(2)
+        const last = calls.mock.calls.at(-1)
+        if (!last) throw new Error('no solve')
+        expect(last[1]).toBe(40)
+        expect(last[4]).toBeUndefined()
+        expect(last[5]).toBeDefined()
+        expect([...(last[6]?.fixedStrategies?.keys() ?? [])]).toEqual(
+          mode === 'none' ? [] : ['', 'k'],
+        )
+        const result = calls.mock.results.at(-1)?.value as solver.RiverSolution
+        expect(output.strategy).toEqual(matchedDecision(result, 'kb172').strategy)
+        // Re-run the exact production showdown/tree/iterations with gadget off and no locks.
+        if (mode === 'none') {
+          const independent = solver.solveRiver(
+            last[0],
+            last[1],
+            last[2],
+            last[3],
+            undefined,
+            last[5],
+            { scheme: 'dcfr' },
+          )
+          expect(result.strategy).toEqual(independent.strategy)
+        }
+        calls.mockRestore()
+      }
+    } finally {
+      rmSync(temporary, { recursive: true, force: true })
+    }
+  },
+  180_000,
+)
