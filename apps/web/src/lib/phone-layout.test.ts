@@ -92,6 +92,31 @@ describe('phone table composition', () => {
     [390, 844 - 81],
   ] as const) {
     for (const count of [2, 6, 9]) {
+      it(`keeps ${count} seats' bets off the board and apart at ${width} by ${height}`, () => {
+        const layout = tableLayout(phoneGeometry(width, height), count, 0)
+        // A bet's chips as the phone draws them, about two chips across and a short stack.
+        const chips = (point: { u: number; v: number }) => ({
+          x: point.u - 12,
+          y: point.v - 8,
+          width: 24,
+          height: 16,
+        })
+        const first = layout.board[0]
+        const last = layout.board[4]
+        if (first === undefined || last === undefined) throw new Error('board')
+        const board = {
+          x: first.u - layout.boardCard.width / 2,
+          y: first.v - layout.boardCard.height / 2,
+          width: last.u - first.u + layout.boardCard.width,
+          height: layout.boardCard.height,
+        }
+        const bets = layout.seats.map((seat) => chips(seat.bet))
+        for (const [one, bet] of bets.entries()) {
+          expect(overlaps(bet, board)).toBe(false)
+          for (const other of bets.slice(one + 1)) expect(overlaps(bet, other)).toBe(false)
+        }
+      })
+
       it(`keeps ${count} seats readable and separate at ${width} by ${height}`, () => {
         const geometry = phoneGeometry(width, height)
         const seats = tableLayout(geometry, count, 0).seats.filter((seat) => seat.seat !== 0)
