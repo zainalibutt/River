@@ -20,7 +20,7 @@ import {
 } from './bot-v9g-policy.js'
 import * as networks from './bot-value-network.js'
 
-/** The v3 pack is private; a fresh clone skips the tests that play it. */
+/** The v3 pack is private; a fresh checkout skips the tests that play it. */
 const v3 = preflop.hasPreflopPack('v3')
 
 beforeEach(() => {

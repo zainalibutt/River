@@ -88,7 +88,7 @@ export function preflopPackFile(
   return join(preflopPackDir(version), `${depth}bb.${extension}`)
 }
 
-/** False where a private pack is absent, as on a fresh clone; tests skip on it. */
+/** False where a private pack is absent, as on a fresh checkout; tests skip on it. */
 export function hasPreflopPack(version: StoredPreflopPack): boolean {
   return PREFLOP_DEPTHS.every((depth) => existsSync(preflopPackFile(version, depth)))
 }

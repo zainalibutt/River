@@ -10,7 +10,7 @@ import { openSessionHand } from './bot-session-benchmark.js'
 import type { ThinkRequest } from './bot-thinker.js'
 import { workerRiverThinker } from './bot-thinker.js'
 
-/** The v3 pack is private; a fresh clone skips the tests that play it. */
+/** The v3 pack is private; a fresh checkout skips the tests that play it. */
 const v3 = hasPreflopPack('v3')
 
 vi.mock('./bot-thinker.js', async (original) => ({

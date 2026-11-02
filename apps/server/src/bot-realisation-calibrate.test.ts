@@ -13,7 +13,7 @@ import {
 } from './bot-realisation-calibrate.js'
 import { fitRealisation, type RealisationObservation } from './bot-realisation-fit.js'
 
-/** The v3 pack is private; a fresh clone skips the tests that play it. */
+/** The v3 pack is private; a fresh checkout skips the tests that play it. */
 const v3 = hasPreflopPack('v3')
 
 const options = {

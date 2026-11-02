@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { hasPreflopPack, loadPreflopPack } from './bot-preflop-tables.js'
 import { replayPreflopTranslation } from './bot-preflop-translation-audit.js'
 
-/** The v3 pack is private; a fresh clone skips the tests that play it. */
+/** The v3 pack is private; a fresh checkout skips the tests that play it. */
 const v3 = hasPreflopPack('v3')
 
 it.skipIf(!v3)(
