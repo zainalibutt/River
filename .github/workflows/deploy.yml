@@ -71,8 +71,16 @@ jobs:
         # A project-scoped token already carries the project, so only the
         # service needs naming. --ci streams the build and exits on the
         # deployment's terminal status, so a failed deploy fails the job.
+        #
+        # The CLI prints a dashboard link carrying the project and service
+        # IDs, and the logs of a public repository are public. The link is
+        # cut down to the host before it reaches the log. bash with pipefail
+        # keeps the deploy's exit status rather than sed's.
+        shell: bash
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service "${{ vars.RAILWAY_SERVICE || 'river-web' }}" --ci
+        run: |
+          railway up --service "${{ vars.RAILWAY_SERVICE || 'river-web' }}" --ci 2>&1 \
+            | sed -u -E 's#railway\.(com|app)/project/[^[:space:]]+#railway.com/project/(hidden)#g'
       - name: Say where it went
         run: echo "Deployed ${{ github.sha }} to production."

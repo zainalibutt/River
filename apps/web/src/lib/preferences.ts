@@ -1,5 +1,6 @@
 export const CENSOR_PROFANITY_KEY = 'river:censor-profanity'
 export const AMOUNTS_IN_BIG_BLINDS_KEY = 'river:amounts-in-big-blinds'
+export const SHOW_LOSING_HANDS_KEY = 'river:show-losing-hands'
 
 interface PreferenceStorage {
   getItem(key: string): string | null
@@ -17,23 +18,28 @@ export interface Preferences {
   censorProfanity: boolean
   /** Bets, pots and stacks in the table's big blinds rather than in chips. */
   amountsInBigBlinds: boolean
+  /** Turn a losing hand over at a showdown rather than throwing it away unseen. */
+  showLosingHands: boolean
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   censorProfanity: false,
   amountsInBigBlinds: false,
+  showLosingHands: false,
 }
 
 export function readPreferences(storage: PreferenceStorage): Preferences {
   return {
     censorProfanity: readCensorProfanity(storage),
     amountsInBigBlinds: readSwitch(storage, AMOUNTS_IN_BIG_BLINDS_KEY),
+    showLosingHands: readSwitch(storage, SHOW_LOSING_HANDS_KEY),
   }
 }
 
 export function writePreferences(storage: PreferenceStorage, preferences: Preferences): void {
   writeCensorProfanity(storage, preferences.censorProfanity)
   writeSwitch(storage, AMOUNTS_IN_BIG_BLINDS_KEY, preferences.amountsInBigBlinds)
+  writeSwitch(storage, SHOW_LOSING_HANDS_KEY, preferences.showLosingHands)
 }
 
 export function readCensorProfanity(storage: PreferenceStorage): boolean {

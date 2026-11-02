@@ -1,5 +1,10 @@
 import { type Browser, type BrowserContext, expect, type Page, test } from '@playwright/test'
 
+// This file is about the menu, not the way in: the intro and its gate are already behind us.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.sessionStorage.setItem('river:intro-seen', '1'))
+})
+
 const MIN_TARGET = 56
 const CENTRE_TOLERANCE = 2
 

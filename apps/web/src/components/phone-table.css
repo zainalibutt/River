@@ -664,3 +664,39 @@
   border-color: var(--river-spotlight);
   box-shadow: 0 0 22px rgb(127 211 255 / 30%);
 }
+/* The thumb's controls give when pressed and spring back when let go. */
+.phone-table :is(.phone-actions, .phone-confirm, .phone-sizing) > button {
+  transition:
+    filter 140ms var(--ease-out),
+    transform 380ms var(--ease-spring);
+}
+.phone-table :is(.phone-actions, .phone-confirm, .phone-sizing) > button:active:not(:disabled) {
+  transform: scale(0.95);
+  transition:
+    filter 80ms var(--ease-out),
+    transform 90ms var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .phone-table :is(.phone-actions, .phone-confirm, .phone-sizing) > button,
+  .phone-table :is(.phone-actions, .phone-confirm, .phone-sizing) > button:active:not(:disabled) {
+    transition: filter 140ms var(--ease-out);
+    transform: none;
+  }
+}
+/* A guest with chips worth keeping, in the status line: save, or not now. */
+.phone-table .phone-save,
+.phone-table .phone-save-dismiss {
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+}
+.phone-table .phone-save {
+  color: var(--river-brass-hi);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.phone-table .phone-save-dismiss {
+  color: var(--river-cream-faint);
+}

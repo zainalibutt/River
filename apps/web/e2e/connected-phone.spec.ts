@@ -3,6 +3,11 @@ import { expect, type Page, test } from '@playwright/test'
 import type { RoomView } from '@river/server'
 import { createClient } from '@supabase/supabase-js'
 
+// This file is about the menu, not the way in: the intro and its gate are already behind us.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.sessionStorage.setItem('river:intro-seen', '1'))
+})
+
 const origin = process.env.RIVER_E2E_URL
 const backend = process.env.RIVER_BOT_CANARY_URL
 const serviceKey = process.env.RIVER_BOT_CANARY_SERVICE_KEY

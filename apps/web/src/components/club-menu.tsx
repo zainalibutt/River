@@ -5,8 +5,14 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { DailyChips } from '@/components/daily-chips'
+import { FriendsSheet } from '@/components/friends-sheet'
+import { MenuDrift } from '@/components/menu-drift'
+import { RiverIntro } from '@/components/river-intro'
+import { RiverMusicControl } from '@/components/river-music-control'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
+import { RollingAmount } from '@/components/rolling-amount'
 import {
   createRiverAuthClient,
   ensureRiverSession,
@@ -21,6 +27,7 @@ import {
   nameProblem,
 } from '@/lib/player-name'
 import { profilePath } from '@/lib/profile'
+import { riverMusic } from '@/lib/river-music'
 import { startTableHref } from '@/lib/start-table'
 import { inviteDestination } from '@/lib/table-target'
 import { useInterfaceSound } from '@/lib/use-interface-sound'
@@ -67,6 +74,11 @@ type NameCheck =
 export function ClubMenu() {
   const router = useRouter()
   useInterfaceSound()
+  // The theme belongs to the menu: in when it shows, out on the way to a table.
+  useEffect(() => {
+    riverMusic.enterHome()
+    return () => riverMusic.leaveHome()
+  }, [])
   const dialogRef = useRef<HTMLDialogElement>(null)
   const closingMotion = useRef<Animation | null>(null)
   const visibleViewport = useVisibleViewport()
@@ -83,6 +95,12 @@ export function ClubMenu() {
   const [inviteError, setInviteError] = useState<string | null>(null)
   const inviteRef = useRef<HTMLInputElement>(null)
   const authRef = useRef<SupabaseClient | null>(null)
+  const [friendsOpen, setFriendsOpen] = useState(false)
+  const accessToken = useCallback(async () => {
+    const client = authRef.current
+    if (client === null) throw new Error('not signed in yet')
+    return (await ensureRiverSession(client)).access_token
+  }, [])
   const [signIn, setSignIn] = useState<'idle' | 'editing' | 'sent' | 'error'>('idle')
   const [returning, setReturning] = useState(false)
   const [email, setEmail] = useState('')
@@ -342,6 +360,7 @@ export function ClubMenu() {
 
   return (
     <div className="club club-home">
+      <RiverIntro />
       <div className="club-home-art" aria-hidden="true">
         <div className="club-home-world">
           <Image
@@ -351,16 +370,21 @@ export function ClubMenu() {
             sizes="(max-width: 900px) and (orientation: portrait) 140vh, 100vw"
             priority
           />
+          <MenuDrift />
         </div>
       </div>
       <header className="club-home-header">
+        {/* The river spade over the name: the lockup the intro ends on, so the curtain
+            lifts on the same mark it showed. */}
         <div className="club-wordmark">
+          <span className="club-home-mark" aria-hidden="true" />
           <h1 className="club-wordmark-name">River</h1>
-          <p className="club-home-tagline">Premium poker.</p>
+          <p className="club-home-tagline">Premium poker</p>
         </div>
 
         <nav className="club-home-tools" aria-label="Settings">
           <RiverSoundControl />
+          <RiverMusicControl />
           <button type="button" className="club-home-tool" onClick={() => setSettingsOpen(true)}>
             Settings
           </button>
@@ -452,25 +476,54 @@ export function ClubMenu() {
                     <button type="button" className="club-link" onClick={openNaming}>
                       Choose your name
                     </button>
-                  ) : profile === null ? null : (
-                    <button
-                      type="button"
-                      className="club-link"
-                      onClick={() => router.push(profile)}
-                    >
-                      Your profile
-                    </button>
-                  )}
+                  ) : null}
                 </>
               )}
             </div>
+            <DailyChips
+              accessToken={accessToken}
+              onBalance={(balance) =>
+                setMe((current) => (current === null ? current : { ...current, balance }))
+              }
+            />
             <div className="club-capsule-figure">
               <div className="club-capsule-value">
-                {me.balance === null ? '—' : me.balance.toLocaleString('en-GB')}
+                {me.balance === null ? (
+                  '—'
+                ) : (
+                  <RollingAmount value={me.balance} abbreviated={false} bigBlind={null} />
+                )}
               </div>
               <div className="club-capsule-label">Chips</div>
             </div>
+            {/* Places of your own, read as one line of type under the strip rather than a
+                stack of buttons: the strip's actions are the claim and the name above. */}
+            <nav className="club-capsule-links" aria-label="Your account">
+              {!me.anonymous && memberName?.chosen !== false && profile !== null ? (
+                <button type="button" className="club-link" onClick={() => router.push(profile)}>
+                  Your profile
+                </button>
+              ) : null}
+              <button type="button" className="club-link" onClick={() => router.push('/record')}>
+                Your record
+              </button>
+              <button type="button" className="club-link" onClick={() => setFriendsOpen(true)}>
+                Friends
+              </button>
+            </nav>
           </footer>
+        ) : null}
+
+        {friendsOpen ? (
+          <FriendsSheet
+            accessToken={accessToken}
+            onClose={() => setFriendsOpen(false)}
+            onJoinTable={(code) => router.push(`/t/${code}`)}
+            onSaveProgress={() => {
+              setFriendsOpen(false)
+              setSignIn('editing')
+            }}
+          />
         ) : null}
 
         <dialog

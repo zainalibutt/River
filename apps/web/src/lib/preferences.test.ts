@@ -6,6 +6,7 @@ import {
   DEFAULT_PREFERENCES,
   readCensorProfanity,
   readPreferences,
+  SHOW_LOSING_HANDS_KEY,
   writeCensorProfanity,
   writePreferences,
 } from './preferences.js'
@@ -90,8 +91,22 @@ describe('amounts in big blinds', () => {
     expect(readPreferences(storage).amountsInBigBlinds).toBe(false)
     writePreferences(storage, { ...DEFAULT_PREFERENCES, amountsInBigBlinds: true })
     expect(storage.values.get(AMOUNTS_IN_BIG_BLINDS_KEY)).toBe('on')
-    expect(readPreferences(storage)).toEqual({ censorProfanity: false, amountsInBigBlinds: true })
+    expect(readPreferences(storage)).toEqual({
+      censorProfanity: false,
+      amountsInBigBlinds: true,
+      showLosingHands: false,
+    })
     writePreferences(storage, { ...DEFAULT_PREFERENCES, amountsInBigBlinds: false })
     expect(readPreferences(storage).amountsInBigBlinds).toBe(false)
+  })
+})
+
+describe('showing losing hands', () => {
+  it('is off by default, so a losing hand is thrown away unseen, and is kept', () => {
+    const storage = new MemoryStorage()
+    expect(readPreferences(storage).showLosingHands).toBe(false)
+    writePreferences(storage, { ...DEFAULT_PREFERENCES, showLosingHands: true })
+    expect(storage.values.get(SHOW_LOSING_HANDS_KEY)).toBe('on')
+    expect(readPreferences(storage).showLosingHands).toBe(true)
   })
 })

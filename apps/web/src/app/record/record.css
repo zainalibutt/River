@@ -1,0 +1,48 @@
+/* The record reads as part of the club: the folio's rows, a heading per section, and
+   the recent sittings as a quiet list with the result in brass or in red. */
+.record-heading {
+  margin: 1.2rem 0 0.2rem;
+  color: var(--club-ivory-dim);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.record-sittings {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.record-sittings li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--club-hairline);
+  color: var(--club-ivory-dim);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-sittings strong.up {
+  color: var(--club-brass);
+}
+
+.record-sittings strong.down {
+  color: var(--river-danger);
+}
+
+/* The record is longer than a profile: it fills the height beside the room and scrolls
+   inside itself rather than running off the bottom of the screen. */
+.club-folio.record-folio {
+  top: clamp(1.4rem, 4vh, 3rem);
+  bottom: clamp(1.4rem, 4vh, 3rem);
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transform: none;
+}

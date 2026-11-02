@@ -151,7 +151,7 @@ test.describe('the desktop control language baseline', () => {
       await page.emulateMedia({ reducedMotion })
       await page.goto('/table?new=1')
       await page.getByRole('button', { name: 'DEAL', exact: true }).click()
-      await expect.poll(sound.decoded).toBe(14)
+      await expect.poll(sound.decoded).toBe(16)
       await page.keyboard.down('Space')
       const faces = page.locator('.hero-cards .playing-card')
       await expect(faces).toHaveCount(2)
@@ -301,6 +301,17 @@ test.describe('the desktop control language baseline', () => {
       '.action-menu .action-slot',
       '.action-menu .action-button',
     ]
+    // The buttons spring back after the press that opened the menu; measure them at rest.
+    await page.locator('.action-menu').evaluate((menu) =>
+      Promise.all(
+        menu
+          .getAnimations({ subtree: true })
+          .filter(
+            (animation) => animation.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY,
+          )
+          .map((animation) => animation.finished.catch(() => undefined)),
+      ),
+    )
     const menuStyles = await measureStyles(menuSelectors)
     await page.keyboard.press('r')
     const raiseLayer = page.locator('.raise-layer')

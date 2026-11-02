@@ -139,3 +139,5 @@ reading and review, and all rights are reserved. Third-party material:
 - Fonts (Fraunces, Inter, Barlow Condensed) are served through `next/font`
   under the SIL Open Font Licence.
 - Sound effects are synthesised by River's own pipeline (`art/pipeline/audio.py`).
+- The intro and menu films are rendered in Blender from River's own scenes.
+- Music sources and licences are recorded in `apps/web/public/audio/manifest.json`.

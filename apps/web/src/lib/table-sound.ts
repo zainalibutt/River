@@ -22,6 +22,8 @@ export type SoundEffect =
   | 'card_peek'
   | 'chip_bet'
   | 'check_tap'
+  | 'showdown_hush'
+  | 'win_chime'
 
 const EFFECTS: readonly SoundEffect[] = [
   'card_deal',
@@ -38,6 +40,8 @@ const EFFECTS: readonly SoundEffect[] = [
   'card_peek',
   'chip_bet',
   'check_tap',
+  'showdown_hush',
+  'win_chime',
 ]
 
 /** How loud each effect sits against the others, before the master level. */
@@ -57,6 +61,9 @@ const LEVEL: Record<SoundEffect, number> = {
   card_peek: 0.4,
   chip_bet: 0.75,
   check_tap: 0.6,
+  // Under the table, not over it: the hush is felt and the chime sits beneath the chips.
+  showdown_hush: 0.45,
+  win_chime: 0.42,
 }
 
 /** The same effect twice within this many milliseconds plays once: a flop is not a crackle. */

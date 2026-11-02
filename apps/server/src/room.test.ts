@@ -529,7 +529,9 @@ describe('leaving in the middle of a hand', () => {
     const between = called.events.find((event) => event.kind === 'between')
     expect(between).toMatchObject({
       countdownMs:
-        room.config.countdownMs + showdownPresentationMs(2) + runoutMs([3, 1, 1], 2, true),
+        room.config.countdownMs +
+        showdownPresentationMs(2, { tabled: true }) +
+        runoutMs([3, 1, 1], 2, true),
     })
   })
 
@@ -695,11 +697,48 @@ describe('per-player projection and adversarial hidden information', () => {
     seatThree(room)
     room.submit({ kind: 'startHand' })
     room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'fold' } })
-    playToPhase(room, 'between')
+    const events = playToPhase(room, 'between')
     const bob = room.viewFor('bob')
     expect(bob.revealed).toBe(true)
     expect(bob.seats[0]?.hole).toBeNull()
-    expect(bob.seats[2]?.hole).toHaveLength(2)
+    // Cara either showed her hand or threw it away unseen; a thrown-away hand is never sent.
+    const showdown = events.find((event) => event.kind === 'showdown')
+    const caraMucked = showdown?.kind === 'showdown' && showdown.mucked?.includes('cara') === true
+    expect(bob.seats[2]?.hole ?? null).toEqual(caraMucked ? null : expect.any(Array))
+  })
+
+  it('throws away a losing hand unseen, and shows it for a player who always shows', () => {
+    // Checked down three ways: whoever cannot beat the best hand already shown mucks, and
+    // nobody else is ever sent those cards. Played twice, the second time with every
+    // player showing whatever they hold.
+    const play = (alwaysShow: boolean) => {
+      const room = makeRoom('house-rule', deckOf(DECK_11))
+      seatThree(room)
+      if (alwaysShow) {
+        for (const playerId of ['alice', 'bob', 'cara']) {
+          room.submit({ kind: 'showHands', playerId, always: true })
+        }
+      }
+      room.submit({ kind: 'startHand' })
+      const events = playToPhase(room, 'between')
+      const showdown = events.find((event) => event.kind === 'showdown')
+      return { room, mucked: showdown?.kind === 'showdown' ? (showdown.mucked ?? []) : [] }
+    }
+    const muck = play(false)
+    expect(muck.mucked.length).toBeGreaterThan(0)
+    for (const playerId of muck.mucked) {
+      const seat = muck.room.viewFor(playerId).seats.find((entry) => entry.playerId === playerId)
+      expect(seat?.hole).toHaveLength(2)
+      for (const viewer of ['alice', 'bob', 'cara'].filter((id) => id !== playerId)) {
+        const seen = muck.room.viewFor(viewer).seats.find((entry) => entry.playerId === playerId)
+        expect(seen?.hole).toBeNull()
+      }
+    }
+    const show = play(true)
+    expect(show.mucked).toEqual([])
+    for (const seat of show.room.viewFor('alice').seats.filter((entry) => entry.playerId)) {
+      expect(seat.hole).toHaveLength(2)
+    }
   })
 
   it('is indistinguishable to a viewer across differing hidden hole assignments', () => {

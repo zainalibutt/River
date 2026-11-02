@@ -1,7 +1,9 @@
 'use client'
 
+import { SHOWDOWN_TENSION_MS } from '@river/engine'
 import type { RoomSeatView, RoomView } from '@river/server'
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
+import { RollingAmount } from '@/components/rolling-amount'
 import {
   actionAmount,
   actionKind,
@@ -48,7 +50,9 @@ import {
   type TableGeometry,
   tableLayout,
 } from '@/lib/table-2d-geometry'
+import { tableNow, tableRate } from '@/lib/table-clock'
 import { type SoundEffect, tableSound } from '@/lib/table-sound'
+import { useReducedMotion } from '@/lib/use-reduced-motion'
 import { ChipPile } from './chip-pile'
 import { Dealer, Shoe } from './dealer'
 import './table-2d.css'
@@ -113,6 +117,8 @@ const DEALER_SIZE = 1.2
 
 /** How long the all-in moment holds the table, words and all. */
 const ALL_IN_MS = 1_400
+/** How far behind the first pile of a payout each trailing pile runs, in seconds. */
+const STREAM_TRAIL_SECONDS = [0.07, 0.14, 0.21] as const
 
 function initials(name: string | null): string {
   const words = (name ?? '').trim().split(/\s+/).filter(Boolean)
@@ -154,6 +160,7 @@ function accentStyle(seat: number, heroSeat: number | null): CSSProperties | und
 }
 
 export function Table2D(props: Table2DProps) {
+  const still = useReducedMotion()
   const { view, geometry } = props
   const bigBlind = props.bigBlind ?? null
   const heroSeat = view.seats.find((seat) => seat.playerId === view.selfId)?.seat ?? null
@@ -175,10 +182,10 @@ export function Table2D(props: Table2DProps) {
   // Chips, moved on by each moment the room table works out; the same schedule the 3D room plays.
   const flow = useRef<ChipFlow>(emptyChipFlow())
   const [schedule, setSchedule] = useState(0)
-  const [now, setNow] = useState(() => (typeof performance === 'undefined' ? 0 : performance.now()))
+  const [now, setNow] = useState(() => tableNow())
 
   useEffect(() => {
-    const at = performance.now()
+    const at = tableNow()
     if (props.showdown === null) {
       showdownStart.current = null
     } else if (showdownStart.current?.plan !== props.showdown) {
@@ -216,7 +223,7 @@ export function Table2D(props: Table2DProps) {
   const allInHand = useRef(-1)
   const [allIn, setAllIn] = useState<{ seat: number; id: number } | null>(null)
   useEffect(() => {
-    const seconds = performance.now() / 1000
+    const seconds = tableNow() / 1000
     let next = flow.current
     for (const moment of props.chipMoments) {
       if (moment.serial > next.lastSerial && allInHand.current !== moment.handNumber) {
@@ -249,19 +256,29 @@ export function Table2D(props: Table2DProps) {
   }, [props.chipMoments, props.showdown])
   useEffect(() => {
     if (allIn === null) return
-    const timer = window.setTimeout(() => setAllIn(null), ALL_IN_MS)
+    // On the table's clock, so a slowed lab holds the moment as long as it plays.
+    const timer = window.setTimeout(() => setAllIn(null), ALL_IN_MS / Math.max(tableRate(), 0.05))
     return () => window.clearTimeout(timer)
   }, [allIn])
 
   // One clock for the felt, running only while something on it is moving. Each frame also
   // plays whatever was scheduled since the last one, so a card is heard as it leaves the shoe.
   const heard = useRef(0)
+  // Read on each frame rather than restarting the loop when the showdown arrives.
+  const showdownNow = useRef(props.showdown)
+  showdownNow.current = props.showdown
   useEffect(() => {
     if (schedule === 0) return
     let frame = 0
     const tick = () => {
-      const at = performance.now()
-      for (const effect of soundsBetween(choreography.current, flow.current, heard.current, at)) {
+      const at = tableNow()
+      for (const effect of soundsBetween(
+        choreography.current,
+        flow.current,
+        showdownNow.current,
+        heard.current,
+        at,
+      )) {
         tableSound.play(effect)
       }
       heard.current = at
@@ -352,7 +369,7 @@ export function Table2D(props: Table2DProps) {
 
   return (
     <div
-      className={`t2d t2d-${geometry.orientation}${props.platesHeld ? ' t2d-plates-held' : ''}`}
+      className={`t2d t2d-${geometry.orientation}${props.platesHeld ? ' t2d-plates-held' : ''}${props.showingSeat == null ? '' : ' t2d-telling'}`}
       aria-hidden={geometry.orientation === 'portrait' ? undefined : true}
     >
       <div className="t2d-room" />
@@ -411,6 +428,13 @@ export function Table2D(props: Table2DProps) {
                 sprite.seat !== null &&
                 (props.heldPeeks ?? []).includes(sprite.seat)
               }
+              still={still}
+              lifted={
+                sprite.kind === 'hole' &&
+                sprite.seat !== null &&
+                sprite.seat === props.showingSeat &&
+                sprite.card !== null
+              }
             />
           ))}
         </div>
@@ -466,7 +490,7 @@ export function Table2D(props: Table2DProps) {
             y: lerp(from.y, to.y, t) - Math.sin(Math.PI * t) * (flight.path === 'slide' ? 6 : 14),
             scale: lerp(from.scale, to.scale, t),
           }
-          return (
+          const pile = (
             <PileAt
               key={`${route}-${copy}`}
               at={at}
@@ -475,6 +499,28 @@ export function Table2D(props: Table2DProps) {
               bigBlind={bigBlind}
             />
           )
+          // A pot paid to its winner streams: smaller piles trail the first down its route,
+          // so the chips arrive as a run rather than as one block.
+          if (flight.to.kind !== 'stack' || still) return pile
+          const trail = STREAM_TRAIL_SECONDS.flatMap((behind, index) => {
+            const lag = flightProgress(flight, seconds - behind)
+            if (lag <= 0 || lag >= 1 || t <= 0) return []
+            return [
+              <PileAt
+                key={`${route}-${copy}-trail-${behind}`}
+                at={{
+                  x: lerp(from.x, to.x, lag),
+                  y: lerp(from.y, to.y, lag) - Math.sin(Math.PI * lag) * 14,
+                  scale: lerp(from.scale, to.scale, lag) * (0.8 - index * 0.12),
+                }}
+                amount={Math.max(1, Math.round(flight.amount / 3))}
+                moving
+                trail
+                bigBlind={bigBlind}
+              />,
+            ]
+          })
+          return [pile, ...trail]
         })}
         {view.seats.map((seat) => {
           const spot = spots.get(seat.seat)
@@ -532,11 +578,22 @@ export function Table2D(props: Table2DProps) {
 function soundsBetween(
   cards: CardChoreography,
   chips: ChipFlow,
+  showdown: ShowdownPlan | null,
   from: number,
   to: number,
 ): SoundEffect[] {
   const out: SoundEffect[] = []
   const began = (at: number) => at > from && at <= to
+  // The showdown's own sounds: a hush as the room waits on the deciding hand, and a chime
+  // under the chips as the pot goes. Told from the felt, so neither runs ahead of the cards.
+  const startsAt = cards.showdownStartsAt
+  if (showdown !== null && startsAt !== null) {
+    const deciding = showdown.show.steps.find((step) => step.deciding)
+    if (deciding !== undefined && !showdown.tabled) {
+      if (began(startsAt + deciding.revealAtMs - SHOWDOWN_TENSION_MS)) out.push('showdown_hush')
+    }
+    if (began(startsAt + showdown.show.awardAtMs)) out.push('win_chime')
+  }
   for (const sprite of cards.sprites) {
     for (const move of sprite.moves) {
       if (!began(move.startAt) || move.startAt === move.endAt) continue
@@ -578,6 +635,8 @@ function FeltCard({
   placeOf,
   size,
   peeking = false,
+  lifted = false,
+  still = false,
 }: {
   sprite: CardSprite
   now: number
@@ -585,6 +644,10 @@ function FeltCard({
   placeOf: (place: CardPlace, id: string) => { point: PlanePoint; rotate: number }
   size: { width: number; height: number }
   peeking?: boolean
+  /** The showdown is telling this hand: it rises off the felt toward the table. */
+  lifted?: boolean
+  /** Reduced motion: the card moves and turns without the flourishes. */
+  still?: boolean
 }) {
   const frame = spriteFrame(sprite, now)
   if (frame === null) return null
@@ -595,25 +658,40 @@ function FeltCard({
     v: lerp(from.point.v, to.point.v, frame.travel),
   }
   const at = planeOffset(geometry, point)
-  const rotate = lerp(from.rotate, to.rotate, frame.travel)
-  // A card turns over on the felt: it narrows to its edge, and the face comes up as it widens.
-  const edge = Math.max(0.04, Math.abs(Math.cos(Math.PI * frame.turn)))
+  // Pitched off the shoe, a card leaves spinning and rides up off the cloth before it lands
+  // square: a little extra turn that unwinds, and a lift at the middle of the flight.
+  const dealt = !still && frame.from.kind === 'shoe' && frame.travel < 1
+  const spin = dealt ? (1 - frame.travel) * 24 : 0
+  const rotate = lerp(from.rotate, to.rotate, frame.travel) + spin
+  const rise =
+    !still && frame.travel < 1 ? Math.sin(Math.PI * frame.travel) * (dealt ? 0.14 : 0.06) : 0
+  // A card turns over in depth: the back swings away to its edge, and the face swings in
+  // from the other edge, with light running across it as it passes the lamp.
+  const turning = !still && frame.turn > 0 && frame.turn < 1
+  const angle = still ? 0 : frame.turn < 0.5 ? frame.turn * 180 : (frame.turn - 1) * 180
   const faceUp = frame.turn >= 0.5 && sprite.card !== null
   const moving = frame.travel < 1
+  const scale = (1 + rise) * (peeking ? 1.1 : 1)
   return (
     <div
-      className={`t2d-card t2d-card-${sprite.kind}${moving ? ' moving' : ''}${peeking ? ' peeking' : ''}`}
-      style={{
-        left: px(at.left),
-        top: px(at.top),
-        width: px(size.width),
-        height: px(size.height),
-        // Lifted at one corner and turned a little in, which is what a player
-        // looking at their cards does with them.
-        transform: `translate(-50%, -50%) rotate(${fixed(rotate + (peeking ? 11 : 0))}deg) scaleX(${fixed(edge)})${peeking ? ' scale(1.1)' : ''}`,
-      }}
+      className={`t2d-card t2d-card-${sprite.kind}${moving ? ' moving' : ''}${peeking ? ' peeking' : ''}${lifted ? ' lifted' : ''}${turning ? ' turning' : ''}`}
+      style={
+        {
+          left: px(at.left),
+          top: px(at.top),
+          width: px(size.width),
+          height: px(size.height),
+          // Lifted at one corner and turned a little in, which is what a player
+          // looking at their cards does with them.
+          transform: `translate(-50%, -50%) rotate(${fixed(rotate + (peeking ? 11 : 0))}deg) perspective(700px) rotateY(${fixed(angle)}deg) scale(${fixed(scale)})`,
+          '--card-rise': fixed(rise),
+          '--sheen-at': `${fixed(-60 + frame.turn * 220)}%`,
+          '--sheen': fixed(turning ? Math.sin(Math.PI * frame.turn) : 0),
+        } as CSSProperties
+      }
     >
       {faceUp && sprite.card !== null ? <PlayingCard card={sprite.card} /> : <CardBack />}
+      {turning ? <i className="t2d-sheen" aria-hidden="true" /> : null}
     </div>
   )
 }
@@ -624,6 +702,7 @@ function PileAt({
   label,
   pot = false,
   moving = false,
+  trail = false,
   bigBlind,
 }: {
   at: { x: number; y: number; scale: number }
@@ -631,11 +710,13 @@ function PileAt({
   label?: string
   pot?: boolean
   moving?: boolean
+  /** A smaller pile running behind a payout, without its own amount. */
+  trail?: boolean
   bigBlind: number | null
 }) {
   return (
     <div
-      className={`t2d-pile${pot ? ' t2d-pot' : ''}${moving ? ' moving' : ''}`}
+      className={`t2d-pile${pot ? ' t2d-pot' : ''}${moving ? ' moving' : ''}${trail ? ' trail' : ''}`}
       style={{
         left: px(at.x),
         top: px(at.y),
@@ -646,7 +727,11 @@ function PileAt({
       {moving ? null : (
         <span className="t2d-pile-amount">
           {label === undefined ? null : <em>{label}</em>}
-          {formatAmount(amount, true, bigBlind)}
+          {pot ? (
+            <RollingAmount value={amount} abbreviated bigBlind={bigBlind} />
+          ) : (
+            formatAmount(amount, true, bigBlind)
+          )}
         </span>
       )}
     </div>
@@ -732,7 +817,7 @@ function Placard({
         <span className="t2d-name">{seat.name}</span>
         <span className="t2d-stack">
           <i aria-hidden="true" />
-          {formatAmount(Math.max(0, stack), true, bigBlind)}
+          <RollingAmount value={Math.max(0, stack)} abbreviated bigBlind={bigBlind} />
         </span>
       </span>
       {phone && playerDealt && seat.dealer ? <span className="phone-dealer">DEALER</span> : null}

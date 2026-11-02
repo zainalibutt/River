@@ -28,6 +28,8 @@
   --river-suit-diamond: #2a64a0;
   --river-suit-club: #1c6b3e;
   --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* A control that is pressed gives, and comes back past where it was before it settles. */
+  --ease-spring: linear(0, 0.2 6%, 0.64 17%, 1 29%, 1.11 39%, 1.08 49%, 1.01 60%, 0.99 72%, 1);
   --ease-in-out: cubic-bezier(0.65, 0.05, 0.36, 1);
   --ease-settle: cubic-bezier(0.34, 1.26, 0.64, 1);
 
@@ -3213,6 +3215,12 @@ button.verify-pill.verify-mismatch {
   animation: showdown-award 640ms var(--ease-out) both;
 }
 
+/* A hand thrown away unseen: said quietly, and nothing turned over. */
+.showdown-hand.showdown-muck {
+  color: var(--river-cream-faint);
+  letter-spacing: 0.24em;
+}
+
 /* Whose hand is being told: the caption takes the spotlight its seat is lit in. */
 .showdown-stage.spotlit .showdown-card {
   border-color: var(--river-spotlight);
@@ -3973,7 +3981,7 @@ button.verify-pill.verify-mismatch {
   place-items: center;
   transition:
     filter 140ms var(--ease-out),
-    transform 140ms var(--ease-out);
+    transform 420ms var(--ease-spring);
 }
 
 .action-button svg {
@@ -4003,6 +4011,22 @@ button.verify-pill.verify-mismatch {
 .raise-step:active:not(:disabled),
 .raise-action:active:not(:disabled) {
   filter: brightness(0.9);
+}
+
+/* Pressed, the button gives; let go, it springs back past its size and settles. */
+.action-button:active:not(:disabled) {
+  transform: scale(0.92);
+  transition:
+    filter 80ms var(--ease-out),
+    transform 90ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-button,
+  .action-button:active:not(:disabled) {
+    transition: filter 140ms var(--ease-out);
+    transform: none;
+  }
 }
 
 .action-slot.call .action-button {
@@ -4807,4 +4831,194 @@ button.verify-pill.verify-mismatch {
 .hud-login:hover {
   border-color: var(--club-brass);
   color: var(--club-brass);
+}
+
+/* A guest with something to lose: one line, the log-in lit, and a way to say not now. */
+.hud-save {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  max-width: 340px;
+  color: var(--club-ivory-dim);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.hud-save-dismiss {
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--club-hairline-strong);
+  background: transparent;
+  color: var(--club-ivory-faint);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.hud-login.nudge {
+  border-color: var(--club-brass);
+  color: var(--club-brass);
+  animation: hud-login-nudge 2.4s var(--ease-out) 2;
+}
+
+@keyframes hud-login-nudge {
+  0%,
+  100% {
+    box-shadow: var(--river-lift-1);
+  }
+  50% {
+    box-shadow:
+      var(--river-lift-1),
+      0 0 22px rgb(232 169 60 / 35%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-login.nudge {
+    animation: none;
+  }
+}
+
+/* Friends: the same modal as the hand history, set out as short lists of people. */
+.friends-modal {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+}
+
+.friends-add {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 18px;
+}
+
+.friends-add label,
+.friends-section h3 {
+  margin: 0;
+  color: var(--river-cream-dim);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.friends-add > div {
+  display: flex;
+  gap: 8px;
+}
+
+.friends-add input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--club-hairline-strong);
+  border-radius: 4px;
+  background: rgb(10 13 12 / 70%);
+  color: var(--river-cream);
+  font: inherit;
+}
+
+.friends-section {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.friends-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--club-hairline);
+}
+
+.friends-row > span {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  color: var(--river-cream);
+}
+
+.friends-row small {
+  color: var(--river-cream-faint);
+  font-size: 12px;
+}
+
+.friends-row button,
+.friends-primary {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--club-hairline-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--river-cream-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.friends-primary {
+  border-color: var(--river-brass);
+  background: rgb(168 124 66 / 18%);
+  color: var(--river-cream);
+}
+
+.friends-note {
+  margin: 0;
+  color: var(--river-cream-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Invite a friend, under the table code: one press per friend. */
+.friend-invites {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  padding: 10px;
+  border: 1px solid var(--club-hairline);
+  border-radius: 4px;
+  background: rgb(10 13 12 / 92%);
+}
+
+.friend-invites p {
+  margin: 0 0 4px;
+  color: var(--river-cream-dim);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.friend-invites button {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--club-hairline);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--river-cream);
+  cursor: pointer;
+  font: inherit;
+  align-items: center;
+}
+
+.friend-invites small {
+  color: var(--river-brass-hi);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.phone-table .friend-invites {
+  position: static;
+  margin-top: 10px;
 }

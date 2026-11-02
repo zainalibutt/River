@@ -26,7 +26,9 @@ import {
   runoutMs,
   SEATS_PER_SHAPE,
   type StakeConfig,
+  showdownOrder,
   showdownPresentationMs,
+  showdownReveals,
   streetDealMs,
 } from '@river/engine'
 import {
@@ -220,6 +222,8 @@ export class Room implements RoomHandle {
   private betweenMs = 0
   private revealed = false
   private readonly revealedPlayerIds = new Set<string>()
+  /** Players who show a losing hand at a showdown rather than throwing it away. */
+  private readonly alwaysShow = new Set<string>()
   private drawPile: DrawPile | null = null
   private currentCommit: string | null = null
   private pendingServerSeed: string | null = null
@@ -404,7 +408,17 @@ export class Room implements RoomHandle {
         return this.kick(command.byPlayerId, command.targetPlayerId, command.reason)
       case 'expireReconnect':
         return this.expireReconnect(command.playerId)
+      case 'showHands':
+        return this.showHands(command.playerId, command.always)
     }
+  }
+
+  /** A preference, not an action: it changes nothing anybody else can see until a showdown. */
+  private showHands(playerId: string, always: boolean): RoomResult {
+    if (!this.players.has(playerId)) return this.reject(playerId, 'not joined')
+    if (always) this.alwaysShow.add(playerId)
+    else this.alwaysShow.delete(playerId)
+    return { ok: true, events: [] }
   }
 
   private join(playerId: string, name: string, inviteCode?: string): RoomResult {
@@ -1120,6 +1134,7 @@ export class Room implements RoomHandle {
       return
     }
     const winners = new Set<string>()
+    const muckedPlayerIds: string[] = []
     this.advanceBoard(betting.street, events)
     // An all-in run-out: the streets betting never reached are dealt in the message that
     // ends the hand, some before this point and some by advanceBoard above. The table turns
@@ -1136,10 +1151,36 @@ export class Room implements RoomHandle {
       events.push({ kind: 'uncontested', playerId: winnerId, amount })
     } else {
       this.revealed = true
-      for (const player of betting.players) {
-        if (!player.folded) {
-          this.revealedPlayerIds.add(player.id)
-        }
+      // The house rule: hands are shown in the dealer's order and a hand that cannot beat
+      // or tie the best already shown is thrown away unseen, unless its player always shows
+      // or somebody is all in, when every hand is turned face up. Thrown-away cards are
+      // never sent to anybody.
+      const contenders = betting.players.filter((player) => !player.folded)
+      const seatOf = new Map(contenders.map((player) => [this.seatOfPlayer(player.id), player]))
+      const order = showdownOrder({
+        record: { actions: this.recorder.actions() },
+        shownSeats: [...seatOf.keys()],
+        dealerSeat: this.dealerSeat,
+        seatCount: this.seats.length,
+      })
+      const showing = showdownReveals({
+        order,
+        ranks: new Map(
+          order.map((seat) => [
+            seat,
+            evaluateBest([...(this.seats[seat]?.hole ?? []), ...this.board]),
+          ]),
+        ),
+        allIn: contenders.some((player) => player.allIn),
+        alwaysShow: new Set(
+          order.filter((seat) => this.alwaysShow.has(seatOf.get(seat)?.id ?? '')),
+        ),
+      })
+      for (const seat of order) {
+        const player = seatOf.get(seat)
+        if (player === undefined) continue
+        if (showing.has(seat)) this.revealedPlayerIds.add(player.id)
+        else muckedPlayerIds.push(player.id)
       }
       const awards: { playerId: string; amount: number }[] = []
       for (const pot of winnablePots(betting.sidePots())) {
@@ -1147,7 +1188,11 @@ export class Room implements RoomHandle {
       }
       this.syncStacks(betting)
       for (const award of awards) winners.add(award.playerId)
-      events.push({ kind: 'showdown', awards })
+      events.push(
+        muckedPlayerIds.length > 0
+          ? { kind: 'showdown', awards, mucked: muckedPlayerIds }
+          : { kind: 'showdown', awards },
+      )
     }
     if (this.currentServerSeed === null || this.settledClientSeeds === null) {
       throw new Error('fairness reveal missing')
@@ -1191,7 +1236,10 @@ export class Room implements RoomHandle {
     this.betweenSince = this.now()
     this.betweenMs =
       this.config.countdownMs +
-      showdownPresentationMs(this.revealedPlayerIds.size) +
+      showdownPresentationMs(this.revealedPlayerIds.size, {
+        mucked: muckedPlayerIds.length,
+        tabled: winnerId === undefined && runout.length > 0,
+      }) +
       (winnerId === undefined && runout.length > 0
         ? runoutMs(runout, this.revealedPlayerIds.size, true)
         : 0)

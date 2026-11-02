@@ -463,7 +463,7 @@ test.describe('phone card and sizing feedback', () => {
     const sound = await installSoundProbe(page)
     await page.goto('/table?new=1')
     await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
-    await expect.poll(sound.decoded).toBe(14)
+    await expect.poll(sound.decoded).toBe(16)
     const peek = page.getByRole('button', { name: 'Press and hold to look at your cards' })
     await peek.focus()
     await page.keyboard.down('Space')
@@ -517,8 +517,24 @@ for (const viewport of [
       await page.getByRole('button', { name: 'DEAL', exact: true }).tap()
       const call = page.locator('.phone-actions .phone-call')
       await expect(call).toBeEnabled()
-      const handBefore = await page.locator('.phone-hand').innerText()
-      const potBefore = await page.locator('.phone-pot > span').innerText()
+      // Stacks and the pot count to their values; read them once they have arrived.
+      const settled = async (selector: string) => {
+        let last = ''
+        await expect
+          .poll(
+            async () => {
+              const now = await page.locator(selector).innerText()
+              const steady = now === last
+              last = now
+              return steady
+            },
+            { intervals: [300] },
+          )
+          .toBe(true)
+        return last
+      }
+      const handBefore = await settled('.phone-hand')
+      const potBefore = await settled('.phone-pot > span')
       await fixture.disconnect()
       await expect(page.locator('.phone-network')).toHaveText('LINK')
       await expect(call).toBeDisabled()

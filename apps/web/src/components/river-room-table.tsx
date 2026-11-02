@@ -25,12 +25,14 @@ import {
   useState,
 } from 'react'
 import { BETTING_ICON as MENU_ICON } from '@/components/betting-icons'
+import { FriendInvites } from '@/components/friend-invites'
 import { PhoneTable } from '@/components/phone-table'
 import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverLobby } from '@/components/river-lobby'
 import { RiverSettings, usePreferences } from '@/components/river-settings'
 import { RiverSoundControl } from '@/components/river-sound-control'
 import type { HoleSeat } from '@/components/river-venue-scene'
+import { RollingAmount } from '@/components/rolling-amount'
 import { Table2D, type TablePresentation } from '@/components/table-2d/table-2d'
 import {
   ActionPin,
@@ -62,6 +64,7 @@ import {
   shouldClearPreset,
 } from '@/lib/preset'
 import { type RepFlash, repFlashFor, shouldShowRate } from '@/lib/rep-feedback'
+import { dismissSavePrompt, savePromptDue } from '@/lib/save-prompt'
 import {
   type PendingSeatRequest,
   requeueSeatRequest,
@@ -100,6 +103,7 @@ import {
   type SocketLike,
 } from '@/lib/socket'
 import { LANDSCAPE } from '@/lib/table-2d-geometry'
+import { tableNow } from '@/lib/table-clock'
 import { tableSound } from '@/lib/table-sound'
 import {
   initialRoomTarget,
@@ -429,6 +433,17 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   const [feed, setFeed] = useState<readonly SocialFeedEntry[]>([])
   // The same settings the menu keeps, changeable here without leaving the table.
   const [preferences, setPreferences] = usePreferences()
+  // Whether a losing hand is shown at a showdown is the server's to apply, so it is told
+  // once the table has answered and again whenever the setting changes.
+  const answered = view.selfId !== 'pending'
+  useEffect(() => {
+    if (connection !== 'connected' || !answered) return
+    try {
+      socketRef.current?.command({ kind: 'showHands', always: preferences.showLosingHands })
+    } catch {
+      // Sent again on the next connection.
+    }
+  }, [connection, answered, preferences.showLosingHands])
   const [settingsOpen, setSettingsOpen] = useState(false)
   // The socket handler is bound once per table, so it reads the profanity
   // setting through a ref: a setting changed at the table applies to the next
@@ -500,6 +515,21 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   // Anyone standing for an all-in sits back down when a hand finishes, and the scene needs
   // to be told each time rather than once.
   const [handsFinished, setHandsFinished] = useState(0)
+  const [saveDismissed, setSaveDismissed] = useState(false)
+  const guest = !signedIn && upgradeState !== 'complete'
+  const askToSave =
+    !saveDismissed &&
+    lab === undefined &&
+    savePromptDue({
+      guest,
+      handsFinished,
+      storage: typeof window === 'undefined' ? null : window.localStorage,
+      nowMs: Date.now(),
+    })
+  const notNowSave = () => {
+    dismissSavePrompt(window.localStorage, Date.now())
+    setSaveDismissed(true)
+  }
   const [hands, setHands] = useState<readonly SessionHand[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [tables, setTables] = useState<readonly TableSummary[]>([])
@@ -765,7 +795,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
           if (plan !== null) {
             // Not yet: the showdown is told once the felt has finished the board, which an
             // all-in run-out can take several seconds to do. Below zero means waiting.
-            showdownSetAt.current = performance.now()
+            showdownSetAt.current = tableNow()
             setShowdown(plan)
             setShowdownAtMs(-1)
           }
@@ -1071,7 +1101,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
       for (const apply of waiting) apply()
     }
     const tick = window.setInterval(() => {
-      const elapsed = performance.now() - showdownStartsAt
+      const elapsed = tableNow() - showdownStartsAt
       if (elapsed >= showdown.show.totalMs) {
         finish()
         return
@@ -1309,6 +1339,17 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     rememberTable({ roomId, inviteCode: view.inviteCode, venueId })
   }, [roomId, venueId, view.inviteCode, lab])
 
+  // A fresh token for the friends route; the motion lab has no account and gets none.
+  const friendsToken = useCallback(async () => {
+    const auth = authRef.current
+    if (auth === null) throw new Error('no account')
+    return (await ensureRiverSession(auth)).access_token
+  }, [])
+  const friendInvites =
+    signedIn && lab === undefined ? (
+      <FriendInvites accessToken={friendsToken} inviteCode={view.inviteCode} />
+    ) : null
+
   const share = async () => {
     const url = shortTableLink(view.inviteCode, window.location.origin)
     await navigator.clipboard?.writeText(url).catch(() => undefined)
@@ -1423,6 +1464,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             if (text !== null) socketRef.current?.social({ kind: 'chat', text })
           }}
           onInvite={share}
+          inviteFriends={friendInvites}
           verifyContent={
             <>
               <h3>{verifyHeadline(verify.status)}</h3>
@@ -1450,6 +1492,8 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             </>
           }
           onAccount={() => setUpgradeState('editing')}
+          askToSave={askToSave}
+          onNotNowSave={notNowSave}
           showdownStage={
             showdown === null || showdownAtMs < 0 ? null : (
               <ShowdownStage
@@ -1916,6 +1960,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               >
                 {inviteShown && view.inviteCode.length > 0 ? view.inviteCode : 'INVITE'}
               </button>
+              {inviteShown ? friendInvites : null}
               <button
                 type="button"
                 className={`social-toggle${socialOpen ? ' open' : ''}`}
@@ -1937,10 +1982,18 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               <span className="hud-identity-name">
                 {signedIn || upgradeState === 'complete' ? 'SIGNED IN' : 'GUEST'}
               </span>
+              {askToSave ? (
+                <span className="hud-save">
+                  Save your progress: keep your chips on any device.
+                  <button type="button" className="hud-save-dismiss" onClick={notNowSave}>
+                    Not now
+                  </button>
+                </span>
+              ) : null}
               {signedIn || upgradeState === 'complete' ? null : (
                 <button
                   type="button"
-                  className="hud-login"
+                  className={`hud-login${askToSave ? ' nudge' : ''}`}
                   onClick={() =>
                     setUpgradeState((state) => (state === 'editing' ? 'idle' : 'editing'))
                   }
@@ -2275,7 +2328,7 @@ function TableCluster({
       {hero === undefined ? null : (
         <p className="cluster-chips">
           <i aria-hidden="true" />
-          {formatAmount(hero.stack, true, bigBlind)}
+          <RollingAmount value={hero.stack} abbreviated bigBlind={bigBlind} />
         </p>
       )}
       {compact || view.board.length === 0 ? null : (
@@ -2493,6 +2546,13 @@ function ShowdownStage({
           <CardBack key="first" />
           <CardBack key="second" />
         </span>
+      </>
+    )
+  } else if (current?.mucked === true) {
+    body = (
+      <>
+        <span className="showdown-who">{nameOf(current.seat)}</span>
+        <strong className="showdown-hand showdown-muck">MUCKS</strong>
       </>
     )
   } else if (current !== undefined) {
@@ -3195,9 +3255,10 @@ function HoldAction({
     timeout.current = null
     setHolding(false)
   }, [])
-  const begin = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  // Held with a pointer or with Space or Enter: a control that can only be held by a hand
+  // on a mouse is one a keyboard can never reach.
+  const begin = () => {
     if (disabled || timeout.current !== null) return
-    event.currentTarget.setPointerCapture(event.pointerId)
     if (duration === 0) {
       onComplete()
       return
@@ -3217,10 +3278,22 @@ function HoldAction({
       disabled={disabled}
       aria-label={ariaLabel}
       style={{ ...style, '--hold-duration': `${duration}ms` } as CSSProperties}
-      onPointerDown={begin}
+      onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+        if (event.button !== 0) return
+        event.currentTarget.setPointerCapture(event.pointerId)
+        begin()
+      }}
       onPointerUp={cancel}
       onPointerLeave={cancel}
       onPointerCancel={cancel}
+      onKeyDown={(event) => {
+        if (!event.repeat && (event.key === ' ' || event.key === 'Enter')) {
+          event.preventDefault()
+          begin()
+        }
+      }}
+      onKeyUp={cancel}
+      onBlur={cancel}
       onAnimationEnd={onAnimationEnd}
     >
       {children}

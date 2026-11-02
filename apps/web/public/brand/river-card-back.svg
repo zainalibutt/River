@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 350" role="img" aria-label="River card back">
+  <defs>
+    <linearGradient id="wine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7a2a36"/>
+      <stop offset="0.5" stop-color="#5c1d28"/>
+      <stop offset="1" stop-color="#6d2430"/>
+    </linearGradient>
+    <linearGradient id="brass" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#f7e0a8"/>
+      <stop offset="0.38" stop-color="#d7a85f"/>
+      <stop offset="0.62" stop-color="#a8742f"/>
+      <stop offset="1" stop-color="#e6bf7a"/>
+    </linearGradient>
+    <!-- An engraved lattice, the way a good deck's back is printed. -->
+    <pattern id="lattice" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <path d="M0 7h14M7 0v14" stroke="#8e3a47" stroke-width="0.8" opacity="0.7"/>
+      <circle cx="7" cy="7" r="1.1" fill="#a24a57" opacity="0.8"/>
+    </pattern>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7"/>
+      <feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.14 0"/>
+      <feComposite in2="SourceGraphic" operator="in"/>
+    </filter>
+  </defs>
+  <rect width="250" height="350" rx="18" fill="url(#wine)"/>
+  <rect x="14" y="14" width="222" height="322" rx="10" fill="url(#lattice)"/>
+  <rect width="250" height="350" rx="18" fill="#000" filter="url(#grain)"/>
+  <rect x="9" y="9" width="232" height="332" rx="13" fill="none" stroke="url(#brass)" stroke-width="3"/>
+  <rect x="17" y="17" width="216" height="316" rx="8" fill="none" stroke="url(#brass)" stroke-width="1" opacity="0.7"/>
+  <circle cx="125" cy="175" r="62" fill="#5a1b26" stroke="url(#brass)" stroke-width="2"/>
+  <circle cx="125" cy="175" r="55" fill="none" stroke="url(#brass)" stroke-width="0.8" stroke-dasharray="2 4" opacity="0.8"/>
+  <g transform="translate(83 133) scale(0.42)" fill="url(#brass)">
+    <path d="M100 12C79 52 22 78 25 122c2 31 36 45 64 29-23 7-48-5-48-31 0-33 44-58 59-90z"/>
+    <path d="M100 12c21 40 78 66 75 110-2 31-36 45-64 29 23 7 48-5 48-31 0-33-44-58-59-90z"/>
+    <path d="M52 131c20-24 52-22 68-6 13 13 33 12 44-2-9 25-38 30-55 15-14-12-36-14-57-7z"/>
+    <path d="M70 155c17-14 37-10 47 0 11 11 26 10 34 1-7 18-28 21-41 10-10-8-24-12-40-11z"/>
+  </g>
+</svg>

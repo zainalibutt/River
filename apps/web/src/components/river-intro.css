@@ -1,0 +1,260 @@
+/*
+ * The way into River. The film is a plain video; the mark that follows is one CSS timeline,
+ * so it is retimed here and nowhere else. Times are from the start of the mark:
+ *
+ *    0 - 1150  a brass line runs in from the left like a river and draws the spade's outline
+ *  950 - 1450  the spade fills in brass behind the line, and the line lets go
+ * 1250 - 1850  light runs across the mark
+ * 1350 - 2050  the name sets itself, letter by letter
+ * 1750 - 2300  the line under it opens on Premium Poker
+ * 2700         the mark glides up onto the menu's own as the curtain lifts (750ms)
+ */
+
+.river-intro {
+  --ident-scale: 2;
+  --intro-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --intro-flow: cubic-bezier(0.45, 0, 0.2, 1);
+
+  position: fixed;
+  z-index: 1000;
+  overflow: hidden;
+  inset: 0;
+}
+
+.intro-curtain {
+  position: absolute;
+  background:
+    radial-gradient(ellipse 46% 42% at 50% 48%, rgb(232 169 60 / 9%), transparent 72%),
+    var(--river-void, #0a0d0c);
+  inset: 0;
+}
+
+.river-intro.leaving {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 320ms var(--intro-ease);
+}
+
+/* Landing: the curtain lifts on the menu while the mark settles onto its twin. */
+.river-intro.landing {
+  pointer-events: none;
+}
+
+.river-intro.landing .intro-curtain {
+  opacity: 0;
+  transition: opacity 650ms var(--intro-ease) 100ms;
+}
+
+.intro-film {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+}
+
+.intro-ident {
+  position: absolute;
+  inset: 0;
+}
+
+.river-intro .intro-lockup {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: max-content;
+  justify-items: center;
+  white-space: nowrap;
+  transform: translate(-50%, -50%) scale(var(--ident-scale));
+  transform-origin: 50% 50%;
+}
+
+.river-intro.landing .intro-lockup {
+  transform: translate(calc(-50% + var(--land-x, 0px)), calc(-50% + var(--land-y, 0px))) scale(1);
+  transition: transform 750ms cubic-bezier(0.65, 0, 0.25, 1);
+}
+
+/* The mark is three layers in the menu mark's own box: the fill, a sheen, and the line. */
+.river-intro .intro-mark {
+  position: relative;
+  background: none;
+  filter: none;
+}
+
+.intro-mark-fill,
+.intro-mark-sheen {
+  position: absolute;
+  inset: 0;
+}
+
+.intro-mark-fill {
+  background: url("/brand/river-mark.svg") center / contain no-repeat;
+  filter: drop-shadow(0 0 18px rgb(232 169 60 / 30%));
+  animation: intro-fade-in 500ms var(--intro-ease) 950ms both;
+}
+
+.intro-mark-sheen {
+  background: linear-gradient(105deg, transparent 35%, rgb(255 244 214 / 85%) 50%, transparent 65%);
+  background-size: 300% 100%;
+  mask: url("/brand/river-mark.svg") center / contain no-repeat;
+  mix-blend-mode: screen;
+  animation: intro-sheen 600ms ease-in-out 1250ms both;
+}
+
+.intro-trace {
+  position: absolute;
+  overflow: visible;
+  inset: 0;
+  animation: intro-let-go 450ms var(--intro-ease) 1150ms forwards;
+}
+
+.intro-trace path {
+  fill: none;
+  stroke: #e6bf7a;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  stroke-linecap: round;
+  stroke-width: 3.2;
+  filter: drop-shadow(0 0 4px rgb(240 196 120 / 70%));
+  animation: intro-draw 1150ms var(--intro-flow) forwards;
+}
+
+/* Each letter carries its own brass, so each can arrive on its own beat. */
+.river-intro .intro-lockup .intro-name {
+  background: none;
+  filter: drop-shadow(0 4px 24px rgb(0 0 0 / 55%));
+}
+
+.intro-name span {
+  display: inline-block;
+  background: linear-gradient(180deg, #f7e0a8, #c8954c 55%, #e6bf7a);
+  background-clip: text;
+  color: transparent;
+  animation: intro-letter 520ms var(--intro-ease) both;
+  animation-delay: calc(1350ms + var(--i) * 75ms);
+}
+
+.intro-tag {
+  animation: intro-fade-in 550ms var(--intro-ease) 1750ms both;
+}
+
+.river-intro .intro-tag::before,
+.river-intro .intro-tag::after {
+  animation: intro-rule 550ms var(--intro-ease) 1800ms both;
+}
+
+@keyframes intro-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes intro-let-go {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes intro-sheen {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+@keyframes intro-letter {
+  from {
+    opacity: 0;
+    transform: translateY(0.25em);
+    filter: blur(6px);
+  }
+}
+
+@keyframes intro-rule {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes intro-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .river-intro {
+    --ident-scale: 0.94;
+  }
+}
+
+/* The menu's own mark waits under the curtain until this one has landed on it. */
+.club-home:has(.river-intro:not(.leaving)) .club-home-header .club-wordmark {
+  visibility: hidden;
+}
+
+/* The gate: the mark on black and an invitation, the press a browser needs before sound. */
+.intro-gate {
+  position: absolute;
+  display: grid;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c99a55;
+  cursor: pointer;
+  gap: 28px;
+  inset: 0;
+  place-content: center;
+  place-items: center;
+}
+
+.intro-gate:focus-visible {
+  outline: none;
+}
+
+.intro-gate:focus-visible .intro-gate-call {
+  outline: 1px solid rgb(201 154 85 / 60%);
+  outline-offset: 10px;
+}
+
+.intro-gate-mark {
+  width: clamp(72px, 11vmin, 112px);
+  aspect-ratio: 1;
+  background: url("/brand/river-mark.svg") center / contain no-repeat;
+  filter: drop-shadow(0 0 22px rgb(232 169 60 / 24%));
+  animation: intro-fade-in 900ms var(--intro-ease) both;
+}
+
+.intro-gate-call {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: clamp(12px, 1.6vmin, 15px);
+  letter-spacing: 0.38em;
+  text-indent: 0.38em;
+  text-transform: uppercase;
+  animation:
+    intro-fade-in 900ms var(--intro-ease) 500ms both,
+    intro-gate-breathe 2.8s ease-in-out 1400ms infinite;
+}
+
+.intro-gate-click {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .intro-gate-tap {
+    display: none;
+  }
+
+  .intro-gate-click {
+    display: inline;
+  }
+}
+
+@keyframes intro-gate-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EconomyConfig, EconomyState, GrantDecision } from './economy.js'
-import { claimDaily, claimRescue, utcDay } from './economy.js'
+import { claimDaily, claimRescue, deriveEconomyState, economyStatus, utcDay } from './economy.js'
 
 const DAY_MS = 86_400_000
 const BASE_DAY = Date.UTC(2026, 7, 24)
@@ -168,5 +168,54 @@ describe('claimRescue', () => {
     expect(second.ref).toBe('rescue:p-1:2026-08-24:1')
     const freshDay = mustGrant(claimRescue(state(), CONFIG, dayN(2)))
     expect(freshDay.ref).toBe('rescue:p-1:2026-08-25:1')
+  })
+})
+
+describe('economyStatus', () => {
+  it('offers exactly what a claim would grant, and the next midnight once claimed', () => {
+    const now = dayN(3) + 5 * 3_600_000
+    const waiting = economyStatus(state(), CONFIG, now)
+    expect(waiting.daily).toEqual({ claimable: true, amount: 10_000, streakDay: 1, nextAtMs: now })
+    const claimed = mustGrant(claimDaily(state(), CONFIG, now)).nextState
+    const after = economyStatus(claimed, CONFIG, now)
+    expect(after.daily.claimable).toBe(false)
+    expect(after.daily.amount).toBe(0)
+    expect(after.daily.nextAtMs).toBe(dayN(4))
+  })
+
+  it('agrees with the claim on every day of a streak, and with the rescue cap', () => {
+    let current = state({ balance: 0 })
+    for (let day = 1; day <= 8; day += 1) {
+      const status = economyStatus(current, CONFIG, dayN(day))
+      const decision = mustGrant(claimDaily(current, CONFIG, dayN(day)))
+      expect(status.daily.amount).toBe(decision.delta)
+      expect(status.daily.streakDay).toBe(decision.nextState.streakDay)
+      current = decision.nextState
+    }
+    const capped = state({ rescuesToday: 3, rescueDay: utcDay(dayN(1)) })
+    expect(economyStatus(capped, ELIGIBLE_CONFIG, dayN(1)).rescue).toEqual({
+      claimable: false,
+      amount: 0,
+      left: 0,
+    })
+  })
+})
+
+describe('deriveEconomyState', () => {
+  it("reads the streak and today's rescues from ledger refs", () => {
+    const rows = [
+      { ref: 'signup:p-1', reason: 'signup', delta: 150_000 },
+      { ref: `daily:p-1:${utcDay(dayN(1))}`, reason: 'daily_login', delta: 10_000 },
+      { ref: `daily:p-1:${utcDay(dayN(2))}`, reason: 'daily_login', delta: 15_000 },
+      { ref: `rescue:p-1:${utcDay(dayN(2))}:1`, reason: 'rescue', delta: 50_000 },
+    ]
+    const derived = deriveEconomyState(rows, false, dayN(2))
+    expect(derived).toMatchObject({
+      playerId: 'p-1',
+      balance: 225_000,
+      lastDailyClaimDay: utcDay(dayN(2)),
+      streakDay: 2,
+      rescuesToday: 1,
+    })
   })
 })

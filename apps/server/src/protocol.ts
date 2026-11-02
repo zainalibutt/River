@@ -90,6 +90,8 @@ export type RoomCommand =
   | { kind: 'reconnect'; playerId: string }
   | { kind: 'kick'; byPlayerId: string; targetPlayerId: string; reason: KickReason }
   | { kind: 'expireReconnect'; playerId: string }
+  /** Whether this player shows a losing hand at a showdown rather than throwing it away. */
+  | { kind: 'showHands'; playerId: string; always: boolean }
 
 export type RoomEvent =
   | { kind: 'joined'; playerId: string; name: string }
@@ -119,7 +121,12 @@ export type RoomEvent =
   | { kind: 'timedOut'; playerId: string; action: TurnAction }
   | { kind: 'awayPlayed'; playerId: string; action: TurnAction }
   | { kind: 'uncontested'; playerId: string; amount: number }
-  | { kind: 'showdown'; awards: { playerId: string; amount: number }[] }
+  | {
+      kind: 'showdown'
+      awards: { playerId: string; amount: number }[]
+      /** Players who threw their hand away unseen, in the order the showdown reached them. */
+      mucked?: string[]
+    }
   | { kind: 'handRecorded'; record: HandRecord }
   | {
       kind: 'repAwarded'
