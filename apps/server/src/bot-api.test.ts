@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BotApi, type BotApiHandView, handleBotApi } from './bot-api.js'
+import { BotApi, type BotApiHandView, type BotApiMatchView, handleBotApi } from './bot-api.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { slumbotMoves } from './bot-slumbot.js'
 
@@ -160,5 +160,76 @@ describe('the HTTP calls', () => {
     expect(
       call(`/v1/hands/${view.hand_id}/act`, { incr: 'c', seq: view.seq }, 'Bearer good').status,
     ).toBe(200)
+  })
+})
+
+describe('duplicate matches', () => {
+  function match(result: ReturnType<BotApi['newMatch']>): BotApiMatchView {
+    if (!result.ok) throw new Error(result.error)
+    return result.match
+  }
+
+  it('deals each deal twice with the seats swapped and the same board', () => {
+    const { api } = testApi()
+    const opened = match(api.newMatch('k1', 'nyx', 2))
+    const first = hand(api.newHand('k1', 'nyx', opened.match_id))
+    const firstDone = playOut(api, 'k1', first)
+    const second = hand(api.newHand('k1', 'nyx', opened.match_id))
+    expect(first.client_pos).toBe(1)
+    expect(second.client_pos).toBe(0)
+    const secondDone = playOut(api, 'k1', second)
+    // The client holds in the second hand what the bot held in the first, when shown.
+    if (firstDone.bot_hole_cards !== undefined) {
+      expect(second.hole_cards).toEqual(firstDone.bot_hole_cards)
+    }
+    if (firstDone.board.length === 5 && secondDone.board.length === 5) {
+      expect(secondDone.board).toEqual(firstDone.board)
+    }
+  })
+
+  it('scores a deal once both its hands are over, as half their sum', () => {
+    const { api } = testApi()
+    const opened = match(api.newMatch('k1', 'nyx', 3))
+    expect(opened).toMatchObject({ deals: 3, hands_dealt: 0, deals_scored: 0, bb_per_100: null })
+    const results: number[] = []
+    for (let index = 0; index < 6; index += 1) {
+      const done = playOut(api, 'k1', hand(api.newHand('k1', 'nyx', opened.match_id)))
+      results.push(done.winnings ?? 0)
+      const now = match(api.match('k1', opened.match_id))
+      expect(now.hands_dealt).toBe(index + 1)
+      expect(now.deals_scored).toBe(Math.floor((index + 1) / 2))
+    }
+    const scores = [0, 1, 2].map(
+      (deal) => ((results[2 * deal] ?? 0) + (results[2 * deal + 1] ?? 0)) / 2,
+    )
+    const final = match(api.match('k1', opened.match_id))
+    expect(final.bb_per_100).toBeCloseTo(scores.reduce((sum, x) => sum + x, 0) / 3, 9)
+    expect(final.interval).not.toBeNull()
+    expect(api.newHand('k1', 'nyx', opened.match_id)).toMatchObject({ ok: false, status: 409 })
+  })
+
+  it('keeps a match to its own key and refuses impossible sizes', () => {
+    const { api } = testApi()
+    const opened = match(api.newMatch('k1', 'nyx', 1))
+    expect(api.match('k2', opened.match_id)).toMatchObject({ ok: false, status: 404 })
+    expect(api.newHand('k2', 'nyx', opened.match_id)).toMatchObject({ ok: false, status: 404 })
+    expect(api.newMatch('k1', 'nyx', 0)).toMatchObject({ ok: false, status: 400 })
+    expect(api.newMatch('k1', 'nyx', 1.5)).toMatchObject({ ok: false, status: 400 })
+    expect(api.newMatch('k1', 'nyx', 10_001)).toMatchObject({ ok: false, status: 400 })
+  })
+
+  it('opens, deals and reads matches over HTTP', () => {
+    const { api } = testApi()
+    const keys = (token: string) => (token === 'good' ? 'k1' : null)
+    const call = (path: string, body: unknown) =>
+      handleBotApi(api, { method: 'POST', path, authorization: 'Bearer good', body }, keys)
+    expect(call('/v1/matches', {}).status).toBe(400)
+    const opened = call('/v1/matches', { deals: 1 })
+    expect(opened.status).toBe(200)
+    const id = (opened.body as BotApiMatchView).match_id
+    expect(call('/v1/hands', { match_id: 7 }).status).toBe(400)
+    expect(call('/v1/hands', { match_id: id }).status).toBe(200)
+    expect(call(`/v1/matches/${id}`, {}).body).toMatchObject({ hands_dealt: 1 })
+    expect(call('/v1/matches/nope', {}).status).toBe(404)
   })
 })

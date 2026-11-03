@@ -67,6 +67,28 @@ export interface BotApiHandView {
   readonly bot_hole_cards?: readonly string[]
 }
 
+/** A duplicate match: every deal is played twice, the client taking each seat once. */
+export interface BotApiMatchView {
+  readonly match_id: string
+  readonly opponent: BotApiOpponent
+  readonly deals: number
+  /** Hands dealt so far, of 2 x deals. */
+  readonly hands_dealt: number
+  /** Deals whose two hands are both over. */
+  readonly deals_scored: number
+  /**
+   * The client's result in big blinds a hundred hands, over scored deals: each
+   * deal scores half the client's winnings from its two hands, so the cards'
+   * luck cancels. The interval is 95%, from the spread between deals.
+   */
+  readonly bb_per_100: number | null
+  readonly interval: readonly [number, number] | null
+}
+
+export type BotApiMatchResult =
+  | { readonly ok: true; readonly match: BotApiMatchView }
+  | { readonly ok: false; readonly status: 400 | 404; readonly error: string }
+
 export type BotApiResult =
   | { readonly ok: true; readonly hand: BotApiHandView }
   | {
@@ -88,6 +110,20 @@ interface Hand {
   /** The client's last accepted move and the seq it was sent with, for a safe resend. */
   last: { readonly seq: number; readonly incr: string } | null
   over: boolean
+  /** The client's chips won or lost, set when the hand ends. */
+  winnings?: number
+  /** The match this hand belongs to, and its place in the match's order. */
+  readonly match?: { readonly id: string; readonly index: number }
+}
+
+interface Match {
+  readonly id: string
+  readonly key: string
+  readonly opponent: BotApiOpponent
+  readonly deals: number
+  next: number
+  /** The client's winnings by hand index, filled in as hands end. */
+  readonly results: (number | undefined)[]
 }
 
 interface KeyState {
@@ -103,6 +139,8 @@ const STREETS: readonly Street[] = ['preflop', 'flop', 'turn', 'river']
 const BOARD_SHOWN = [0, 3, 4, 5] as const
 const CLIENT = botPlayerId('api-client')
 const LIMITS = { dailyHands: 10_000, handTtlMs: 5 * 60_000 }
+/** The most deals a match may ask for. */
+export const BOT_API_MAX_DEALS = 10_000
 
 /** Nyx, as River's tables play it: the river solver over the poker guard, with reads. */
 export function nyxPolicy(): BotPolicy {
@@ -115,6 +153,7 @@ export function isBotApiOpponent(value: unknown): value is BotApiOpponent {
 
 export class BotApi {
   private readonly hands = new Map<string, Hand>()
+  private readonly matches = new Map<string, Match>()
   private readonly keys = new Map<string, KeyState>()
   private readonly dailyHands: number
   private readonly handTtlMs: number
@@ -131,12 +170,46 @@ export class BotApi {
     this.policies = { ...options.policies }
   }
 
+  /** Opens a duplicate match of the given number of deals; its hands are dealt by `newHand`. */
+  newMatch(key: string, opponent: BotApiOpponent, deals: number): BotApiMatchResult {
+    if (!Number.isSafeInteger(deals) || deals < 1 || deals > BOT_API_MAX_DEALS) {
+      return { ok: false, status: 400, error: `deals must be 1 to ${BOT_API_MAX_DEALS}` }
+    }
+    const match: Match = {
+      id: this.newId(),
+      key,
+      opponent,
+      deals,
+      next: 0,
+      results: Array.from({ length: 2 * deals }, () => undefined),
+    }
+    this.matches.set(match.id, match)
+    return { ok: true, match: matchView(match) }
+  }
+
+  /** A match as it stands: hands dealt, deals scored, and the score so far. */
+  match(key: string, matchId: string): BotApiMatchResult {
+    const match = this.matches.get(matchId)
+    if (match === undefined || match.key !== key) {
+      return { ok: false, status: 404, error: 'no such match' }
+    }
+    return { ok: true, match: matchView(match) }
+  }
+
   /**
-   * Deals a new hand for the key. A hand the key left open is folded first, as
+   * Deals a new hand for the key: the next hand of a match when one is named,
+   * otherwise a fresh deal. A hand the key left open is folded first, as
    * Slumbot does. If the bot is on the button it moves before the client sees
    * the hand.
    */
-  newHand(key: string, opponent: BotApiOpponent): BotApiResult {
+  newHand(key: string, opponent: BotApiOpponent, matchId?: string): BotApiResult {
+    const match = matchId === undefined ? undefined : this.matches.get(matchId)
+    if (matchId !== undefined && (match === undefined || match.key !== key)) {
+      return { ok: false, status: 404, error: 'no such match' }
+    }
+    if (match !== undefined && match.next >= 2 * match.deals) {
+      return { ok: false, status: 409, error: 'every hand of the match has been dealt' }
+    }
     const state = this.keyState(key)
     if (state.handsToday >= this.dailyHands) {
       return { ok: false, status: 429, error: 'daily hand limit reached' }
@@ -144,21 +217,33 @@ export class BotApi {
     if (state.open !== null) this.foldForClient(state.open)
     state.handsToday += 1
     const id = this.newId()
-    const rng = mulberry32(seedFromString(`bot-api:${key}:${id}`))
-    const deck = shuffle(makeDeck(), rng)
+    // A match deals the same cards twice: the client takes the button with
+    // them first, then the big blind.
+    const index = match?.next ?? 0
+    const seed =
+      match === undefined
+        ? `bot-api:${key}:${id}`
+        : `bot-api:match:${match.id}:${Math.floor(index / 2)}`
+    const deck = shuffle(makeDeck(), mulberry32(seedFromString(seed)))
+    const clientPos: 0 | 1 =
+      match === undefined ? (state.dealt % 2 === 0 ? 1 : 0) : index % 2 === 0 ? 1 : 0
+    const button = deck.slice(0, 2)
+    const bigBlind = deck.slice(2, 4)
     const hand: Hand = {
       id,
       key,
-      opponent,
-      clientPos: state.dealt % 2 === 0 ? 1 : 0,
-      clientHole: deck.slice(0, 2),
-      botHole: deck.slice(2, 4),
+      opponent: match?.opponent ?? opponent,
+      clientPos,
+      clientHole: clientPos === 1 ? button : bigBlind,
+      botHole: clientPos === 1 ? bigBlind : button,
       board: deck.slice(4, 9),
       action: '',
       updatedAtMs: this.now(),
       last: null,
       over: false,
+      ...(match === undefined ? {} : { match: { id: match.id, index } }),
     }
+    if (match !== undefined) match.next += 1
     state.dealt += 1
     state.open = hand
     this.hands.set(id, hand)
@@ -292,6 +377,12 @@ export class BotApi {
       hand.over = true
       const folded = action.kind === 'fold'
       hand.action += text + (folded ? '' : '/'.repeat(Math.max(0, 3 - from)))
+      const clientSeat = before.seats.find((entry) => entry.playerId === CLIENT)?.seat
+      hand.winnings = settled.results.find((result) => result.seat === clientSeat)?.delta ?? 0
+      const match = hand.match === undefined ? undefined : this.matches.get(hand.match.id)
+      if (match !== undefined && hand.match !== undefined) {
+        match.results[hand.match.index] = hand.winnings
+      }
       this.remember(hand)
       return true
     }
@@ -377,16 +468,38 @@ export class BotApi {
       seq: moveCount(hand.action),
     }
     if (!hand.over) return base
-    const room = this.room(hand)
-    const record = room.recentHands(1)[0]
-    const seat = room.viewFor('').seats.find((entry) => entry.playerId === CLIENT)?.seat
-    const winnings = record?.results.find((result) => result.seat === seat)?.delta ?? 0
     const showdown = !hand.action.endsWith('f')
     return {
       ...base,
-      winnings,
+      winnings: hand.winnings ?? 0,
       ...(showdown ? { bot_hole_cards: hand.botHole.map(cardToString) } : {}),
     }
+  }
+}
+
+function matchView(match: Match): BotApiMatchView {
+  const scores: number[] = []
+  for (let deal = 0; deal < match.deals; deal += 1) {
+    const first = match.results[2 * deal]
+    const second = match.results[2 * deal + 1]
+    // At a 100-chip big blind, chips a hand are big blinds a hundred hands.
+    if (first !== undefined && second !== undefined) scores.push((first + second) / 2)
+  }
+  const mean = scores.length === 0 ? null : scores.reduce((sum, x) => sum + x, 0) / scores.length
+  let interval: readonly [number, number] | null = null
+  if (mean !== null && scores.length >= 2) {
+    const variance = scores.reduce((sum, x) => sum + (x - mean) ** 2, 0) / (scores.length - 1)
+    const half = 1.96 * Math.sqrt(variance / scores.length)
+    interval = [mean - half, mean + half]
+  }
+  return {
+    match_id: match.id,
+    opponent: match.opponent,
+    deals: match.deals,
+    hands_dealt: match.next,
+    deals_scored: scores.length,
+    bb_per_100: mean,
+    interval,
   }
 }
 
@@ -418,7 +531,7 @@ export interface BotApiResponse {
 }
 
 /**
- * The API's two calls over plain request and response values, so any server
+ * The API's calls over plain request and response values, so any server
  * can mount it. `keyFor` turns a bearer token into the key it belongs to, or
  * null; key storage and hashing live with whoever issues them.
  */
@@ -435,16 +548,29 @@ export function handleBotApi(
     readonly opponent?: unknown
     readonly incr?: unknown
     readonly seq?: unknown
+    readonly deals?: unknown
+    readonly match_id?: unknown
   }
-  if (request.path === '/v1/hands') {
-    const opponent = body.opponent ?? 'nyx'
-    if (!isBotApiOpponent(opponent)) {
-      return {
-        status: 400,
-        body: { error: `opponent must be one of ${BOT_API_OPPONENTS.join(', ')}` },
-      }
+  const opponent = body.opponent ?? 'nyx'
+  if (!isBotApiOpponent(opponent)) {
+    return {
+      status: 400,
+      body: { error: `opponent must be one of ${BOT_API_OPPONENTS.join(', ')}` },
     }
-    return respond(api.newHand(key, opponent))
+  }
+  if (request.path === '/v1/matches') {
+    if (typeof body.deals !== 'number') {
+      return { status: 400, body: { error: 'send { deals: integer }' } }
+    }
+    return respondMatch(api.newMatch(key, opponent, body.deals))
+  }
+  const match = /^\/v1\/matches\/([A-Za-z0-9-]{1,64})$/.exec(request.path)
+  if (match?.[1] !== undefined) return respondMatch(api.match(key, match[1]))
+  if (request.path === '/v1/hands') {
+    if (body.match_id !== undefined && typeof body.match_id !== 'string') {
+      return { status: 400, body: { error: 'match_id must be a string' } }
+    }
+    return respond(api.newHand(key, opponent, body.match_id))
   }
   const act = /^\/v1\/hands\/([A-Za-z0-9-]{1,64})\/act$/.exec(request.path)
   if (act?.[1] !== undefined) {
@@ -458,6 +584,12 @@ export function handleBotApi(
     return respond(api.act(key, act[1], body.incr, body.seq))
   }
   return { status: 404, body: { error: 'no such call' } }
+}
+
+function respondMatch(result: BotApiMatchResult): BotApiResponse {
+  return result.ok
+    ? { status: 200, body: result.match }
+    : { status: result.status, body: { error: result.error } }
 }
 
 function respond(result: BotApiResult): BotApiResponse {
