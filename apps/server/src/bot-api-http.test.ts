@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AuthenticatedPlayer } from './auth.js'
-import { BotApi } from './bot-api.js'
+import { BotApi, type BotApiHandView, type BotApiMatchView, type BotApiOptions } from './bot-api.js'
 import { withBotApi } from './bot-api-http.js'
 import {
   BOT_API_MAX_KEYS,
@@ -30,8 +30,8 @@ afterEach(async () => {
 })
 
 /** A real HTTP server with the bot API in front of a listener that answers 'next'. */
-async function start(): Promise<string> {
-  const api = new BotApi({ policies: { nyx: pokerGuardPolicy } })
+async function start(options: BotApiOptions = {}): Promise<string> {
+  const api = new BotApi({ ...options, policies: { nyx: pokerGuardPolicy } })
   const keys = new MemoryBotApiKeyStore()
   server = createServer(
     withBotApi(
@@ -114,6 +114,74 @@ describe('bot API keys', () => {
 })
 
 describe('the bot API over HTTP', () => {
+  it('plays a full two-deal match and scores both pairs of hands over HTTP', async () => {
+    let ids = 0
+    const base = await start({ newId: () => `match-test-${++ids}` })
+    const made = await call(base, '/api/bot/keys', { token: 'member', body: {} })
+    expect(made.status).toBe(201)
+    const { key } = made.body as { key: string }
+    const opened = await call(base, '/api/bot/v1/matches', {
+      token: key,
+      body: { opponent: 'nyx', deals: 2 },
+    })
+    expect(opened.status).toBe(200)
+    const match = opened.body as BotApiMatchView
+    expect(match).toMatchObject({
+      deals: 2,
+      hands_dealt: 0,
+      deals_scored: 0,
+      bb_per_100: null,
+      interval: null,
+    })
+    const results: number[] = []
+    for (let index = 0; index < 4; index += 1) {
+      const dealt = await call(base, '/api/bot/v1/hands', {
+        token: key,
+        body: { match_id: match.match_id },
+      })
+      expect(dealt.status).toBe(200)
+      let hand = dealt.body as BotApiHandView
+      expect(hand.client_pos).toBe(index % 2 === 0 ? 1 : 0)
+      for (let step = 0; hand.winnings === undefined; step += 1) {
+        expect(step).toBeLessThan(40)
+        const facingBet = /b\d+$/.test(hand.action.split('/').at(-1) ?? '')
+        const smallBlind = hand.action === '' && hand.client_pos === 1
+        const acted = await call(base, `/api/bot/v1/hands/${hand.hand_id}/act`, {
+          token: key,
+          body: { incr: facingBet || smallBlind ? 'c' : 'k', seq: hand.seq },
+        })
+        expect(acted.status).toBe(200)
+        hand = acted.body as BotApiHandView
+      }
+      results.push(hand.winnings)
+      const progress = await call(base, `/api/bot/v1/matches/${match.match_id}`, { token: key })
+      expect(progress.status).toBe(200)
+      expect(progress.body).toMatchObject({
+        hands_dealt: index + 1,
+        deals_scored: Math.floor((index + 1) / 2),
+      })
+    }
+    const first = ((results[0] as number) + (results[1] as number)) / 2
+    const second = ((results[2] as number) + (results[3] as number)) / 2
+    const mean = (first + second) / 2
+    const halfWidth = (1.96 * Math.abs(first - second)) / 2
+    const scored = await call(base, `/api/bot/v1/matches/${match.match_id}`, { token: key })
+    expect(scored.status).toBe(200)
+    const final = scored.body as BotApiMatchView
+    expect(final).toMatchObject({ hands_dealt: 4, deals_scored: 2 })
+    expect(final.bb_per_100).toBeCloseTo(mean, 9)
+    expect(final.interval?.[0]).toBeCloseTo(mean - halfWidth, 9)
+    expect(final.interval?.[1]).toBeCloseTo(mean + halfWidth, 9)
+    expect(
+      (
+        await call(base, '/api/bot/v1/hands', {
+          token: key,
+          body: { match_id: match.match_id },
+        })
+      ).status,
+    ).toBe(409)
+  })
+
   it('passes every other path on untouched', async () => {
     const base = await start()
     const response = await fetch(`${base}/table`)
