@@ -39,4 +39,10 @@ describe('the table "Start a table" opens', () => {
     expect(target.botSeats).toBe(0)
     expect(target.botPreset).toBeUndefined()
   })
+
+  it('carries the Midas preset from the menu link to the wire target', () => {
+    const target = openedFrom(startTableHref({ bots: 'fill', preset: 'midas' }))
+    expect(target.botPreset).toBe('midas')
+    expect(target.botSeats).toBeUndefined()
+  })
 })

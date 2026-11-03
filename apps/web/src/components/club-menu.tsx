@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { BotChallenges } from '@/components/bot-challenges'
 import { DailyChips } from '@/components/daily-chips'
 import { FriendsSheet } from '@/components/friends-sheet'
 import { MenuDrift } from '@/components/menu-drift'
@@ -19,6 +20,7 @@ import {
   loadBrowserAuthConfig,
   signInToRiver,
 } from '@/lib/auth'
+import { midasAvailable } from '@/lib/bot-capabilities'
 import {
   describeNameStatus,
   isNameStatus,
@@ -47,7 +49,7 @@ import { useVisibleViewport } from '@/lib/use-visible-viewport'
  */
 
 /** The strength of a full bot table. The champion table sits beside these, heads-up. */
-type TableStrength = Exclude<BotTablePreset, 'champion'>
+type TableStrength = Exclude<BotTablePreset, 'champion' | 'midas'>
 
 const BOT_PRESET_LABELS: Readonly<Record<TableStrength, string>> = {
   casual: 'Casual',
@@ -83,6 +85,16 @@ export function ClubMenu() {
   const closingMotion = useRef<Animation | null>(null)
   const visibleViewport = useVisibleViewport()
   const [me, setMe] = useState<Me | null>(null)
+  const [midas, setMidas] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    void midasAvailable().then((available) => {
+      if (!cancelled) setMidas(available)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   // Where this member's public profile lives, once their name is known to have one.
   const [profile, setProfile] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
@@ -406,22 +418,10 @@ export function ClubMenu() {
               Table options
             </button>
           </section>
-          <button
-            type="button"
-            className="club-home-nell"
-            aria-label="Champion, Nell 1v1"
-            onClick={() => router.push(startTableHref({ bots: 'fill', preset: 'champion' }))}
-          >
-            <span className="club-home-match-mark" aria-hidden="true">
-              <span>1</span>
-              <small>v</small>
-              <span>1</span>
-            </span>
-            <span className="club-home-challenge">
-              <span className="club-home-action-title">Champion</span>
-              <span className="club-home-action-detail">Nell · 1v1</span>
-            </span>
-          </button>
+          <BotChallenges
+            midasAvailable={midas}
+            onSelect={(preset) => router.push(startTableHref({ bots: 'fill', preset }))}
+          />
           <section className="club-home-friends" aria-labelledby="club-friends-title">
             <div>
               <h2 id="club-friends-title">Friends</h2>

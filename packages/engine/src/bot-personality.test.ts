@@ -107,11 +107,20 @@ describe('pickPersonalities', () => {
 
 describe('table presets', () => {
   it('recognises only the public preset names', () => {
-    for (const preset of ['casual', 'mixed', 'tough', 'random', 'champion']) {
+    for (const preset of ['casual', 'mixed', 'tough', 'random', 'champion', 'midas']) {
       expect(isBotTablePreset(preset)).toBe(true)
     }
     expect(isBotTablePreset('expert')).toBe(false)
     expect(isBotTablePreset(3)).toBe(false)
+  })
+
+  it('names the existing champion Nyx without changing its identity and casts Midas alone', () => {
+    expect(championPersonality()).toMatchObject({ id: 'nell', name: 'Nyx' })
+    expect(pickPersonalitiesForPreset(17, 8, 'midas')).toEqual([
+      expect.objectContaining({ id: 'midas', name: 'Midas', skill: 'og' }),
+    ])
+    expect(pickPersonalitiesForPreset(17, 0, 'midas')).toEqual([])
+    expect(personalityPool().some((bot) => bot.id === 'midas')).toBe(false)
   })
 
   it('casts the champion alone at a champion table, however many seats it asks for', () => {
@@ -154,7 +163,7 @@ describe('the champion', () => {
   const champion = championPersonality()
 
   it('sits exactly once at every table with bots, whatever the preset and size', () => {
-    for (const preset of BOT_TABLE_PRESETS) {
+    for (const preset of BOT_TABLE_PRESETS.filter((preset) => preset !== 'midas')) {
       for (let count = 1; count <= 8; count += 1) {
         for (const seed of [1, 17, 91, 4242]) {
           const cast = pickPersonalitiesForPreset(seed, count, preset)

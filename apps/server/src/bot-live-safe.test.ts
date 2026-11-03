@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { Worker } from 'node:worker_threads'
-import { mulberry32, personalityPool } from '@river/engine'
+import { championPersonality, midasPersonality, mulberry32, personalityPool } from '@river/engine'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { liveBotThinker, liveSafeBotPolicy, liveSafeConfig } from './bot-live-safe.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
@@ -19,17 +19,21 @@ vi.mock('./bot-thinker.js', async (original) => ({
 }))
 
 function request(): ThinkRequest {
-  const cast = personalityPool()
-    .filter((person) => person.skill === 'og')
-    .slice(0, 2)
+  const cast = [
+    midasPersonality(),
+    ...personalityPool()
+      .filter((person) => person.skill === 'og')
+      .slice(0, 1),
+  ]
   const entrants = cast.map((personality) => ({ personality }))
   const ids = cast.map((personality) => botPlayerId(personality.id))
   const { room } = openSessionHand('safe-live-tests', 0, 0, 0, entrants, ids)
   const actor = room.viewFor('').currentActor?.playerId as string
+  if (actor !== 'bot:midas') throw new Error('fixture must open on Midas')
   return {
     view: room.viewFor(actor),
     playerId: actor,
-    personality: cast[ids.indexOf(actor)] as never,
+    personality: midasPersonality(),
     seed: 7,
     options: { roomId: room.id, publicActions: room.currentActions() },
   }
@@ -70,7 +74,7 @@ describe('live safe policy routing and hard budget', () => {
     expect(liveSafeConfig({})).toMatchObject({
       enabled: false,
       threads: 2,
-      variant: 'v9go',
+      variant: 'v9gpw2',
       budgetMs: 8000,
     })
     expect(liveBotThinker({})).toBeUndefined()
@@ -94,34 +98,62 @@ describe('live safe policy routing and hard budget', () => {
     ).toMatchObject({ enabled: true, variant: 'v9gp', threads: 1 })
   })
 
-  it('never requests v9go on a multiway table, even after folds leave two players', async () => {
-    const worker = new FakeWorker((worker, message) => worker.send(message.id))
-    const policy = liveSafeBotPolicy(
-      { ...liveSafeConfig(), enabled: true, threads: 1 },
-      {
-        workerFactory: () => worker as unknown as Worker,
-      },
-    )
+  it.each(['v9go', 'v9gp', 'v9gpw', 'v9gpw2'])('accepts the %s variant', (variant) => {
+    expect(liveSafeConfig({ BOT_LIVE_SAFE_VARIANT: variant }).variant).toBe(variant)
+  })
+
+  it('defaults unknown variants to v9gpw2', () => {
+    expect(liveSafeConfig({ BOT_LIVE_SAFE_VARIANT: 'unknown' }).variant).toBe('v9gpw2')
+  })
+
+  it('wants only Midas, including on the river; disabled never opts in', async () => {
+    const policy = liveSafeBotPolicy({ ...liveSafeConfig({}), enabled: true })
+    const off = liveSafeBotPolicy(liveSafeConfig({}))
     try {
-      const original = request()
-      const extra = {
-        ...(original.view.seats[0] as NonNullable<(typeof original.view.seats)[0]>),
-        seat: 2,
-        folded: true,
-      }
-      const req = {
-        ...original,
-        view: { ...original.view, seats: [...original.view.seats, extra] },
-      }
-      expect(policy.wants(req.view, req.playerId, req.personality)).toBe(false)
-      expect(await policy.think(req, 8000)).toEqual({ kind: 'call' })
-      expect(worker.sent.find((message) => message.type === 'think')?.safe).toBe(false)
-      expect(policy.stats.safeDecisions).toBe(0)
-      expect(policy.diagnostics().activeHands).toBe(0)
+      const req = request()
+      const river = { ...req.view, street: 'river' as const }
+      expect(policy.wants(req.view, req.playerId, req.personality)).toBe(true)
+      expect(policy.wants(river, req.playerId, req.personality)).toBe(true)
+      expect(policy.wants(river, req.playerId, championPersonality())).toBe(false)
+      expect(policy.wants(river, 'bot:nell', championPersonality())).toBe(false)
+      expect(off.wants(river, req.playerId, req.personality)).toBe(false)
     } finally {
       await policy.close()
+      await off.close()
     }
   })
+
+  it.each(['preflop', 'river'] as const)(
+    'never requests a safe solve on a multiway %s, even after folds leave two players',
+    async (street) => {
+      const worker = new FakeWorker((worker, message) => worker.send(message.id))
+      const policy = liveSafeBotPolicy(
+        { ...liveSafeConfig(), enabled: true, threads: 1 },
+        {
+          workerFactory: () => worker as unknown as Worker,
+        },
+      )
+      try {
+        const original = request()
+        const extra = {
+          ...(original.view.seats[0] as NonNullable<(typeof original.view.seats)[0]>),
+          seat: 2,
+          folded: true,
+        }
+        const req = {
+          ...original,
+          view: { ...original.view, street, seats: [...original.view.seats, extra] },
+        }
+        expect(policy.wants(req.view, req.playerId, req.personality)).toBe(false)
+        expect(await policy.think(req, 8000)).toEqual({ kind: 'call' })
+        expect(worker.sent.find((message) => message.type === 'think')?.safe).toBe(false)
+        expect(policy.stats.safeDecisions).toBe(0)
+        expect(policy.diagnostics().activeHands).toBe(0)
+      } finally {
+        await policy.close()
+      }
+    },
+  )
 
   it('terminates timed-out solves, returns v8z, counts the fallback and disables carry', async () => {
     vi.useFakeTimers()

@@ -354,6 +354,8 @@ export interface RoomHubOptions {
    * elsewhere while the bot thinks. Without one every decision is the quick one.
    */
   botRiverThinker?: BotRiverThinker
+  /** Present only with BOT_LIVE_SAFE=true. Reserved for the Midas heads-up preset. */
+  midas?: { thinker: BotRiverThinker; budgetMs: number }
   botOpponentStore?: BotOpponentStore
   /** Where each person's private record of their hands is written; none in tests. */
   playerHands?: PlayerHandStore
@@ -509,7 +511,10 @@ function socialCommand(value: unknown): ClientSocialCommand | null {
   return null
 }
 
-function roomCreationSettings(value: Record<string, unknown>): RoomCreationSettings | null {
+function roomCreationSettings(
+  value: Record<string, unknown>,
+  midasAvailable: boolean,
+): RoomCreationSettings | null {
   const maxSeats = value.maxSeats
   if (
     maxSeats !== undefined &&
@@ -539,18 +544,19 @@ function roomCreationSettings(value: Record<string, unknown>): RoomCreationSetti
   }
   const botPreset = value.botPreset
   if (botPreset !== undefined && !isBotTablePreset(botPreset)) return null
-  // A champion table is a heads-up match against her and nobody else. It needs
+  if (botPreset === 'midas' && !midasAvailable) return null
+  // Champion and Midas are heads-up matches against one character. Each needs
   // no size or count from the creator, and one that says otherwise is refused.
-  const champion = botPreset === 'champion'
+  const headsUpPreset = botPreset === 'champion' || botPreset === 'midas'
   const headsUp = SEATS_PER_SHAPE['heads-up']
   if (
-    champion &&
+    headsUpPreset &&
     ((maxSeats !== undefined && maxSeats !== headsUp) || (botSeats !== undefined && botSeats !== 1))
   ) {
     return null
   }
-  const seats = champion ? headsUp : maxSeats
-  const bots = champion ? 1 : botSeats
+  const seats = headsUpPreset ? headsUp : maxSeats
+  const bots = headsUpPreset ? 1 : botSeats
   return {
     ...(seats === undefined ? {} : { maxSeats: seats }),
     ...(stakeId === undefined ? {} : { stakeId }),
@@ -561,7 +567,7 @@ function roomCreationSettings(value: Record<string, unknown>): RoomCreationSetti
   }
 }
 
-export function parseClientMessage(raw: string): ClientMessage | null {
+export function parseClientMessage(raw: string, midasAvailable = false): ClientMessage | null {
   let value: unknown
   try {
     value = JSON.parse(raw) as unknown
@@ -580,7 +586,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     typeof value.name === 'string'
   ) {
     const inviteCode = typeof value.inviteCode === 'string' ? value.inviteCode : undefined
-    const settings = roomCreationSettings(value)
+    const settings = roomCreationSettings(value, midasAvailable)
     if (settings === null) return null
     return {
       kind: 'enter',
@@ -650,6 +656,7 @@ export class RoomHub {
   private readonly botTilt: BotTiltSource
   private readonly botTrace: BotDecisionTraceSink | undefined
   private readonly botRiverThinker: BotRiverThinker | undefined
+  private readonly midas: RoomHubOptions['midas']
   private readonly botOpponentStore: BotOpponentStore | undefined
   private readonly playerHands: PlayerHandStore | undefined
   private readonly actionShadow: ActionShadowPort | undefined
@@ -669,6 +676,7 @@ export class RoomHub {
     this.botTilt = options.botTilt ?? (() => ({ factor: 0 }) satisfies BotTiltState)
     this.botTrace = options.botTrace
     this.botRiverThinker = options.botRiverThinker
+    this.midas = options.midas
     this.botOpponentStore = options.botOpponentStore
     this.playerHands = options.playerHands
     this.actionShadow = options.actionShadow
@@ -717,7 +725,7 @@ export class RoomHub {
   }
 
   private async receive(connection: ConnectionState, raw: string): Promise<void> {
-    const message = parseClientMessage(raw)
+    const message = parseClientMessage(raw, this.midas !== undefined)
     if (message === null) {
       this.error(connection, null, 'invalid_message', 'Invalid client message')
       return
@@ -1528,6 +1536,17 @@ export class RoomHub {
     // already exists would move everyone already sitting there.
     if (existing !== undefined) return existing
     const room = this.createRoom(roomId, settings)
+    if (settings?.botPreset === 'midas' && this.midas !== undefined) {
+      // The thinker gets 70% of the remaining clock. Leave another poll plus
+      // scheduling headroom, including when a caller supplies shorter clocks.
+      const minimum = Math.ceil((Math.min(8_000, this.midas.budgetMs) + 100) / 0.7)
+      room.config.turnBudgetsMs = Object.fromEntries(
+        Object.entries(room.config.turnBudgetsMs).map(([street, ms]) => [
+          street,
+          Math.max(ms, minimum),
+        ]),
+      ) as typeof room.config.turnBudgetsMs
+    }
     // A number from the creator is kept as given. Without one, a hub that fills
     // tables at random lets the room id choose how many and which chairs.
     const drawn =
@@ -1968,7 +1987,13 @@ export class RoomHub {
     // A decision the thinker takes is worked out off this thread while the bot
     // appears to think; the quick decision stands in if it is not back in time.
     let slow: TurnAction | null | undefined = null
-    const thinker = this.botRiverThinker
+    const thinker =
+      state.botPreset === 'midas' &&
+      actor === 'bot:midas' &&
+      personality.id === 'midas' &&
+      seen.seats.length === 2
+        ? this.midas?.thinker
+        : this.botRiverThinker
     if (thinker?.wants(seen, actor, personality) === true) {
       slow = undefined
       const deadline = Math.min(RIVER_THINK_CAP_MS, this.remainingTurnMs(state) * 0.7)
@@ -2152,7 +2177,8 @@ export class RoomHub {
         }
       }
       try {
-        this.botRiverThinker?.releaseHand?.(state.room.id, event.record.handNumber)
+        const thinker = state.botPreset === 'midas' ? this.midas?.thinker : this.botRiverThinker
+        thinker?.releaseHand?.(state.room.id, event.record.handNumber)
       } catch (error) {
         this.onError('bot thinker hand release failed', error)
       }

@@ -2,11 +2,17 @@ import { Worker } from 'node:worker_threads'
 import { mulberry32, type TurnAction } from '@river/engine'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { actionFor } from './bot-service.js'
-import { type BotRiverThinker, isSolvedRiver, workerRiverThinker } from './bot-thinker.js'
+import { type BotRiverThinker, workerRiverThinker } from './bot-thinker.js'
+
+export type LiveSafeVariant = 'v9go' | 'v9gp' | 'v9gpw' | 'v9gpw2'
+
+export function liveSafeVariant(value: string | undefined): LiveSafeVariant {
+  return value === 'v9go' || value === 'v9gp' || value === 'v9gpw' ? value : 'v9gpw2'
+}
 
 export interface LiveSafeConfig {
   enabled: boolean
-  variant: 'v9go' | 'v9gp'
+  variant: LiveSafeVariant
   budgetMs: number
   threads: number
   maxHands: number
@@ -21,7 +27,7 @@ function integer(text: string | undefined, fallback: number, min: number, max: n
 export function liveSafeConfig(env: NodeJS.ProcessEnv = process.env): LiveSafeConfig {
   return {
     enabled: env.BOT_LIVE_SAFE === 'true',
-    variant: env.BOT_LIVE_SAFE_VARIANT === 'v9gp' ? 'v9gp' : 'v9go',
+    variant: liveSafeVariant(env.BOT_LIVE_SAFE_VARIANT),
     budgetMs: integer(env.BOT_LIVE_SAFE_BUDGET_MS, 8_000, 1, 8_000),
     threads: integer(env.BOT_LIVE_SAFE_THREADS, 2, 1, 4),
     maxHands: integer(env.BOT_LIVE_SAFE_MAX_HANDS, 8, 1, 64),
@@ -177,11 +183,12 @@ export function liveSafeBotPolicy(
     stats,
     wants(view, playerId, personality) {
       return (
-        (config.enabled &&
-          view.seats.length === 2 &&
-          personality.skill === 'og' &&
-          view.currentActor?.playerId === playerId) ||
-        isSolvedRiver(view, playerId, personality)
+        config.enabled &&
+        view.seats.length === 2 &&
+        playerId === 'bot:midas' &&
+        personality.id === 'midas' &&
+        personality.skill === 'og' &&
+        view.currentActor?.playerId === playerId
       )
     },
     async ready() {
@@ -213,8 +220,7 @@ export function liveSafeBotPolicy(
       stats.decisions += 1
       const roomId = request.options.roomId ?? 'local'
       const key = JSON.stringify([roomId, request.view.handNumber, request.playerId])
-      const eligible =
-        config.enabled && request.view.seats.length === 2 && request.personality.skill === 'og'
+      const eligible = policy.wants(request.view, request.playerId, request.personality)
       let hand = hands.get(key)
       const guard = () => {
         try {
