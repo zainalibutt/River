@@ -448,14 +448,19 @@ export function turnResidualLeaf(
   const prepareBatch = (boards: Parameters<NonNullable<RiverLeafEvaluator['batch']>>[0]) => {
     const cards = boards.map((b) => prepare(b.board.map(cardKey), b.ranks))
     const input = new Float32Array(cards.length * 385)
+    const live = cards.map((c) =>
+      Int32Array.from(
+        Array.from(c.layout.bucketOf.keys()).filter((h) => (c.layout.bucketOf[h] as number) >= 0),
+      ),
+    )
     return {
       cards,
       input,
       inputs: cards.map((_, i) => input.subarray(i * 385, (i + 1) * 385)),
-      live: cards.map((c) =>
-        Int32Array.from(
-          Array.from(c.layout.bucketOf.keys()).filter((h) => (c.layout.bucketOf[h] as number) >= 0),
-        ),
+      live,
+      // Board/holding projection is fixed across every range and correction visit.
+      bucketIndices: live.map((holdings, i) =>
+        Int32Array.from(holdings, (h) => i * 256 + (cards[i]?.layout.bucketOf[h] as number)),
       ),
       masks: [0, 1].map((p) => Uint8Array.from({ length: 256 }, (_, i) => Number(i >>> 7 === p))),
       // Only identical f32 inputs and identical output masks may reuse inference.
@@ -482,7 +487,7 @@ export function turnResidualLeaf(
         preparedBatch = prepareBatch(boards)
         batches.set(boards, preparedBatch)
       }
-      const { cards, input: inputs, live, masks, predictions } = preparedBatch
+      const { cards, input: inputs, live, bucketIndices, masks, predictions } = preparedBatch
       cards.forEach((c, i) => {
         bucketInputs(c.layout, ranges, stack, pot, undefined, 'live', preparedBatch.inputs[i])
       })
@@ -568,10 +573,14 @@ export function turnResidualLeaf(
             row += c.layout.live
             continue
           }
-          for (const h of live[i] as Int32Array) {
-            const b = c.layout.bucketOf[h] as number
+          const holdings = live[i] as Int32Array
+          const indices = bucketIndices[i] as Int32Array
+          const baseline = p * 128
+          const values = out[p]
+          for (let j = 0; j < holdings.length; j++) {
+            const h = holdings[j] as number
             const correction = delta[row++] as number
-            out[p][h] = (bucket[i * 256 + p * 128 + b] as number) + correction
+            values[h] = (bucket[(indices[j] as number) + baseline] as number) + correction
           }
         }
         return out

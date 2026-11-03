@@ -136,6 +136,7 @@ export function perCardShowdown(
         }
   let indices: ReturnType<typeof holdingIndices> | undefined
   let liveHoldings: (readonly [Int32Array, Int32Array])[] | undefined
+  let valueIndices: (readonly [Int32Array, Int32Array])[] | undefined
   let masses: ReturnType<typeof massesFor> | undefined
   let previousHands: readonly [Hands, Hands] | undefined
   // Network inference is pure for immutable weights and exactly equal f32
@@ -177,6 +178,19 @@ export function perCardShowdown(
               ),
             )
           return [liveFor(0), liveFor(1)] as const
+        })
+        valueIndices = prepared.map((river, r) => {
+          const live = liveHoldings?.[r] as readonly [Int32Array, Int32Array]
+          const forPlayer = (player: Player) =>
+            Int32Array.from(live[player], (h) => {
+              const index = holdingIds[player][h] as number
+              return typeof riverNetwork === 'function'
+                ? index
+                : r * 2 * riverNetwork.buckets +
+                    player * riverNetwork.buckets +
+                    (river.layout?.bucketOf[index] as number)
+            })
+          return [forPlayer(0), forPlayer(1)] as const
         })
         if (typeof riverNetwork !== 'function' && networkBuffers !== undefined) {
           for (const player of [0, 1] as const) {
@@ -276,17 +290,17 @@ export function perCardShowdown(
       if (typeof riverNetwork !== 'function' && networkBuffers !== undefined) {
         const started = profile === undefined ? 0 : performance.now()
         const columns = 3 * riverNetwork.buckets + 1
+        // bucketInputs masks each board itself. Scatter the dense reaches once,
+        // rather than rebuilding the same ranges for every public card.
+        reach[0].fill(0)
+        reach[1].fill(0)
+        for (const player of [0, 1] as const) {
+          const source = player === traverser ? ownRange : opponent
+          for (let h = 0; h < source.length; h += 1)
+            reach[player][indices[player][h] as number] = source[h] as number
+        }
         for (let r = 0; r < prepared.length; r += 1) {
           const river = prepared[r] as (typeof prepared)[number]
-          reach[0].fill(0)
-          reach[1].fill(0)
-          for (const player of [0, 1] as const) {
-            const source = player === traverser ? ownRange : opponent
-            for (let h = 0; h < source.length; h += 1) {
-              const index = indices[player][h] as number
-              if ((river.ranks[index] as number) > 0) reach[player][index] = source[h] as number
-            }
-          }
           bucketInputs(
             river.layout as BucketLayout,
             reach,
@@ -379,22 +393,32 @@ export function perCardShowdown(
             leaf.cards.set(river.key, sums)
           }
         }
-        for (const h of live[traverser]) {
-          const index = indices[traverser][h] as number
-          const bucket = river.layout?.bucketOf[index] as number
-          const predicted =
-            values === undefined
-              ? (batchValues?.[
-                  r * 2 * (riverNetwork as RiverValueNetwork).buckets +
-                    traverser * (riverNetwork as RiverValueNetwork).buckets +
-                    bucket
-                ] as number)
-              : (values[traverser][index] as number)
-          const value = (met[h] as number) * (predicted * total - node.paid[traverser])
-          out[h] = (out[h] as number) + value / chanceCards
-          if (sums !== undefined && visit !== undefined) {
-            sums[traverser][index] =
-              (visit.discount ?? 1) * (sums[traverser][index] as number) + visit.weight * value
+        const predictedValues =
+          values === undefined ? (batchValues as Float32Array) : values[traverser]
+        const at = valueIndices?.[r]?.[traverser] as Int32Array
+        const own = live[traverser]
+        const mine = node.paid[traverser]
+        // The callback/direct-network choice and recording branch are invariant
+        // over this card's holdings. Keep them out of the integration loop.
+        if (sums !== undefined && visit !== undefined) {
+          const accumulated = sums[traverser]
+          const discount = visit.discount ?? 1
+          const weight = visit.weight
+          const ids = indices[traverser]
+          for (let i = 0; i < own.length; i++) {
+            const h = own[i] as number
+            const index = ids[h] as number
+            const predicted = predictedValues[at[i] as number] as number
+            const value = (met[h] as number) * (predicted * total - mine)
+            out[h] = (out[h] as number) + value / chanceCards
+            accumulated[index] = discount * (accumulated[index] as number) + weight * value
+          }
+        } else {
+          for (let i = 0; i < own.length; i++) {
+            const h = own[i] as number
+            const predicted = predictedValues[at[i] as number] as number
+            const value = (met[h] as number) * (predicted * total - mine)
+            out[h] = (out[h] as number) + value / chanceCards
           }
         }
       }
