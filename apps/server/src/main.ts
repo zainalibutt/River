@@ -13,6 +13,7 @@ import { SupabaseCosmeticStore } from './cosmetic-store.js'
 import { createSupabaseEconomy } from './economy-service.js'
 import { SupabaseLedger } from './ledger.js'
 import { SupabasePlayerHandStore } from './player-hand-store.js'
+import { SupabasePlayerNames } from './player-names.js'
 import { publicProfileRoute, SupabasePublicProfiles } from './public-profiles.js'
 import { SupabaseTableItemStore } from './table-item-store.js'
 import { tableLinkRoute } from './table-link-route.js'
@@ -87,6 +88,11 @@ async function start(): Promise<void> {
           }),
         }
       : {}),
+    // Members sit under the name on their account; guests under the one they send.
+    playerNames: new SupabasePlayerNames({
+      supabaseUrl: config.supabaseUrl,
+      serviceRoleKey: config.serviceRoleKey,
+    }),
     playerHands: new SupabasePlayerHandStore({
       supabaseUrl: config.supabaseUrl,
       serviceRoleKey: config.serviceRoleKey,
