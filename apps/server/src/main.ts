@@ -8,11 +8,12 @@ import { serveApiRoutes } from './api-routes.js'
 import { createSupabaseTokenVerifier } from './auth.js'
 import { type LiveSafeBotPolicy, liveBotThinker } from './bot-live-safe.js'
 import { SupabaseBotOpponentStore } from './bot-opponent-store.js'
-import { readServerConfig } from './config.js'
+import { assertDevelopmentDatabase, readServerConfig } from './config.js'
 import { SupabaseCosmeticStore } from './cosmetic-store.js'
 import { createSupabaseEconomy } from './economy-service.js'
 import { SupabaseLedger } from './ledger.js'
 import { SupabasePlayerHandStore } from './player-hand-store.js'
+import { SupabasePlayerNames } from './player-names.js'
 import { publicProfileRoute, SupabasePublicProfiles } from './public-profiles.js'
 import { SupabaseTableItemStore } from './table-item-store.js'
 import { tableLinkRoute } from './table-link-route.js'
@@ -52,6 +53,7 @@ async function start(): Promise<void> {
   const startedAtMs = Date.now()
   const config = readServerConfig(process.env)
   const development = process.env.NODE_ENV !== 'production'
+  if (development) assertDevelopmentDatabase(process.env)
   const webDirectory = fileURLToPath(new URL('../../web', import.meta.url))
   const application = next({
     dev: development,
@@ -104,6 +106,11 @@ async function start(): Promise<void> {
           }),
         }
       : {}),
+    // Members sit under the name on their account; guests under the one they send.
+    playerNames: new SupabasePlayerNames({
+      supabaseUrl: config.supabaseUrl,
+      serviceRoleKey: config.serviceRoleKey,
+    }),
     playerHands: new SupabasePlayerHandStore({
       supabaseUrl: config.supabaseUrl,
       serviceRoleKey: config.serviceRoleKey,

@@ -14,7 +14,7 @@
   },
   "scripts": {
     "predev": "npm run build --workspace @river/engine",
-    "dev": "npm run dev --workspace @river/server",
+    "dev": "node scripts/dev-db.mjs exec npm run dev --workspace @river/server",
     "dev:web": "npm run dev --workspace @river/web",
     "dev:server": "npm run dev --workspace @river/server",
     "build": "npm run build --workspace @river/web && npm run build --workspace @river/server",
@@ -26,7 +26,12 @@
     "format": "biome check --write .",
     "pretest": "npm run build --workspace @river/engine",
     "test": "vitest run",
-    "test:ui": "playwright test"
+    "test:ui": "node scripts/dev-db.mjs exec playwright test",
+    "db:start": "node scripts/dev-db.mjs start",
+    "db:reset": "node scripts/dev-db.mjs reset",
+    "db:migrate": "node scripts/dev-db.mjs migrate",
+    "db:stop": "node scripts/dev-db.mjs stop",
+    "db:status": "node scripts/dev-db.mjs status"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

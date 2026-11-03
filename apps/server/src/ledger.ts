@@ -35,11 +35,21 @@ export interface Seating {
  * of entries and an id the client chose. So a seating is written down when it
  * opens and again when it ends, whatever it had left, and a seat stays a seat
  * operation rather than becoming a chip one.
+ *
+ * Wherever chips move for a seat, the ledger entry and the seating's line are
+ * written in one transaction. Written one after the other, a crash between them
+ * lost a buy-in the book never heard of, or paid a stand back twice.
  */
 export interface SeatingStore {
-  /** A seating opened, or a rebuy grew it. Writing one again never reopens it. */
-  open(seating: Seating): Promise<void>
-  /** A seating ended, with chips or without. */
+  /**
+   * Apply `entry` and write `seating` open at its size, together: a buy-in, a
+   * rebuy, or a refused stand's credit taken back. A retry of an entry that
+   * already landed leaves the seating as that write left it.
+   */
+  openWith(entry: LedgerEntry, seating: Seating): Promise<number>
+  /** Apply `entry` and close `seating`, together: a stack paid back, or a refused buy-in refunded. */
+  closeWith(entry: LedgerEntry, seating: Seating): Promise<number>
+  /** A seating ended with nothing to pay. */
   close(seating: Seating): Promise<void>
   /** Seatings opened before `openedBeforeMs` that never ended. */
   unsettled(openedBeforeMs: number): Promise<Seating[]>
@@ -140,23 +150,21 @@ export class SupabaseLedger implements Ledger, SeatingStore {
   }
 
   async apply(entry: LedgerEntry): Promise<number> {
-    if (!Number.isSafeInteger(entry.delta) || entry.delta === 0) {
-      throw new Error('ledger delta must be a non-zero safe integer')
-    }
-    const response = await this.send(`${this.baseUrl}/rest/v1/rpc/apply_ledger_entry`, {
-      method: 'POST',
-      body: JSON.stringify({
-        p_player_id: entry.playerId,
-        p_delta: entry.delta,
-        p_reason: entry.reason,
-        p_ref: entry.ref,
-      }),
-    })
-    return asSafeBalance(await this.read(response))
+    return this.applyThrough('apply_ledger_entry', entry, {})
   }
 
-  async open(seating: Seating): Promise<void> {
-    await this.writeSeating(seatingRow(seating))
+  async openWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    return this.applyThrough('apply_ledger_entry_opening_seating', entry, {
+      p_seating_ref: seating.ref,
+      p_buy_in: seating.buyIn,
+      p_opened_at: new Date(seating.openedAtMs).toISOString(),
+    })
+  }
+
+  async closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    return this.applyThrough('apply_ledger_entry_closing_seating', entry, {
+      p_seating_ref: seating.ref,
+    })
   }
 
   async close(seating: Seating): Promise<void> {
@@ -178,6 +186,27 @@ export class SupabaseLedger implements Ledger, SeatingStore {
       seatings.push(...body.map(asSeating))
       if (body.length < SEATING_PAGE) return seatings
     }
+  }
+
+  private async applyThrough(
+    rpc: string,
+    entry: LedgerEntry,
+    seating: Record<string, unknown>,
+  ): Promise<number> {
+    if (!Number.isSafeInteger(entry.delta) || entry.delta === 0) {
+      throw new Error('ledger delta must be a non-zero safe integer')
+    }
+    const response = await this.send(`${this.baseUrl}/rest/v1/rpc/${rpc}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        p_player_id: entry.playerId,
+        p_delta: entry.delta,
+        p_reason: entry.reason,
+        p_ref: entry.ref,
+        ...seating,
+      }),
+    })
+    return asSafeBalance(await this.read(response))
   }
 
   /**

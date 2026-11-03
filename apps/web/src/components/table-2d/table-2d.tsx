@@ -2,7 +2,7 @@
 
 import { SHOWDOWN_TENSION_MS } from '@river/engine'
 import type { RoomSeatView, RoomView } from '@river/server'
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { RollingAmount } from '@/components/rolling-amount'
 import {
   actionAmount,
@@ -37,6 +37,7 @@ import {
   settleChipFlow,
   stackAdjustmentAt,
 } from '@/lib/chip-flow'
+import { fittedFontSize } from '@/lib/fit-text'
 import { formatAmount } from '@/lib/presentation'
 import { accentFor } from '@/lib/seat-accents'
 import type { ShowdownPlan } from '@/lib/showdown-plan'
@@ -738,6 +739,45 @@ function PileAt({
   )
 }
 
+/** The smallest a name on a phone plate shrinks to before its ellipsis returns. */
+const PHONE_NAME_FLOOR_PX = 8
+
+/**
+ * On a phone a long name shrinks to fit its plate, down to a floor, rather than
+ * ending in an ellipsis: members sit under names of up to sixteen letters, and
+ * the plate has room for about eleven at its own size. Measured at that size
+ * each time the name changes, and again once the web font has loaded, since a
+ * fallback font measures differently.
+ */
+function usePhoneFittedName(name: string | null, phone: boolean) {
+  const ref = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (element === null) return
+    const fit = () => {
+      element.style.fontSize = ''
+      if (!phone || name === null) return
+      const base = Number.parseFloat(getComputedStyle(element).fontSize)
+      const size = fittedFontSize(
+        base,
+        element.clientWidth,
+        element.scrollWidth,
+        PHONE_NAME_FLOOR_PX,
+      )
+      if (size < base) element.style.fontSize = `${size}px`
+    }
+    fit()
+    let live = true
+    void document.fonts?.ready.then(() => {
+      if (live) fit()
+    })
+    return () => {
+      live = false
+    }
+  }, [name, phone])
+  return ref
+}
+
 function Placard({
   seat,
   spot,
@@ -775,6 +815,7 @@ function Placard({
   phone: boolean
   playerDealt: boolean
 }) {
+  const nameRef = usePhoneFittedName(seat.name, phone)
   const box = spot.placardBox
   const position: CSSProperties = { left: px(box.x), top: px(box.y) }
   // An empty place has no plate: an empty frame round the rail read as clutter, and as a
@@ -814,7 +855,9 @@ function Placard({
         )}
       </span>
       <span className="t2d-plate-text">
-        <span className="t2d-name">{seat.name}</span>
+        <span ref={nameRef} className="t2d-name">
+          {seat.name}
+        </span>
         <span className="t2d-stack">
           <i aria-hidden="true" />
           <RollingAmount value={Math.max(0, stack)} abbreviated bigBlind={bigBlind} />

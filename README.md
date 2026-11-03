@@ -92,16 +92,27 @@ CI runs lint, typecheck and the unit suite on every push and pull request.
 
 ## Running locally
 
-River needs Node 22 or later and a Supabase project for auth and persistence.
-The Supabase CLI can run one locally in Docker.
+River needs Node 22 or later, and Docker for its development database: a local
+Supabase stack (Postgres, Auth and REST) that the Supabase CLI runs on this
+machine, bound to the loopback address.
 
 ```bash
 npm ci
-npx supabase start          # local Postgres, Auth and REST
-npx supabase db reset       # applies supabase/migrations
-cp .env.example .env.local  # fill in the local URL and keys printed by `supabase start`
-npm run dev                 # server and app on http://localhost:3000
+npm run db:start            # start the local stack; the first run pulls its images
+npm run db:reset            # wipe it and start afresh with every migration
+npm run db:migrate          # apply new migrations, keeping its data
+npm run dev                 # server and app on http://localhost:3000, on the local stack
 ```
+
+`npm run dev` and `npm run test:ui` read the local stack's URL and keys from the
+CLI each time they start, so no key is written to a file. A development server
+refuses a hosted Supabase project unless `RIVER_DEV_REMOTE_DATABASE=1` says one
+is meant, and the unit and interface suites refuse to run against any database
+that is not on this machine: the interface suite asks the running app which one
+it uses. `npm run db:stop` stops the stack and keeps its data.
+
+The local stack's settings live in `supabase/config.toml`. They are for this
+machine only and are never pushed to a hosted project.
 
 `npm run demo` plays an interactive hand against a bot in the terminal, using only the engine and no database.
 

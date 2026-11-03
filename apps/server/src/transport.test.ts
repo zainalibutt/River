@@ -39,18 +39,34 @@ class MemoryLedger implements Ledger, SeatingStore {
   /** Every seating the book has heard of, by player and reference, and whether it has closed. */
   readonly seatings = new Map<string, { seating: Seating; closed: boolean }>()
 
-  async open(seating: Seating): Promise<void> {
-    const key = `${seating.playerId} ${seating.ref}`
-    // Writing a seating again never reopens one that has closed.
-    const closed = this.seatings.get(key)?.closed ?? false
-    this.seatings.set(key, { seating: { ...seating }, closed })
-  }
-
   async close(seating: Seating): Promise<void> {
     this.seatings.set(`${seating.playerId} ${seating.ref}`, {
       seating: { ...seating },
       closed: true,
     })
+  }
+
+  async openWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    const replay = this.refs.has(`${entry.playerId}:${entry.ref}`)
+    const balance = await this.apply(entry)
+    // One transaction: a replay finds its seating already written, and a
+    // refused entry writes nothing.
+    if (!replay) {
+      this.seatings.set(`${seating.playerId} ${seating.ref}`, {
+        seating: { ...seating },
+        closed: false,
+      })
+    }
+    return balance
+  }
+
+  async closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    const balance = await this.apply(entry)
+    // Closing is the same however often it runs, so a retry closes it too.
+    const key = `${seating.playerId} ${seating.ref}`
+    const recorded = this.seatings.get(key)
+    if (recorded !== undefined) this.seatings.set(key, { ...recorded, closed: true })
+    return balance
   }
 
   async unsettled(openedBeforeMs: number): Promise<Seating[]> {
@@ -78,6 +94,52 @@ class MemoryLedger implements Ledger, SeatingStore {
     this.entries.push(entry)
     this.balances.set(entry.playerId, next)
     return next
+  }
+}
+
+/**
+ * The ledger and the seating book as a server that is about to die sees them.
+ * After `dieAfter(n)`, n more writes land and every one after that is refused,
+ * as if the process had stopped there, so nothing else it meant to write ever
+ * lands. Reads still answer, so the server gets as far as its next write.
+ */
+class DyingBook implements Ledger, SeatingStore {
+  private writes = Number.POSITIVE_INFINITY
+
+  constructor(readonly book: MemoryLedger) {}
+
+  dieAfter(writes: number): void {
+    this.writes = writes
+  }
+
+  private write<T>(run: () => Promise<T>): Promise<T> {
+    if (this.writes <= 0) return Promise.reject(new Error('the server has died'))
+    this.writes -= 1
+    return run()
+  }
+
+  balance(playerId: string): Promise<number> {
+    return this.book.balance(playerId)
+  }
+
+  unsettled(openedBeforeMs: number): Promise<Seating[]> {
+    return this.book.unsettled(openedBeforeMs)
+  }
+
+  apply(entry: LedgerEntry): Promise<number> {
+    return this.write(() => this.book.apply(entry))
+  }
+
+  close(seating: Seating): Promise<void> {
+    return this.write(() => this.book.close(seating))
+  }
+
+  openWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    return this.write(() => this.book.openWith(entry, seating))
+  }
+
+  closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    return this.write(() => this.book.closeWith(entry, seating))
   }
 }
 
@@ -1118,7 +1180,10 @@ function viewOf(client: Client) {
  * A hub over the given ledger, its rooms dealing from `deck` when there is one,
  * keeping its seatings in the ledger's book when asked to.
  */
-function hubOver(ledger: MemoryLedger, options: { deck?: string; book?: boolean } = {}): RoomHub {
+function hubOver(
+  ledger: Ledger & SeatingStore,
+  options: { deck?: string; book?: boolean } = {},
+): RoomHub {
   const deck = options.deck?.split(' ').map((card) => parseCard(card))
   return new RoomHub({
     ledger,
@@ -1291,6 +1356,36 @@ describe('buy-ins a crash left behind', () => {
     expect(await ledger.balance(ALICE)).toBe(100_000)
   })
 
+  it('pays back every buy-in when the server dies in the middle of a hand', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new MemoryLedger()
+    const hub = hubOver(ledger, { book: true, deck: ALICE_LOSES })
+    const alice = await sitDown(hub, 'alice', 0)
+    const bob = await sitDown(hub, 'bob', 1)
+    await send(alice, 'deal', { kind: 'startHand' })
+    // Alice's whole stack is in the pot and she has asked to leave once the
+    // hand is over. Bob has not acted, so the hand is still running when the
+    // server dies, with chips in the pot that only its memory knew about.
+    await send(alice, 'shove', { kind: 'act', action: { kind: 'allIn' } })
+    await send(alice, 'alice-leave', { kind: 'leave' })
+    const view = viewOf(bob)
+    expect(view.phase).toBe('hand')
+    expect(view.currentActor?.playerId).toBe(BOB)
+    expect(view.seats[0]).toMatchObject({ playerId: ALICE, stack: 0 })
+    expect(await ledger.balance(ALICE)).toBe(50_000)
+    expect(await ledger.balance(BOB)).toBe(50_000)
+
+    vi.setSystemTime(RESTART)
+    const restarted = hubOver(ledger, { book: true })
+    expect(await restarted.refundCrashedSeatings(RESTART)).toBe(2)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    expect(await ledger.balance(BOB)).toBe(100_000)
+    expect([...ledger.seatings.values()].every((entry) => entry.closed)).toBe(true)
+    expect(await restarted.refundCrashedSeatings(RESTART)).toBe(0)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
+
   it('leaves a seating that was stood up from alone', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(NOON)
@@ -1352,6 +1447,87 @@ describe('buy-ins a crash left behind', () => {
     expect(await hubOver(ledger, { book: true }).refundCrashedSeatings(RESTART)).toBe(0)
     expect(await ledger.balance(ALICE)).toBe(50_000)
     expect(await ledger.balance(BOB)).toBe(150_000)
+  })
+
+  describe('wherever the server dies', () => {
+    /**
+     * Alice sits down with 50,000 of her 100,000 and does `then` on a server
+     * that dies after `writes` more writes once she is seated (or, with
+     * `dieSeating`, while she sits). A new server then pays back what the
+     * dead one left seated. No hand is dealt, so no chip of hers was ever won
+     * or lost: whichever write the server died at, she ends where she began.
+     */
+    async function aliceAfterACrash(
+      writes: number,
+      then: (alice: Client) => Promise<void>,
+      dieSeating = false,
+    ): Promise<number> {
+      vi.useFakeTimers()
+      vi.setSystemTime(NOON)
+      const book = new MemoryLedger()
+      const dying = new DyingBook(book)
+      const hub = hubOver(dying, { book: true })
+      if (dieSeating) dying.dieAfter(writes)
+      const alice = await sitDown(hub, 'alice', 0)
+      if (!dieSeating) dying.dieAfter(writes)
+      await then(alice)
+      vi.setSystemTime(RESTART)
+      await hubOver(book, { book: true }).refundCrashedSeatings(RESTART)
+      return book.balance(ALICE)
+    }
+
+    it.each([0, 1, 2, 3])(
+      'pays a buy-in back once when the server dies sitting down, after %i writes',
+      async (writes) => {
+        expect(await aliceAfterACrash(writes, async () => {}, true)).toBe(100_000)
+      },
+    )
+
+    it.each([0, 1, 2, 3])(
+      'pays a stack back once when the server dies standing up, after %i writes',
+      async (writes) => {
+        expect(
+          await aliceAfterACrash(writes, (alice) => send(alice, 'alice-stand', { kind: 'stand' })),
+        ).toBe(100_000)
+      },
+    )
+
+    it.each([0, 1, 2, 3])(
+      'pays a stack back once when the server dies as she leaves, after %i writes',
+      async (writes) => {
+        expect(
+          await aliceAfterACrash(writes, (alice) => send(alice, 'alice-leave', { kind: 'leave' })),
+        ).toBe(100_000)
+      },
+    )
+
+    it.each([0, 1, 2, 3])(
+      'pays a rebuy back once when the server dies buying it, after %i writes',
+      async (writes) => {
+        expect(
+          await aliceAfterACrash(writes, (alice) =>
+            send(alice, 'alice-rebuy', { kind: 'rebuy', amount: 20_000 }),
+          ),
+        ).toBe(100_000)
+      },
+    )
+  })
+
+  it('keeps a seating open through a stand the room refuses', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new MemoryLedger()
+    const hub = hubOver(ledger, { book: true })
+    const alice = await sitDown(hub, 'alice', 0)
+    await sitDown(hub, 'bob', 1)
+    await send(alice, 'deal', { kind: 'startHand' })
+    // Paid out and closed, then taken back and reopened when the room says no.
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    expect(viewOf(alice).seats[0]?.playerId).toBe(ALICE)
+    expect([...ledger.seatings.values()].every((entry) => !entry.closed)).toBe(true)
+    vi.setSystemTime(RESTART)
+    expect(await hubOver(ledger, { book: true }).refundCrashedSeatings(RESTART)).toBe(2)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
   })
 
   it('does nothing without a book of seatings to read', async () => {
@@ -2635,5 +2811,60 @@ describe('bots at the table', () => {
     expect(signed.peer.last('snapshot')?.kind).toBe('snapshot')
     expect(store.load).toHaveBeenCalled()
     expect(onError).toHaveBeenCalledWith('bot opponent memory: load failed', expect.any(Error))
+  })
+})
+
+describe('the name a player sits under', () => {
+  /** A hub whose members, by token, are Alice and Bob, and whose guest is Dev. */
+  function namedHub(seatName: (playerId: string) => Promise<string | null>) {
+    const ledger = new MemoryLedger()
+    const errors: string[] = []
+    const hub = new RoomHub({
+      ledger,
+      verifyToken: async (token) => ({
+        playerId: token === 'alice' ? ALICE : token === 'bob' ? BOB : DEV,
+        anonymous: token === 'dev',
+        admin: false,
+      }),
+      playerNames: { seatName },
+      onError: (context) => errors.push(context),
+      createRoom: (roomId) =>
+        new Room(
+          roomId,
+          defaultRoomConfig({ seed: roomId, inviteCode: 'RIVER2', seedCollectionMs: 0 }),
+        ),
+    })
+    return { hub, errors }
+  }
+
+  async function seatedName(hub: RoomHub, token: string, seat: number): Promise<string | null> {
+    const client = await connectAndEnter(hub, token, 'Guest')
+    await send(client, `${token}-sit`, { kind: 'sit', seat, buyIn: 50_000 })
+    return viewOf(client).seats[seat]?.name ?? null
+  }
+
+  it("seats a member under their account's name, whatever the client sends", async () => {
+    const { hub } = namedHub(async (playerId) => (playerId === ALICE ? 'WilyBadger91' : null))
+    expect(await seatedName(hub, 'alice', 0)).toBe('WilyBadger91')
+  })
+
+  it('seats a guest under the name the client sends, without asking for one', async () => {
+    const asked: string[] = []
+    const { hub } = namedHub(async (playerId) => {
+      asked.push(playerId)
+      return 'NotForGuests'
+    })
+    expect(await seatedName(hub, 'dev', 0)).toBe('Guest')
+    expect(asked).toEqual([])
+  })
+
+  it('seats a member with no usable name, or whose name cannot be read, under the client name', async () => {
+    const { hub, errors } = namedHub(async (playerId) => {
+      if (playerId === BOB) throw new Error('Supabase did not answer')
+      return null
+    })
+    expect(await seatedName(hub, 'alice', 0)).toBe('Guest')
+    expect(await seatedName(hub, 'bob', 1)).toBe('Guest')
+    expect(errors).toEqual(['enter: could not read a member name'])
   })
 })
