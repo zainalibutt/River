@@ -144,21 +144,24 @@ describe('the bot API', () => {
 describe('the HTTP calls', () => {
   const keys = (token: string) => (token === 'good' ? 'k1' : null)
 
-  it('needs a key and POST, and routes the two calls', () => {
+  it('needs a key and POST, and routes the two calls', async () => {
     const { api } = testApi()
     const call = (path: string, body: unknown, authorization?: string, method = 'POST') =>
       handleBotApi(api, { method, path, authorization, body }, keys)
-    expect(call('/v1/hands', {}).status).toBe(401)
-    expect(call('/v1/hands', {}, 'Bearer bad').status).toBe(401)
-    expect(call('/v1/hands', {}, 'Bearer good', 'GET').status).toBe(405)
-    expect(call('/v1/hands', { opponent: 'slumbot' }, 'Bearer good').status).toBe(400)
-    expect(call('/v1/nope', {}, 'Bearer good').status).toBe(404)
-    const dealt = call('/v1/hands', { opponent: 'nyx' }, 'Bearer good')
+    expect((await call('/v1/hands', {})).status).toBe(401)
+    expect((await call('/v1/hands', {}, 'Bearer bad')).status).toBe(401)
+    expect((await call('/v1/hands', {}, 'Bearer good', 'GET')).status).toBe(405)
+    expect((await call('/v1/hands', { opponent: 'slumbot' }, 'Bearer good')).status).toBe(400)
+    expect((await call('/v1/nope', {}, 'Bearer good')).status).toBe(404)
+    const dealt = await call('/v1/hands', { opponent: 'nyx' }, 'Bearer good')
     expect(dealt.status).toBe(200)
     const view = dealt.body as BotApiHandView
-    expect(call(`/v1/hands/${view.hand_id}/act`, { incr: 'c' }, 'Bearer good').status).toBe(400)
+    expect((await call(`/v1/hands/${view.hand_id}/act`, { incr: 'c' }, 'Bearer good')).status).toBe(
+      400,
+    )
     expect(
-      call(`/v1/hands/${view.hand_id}/act`, { incr: 'c', seq: view.seq }, 'Bearer good').status,
+      (await call(`/v1/hands/${view.hand_id}/act`, { incr: 'c', seq: view.seq }, 'Bearer good'))
+        .status,
     ).toBe(200)
   })
 })
@@ -218,18 +221,18 @@ describe('duplicate matches', () => {
     expect(api.newMatch('k1', 'nyx', 10_001)).toMatchObject({ ok: false, status: 400 })
   })
 
-  it('opens, deals and reads matches over HTTP', () => {
+  it('opens, deals and reads matches over HTTP', async () => {
     const { api } = testApi()
     const keys = (token: string) => (token === 'good' ? 'k1' : null)
     const call = (path: string, body: unknown) =>
       handleBotApi(api, { method: 'POST', path, authorization: 'Bearer good', body }, keys)
-    expect(call('/v1/matches', {}).status).toBe(400)
-    const opened = call('/v1/matches', { deals: 1 })
+    expect((await call('/v1/matches', {})).status).toBe(400)
+    const opened = await call('/v1/matches', { deals: 1 })
     expect(opened.status).toBe(200)
     const id = (opened.body as BotApiMatchView).match_id
-    expect(call('/v1/hands', { match_id: 7 }).status).toBe(400)
-    expect(call('/v1/hands', { match_id: id }).status).toBe(200)
-    expect(call(`/v1/matches/${id}`, {}).body).toMatchObject({ hands_dealt: 1 })
-    expect(call('/v1/matches/nope', {}).status).toBe(404)
+    expect((await call('/v1/hands', { match_id: 7 })).status).toBe(400)
+    expect((await call('/v1/hands', { match_id: id })).status).toBe(200)
+    expect((await call(`/v1/matches/${id}`, {})).body).toMatchObject({ hands_dealt: 1 })
+    expect((await call('/v1/matches/nope', {})).status).toBe(404)
   })
 })

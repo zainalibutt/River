@@ -122,6 +122,7 @@ interface Match {
   readonly opponent: BotApiOpponent
   readonly deals: number
   next: number
+  touchedAtMs: number
   /** The client's winnings by hand index, filled in as hands end. */
   readonly results: (number | undefined)[]
 }
@@ -139,6 +140,8 @@ const STREETS: readonly Street[] = ['preflop', 'flop', 'turn', 'river']
 const BOARD_SHOWN = [0, 3, 4, 5] as const
 const CLIENT = botPlayerId('api-client')
 const LIMITS = { dailyHands: 10_000, handTtlMs: 5 * 60_000 }
+const HAND_KEPT_MS = 60 * 60_000
+const MATCH_KEPT_MS = DAY_MS
 /** The most deals a match may ask for. */
 export const BOT_API_MAX_DEALS = 10_000
 
@@ -181,6 +184,7 @@ export class BotApi {
       opponent,
       deals,
       next: 0,
+      touchedAtMs: this.now(),
       results: Array.from({ length: 2 * deals }, () => undefined),
     }
     this.matches.set(match.id, match)
@@ -243,7 +247,10 @@ export class BotApi {
       over: false,
       ...(match === undefined ? {} : { match: { id: match.id, index } }),
     }
-    if (match !== undefined) match.next += 1
+    if (match !== undefined) {
+      match.next += 1
+      match.touchedAtMs = this.now()
+    }
     state.dealt += 1
     state.open = hand
     this.hands.set(id, hand)
@@ -288,16 +295,29 @@ export class BotApi {
     return { ok: true, hand: this.view(hand) }
   }
 
-  /** Folds every hand left open longer than the time limit. */
+  /**
+   * Folds every hand left open longer than the time limit, and forgets hands
+   * over for an hour and matches untouched for a day. Run it every minute or so.
+   */
   expire(): number {
     let folded = 0
-    for (const hand of this.hands.values()) {
-      if (!hand.over && this.now() - hand.updatedAtMs > this.handTtlMs) {
+    const now = this.now()
+    for (const [id, hand] of this.hands) {
+      if (!hand.over && now - hand.updatedAtMs > this.handTtlMs) {
         this.foldForClient(hand)
         folded += 1
       }
+      if (hand.over && now - hand.updatedAtMs > HAND_KEPT_MS) this.hands.delete(id)
+    }
+    for (const [id, match] of this.matches) {
+      if (now - match.touchedAtMs > MATCH_KEPT_MS) this.matches.delete(id)
     }
     return folded
+  }
+
+  /** Hands and matches held in memory, for the server's health line. */
+  size(): { readonly hands: number; readonly matches: number } {
+    return { hands: this.hands.size, matches: this.matches.size }
   }
 
   private keyState(key: string): KeyState {
@@ -535,13 +555,13 @@ export interface BotApiResponse {
  * can mount it. `keyFor` turns a bearer token into the key it belongs to, or
  * null; key storage and hashing live with whoever issues them.
  */
-export function handleBotApi(
+export async function handleBotApi(
   api: BotApi,
   request: BotApiRequest,
-  keyFor: (token: string) => string | null,
-): BotApiResponse {
+  keyFor: (token: string) => Promise<string | null> | string | null,
+): Promise<BotApiResponse> {
   const token = /^Bearer (\S+)$/.exec(request.authorization ?? '')?.[1]
-  const key = token === undefined ? null : keyFor(token)
+  const key = token === undefined ? null : await keyFor(token)
   if (key === null) return { status: 401, body: { error: 'a valid API key is required' } }
   if (request.method !== 'POST') return { status: 405, body: { error: 'use POST' } }
   const body = (typeof request.body === 'object' && request.body !== null ? request.body : {}) as {
