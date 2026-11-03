@@ -2727,3 +2727,58 @@ describe('bots at the table', () => {
     expect(onError).toHaveBeenCalledWith('bot opponent memory: load failed', expect.any(Error))
   })
 })
+
+describe('the name a player sits under', () => {
+  /** A hub whose members, by token, are Alice and Bob, and whose guest is Dev. */
+  function namedHub(seatName: (playerId: string) => Promise<string | null>) {
+    const ledger = new MemoryLedger()
+    const errors: string[] = []
+    const hub = new RoomHub({
+      ledger,
+      verifyToken: async (token) => ({
+        playerId: token === 'alice' ? ALICE : token === 'bob' ? BOB : DEV,
+        anonymous: token === 'dev',
+        admin: false,
+      }),
+      playerNames: { seatName },
+      onError: (context) => errors.push(context),
+      createRoom: (roomId) =>
+        new Room(
+          roomId,
+          defaultRoomConfig({ seed: roomId, inviteCode: 'RIVER2', seedCollectionMs: 0 }),
+        ),
+    })
+    return { hub, errors }
+  }
+
+  async function seatedName(hub: RoomHub, token: string, seat: number): Promise<string | null> {
+    const client = await connectAndEnter(hub, token, 'Guest')
+    await send(client, `${token}-sit`, { kind: 'sit', seat, buyIn: 50_000 })
+    return viewOf(client).seats[seat]?.name ?? null
+  }
+
+  it("seats a member under their account's name, whatever the client sends", async () => {
+    const { hub } = namedHub(async (playerId) => (playerId === ALICE ? 'WilyBadger91' : null))
+    expect(await seatedName(hub, 'alice', 0)).toBe('WilyBadger91')
+  })
+
+  it('seats a guest under the name the client sends, without asking for one', async () => {
+    const asked: string[] = []
+    const { hub } = namedHub(async (playerId) => {
+      asked.push(playerId)
+      return 'NotForGuests'
+    })
+    expect(await seatedName(hub, 'dev', 0)).toBe('Guest')
+    expect(asked).toEqual([])
+  })
+
+  it('seats a member with no usable name, or whose name cannot be read, under the client name', async () => {
+    const { hub, errors } = namedHub(async (playerId) => {
+      if (playerId === BOB) throw new Error('Supabase did not answer')
+      return null
+    })
+    expect(await seatedName(hub, 'alice', 0)).toBe('Guest')
+    expect(await seatedName(hub, 'bob', 1)).toBe('Guest')
+    expect(errors).toEqual(['enter: could not read a member name'])
+  })
+})

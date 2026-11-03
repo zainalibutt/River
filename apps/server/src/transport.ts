@@ -57,6 +57,7 @@ import { claimDailyFor, claimRescueFor } from './economy-service.js'
 import { isFairnessSeed } from './fairness.js'
 import type { Ledger, LedgerEntry, Seating, SeatingStore } from './ledger.js'
 import { type PlayerHandStore, playerHandRows } from './player-hand-store.js'
+import type { PlayerNames } from './player-names.js'
 import type {
   Emote,
   RoomCommand,
@@ -380,6 +381,11 @@ export interface RoomHubOptions {
    * one nothing is written and nothing is refunded.
    */
   seatings?: SeatingStore
+  /**
+   * Where a member's name is read from as they come to a table. Without it,
+   * everybody sits under the name their client sends.
+   */
+  playerNames?: PlayerNames
 }
 
 export interface RoomCreationSettings {
@@ -654,6 +660,7 @@ export class RoomHub {
   private readonly actionShadow: ActionShadowPort | undefined
   private readonly pendingOpponentWrites = new Map<string, Promise<void>>()
   private readonly seatingStore: SeatingStore | undefined
+  private readonly playerNames: PlayerNames | undefined
   /** Seatings that have ended whose close the book has not taken yet. */
   private readonly unconfirmedCloses = new Map<string, Seating>()
 
@@ -672,6 +679,7 @@ export class RoomHub {
     this.playerHands = options.playerHands
     this.actionShadow = options.actionShadow
     this.seatingStore = options.seatings
+    this.playerNames = options.playerNames
     this.economy = options.economy ?? null
     this.tableItems = options.tableItems
     this.cosmetics = options.cosmetics
@@ -838,6 +846,21 @@ export class RoomHub {
     }
   }
 
+  /**
+   * The name a player sits under: a member's own, from their account, and the
+   * client's for a guest. A member whose name cannot be read in time sits under
+   * the client's, rather than not sitting at all.
+   */
+  private async seatName(player: AuthenticatedPlayer, sent: string): Promise<string> {
+    if (player.anonymous || this.playerNames === undefined) return sent
+    try {
+      return (await this.playerNames.seatName(player.playerId)) ?? sent
+    } catch (error) {
+      this.onError('enter: could not read a member name', error)
+      return sent
+    }
+  }
+
   private async enter(
     connection: ConnectionState,
     message: Extract<ClientMessage, { kind: 'enter' }>,
@@ -864,6 +887,7 @@ export class RoomHub {
       )
       return
     }
+    const name = await this.seatName(player, message.name.trim())
     const exists = this.rooms.has(message.roomId)
     const room = this.room(message.roomId, message)
     await this.enqueue(room, async () => {
@@ -887,7 +911,7 @@ export class RoomHub {
         const result = room.room.submit({
           kind: 'join',
           playerId: player.playerId,
-          name: message.name.trim(),
+          name,
           ...(message.inviteCode === undefined ? {} : { inviteCode: message.inviteCode }),
         })
         if (!result.ok) {
