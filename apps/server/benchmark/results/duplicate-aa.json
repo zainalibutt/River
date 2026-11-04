@@ -1,0 +1,3853 @@
+{
+  "a": "v8z",
+  "b": "v8z",
+  "prefix": "d8-aa",
+  "first": 0,
+  "sessions": 2,
+  "hands": 2,
+  "estimate": { "hands": 4, "sessions": 2, "bigBlindsPer100": 0, "interval95": [0, 0] },
+  "corrected": { "hands": 4, "sessions": 2, "bigBlindsPer100": 0, "interval95": [0, 0] },
+  "scores": [
+    { "session": 0, "value": 0, "raw": 0, "aivat": 0, "corrected": 0 },
+    { "session": 0, "value": 0, "raw": 0, "aivat": 0, "corrected": 0 },
+    { "session": 1, "value": 0, "raw": 0, "aivat": 0, "corrected": 0 },
+    { "session": 1, "value": 0, "raw": 0, "aivat": 0, "corrected": 0 }
+  ],
+  "forward": [
+    {
+      "session": 0,
+      "encounter": 0,
+      "hand": 0,
+      "commit": "dc51511d4b4c1af22f17d05cbe2daabaec87c6c820ca68ee52cd88aeda337131",
+      "focalChips": -250,
+      "position": "button",
+      "depth": "short",
+      "handClass": "weak",
+      "adjustedChips": -250,
+      "aivatChips": -250,
+      "aivatDecisions": [
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-0",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 0,
+              "hole": [{ "rank": "3", "suit": "s" }, { "rank": "6", "suit": "h" }],
+              "stack": 199750,
+              "betHand": 250,
+              "betStreet": 250
+            },
+            "street": "preflop",
+            "board": [],
+            "dealerSeat": 0,
+            "pot": 750,
+            "currentBet": 500,
+            "amountToCall": 250,
+            "legal": {
+              "fold": true,
+              "check": false,
+              "call": { "enabled": true, "amount": 250 },
+              "raiseTo": { "enabled": true, "min": 1000, "max": 200000 },
+              "allIn": { "enabled": true, "amount": 200000 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell",
+                "stack": 199750,
+                "betHand": 250,
+                "betStreet": 250,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell-twin",
+                "stack": 19500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "version": 1,
+                "playerId": "bot:nell-twin",
+                "sampleCount": 0,
+                "confidence": 0,
+                "vpip": 0,
+                "pfr": 0,
+                "aggressionFrequency": 0,
+                "showdownFrequency": 0,
+                "averageAggressivePotRatio": 0
+              }
+            ],
+            "opponentStats": [],
+            "actions": [],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        }
+      ],
+      "correctedChips": -250
+    },
+    {
+      "session": 0,
+      "encounter": 0,
+      "hand": 1,
+      "commit": "d60e8fcbc077f08888df178aedd4ccdd854113b57f603a7c7eaf1343f497909f",
+      "focalChips": -500,
+      "position": "big-blind",
+      "depth": "standard",
+      "handClass": "weak",
+      "adjustedChips": -500,
+      "aivatChips": -394.3080618368118,
+      "aivatDecisions": [
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "5", "suit": "c" }, { "rank": "3", "suit": "c" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 500
+            },
+            "street": "preflop",
+            "board": [],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 500,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 1000, "max": 100000 },
+              "allIn": { "enabled": true, "amount": 100000 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 49500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.5,
+                  "low": 0.25200691908478945,
+                  "high": 0.7479930809152106
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "5", "suit": "c" }, { "rank": "3", "suit": "c" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 0
+            },
+            "street": "flop",
+            "board": [
+              { "rank": "4", "suit": "h" },
+              { "rank": "8", "suit": "c" },
+              { "rank": "K", "suit": "h" }
+            ],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 99500 },
+              "allIn": { "enabled": true, "amount": 99500 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 49500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.5,
+                  "low": 0.25200691908478945,
+                  "high": 0.7479930809152106
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 500
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "5", "suit": "c" }, { "rank": "3", "suit": "c" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 0
+            },
+            "street": "turn",
+            "board": [
+              { "rank": "4", "suit": "h" },
+              { "rank": "8", "suit": "c" },
+              { "rank": "K", "suit": "h" },
+              { "rank": "8", "suit": "h" }
+            ],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 99500 },
+              "allIn": { "enabled": true, "amount": 99500 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 49500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.5,
+                  "low": 0.25200691908478945,
+                  "high": 0.7479930809152106
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "5", "suit": "c" }, { "rank": "3", "suit": "c" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 0
+            },
+            "street": "river",
+            "board": [
+              { "rank": "4", "suit": "h" },
+              { "rank": "8", "suit": "c" },
+              { "rank": "K", "suit": "h" },
+              { "rank": "8", "suit": "h" },
+              { "rank": "J", "suit": "d" }
+            ],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 99500 },
+              "allIn": { "enabled": true, "amount": 99500 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 49500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.5,
+                  "low": 0.25200691908478945,
+                  "high": 0.7479930809152106
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 1,
+                "street": "turn",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "turn",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": {
+            "kind": "action",
+            "choices": [
+              { "action": "check", "value": -468.75, "probability": 0.7481498608477474 },
+              { "action": "raiseTo:500", "value": -953.125, "probability": 0.09420667133218885 },
+              { "action": "raiseTo:1000", "value": -1437.5, "probability": 0.15764346782006378 },
+              { "action": "allIn", "value": -96859.375, "probability": 0 }
+            ],
+            "taken": "check"
+          },
+          "reason": null
+        }
+      ],
+      "correctedChips": -38.375
+    },
+    {
+      "session": 1,
+      "encounter": 0,
+      "hand": 0,
+      "commit": "d87454681534358faaa6ef048aa8d1fce439f12e25e212286bb32f670c683469",
+      "focalChips": 500,
+      "position": "button",
+      "depth": "standard",
+      "handClass": "offsuit-broadway",
+      "adjustedChips": 500,
+      "aivatChips": 500,
+      "aivatDecisions": [
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-0",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 0,
+              "hole": [{ "rank": "T", "suit": "c" }, { "rank": "Q", "suit": "d" }],
+              "stack": 49750,
+              "betHand": 250,
+              "betStreet": 250
+            },
+            "street": "preflop",
+            "board": [],
+            "dealerSeat": 0,
+            "pot": 750,
+            "currentBet": 500,
+            "amountToCall": 250,
+            "legal": {
+              "fold": true,
+              "check": false,
+              "call": { "enabled": true, "amount": 250 },
+              "raiseTo": { "enabled": true, "min": 1000, "max": 50000 },
+              "allIn": { "enabled": true, "amount": 50000 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell",
+                "stack": 49750,
+                "betHand": 250,
+                "betStreet": 250,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell-twin",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "version": 1,
+                "playerId": "bot:nell-twin",
+                "sampleCount": 0,
+                "confidence": 0,
+                "vpip": 0,
+                "pfr": 0,
+                "aggressionFrequency": 0,
+                "showdownFrequency": 0,
+                "averageAggressivePotRatio": 0
+              }
+            ],
+            "opponentStats": [],
+            "actions": [],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        }
+      ],
+      "correctedChips": 500
+    },
+    {
+      "session": 1,
+      "encounter": 0,
+      "hand": 1,
+      "commit": "341d559c88399fd0bf73ec3c0b6baaba521166c198eb00676a2a2c65ac3da72b",
+      "focalChips": -4250,
+      "position": "big-blind",
+      "depth": "short",
+      "handClass": "strong",
+      "adjustedChips": -4250,
+      "aivatChips": -2445.9545632618756,
+      "aivatDecisions": [
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 500
+            },
+            "street": "preflop",
+            "board": [],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 500,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 1000, "max": 100000 },
+              "allIn": { "enabled": true, "amount": 100000 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 19500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 97875,
+              "betHand": 2125,
+              "betStreet": 0
+            },
+            "street": "flop",
+            "board": [
+              { "rank": "3", "suit": "h" },
+              { "rank": "9", "suit": "h" },
+              { "rank": "6", "suit": "d" }
+            ],
+            "dealerSeat": 0,
+            "pot": 4250,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 97875 },
+              "allIn": { "enabled": true, "amount": 97875 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 17875,
+                "betHand": 2125,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 97875,
+                "betHand": 2125,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 1625,
+                "potBefore": 1000,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 1625,
+                "potBefore": 2625,
+                "streetBetAfter": 2125
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 97875,
+              "betHand": 2125,
+              "betStreet": 0
+            },
+            "street": "flop",
+            "board": [
+              { "rank": "3", "suit": "h" },
+              { "rank": "9", "suit": "h" },
+              { "rank": "6", "suit": "d" }
+            ],
+            "dealerSeat": 0,
+            "pot": 6375,
+            "currentBet": 2125,
+            "amountToCall": 2125,
+            "legal": {
+              "fold": true,
+              "check": false,
+              "call": { "enabled": true, "amount": 2125 },
+              "raiseTo": { "enabled": true, "min": 4250, "max": 97875 },
+              "allIn": { "enabled": true, "amount": 97875 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 15750,
+                "betHand": 4250,
+                "betStreet": 2125,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 97875,
+                "betHand": 2125,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 1625,
+                "potBefore": 1000,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 1625,
+                "potBefore": 2625,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 4250,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 2125,
+                "potBefore": 4250,
+                "streetBetAfter": 2125
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 95750,
+              "betHand": 4250,
+              "betStreet": 0
+            },
+            "street": "turn",
+            "board": [
+              { "rank": "3", "suit": "h" },
+              { "rank": "9", "suit": "h" },
+              { "rank": "6", "suit": "d" },
+              { "rank": "3", "suit": "s" }
+            ],
+            "dealerSeat": 0,
+            "pot": 8500,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 95750 },
+              "allIn": { "enabled": true, "amount": 95750 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 15750,
+                "betHand": 4250,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 95750,
+                "betHand": 4250,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 1625,
+                "potBefore": 1000,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 1625,
+                "potBefore": 2625,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 4250,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 2125,
+                "potBefore": 4250,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "call" },
+                "amountCommitted": 2125,
+                "potBefore": 6375,
+                "streetBetAfter": 2125
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 95750,
+              "betHand": 4250,
+              "betStreet": 0
+            },
+            "street": "river",
+            "board": [
+              { "rank": "3", "suit": "h" },
+              { "rank": "9", "suit": "h" },
+              { "rank": "6", "suit": "d" },
+              { "rank": "3", "suit": "s" },
+              { "rank": "8", "suit": "h" }
+            ],
+            "dealerSeat": 0,
+            "pot": 8500,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 95750 },
+              "allIn": { "enabled": true, "amount": 95750 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 15750,
+                "betHand": 4250,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 95750,
+                "betHand": 4250,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 1625,
+                "potBefore": 1000,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 1625,
+                "potBefore": 2625,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 4250,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 2125,
+                "potBefore": 4250,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "call" },
+                "amountCommitted": 2125,
+                "potBefore": 6375,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "turn",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 8500,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "turn",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 8500,
+                "streetBetAfter": 0
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": {
+            "kind": "action",
+            "choices": [
+              { "action": "check", "value": -1328.125, "probability": 0.9989562395700813 },
+              {
+                "action": "raiseTo:4250",
+                "value": -4117.1875,
+                "probability": 0.0006317329114450265
+              },
+              { "action": "raiseTo:8500", "value": -6906.25, "probability": 0.000350718132907768 },
+              { "action": "allIn", "value": -64164.0625, "probability": 0.00006130938556592191 }
+            ],
+            "taken": "check"
+          },
+          "reason": null
+        }
+      ],
+      "correctedChips": -632.1606691919192
+    }
+  ],
+  "mirrored": [
+    {
+      "session": 0,
+      "encounter": 0,
+      "hand": 0,
+      "commit": "dc51511d4b4c1af22f17d05cbe2daabaec87c6c820ca68ee52cd88aeda337131",
+      "focalChips": -250,
+      "position": "button",
+      "depth": "short",
+      "handClass": "weak",
+      "adjustedChips": -250,
+      "aivatChips": -250,
+      "aivatDecisions": [
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-0",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 0,
+              "hole": [{ "rank": "3", "suit": "s" }, { "rank": "6", "suit": "h" }],
+              "stack": 199750,
+              "betHand": 250,
+              "betStreet": 250
+            },
+            "street": "preflop",
+            "board": [],
+            "dealerSeat": 0,
+            "pot": 750,
+            "currentBet": 500,
+            "amountToCall": 250,
+            "legal": {
+              "fold": true,
+              "check": false,
+              "call": { "enabled": true, "amount": 250 },
+              "raiseTo": { "enabled": true, "min": 1000, "max": 200000 },
+              "allIn": { "enabled": true, "amount": 200000 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell",
+                "stack": 199750,
+                "betHand": 250,
+                "betStreet": 250,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell-twin",
+                "stack": 19500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "version": 1,
+                "playerId": "bot:nell-twin",
+                "sampleCount": 0,
+                "confidence": 0,
+                "vpip": 0,
+                "pfr": 0,
+                "aggressionFrequency": 0,
+                "showdownFrequency": 0,
+                "averageAggressivePotRatio": 0
+              }
+            ],
+            "opponentStats": [],
+            "actions": [],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        }
+      ],
+      "correctedChips": -250
+    },
+    {
+      "session": 0,
+      "encounter": 0,
+      "hand": 1,
+      "commit": "d60e8fcbc077f08888df178aedd4ccdd854113b57f603a7c7eaf1343f497909f",
+      "focalChips": -500,
+      "position": "big-blind",
+      "depth": "standard",
+      "handClass": "weak",
+      "adjustedChips": -500,
+      "aivatChips": -394.3080618368118,
+      "aivatDecisions": [
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "5", "suit": "c" }, { "rank": "3", "suit": "c" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 500
+            },
+            "street": "preflop",
+            "board": [],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 500,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 1000, "max": 100000 },
+              "allIn": { "enabled": true, "amount": 100000 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 49500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.5,
+                  "low": 0.25200691908478945,
+                  "high": 0.7479930809152106
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "5", "suit": "c" }, { "rank": "3", "suit": "c" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 0
+            },
+            "street": "flop",
+            "board": [
+              { "rank": "4", "suit": "h" },
+              { "rank": "8", "suit": "c" },
+              { "rank": "K", "suit": "h" }
+            ],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 99500 },
+              "allIn": { "enabled": true, "amount": 99500 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 49500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.5,
+                  "low": 0.25200691908478945,
+                  "high": 0.7479930809152106
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 500
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "5", "suit": "c" }, { "rank": "3", "suit": "c" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 0
+            },
+            "street": "turn",
+            "board": [
+              { "rank": "4", "suit": "h" },
+              { "rank": "8", "suit": "c" },
+              { "rank": "K", "suit": "h" },
+              { "rank": "8", "suit": "h" }
+            ],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 99500 },
+              "allIn": { "enabled": true, "amount": 99500 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 49500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.5,
+                  "low": 0.25200691908478945,
+                  "high": 0.7479930809152106
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-0-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "5", "suit": "c" }, { "rank": "3", "suit": "c" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 0
+            },
+            "street": "river",
+            "board": [
+              { "rank": "4", "suit": "h" },
+              { "rank": "8", "suit": "c" },
+              { "rank": "K", "suit": "h" },
+              { "rank": "8", "suit": "h" },
+              { "rank": "J", "suit": "d" }
+            ],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 99500 },
+              "allIn": { "enabled": true, "amount": 99500 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 49500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.5,
+                  "low": 0.25200691908478945,
+                  "high": 0.7479930809152106
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 1,
+                "street": "turn",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "turn",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 1000,
+                "streetBetAfter": 0
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": {
+            "kind": "action",
+            "choices": [
+              { "action": "check", "value": -468.75, "probability": 0.7481498608477474 },
+              { "action": "raiseTo:500", "value": -953.125, "probability": 0.09420667133218885 },
+              { "action": "raiseTo:1000", "value": -1437.5, "probability": 0.15764346782006378 },
+              { "action": "allIn", "value": -96859.375, "probability": 0 }
+            ],
+            "taken": "check"
+          },
+          "reason": null
+        }
+      ],
+      "correctedChips": -38.375
+    },
+    {
+      "session": 1,
+      "encounter": 0,
+      "hand": 0,
+      "commit": "d87454681534358faaa6ef048aa8d1fce439f12e25e212286bb32f670c683469",
+      "focalChips": 500,
+      "position": "button",
+      "depth": "standard",
+      "handClass": "offsuit-broadway",
+      "adjustedChips": 500,
+      "aivatChips": 500,
+      "aivatDecisions": [
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-0",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 0,
+              "hole": [{ "rank": "T", "suit": "c" }, { "rank": "Q", "suit": "d" }],
+              "stack": 49750,
+              "betHand": 250,
+              "betStreet": 250
+            },
+            "street": "preflop",
+            "board": [],
+            "dealerSeat": 0,
+            "pot": 750,
+            "currentBet": 500,
+            "amountToCall": 250,
+            "legal": {
+              "fold": true,
+              "check": false,
+              "call": { "enabled": true, "amount": 250 },
+              "raiseTo": { "enabled": true, "min": 1000, "max": 50000 },
+              "allIn": { "enabled": true, "amount": 50000 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell",
+                "stack": 49750,
+                "betHand": 250,
+                "betStreet": 250,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell-twin",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "version": 1,
+                "playerId": "bot:nell-twin",
+                "sampleCount": 0,
+                "confidence": 0,
+                "vpip": 0,
+                "pfr": 0,
+                "aggressionFrequency": 0,
+                "showdownFrequency": 0,
+                "averageAggressivePotRatio": 0
+              }
+            ],
+            "opponentStats": [],
+            "actions": [],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        }
+      ],
+      "correctedChips": 500
+    },
+    {
+      "session": 1,
+      "encounter": 0,
+      "hand": 1,
+      "commit": "341d559c88399fd0bf73ec3c0b6baaba521166c198eb00676a2a2c65ac3da72b",
+      "focalChips": -4250,
+      "position": "big-blind",
+      "depth": "short",
+      "handClass": "strong",
+      "adjustedChips": -4250,
+      "aivatChips": -2445.9545632618756,
+      "aivatDecisions": [
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 99500,
+              "betHand": 500,
+              "betStreet": 500
+            },
+            "street": "preflop",
+            "board": [],
+            "dealerSeat": 0,
+            "pot": 1000,
+            "currentBet": 500,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 1000, "max": 100000 },
+              "allIn": { "enabled": true, "amount": 100000 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 19500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 99500,
+                "betHand": 500,
+                "betStreet": 500,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 97875,
+              "betHand": 2125,
+              "betStreet": 0
+            },
+            "street": "flop",
+            "board": [
+              { "rank": "3", "suit": "h" },
+              { "rank": "9", "suit": "h" },
+              { "rank": "6", "suit": "d" }
+            ],
+            "dealerSeat": 0,
+            "pot": 4250,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 97875 },
+              "allIn": { "enabled": true, "amount": 97875 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 17875,
+                "betHand": 2125,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 97875,
+                "betHand": 2125,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 1625,
+                "potBefore": 1000,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 1625,
+                "potBefore": 2625,
+                "streetBetAfter": 2125
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 97875,
+              "betHand": 2125,
+              "betStreet": 0
+            },
+            "street": "flop",
+            "board": [
+              { "rank": "3", "suit": "h" },
+              { "rank": "9", "suit": "h" },
+              { "rank": "6", "suit": "d" }
+            ],
+            "dealerSeat": 0,
+            "pot": 6375,
+            "currentBet": 2125,
+            "amountToCall": 2125,
+            "legal": {
+              "fold": true,
+              "check": false,
+              "call": { "enabled": true, "amount": 2125 },
+              "raiseTo": { "enabled": true, "min": 4250, "max": 97875 },
+              "allIn": { "enabled": true, "amount": 97875 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 15750,
+                "betHand": 4250,
+                "betStreet": 2125,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 97875,
+                "betHand": 2125,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 1625,
+                "potBefore": 1000,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 1625,
+                "potBefore": 2625,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 4250,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 2125,
+                "potBefore": 4250,
+                "streetBetAfter": 2125
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 95750,
+              "betHand": 4250,
+              "betStreet": 0
+            },
+            "street": "turn",
+            "board": [
+              { "rank": "3", "suit": "h" },
+              { "rank": "9", "suit": "h" },
+              { "rank": "6", "suit": "d" },
+              { "rank": "3", "suit": "s" }
+            ],
+            "dealerSeat": 0,
+            "pot": 8500,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 95750 },
+              "allIn": { "enabled": true, "amount": 95750 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 15750,
+                "betHand": 4250,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 95750,
+                "betHand": 4250,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 1625,
+                "potBefore": 1000,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 1625,
+                "potBefore": 2625,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 4250,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 2125,
+                "potBefore": 4250,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "call" },
+                "amountCommitted": 2125,
+                "potBefore": 6375,
+                "streetBetAfter": 2125
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": null,
+          "reason": "strategy-unavailable"
+        },
+        {
+          "heuristic": "pot-share-uniform-32-v1",
+          "observation": {
+            "version": 1,
+            "roomId": "session-1-hand-1",
+            "handNumber": 1,
+            "actor": {
+              "playerId": "bot:nell",
+              "seat": 1,
+              "hole": [{ "rank": "Q", "suit": "h" }, { "rank": "A", "suit": "d" }],
+              "stack": 95750,
+              "betHand": 4250,
+              "betStreet": 0
+            },
+            "street": "river",
+            "board": [
+              { "rank": "3", "suit": "h" },
+              { "rank": "9", "suit": "h" },
+              { "rank": "6", "suit": "d" },
+              { "rank": "3", "suit": "s" },
+              { "rank": "8", "suit": "h" }
+            ],
+            "dealerSeat": 0,
+            "pot": 8500,
+            "currentBet": 0,
+            "amountToCall": 0,
+            "legal": {
+              "fold": true,
+              "check": true,
+              "call": { "enabled": false, "amount": 0 },
+              "raiseTo": { "enabled": true, "min": 500, "max": 95750 },
+              "allIn": { "enabled": true, "amount": 95750 }
+            },
+            "seats": [
+              {
+                "seat": 0,
+                "playerId": "bot:nell-twin",
+                "stack": 15750,
+                "betHand": 4250,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              },
+              {
+                "seat": 1,
+                "playerId": "bot:nell",
+                "stack": 95750,
+                "betHand": 4250,
+                "betStreet": 0,
+                "folded": false,
+                "allIn": false,
+                "away": false
+              }
+            ],
+            "opponents": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 1,
+                "sampleCount": 1,
+                "confidence": 0.048770575499285984,
+                "vpip": 0.26666666666666666,
+                "pfr": 0.16,
+                "aggressionFrequency": 0.45,
+                "showdownFrequency": 0.2488888888888889,
+                "averageAggressivePotRatio": 0.65
+              }
+            ],
+            "opponentStats": [
+              {
+                "playerId": "bot:nell-twin",
+                "version": 2,
+                "hands": 1,
+                "vpip": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.2727272727272727,
+                  "low": 0.06123806271784171,
+                  "high": 0.4842164827367037
+                },
+                "pfr": {
+                  "successes": 0,
+                  "opportunities": 1,
+                  "mean": 0.1636363636363636,
+                  "low": 0,
+                  "high": 0.33931249549776676
+                },
+                "foldToPreflopRaise": {
+                  "successes": 1,
+                  "opportunities": 1,
+                  "mean": 0.5454545454545454,
+                  "low": 0.30900242041013704,
+                  "high": 0.7819066704989538
+                },
+                "foldToBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.4,
+                  "low": 0.15701739680679722,
+                  "high": 0.6429826031932029
+                },
+                "foldToBetBySize": {
+                  "small": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "medium": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  },
+                  "large": {
+                    "successes": 0,
+                    "opportunities": 0,
+                    "mean": 0.4,
+                    "low": 0.15701739680679722,
+                    "high": 0.6429826031932029
+                  }
+                },
+                "raiseVsBet": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.1,
+                  "low": 0,
+                  "high": 0.24879584854912637
+                },
+                "betWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.35,
+                  "low": 0.11342967843481602,
+                  "high": 0.586570321565184
+                },
+                "riverBetWhenCheckedTo": {
+                  "successes": 0,
+                  "opportunities": 0,
+                  "mean": 0.3,
+                  "low": 0.0727105869761478,
+                  "high": 0.5272894130238521
+                },
+                "betSizes": { "small": 0, "medium": 0, "large": 0 },
+                "shownRiverAggression": { "air": 0, "pair": 0, "made": 0 }
+              }
+            ],
+            "actions": [
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 250,
+                "potBefore": 750,
+                "streetBetAfter": 500
+              },
+              {
+                "seat": 1,
+                "street": "preflop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 1625,
+                "potBefore": 1000,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 0,
+                "street": "preflop",
+                "action": { "kind": "call" },
+                "amountCommitted": 1625,
+                "potBefore": 2625,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 4250,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "flop",
+                "action": { "kind": "raiseTo", "to": 2125 },
+                "amountCommitted": 2125,
+                "potBefore": 4250,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "flop",
+                "action": { "kind": "call" },
+                "amountCommitted": 2125,
+                "potBefore": 6375,
+                "streetBetAfter": 2125
+              },
+              {
+                "seat": 1,
+                "street": "turn",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 8500,
+                "streetBetAfter": 0
+              },
+              {
+                "seat": 0,
+                "street": "turn",
+                "action": { "kind": "check" },
+                "amountCommitted": 0,
+                "potBefore": 8500,
+                "streetBetAfter": 0
+              }
+            ],
+            "tilt": { "factor": 0 }
+          },
+          "control": {
+            "kind": "action",
+            "choices": [
+              { "action": "check", "value": -1328.125, "probability": 0.9989562395700813 },
+              {
+                "action": "raiseTo:4250",
+                "value": -4117.1875,
+                "probability": 0.0006317329114450265
+              },
+              { "action": "raiseTo:8500", "value": -6906.25, "probability": 0.000350718132907768 },
+              { "action": "allIn", "value": -64164.0625, "probability": 0.00006130938556592191 }
+            ],
+            "taken": "check"
+          },
+          "reason": null
+        }
+      ],
+      "correctedChips": -632.1606691919192
+    }
+  ],
+  "provenance": {
+    "schema": "river-benchmark-provenance-v1",
+    "benchmark": "d8-frozen-v1",
+    "specificationSha256": "981103865fc0e4e2c8d55feefd4b7b25f2d339e7189290f1c9a34d769e004a1a",
+    "runner": "duplicate",
+    "startedAt": "2026-10-26T00:05:22.824Z",
+    "commit": "ea36ee39df85e5fe1483b955dc467e8034d4626f",
+    "sourceSha256": "eeaf5ed75de91351fea855ec5c53808f44ff3f5296794a324f49f58b257d8c6d",
+    "engineRuntimeSha256": "9d655a1daac401a9abaff83bc87c3dd93b0ab56b2e11ea528666c9a16d9605d3",
+    "lockfileSha256": "171c26948b1943a3cff5ec09deb5db9580218a8e7a3ceccfcff2b76d7177ed43",
+    "models": {
+      "RIVER_FLOP_NETWORK": null,
+      "RIVER_TURN_NETWORK": null,
+      "RIVER_TURN_START_NETWORK": null,
+      "RIVER_RIVER_NETWORK": null
+    },
+    "preflop": {
+      "version": "v3",
+      "files": [
+        {
+          "depth": 100,
+          "sha256": "36090daa61b214019ac2b4317357d5a53e275e48ff28d220bd84d50893ba1414"
+        },
+        {
+          "depth": 200,
+          "sha256": "847c70afa14e725933f0b60214cdb99235e3415a20333f54aed50b2f888a2ace"
+        }
+      ]
+    },
+    "environment": {
+      "node": "v24.13.0",
+      "platform": "win32",
+      "arch": "x64",
+      "RIVER_VALUE_BACKEND": null,
+      "RIVER_VALUE_THREADS": "1",
+      "RIVER_COMPARE_HANDS": null,
+      "RIVER_PREFLOP_PACK": null,
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "UV_THREADPOOL_SIZE": "1"
+    },
+    "heuristic": "pot-share-uniform-32-v1",
+    "policies": ["v8z", "v8z"],
+    "seeds": ["d8-aa-h2h"],
+    "plannedHands": 4,
+    "settings": { "first": 0, "sessions": 2, "handsPerSession": 2 }
+  },
+  "raw": { "hands": 4, "sessions": 2, "bigBlindsPer100": 0, "interval95": [0, 0] },
+  "aivat": { "hands": 4, "sessions": 2, "bigBlindsPer100": 0, "interval95": [0, 0] }
+}

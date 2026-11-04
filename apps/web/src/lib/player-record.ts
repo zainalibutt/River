@@ -52,8 +52,12 @@ export function scorecard(hands: readonly RecordedHand[]): Scorecard {
 }
 
 /** The hands played with the champion at the table. */
-export function againstNell(hands: readonly RecordedHand[]): Scorecard {
-  return scorecard(hands.filter((hand) => hand.opponents.includes('Nell')))
+export function againstNyx(hands: readonly RecordedHand[]): Scorecard {
+  // Historical player_hands rows store display names. Keep Nell as an alias;
+  // do not rewrite those records or change the champion's bot:nell identity.
+  return scorecard(
+    hands.filter((hand) => hand.opponents.includes('Nyx') || hand.opponents.includes('Nell')),
+  )
 }
 
 /** Hands grouped into sittings, newest first, split wherever play stopped for half an hour. */

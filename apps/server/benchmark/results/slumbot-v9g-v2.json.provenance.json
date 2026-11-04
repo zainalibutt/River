@@ -1,0 +1,70 @@
+{
+  "schema": "river-benchmark-provenance-v1",
+  "benchmark": "d8-frozen-v2",
+  "specificationSha256": "af73320199cbd066cb75b7a596a467e45a999730d214e44ddd7faed53ccf00bd",
+  "runner": "aivat-replay-slumbot",
+  "startedAt": "2026-10-26T14:09:58.515Z",
+  "commit": "8262aab9d4c471e8acc6d3e40ad1af503b355219",
+  "sourceSha256": "746f1e1956560a02032b878670f051e27dd583fcd34fd567ae98ef0a9980964f",
+  "engineRuntimeSha256": "9d655a1daac401a9abaff83bc87c3dd93b0ab56b2e11ea528666c9a16d9605d3",
+  "lockfileSha256": "171c26948b1943a3cff5ec09deb5db9580218a8e7a3ceccfcff2b76d7177ed43",
+  "models": {
+    "RIVER_FLOP_NETWORK": null,
+    "RIVER_TURN_NETWORK": null,
+    "RIVER_TURN_START_NETWORK": null,
+    "RIVER_RIVER_NETWORK": null
+  },
+  "preflop": {
+    "version": "v3",
+    "files": [
+      {
+        "depth": 100,
+        "sha256": "36090daa61b214019ac2b4317357d5a53e275e48ff28d220bd84d50893ba1414"
+      },
+      {
+        "depth": 200,
+        "sha256": "847c70afa14e725933f0b60214cdb99235e3415a20333f54aed50b2f888a2ace"
+      }
+    ]
+  },
+  "environment": {
+    "node": "v24.13.0",
+    "platform": "win32",
+    "arch": "x64",
+    "RIVER_VALUE_BACKEND": null,
+    "RIVER_VALUE_THREADS": null,
+    "RIVER_COMPARE_HANDS": null,
+    "RIVER_PREFLOP_PACK": null,
+    "OMP_NUM_THREADS": null,
+    "OPENBLAS_NUM_THREADS": null,
+    "UV_THREADPOOL_SIZE": null
+  },
+  "heuristic": "pot-share-uniform-32-v1",
+  "policies": ["v9g"],
+  "seeds": [],
+  "plannedHands": 16000,
+  "settings": {
+    "inputs": [
+      {
+        "name": "v9g-1-fixed.jsonl",
+        "sha256": "d415b9d3171db831383b3634924fa46175a3514e62f3dae526c1a435c0d22154"
+      },
+      {
+        "name": "v9g-2-fixed.jsonl",
+        "sha256": "ac5987d4e293bba05b791b3e0ce876c511dc1bbe1f3757b86fa225b381b58dee"
+      },
+      {
+        "name": "v9g-3-fixed.jsonl",
+        "sha256": "077e984af76c110482d86717df7beb25d93a4b72d343ff9e75602245f1f287cd"
+      },
+      {
+        "name": "v9g-4-fixed.jsonl",
+        "sha256": "1a0b108d0a7ca11a6df3346dacfacdbae86d6c6c6aceb8c005e86d1b00b74285"
+      }
+    ],
+    "historical": true
+  },
+  "status": "complete",
+  "hands": 16000,
+  "failures": 0
+}

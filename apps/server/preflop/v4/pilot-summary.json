@@ -1,0 +1,309 @@
+{
+  "flops": 60,
+  "observations": 141120,
+  "trainingFlops": 36,
+  "heldoutFlops": 24,
+  "configHash": "0076db612d4d72b9f8de4083b8a68e254910caf5a1ed28e40ed5497d85498880",
+  "converged": true,
+  "fitIterations": 106,
+  "parameters": [
+    {
+      "name": "limped.ip.base",
+      "prior": 0.78,
+      "fitted": 0.5111726347736881,
+      "standardError": 0.27033641795943025,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 2924,
+      "projectedFlopsForSE002": 6578
+    },
+    {
+      "name": "limped.ip.equitySlope",
+      "prior": 0.65,
+      "fitted": 0.9972746705286732,
+      "standardError": 0.3380815557644443,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 4572,
+      "projectedFlopsForSE002": 10287
+    },
+    {
+      "name": "limped.oop.base",
+      "prior": 0.43,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    },
+    {
+      "name": "limped.oop.equitySlope",
+      "prior": 0.8,
+      "fitted": 1.3860310622785448,
+      "standardError": 1.053831867854553,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 44423,
+      "projectedFlopsForSE002": 99951
+    },
+    {
+      "name": "single-raised.ip.base",
+      "prior": 0.74,
+      "fitted": 0.004944471104824956,
+      "standardError": 0.1387460429830998,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 771,
+      "projectedFlopsForSE002": 1733
+    },
+    {
+      "name": "single-raised.ip.equitySlope",
+      "prior": 0.7,
+      "fitted": 1.609987612737462,
+      "standardError": 0.2708150778466797,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 2934,
+      "projectedFlopsForSE002": 6601
+    },
+    {
+      "name": "single-raised.oop.base",
+      "prior": 0.39,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    },
+    {
+      "name": "single-raised.oop.equitySlope",
+      "prior": 0.9,
+      "fitted": 1.5290059453928009,
+      "standardError": 0.32189455057158656,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 4145,
+      "projectedFlopsForSE002": 9326
+    },
+    {
+      "name": "three-bet-plus.ip.base",
+      "prior": 0.7,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    },
+    {
+      "name": "three-bet-plus.ip.equitySlope",
+      "prior": 0.75,
+      "fitted": 1.725421204833488,
+      "standardError": 0.5265790553846067,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 11092,
+      "projectedFlopsForSE002": 24956
+    },
+    {
+      "name": "three-bet-plus.oop.base",
+      "prior": 0.36,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    },
+    {
+      "name": "three-bet-plus.oop.equitySlope",
+      "prior": 0.95,
+      "fitted": 1.6634473285268683,
+      "standardError": 0.5335998616417222,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 11390,
+      "projectedFlopsForSE002": 25626
+    },
+    {
+      "name": "pair",
+      "prior": 0.08,
+      "fitted": 0.13762827471492134,
+      "standardError": 0.09743397865225824,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 380,
+      "projectedFlopsForSE002": 855
+    },
+    {
+      "name": "suited",
+      "prior": 0.1,
+      "fitted": 0.031916297836206815,
+      "standardError": 0.04192542921352251,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 71,
+      "projectedFlopsForSE002": 159
+    },
+    {
+      "name": "connected",
+      "prior": 0.06,
+      "fitted": 0.031957176413457924,
+      "standardError": 0.07890401685668239,
+      "atBound": false,
+      "projectedFlopHandsForSE003": 250,
+      "projectedFlopsForSE002": 561
+    },
+    {
+      "name": "highCard",
+      "prior": 0.04,
+      "fitted": 0,
+      "standardError": null,
+      "atBound": true,
+      "projectedFlopHandsForSE003": null,
+      "projectedFlopsForSE002": null
+    }
+  ],
+  "training": {
+    "prior": {
+      "observations": 84672,
+      "flops": 36,
+      "weight": 25409.612018219945,
+      "rmsePots": 0.34703559302682546,
+      "biasPots": -0.06346387029177149
+    },
+    "fitted": {
+      "observations": 84672,
+      "flops": 36,
+      "weight": 25409.612018219945,
+      "rmsePots": 0.3176986300168882,
+      "biasPots": -0.01791681585411317
+    }
+  },
+  "heldout": {
+    "prior": {
+      "observations": 56448,
+      "flops": 24,
+      "weight": 17120.521166650444,
+      "rmsePots": 0.37571968938414424,
+      "biasPots": -0.06756838234033898
+    },
+    "fitted": {
+      "observations": 56448,
+      "flops": 24,
+      "weight": 17120.521166650444,
+      "rmsePots": 0.3462455958748501,
+      "biasPots": -0.022424933220545583
+    }
+  },
+  "packs": [
+    {
+      "depth": 100,
+      "version": "v3",
+      "button": {
+        "fold": 0.1529543146572798,
+        "limp": 0.29595516146361833,
+        "opensAndJam": 0.5510905238791004,
+        "open2": 0.2906151621426856,
+        "open2_5": 0.0770036018495473,
+        "open3": 0.18347167688340343,
+        "jam": 8.30034641250144e-8
+      },
+      "bbVs2": {
+        "fold": 0.19607740254841938,
+        "call": 0.5797171422970524,
+        "threeBetIncludingJam": 0.2242054551545111
+      },
+      "iterations": 800,
+      "seconds": 28.394521,
+      "exploitabilityBb": 0.0009610358911752294
+    },
+    {
+      "depth": 100,
+      "version": "v4",
+      "button": {
+        "fold": 0.3060171153561116,
+        "limp": 0.2870831604110633,
+        "opensAndJam": 0.4068997242328503,
+        "open2": 0.35704699794650435,
+        "open2_5": 0.04434088839672577,
+        "open3": 0.005511626921525963,
+        "jam": 2.1096809420781613e-7
+      },
+      "bbVs2": {
+        "fold": 0.4085063641638834,
+        "call": 0.36619148840640314,
+        "threeBetIncludingJam": 0.2253021474296913
+      },
+      "iterations": 700,
+      "seconds": 25.7235281,
+      "exploitabilityBb": 0.0008874992357382934
+    },
+    {
+      "depth": 200,
+      "version": "v3",
+      "button": {
+        "fold": 0.13888327611503976,
+        "limp": 0.30234101241267697,
+        "opensAndJam": 0.558775711472273,
+        "open2": 0.3334118478719704,
+        "open2_5": 0.08769201952383565,
+        "open3": 0.1376717814061784,
+        "jam": 6.267028851773942e-8
+      },
+      "bbVs2": {
+        "fold": 0.20028781301550952,
+        "call": 0.5846277889065056,
+        "threeBetIncludingJam": 0.21508439807797633
+      },
+      "iterations": 1100,
+      "seconds": 38.458629699999996,
+      "exploitabilityBb": 0.000982450302711874
+    },
+    {
+      "depth": 200,
+      "version": "v4",
+      "button": {
+        "fold": 0.3052413324099172,
+        "limp": 0.2862505641095362,
+        "opensAndJam": 0.4085081034805504,
+        "open2": 0.35845195892897674,
+        "open2_5": 0.04737840257288766,
+        "open3": 0.0026776651918223914,
+        "jam": 7.67868636139314e-8
+      },
+      "bbVs2": {
+        "fold": 0.41686289091851103,
+        "call": 0.3688310581952316,
+        "threeBetIncludingJam": 0.2143060508862683
+      },
+      "iterations": 1300,
+      "seconds": 45.61262,
+      "exploitabilityBb": 0.000980530966122415
+    }
+  ],
+  "planning": {
+    "formula": "ceil(trainingFlops * (SE / 0.02)^2)",
+    "maxProjectedTrainingFlops": 99951,
+    "roundedTrainingFlops": 100008,
+    "heldoutFlops": 25008,
+    "measuredWorkerRates": [
+      484.59466620014666,
+      469.01113884735383
+    ],
+    "planningFlopsPerWorkerHour": 475,
+    "totalWorkerHours": 263.19157894736844,
+    "idealHoursAt64Workers": 4.112368421052632,
+    "stageOneTrainingFlops": 2400,
+    "stageOneHeldoutFlops": 600,
+    "caveat": "Provisional sqrt(N) extrapolation. Null SEs at active constraints have no finite projection. Reassess with 2400 independent training flops before scaling; pre-board transport and solver/model bias are outside these SEs."
+  },
+  "exitCodes": {
+    "collectionInitialPowerShellWrappers": 1,
+    "collectionChecksumRestarts": 0,
+    "fit": 0,
+    "solve100": 0,
+    "solve200": 0,
+    "tests": 0,
+    "typecheck": 0,
+    "lint": 0,
+    "productionReplay": 0
+  },
+  "notes": [
+    "Initial collection wrapper exit 1 was PowerShell NativeCommandError from stderr progress. Both workers completed; checksum restarts verified all 60 shards and exited 0.",
+    "Production remains v3; v4 is a calibration candidate."
+  ],
+  "productionReplay": {
+    "byteIdentical": true,
+    "manifestIdentical": true,
+    "sha256": "27ab1cfd550aa1a283103ce14d9df5fe8f9d8f2e960fe458262773523d780fdc"
+  }
+}

@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { type BotPolicy, championPersonality, personalityPool } from '@river/engine'
+import { beginBenchmark } from './bot-benchmark-provenance.js'
 import { alwaysCallPolicy, alwaysFoldPolicy, localBestResponse } from './bot-lbr.js'
+import { localBestResponse2, shark2Arguments } from './bot-lbr2.js'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import {
   headsUpButtonGuardPolicy,
@@ -20,16 +22,30 @@ import { runSessions } from './bot-session-benchmark.js'
 import { focalRotation } from './bot-session-campaign.js'
 import { clusteredEstimate } from './bot-session-evaluation.js'
 import { solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
+import { type V9gNetworks, v9gPolicy } from './bot-v9g-policy.js'
 import { learnedValuePolicy, type ValueModel } from './bot-value-model.js'
 import { turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
+// Usage: tsx bot-lbr-run.ts <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9go|v9gp|v9gz|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]
+// Opt in with --shark2. Optional integer settings: --shark2-holdings=0 (all),
+// --shark2-fast selects a capped, cached profile with the same complete size menu.
+// --first-session=N shards independent sessions without changing their deals.
+// --shark2-draws=16, --shark2-preflop-runouts=48, --shark2-continuation-boards=8,
+// --shark2-flop-runouts=48,
+// --shark2-turn-runouts=32. JSON remains compatible with bot-lbr-pool.ts.
 // Plays one focal policy heads-up against a local best response to it. What
 // the probe wins is a lower bound on how exploitable that policy is. Runs with
 // the same seed deal the same cards, stacks and chairs to every focal policy,
 // so their results pair hand for hand. v8z-forget is v8z with no memory of its
 // opponent (forgetOpponents), so a pair of runs prices the memory.
-const [focalName, seed, sessionArg, out, handArg, castName] = process.argv.slice(2)
+// Session sharding preserves deals, personality rotation and within-session memory.
+const cli = process.argv.slice(2)
+const firstFlag = cli.find((arg) => arg.startsWith('--first-session='))
+const firstSession = firstFlag === undefined ? 0 : Number(firstFlag.split('=')[1])
+if (!Number.isSafeInteger(firstSession) || firstSession < 0)
+  throw new Error('invalid first session')
+const shark = shark2Arguments(cli.filter((arg) => arg !== firstFlag))
+const [focalName, seed, sessionArg, out, handArg, castName] = shark.positional
 const focalCast =
   castName === undefined || castName === 'rotation'
     ? focalRotation()
@@ -49,7 +65,7 @@ if (
   focalCast === undefined
 ) {
   throw new Error(
-    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
+    'usage: <v4|v5|v6|v8|v8a|v8b|v8c|v8e|v8r|v8m|v8h|v8x|v8y|v8z|v8z-forget|v9a|v9a-reads|v9b|v9g|v9go|v9gp|v9gz|v9gx|v9gy|v9gh|v9gh50|v9h35|v9h50|model|call|fold> <seed> <sessions> <out.json> [hands] [rotation|champion]',
   )
 }
 let riverStats: RiverPolicyStats | undefined
@@ -57,6 +73,29 @@ const river = (overrides: Partial<RiverPolicyTuning>, base: BotPolicy = pokerGua
   const solver = riverSolverPolicy(base, 'river-solver', 1, overrides)
   riverStats = solver.stats
   return solver.policy
+}
+let hybridStats: ReturnType<typeof v9gPolicy>['hybrid']
+let preflopStats: ReturnType<typeof v9gPolicy>['preflop']
+let offTree:
+  | {
+      flop: ReturnType<typeof v9gPolicy>['stats']['offTree']
+      turn: ReturnType<typeof v9gPolicy>['turn']['offTree']
+      river: RiverPolicyStats['offTree']
+    }
+  | undefined
+let exploitRiverStats: RiverPolicyStats | undefined
+let turnExploitStats: ReturnType<typeof v9gPolicy>['turn']['safeExploit'] | undefined
+let queryNetworks: V9gNetworks | undefined
+const v9g = (options: Parameters<typeof v9gPolicy>[0] = {}) => {
+  const chain = v9gPolicy(options, shark.enabled ? queryNetworks : undefined)
+  if (shark.enabled) queryNetworks = chain.networks
+  preflopStats = chain.preflop
+  riverStats = chain.river
+  turnExploitStats = chain.turn.safeExploit
+  hybridStats = chain.hybrid
+  exploitRiverStats = chain.exploitRiver
+  offTree = { flop: chain.stats.offTree, turn: chain.turn.offTree, river: chain.river.offTree }
+  return chain.policy
 }
 const focals: Record<string, () => BotPolicy> = {
   v4: () => legacyGuardPolicy,
@@ -122,6 +161,17 @@ const focals: Record<string, () => BotPolicy> = {
     riverStats = solver.river
     return solver.policy
   },
+  // The fully carried safe chain at live speed (as in bot-compare-table.ts).
+  v9g: () => v9g(),
+  v9go: () => v9g({ offTree: 'resolve' }),
+  v9gp: () => v9g({ offTree: 'resolve', preflopTables: true }),
+  v9gz: () => v9g({ offTree: 'resolve', preflopTables: true, safeExploitV2: true }),
+  v9gz2: () =>
+    v9g({ offTree: 'resolve', preflopTables: true, safeExploitV2: true, safeTurnExploit: true }),
+  v9gx: () => v9g({ boundedReads: true }),
+  v9gy: () => v9g({ boundedReads: true, baselineCaps: true }),
+  v9gh: () => v9g({ hybridThreshold: 0.35 }),
+  v9gh50: () => v9g({ hybridThreshold: 0.5 }),
   'v8z-hu20': () => river(RIVER_CANDIDATE_TUNING, headsUpButtonGuardPolicy(0.2)),
   'v8z-hu12': () => river(RIVER_CANDIDATE_TUNING, headsUpButtonGuardPolicy(0.12)),
   call: () => alwaysCallPolicy,
@@ -138,19 +188,70 @@ const opponent = personalityPool()[0]
 if (make === undefined || opponent === undefined) throw new Error(`unknown focal ${focalName}`)
 const focal = make()
 const choices: Record<string, { count: number; foldShare: number }> = {}
-const probe = localBestResponse(focal, {
-  onChoice: (choice) => {
-    const key = `${choice.street}:${choice.kind}`
-    const tally = choices[key] ?? { count: 0, foldShare: 0 }
-    tally.count += 1
-    tally.foldShare += choice.foldShare ?? 0
-    choices[key] = tally
+const sizeChoices: Record<string, number> = {}
+const onChoice: NonNullable<Parameters<typeof localBestResponse>[1]>['onChoice'] = (choice) => {
+  const key = `${choice.street}:${choice.kind}`
+  const tally = choices[key] ?? { count: 0, foldShare: 0 }
+  tally.count += 1
+  tally.foldShare += choice.foldShare ?? 0
+  choices[key] = tally
+}
+const shark2 = shark.enabled
+  ? localBestResponse2(focal, {
+      fast: shark.fast === true,
+      tuning: shark.tuning,
+      createQueryPolicy: () => {
+        // Constructors publish telemetry for the live seat. Keep disposable-query
+        // statistics separate, including when a constructor throws.
+        const saved = {
+          riverStats,
+          hybridStats,
+          preflopStats,
+          offTree,
+          exploitRiverStats,
+          turnExploitStats,
+        }
+        try {
+          const query = make()
+          // These factories return shared, stateless policy objects. Give the
+          // query its own wrapper; solver factories already own fresh closures.
+          return ['v4', 'v5', 'v6', 'call', 'fold'].includes(focalName) ? { ...query } : query
+        } finally {
+          ;({
+            riverStats,
+            hybridStats,
+            preflopStats,
+            offTree,
+            exploitRiverStats,
+            turnExploitStats,
+          } = saved)
+        }
+      },
+      onChoice: (choice) => {
+        onChoice?.(choice)
+        const size = choice.decision.kind === 'raiseTo' ? `:${choice.decision.to}` : ''
+        const key = `${choice.street}:${choice.kind}${size}`
+        sizeChoices[key] = (sizeChoices[key] ?? 0) + 1
+      },
+    })
+  : undefined
+const probe = shark2 ?? localBestResponse(focal, { onChoice })
+const started = Date.now()
+const benchmark = beginBenchmark(out, 'lbr', {
+  policies: [focalName],
+  seeds: [seed],
+  plannedHands: sessions * handsPerSession,
+  settings: {
+    sessions,
+    firstSession,
+    handsPerSession,
+    probe: shark.fast ? 'shark2-fast' : shark.enabled ? 'shark2' : 'shark',
   },
 })
-const started = Date.now()
 const run = runSessions({
   seed,
   sessions,
+  firstSession,
   handsPerSession,
   table: {
     name: 'heads-up-best-response',
@@ -161,6 +262,7 @@ const run = runSessions({
   focalPersonalities: focalCast,
   forgetOpponents: focalName === 'v8z-forget',
   onFocalDecision: probe.watch,
+  ...(shark2 === undefined ? {} : { onHandOpened: shark2.watchHand }),
   allInAdjustment: true,
   // Only the focal policies that exploit reads look at these statistics.
   ...([
@@ -172,33 +274,59 @@ const run = runSessions({
     'v9a',
     'v9a-reads',
     'v9b',
+    'v9g',
+    'v9go',
+    'v9gp',
+    'v9gz',
+    'v9gz2',
+    'v9gx',
+    'v9gy',
+    'v9gh',
+    'v9gh50',
     'v9h35',
     'v9h50',
   ].includes(focalName)
     ? { plugin: opponentStatsPlugin() }
     : {}),
   onFocalHand: (session, hand) => {
-    if (hand === 0 && session > 0) {
+    if (hand === 0 && session > firstSession) {
       const seconds = (Date.now() - started) / 1000
       process.stderr.write(
-        `${focalName}: ${session}/${sessions} sessions, ${seconds.toFixed(0)}s\n`,
+        `${focalName}: ${session - firstSession}/${sessions} sessions, ${seconds.toFixed(0)}s\n`,
       )
     }
   },
 })
 const estimate = clusteredEstimate(
-  run.hands.map((hand) => ({ session: hand.session, value: -hand.focalChips })),
+  run.hands.map((hand) => ({ session: hand.session - firstSession, value: -hand.focalChips })),
   sessions,
 )
 writeFileSync(
   out,
   `${JSON.stringify({
     focal: focalName,
+    provenance: benchmark.provenance,
     seed,
     sessions,
+    firstSession,
     handsPerSession,
     estimate,
     choices,
+    ...(shark2 === undefined
+      ? {}
+      : {
+          probe: shark.fast ? 'shark2-fast' : 'shark2',
+          tuning: shark2.tuning,
+          queryStats: shark2.stats,
+          sizeChoices,
+          elapsedMs: Date.now() - started,
+          millisecondsPerHand: (Date.now() - started) / run.hands.length,
+        }),
+    offTree,
+    hybrid: hybridStats,
+    preflop: preflopStats,
+    exploitRiver: exploitRiverStats,
+    turnSafeExploit: turnExploitStats,
     ...(riverStats === undefined ? {} : { river: riverStats }),
     hands: run.hands.map((hand) => [
       hand.session,
@@ -210,13 +338,35 @@ writeFileSync(
   })}\n`,
 )
 const [low, high] = estimate.interval95
+benchmark.finish(run.hands.length)
 process.stdout.write(
   `${focalName}: probe wins ${estimate.bigBlindsPer100.toFixed(1)} (${low.toFixed(1)} to ${high.toFixed(1)}) bb/100 over ${run.hands.length} hands in ${((Date.now() - started) / 1000).toFixed(0)}s\n`,
 )
+if (shark2 !== undefined)
+  process.stdout.write(
+    `${shark.fast ? 'shark2-fast' : 'shark2'}: ${((Date.now() - started) / run.hands.length / 1000).toFixed(3)} s/hand; settings ${JSON.stringify(shark2.tuning)}; queries ${JSON.stringify(shark2.stats)}\n`,
+  )
 if (riverStats !== undefined) {
   const { solves, solved, fallbacks, trackMs, solveMs, exploitability, combos } = riverStats
   process.stdout.write(
     `river: ${solved} decisions solved, fallbacks ${JSON.stringify(fallbacks)}, ${solves} solves, ${(trackMs / Math.max(1, solves)).toFixed(0)} ms ranges and ${(solveMs / Math.max(1, solves)).toFixed(0)} ms solving each, ${(combos / Math.max(1, 2 * solves)).toFixed(0)} holdings a range, exploitable ${((100 * exploitability) / Math.max(1, solves)).toFixed(2)}% of the pot
 `,
   )
+  if (focalName === 'v9gx' || focalName === 'v9gy') {
+    const n = Math.max(1, riverStats.adaptationChecks)
+    process.stdout.write(
+      `adaptation: ${riverStats.adaptations}/${riverStats.adaptationChecks} roots (${((100 * riverStats.adaptations) / n).toFixed(2)}%), mean mixture ${(riverStats.mixtureWeight / n).toFixed(6)}, baseline violations ${riverStats.baselineViolations}, max baseline violation ${riverStats.maxBaselineViolation}, max cap violation ${riverStats.maxCapViolation}, max slack ${riverStats.maxCapSlack}, ${(riverStats.adaptationMs / n).toFixed(1)} ms/root\n`,
+    )
+  }
+  if (focalName === 'v9gz' || focalName === 'v9gz2')
+    process.stdout.write(`safe exploit: ${JSON.stringify(riverStats.safeExploit)}\n`)
 }
+if (focalName === 'v9gz2')
+  process.stdout.write(`turn safe exploit: ${JSON.stringify(turnExploitStats)}\n`)
+
+if (hybridStats !== undefined) process.stdout.write(`hybrid: ${JSON.stringify(hybridStats)}\n`)
+if (preflopStats !== undefined) process.stdout.write(`preflop: ${JSON.stringify(preflopStats)}\n`)
+if (offTree !== undefined) process.stdout.write(`off tree: ${JSON.stringify(offTree)}\n`)
+
+if (exploitRiverStats !== undefined)
+  process.stdout.write(`exploit river: ${JSON.stringify(exploitRiverStats)}\n`)

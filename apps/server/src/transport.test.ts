@@ -15,12 +15,18 @@ import { ACTION_LABELS, type ActionModelV1 } from './bot-learning-model.js'
 import type { ActionShadowPort, PreparedActionShadow } from './bot-learning-shadow.js'
 import { OnlineActionShadow } from './bot-learning-shadow.js'
 import type { BotOpponentObservation, BotOpponentStore } from './bot-opponent-store.js'
+import { type HandAwareBotPolicy, HandSolveCache } from './bot-policy-hand.js'
 import { type BotDecisionTrace, randomBotTable } from './bot-service.js'
 import type { BotRiverThinker, ThinkRequest } from './bot-thinker.js'
 import type { LedgerRow, SupabaseEconomy } from './economy-service.js'
 import type { Ledger, LedgerEntry, Seating, SeatingStore } from './ledger.js'
 import { defaultRoomConfig, Room, stakeForId, turnBudgetsForPreset } from './room.js'
-import type { ClientPeer, RoomCreationSettings, ServerMessage } from './transport.js'
+import type {
+  ClientPeer,
+  RoomCreationSettings,
+  RoomHubOptions,
+  ServerMessage,
+} from './transport.js'
 import { parseClientMessage, RoomHub } from './transport.js'
 
 const ALICE = '323c30d2-9e36-4c4d-96c8-a315322b113d'
@@ -38,18 +44,34 @@ class MemoryLedger implements Ledger, SeatingStore {
   /** Every seating the book has heard of, by player and reference, and whether it has closed. */
   readonly seatings = new Map<string, { seating: Seating; closed: boolean }>()
 
-  async open(seating: Seating): Promise<void> {
-    const key = `${seating.playerId} ${seating.ref}`
-    // Writing a seating again never reopens one that has closed.
-    const closed = this.seatings.get(key)?.closed ?? false
-    this.seatings.set(key, { seating: { ...seating }, closed })
-  }
-
   async close(seating: Seating): Promise<void> {
     this.seatings.set(`${seating.playerId} ${seating.ref}`, {
       seating: { ...seating },
       closed: true,
     })
+  }
+
+  async openWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    const replay = this.refs.has(`${entry.playerId}:${entry.ref}`)
+    const balance = await this.apply(entry)
+    // One transaction: a replay finds its seating already written, and a
+    // refused entry writes nothing.
+    if (!replay) {
+      this.seatings.set(`${seating.playerId} ${seating.ref}`, {
+        seating: { ...seating },
+        closed: false,
+      })
+    }
+    return balance
+  }
+
+  async closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    const balance = await this.apply(entry)
+    // Closing is the same however often it runs, so a retry closes it too.
+    const key = `${seating.playerId} ${seating.ref}`
+    const recorded = this.seatings.get(key)
+    if (recorded !== undefined) this.seatings.set(key, { ...recorded, closed: true })
+    return balance
   }
 
   async unsettled(openedBeforeMs: number): Promise<Seating[]> {
@@ -77,6 +99,52 @@ class MemoryLedger implements Ledger, SeatingStore {
     this.entries.push(entry)
     this.balances.set(entry.playerId, next)
     return next
+  }
+}
+
+/**
+ * The ledger and the seating book as a server that is about to die sees them.
+ * After `dieAfter(n)`, n more writes land and every one after that is refused,
+ * as if the process had stopped there, so nothing else it meant to write ever
+ * lands. Reads still answer, so the server gets as far as its next write.
+ */
+class DyingBook implements Ledger, SeatingStore {
+  private writes = Number.POSITIVE_INFINITY
+
+  constructor(readonly book: MemoryLedger) {}
+
+  dieAfter(writes: number): void {
+    this.writes = writes
+  }
+
+  private write<T>(run: () => Promise<T>): Promise<T> {
+    if (this.writes <= 0) return Promise.reject(new Error('the server has died'))
+    this.writes -= 1
+    return run()
+  }
+
+  balance(playerId: string): Promise<number> {
+    return this.book.balance(playerId)
+  }
+
+  unsettled(openedBeforeMs: number): Promise<Seating[]> {
+    return this.book.unsettled(openedBeforeMs)
+  }
+
+  apply(entry: LedgerEntry): Promise<number> {
+    return this.write(() => this.book.apply(entry))
+  }
+
+  close(seating: Seating): Promise<void> {
+    return this.write(() => this.book.close(seating))
+  }
+
+  openWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    return this.write(() => this.book.openWith(entry, seating))
+  }
+
+  closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {
+    return this.write(() => this.book.closeWith(entry, seating))
   }
 }
 
@@ -111,6 +179,7 @@ function setup(
   onError?: (context: string, error: unknown) => void,
   actionShadow?: ActionShadowPort,
   botRiverThinker?: BotRiverThinker,
+  midas?: RoomHubOptions['midas'],
 ) {
   const players: Record<string, AuthenticatedPlayer> = {
     alice: { playerId: ALICE, anonymous: true, admin: false },
@@ -129,6 +198,7 @@ function setup(
     ...(onError === undefined ? {} : { onError }),
     ...(actionShadow === undefined ? {} : { actionShadow }),
     ...(botRiverThinker === undefined ? {} : { botRiverThinker }),
+    ...(midas === undefined ? {} : { midas }),
     ...(economy === undefined ? {} : { economy }),
     verifyToken: async (token) => {
       const player = players[token]
@@ -1117,7 +1187,10 @@ function viewOf(client: Client) {
  * A hub over the given ledger, its rooms dealing from `deck` when there is one,
  * keeping its seatings in the ledger's book when asked to.
  */
-function hubOver(ledger: MemoryLedger, options: { deck?: string; book?: boolean } = {}): RoomHub {
+function hubOver(
+  ledger: Ledger & SeatingStore,
+  options: { deck?: string; book?: boolean } = {},
+): RoomHub {
   const deck = options.deck?.split(' ').map((card) => parseCard(card))
   return new RoomHub({
     ledger,
@@ -1290,6 +1363,36 @@ describe('buy-ins a crash left behind', () => {
     expect(await ledger.balance(ALICE)).toBe(100_000)
   })
 
+  it('pays back every buy-in when the server dies in the middle of a hand', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new MemoryLedger()
+    const hub = hubOver(ledger, { book: true, deck: ALICE_LOSES })
+    const alice = await sitDown(hub, 'alice', 0)
+    const bob = await sitDown(hub, 'bob', 1)
+    await send(alice, 'deal', { kind: 'startHand' })
+    // Alice's whole stack is in the pot and she has asked to leave once the
+    // hand is over. Bob has not acted, so the hand is still running when the
+    // server dies, with chips in the pot that only its memory knew about.
+    await send(alice, 'shove', { kind: 'act', action: { kind: 'allIn' } })
+    await send(alice, 'alice-leave', { kind: 'leave' })
+    const view = viewOf(bob)
+    expect(view.phase).toBe('hand')
+    expect(view.currentActor?.playerId).toBe(BOB)
+    expect(view.seats[0]).toMatchObject({ playerId: ALICE, stack: 0 })
+    expect(await ledger.balance(ALICE)).toBe(50_000)
+    expect(await ledger.balance(BOB)).toBe(50_000)
+
+    vi.setSystemTime(RESTART)
+    const restarted = hubOver(ledger, { book: true })
+    expect(await restarted.refundCrashedSeatings(RESTART)).toBe(2)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    expect(await ledger.balance(BOB)).toBe(100_000)
+    expect([...ledger.seatings.values()].every((entry) => entry.closed)).toBe(true)
+    expect(await restarted.refundCrashedSeatings(RESTART)).toBe(0)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
+
   it('leaves a seating that was stood up from alone', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(NOON)
@@ -1351,6 +1454,87 @@ describe('buy-ins a crash left behind', () => {
     expect(await hubOver(ledger, { book: true }).refundCrashedSeatings(RESTART)).toBe(0)
     expect(await ledger.balance(ALICE)).toBe(50_000)
     expect(await ledger.balance(BOB)).toBe(150_000)
+  })
+
+  describe('wherever the server dies', () => {
+    /**
+     * Alice sits down with 50,000 of her 100,000 and does `then` on a server
+     * that dies after `writes` more writes once she is seated (or, with
+     * `dieSeating`, while she sits). A new server then pays back what the
+     * dead one left seated. No hand is dealt, so no chip of hers was ever won
+     * or lost: whichever write the server died at, she ends where she began.
+     */
+    async function aliceAfterACrash(
+      writes: number,
+      then: (alice: Client) => Promise<void>,
+      dieSeating = false,
+    ): Promise<number> {
+      vi.useFakeTimers()
+      vi.setSystemTime(NOON)
+      const book = new MemoryLedger()
+      const dying = new DyingBook(book)
+      const hub = hubOver(dying, { book: true })
+      if (dieSeating) dying.dieAfter(writes)
+      const alice = await sitDown(hub, 'alice', 0)
+      if (!dieSeating) dying.dieAfter(writes)
+      await then(alice)
+      vi.setSystemTime(RESTART)
+      await hubOver(book, { book: true }).refundCrashedSeatings(RESTART)
+      return book.balance(ALICE)
+    }
+
+    it.each([0, 1, 2, 3])(
+      'pays a buy-in back once when the server dies sitting down, after %i writes',
+      async (writes) => {
+        expect(await aliceAfterACrash(writes, async () => {}, true)).toBe(100_000)
+      },
+    )
+
+    it.each([0, 1, 2, 3])(
+      'pays a stack back once when the server dies standing up, after %i writes',
+      async (writes) => {
+        expect(
+          await aliceAfterACrash(writes, (alice) => send(alice, 'alice-stand', { kind: 'stand' })),
+        ).toBe(100_000)
+      },
+    )
+
+    it.each([0, 1, 2, 3])(
+      'pays a stack back once when the server dies as she leaves, after %i writes',
+      async (writes) => {
+        expect(
+          await aliceAfterACrash(writes, (alice) => send(alice, 'alice-leave', { kind: 'leave' })),
+        ).toBe(100_000)
+      },
+    )
+
+    it.each([0, 1, 2, 3])(
+      'pays a rebuy back once when the server dies buying it, after %i writes',
+      async (writes) => {
+        expect(
+          await aliceAfterACrash(writes, (alice) =>
+            send(alice, 'alice-rebuy', { kind: 'rebuy', amount: 20_000 }),
+          ),
+        ).toBe(100_000)
+      },
+    )
+  })
+
+  it('keeps a seating open through a stand the room refuses', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new MemoryLedger()
+    const hub = hubOver(ledger, { book: true })
+    const alice = await sitDown(hub, 'alice', 0)
+    await sitDown(hub, 'bob', 1)
+    await send(alice, 'deal', { kind: 'startHand' })
+    // Paid out and closed, then taken back and reopened when the room says no.
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    expect(viewOf(alice).seats[0]?.playerId).toBe(ALICE)
+    expect([...ledger.seatings.values()].every((entry) => !entry.closed)).toBe(true)
+    vi.setSystemTime(RESTART)
+    expect(await hubOver(ledger, { book: true }).refundCrashedSeatings(RESTART)).toBe(2)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
   })
 
   it('does nothing without a book of seatings to read', async () => {
@@ -1821,7 +2005,7 @@ describe('bots at the table', () => {
   }
 
   describe('a 1v1 table against the champion', () => {
-    it('seats Nell alone opposite the player, heads-up, even where tables fill at random', async () => {
+    it('seats Nyx alone opposite the player, heads-up, even where tables fill at random', async () => {
       const { hub } = setup(30_000, 0, undefined, undefined, undefined, 'random')
       const peer = await openTable(hub, 'river-nell', { botPreset: 'champion' })
       const snapshot = peer.last('snapshot')
@@ -1829,6 +2013,7 @@ describe('bots at the table', () => {
       expect(snapshot).toMatchObject({ botSeats: 1, botPreset: 'champion' })
       expect(snapshot.view.tableSettings?.maxSeats).toBe(2)
       expect(snapshot.view.seats.map((seat) => seat.playerId)).toEqual([ALICE, 'bot:nell'])
+      expect(snapshot.view.seats[1]?.name).toBe('Nyx')
       expect(snapshot.view.phase).toBe('hand')
     })
 
@@ -1850,6 +2035,176 @@ describe('bots at the table', () => {
         { ...enter, botPreset: 'Champion' },
       ]) {
         expect(parseClientMessage(JSON.stringify(invalid))).toBeNull()
+      }
+    })
+  })
+
+  describe('Midas live-safe heads-up tables', () => {
+    const enter = { kind: 'enter', requestId: 'midas', roomId: 'river-midas', name: 'Alice' }
+
+    it('parses Midas only when enabled and refuses conflicting table shapes', () => {
+      const raw = JSON.stringify({ ...enter, botPreset: 'midas' })
+      expect(parseClientMessage(raw)).toBeNull()
+      expect(parseClientMessage(raw, false)).toBeNull()
+      expect(parseClientMessage(raw, true)).toMatchObject({
+        botPreset: 'midas',
+        maxSeats: 2,
+        botSeats: 1,
+      })
+      for (const settings of [{ maxSeats: 9 }, { maxSeats: 6 }, { botSeats: 0 }, { botSeats: 2 }]) {
+        expect(
+          parseClientMessage(JSON.stringify({ ...enter, botPreset: 'midas', ...settings }), true),
+        ).toBeNull()
+      }
+    })
+
+    it('leaves existing preset wire messages byte-identical with either capability', () => {
+      for (const botPreset of ['casual', 'mixed', 'tough', 'random', 'champion', undefined]) {
+        const raw = JSON.stringify({ ...enter, botPreset })
+        const expected = {
+          ...enter,
+          ...(botPreset === undefined ? {} : { botPreset }),
+          ...(botPreset === 'champion' ? { maxSeats: 2, botSeats: 1 } : {}),
+        }
+        expect(parseClientMessage(raw, false)).toEqual(expected)
+        expect(JSON.stringify(parseClientMessage(raw, true))).toBe(
+          JSON.stringify(parseClientMessage(raw, false)),
+        )
+      }
+    })
+
+    function thinker() {
+      const started: number[] = []
+      return {
+        started,
+        wants: vi.fn(() => true),
+        think: vi.fn(async (request: ThinkRequest, _deadlineMs: number): Promise<TurnAction> => {
+          started.push(Date.now())
+          return request.view.legal?.check.enabled ? { kind: 'check' } : { kind: 'call' }
+        }),
+        releaseHand: vi.fn(),
+        close: async () => {},
+      }
+    }
+
+    async function runTable(preset: string, enabled: boolean, maxSeats?: number, budgetMs = 8000) {
+      const safe = thinker()
+      const legacy = thinker()
+      const hub = setup(
+        30_000,
+        0,
+        { preflop: 1000, flop: 1000, turn: 1000, river: 1000 },
+        undefined,
+        undefined,
+        'random',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        legacy,
+        enabled ? { thinker: safe, budgetMs } : undefined,
+      ).hub
+      const peer = new TestPeer()
+      const connection = hub.connect(peer)
+      await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'alice' }))
+      await connection.receive(
+        JSON.stringify({
+          ...enter,
+          botPreset: preset,
+          ...(maxSeats === undefined ? {} : { maxSeats, botSeats: maxSeats - 1 }),
+        }),
+      )
+      if (peer.last('error') !== undefined) return { peer, safe, legacy, hub }
+      await connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId: 'sit',
+          command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+        }),
+      )
+      await connection.receive(
+        JSON.stringify({ kind: 'command', requestId: 'start', command: { kind: 'startHand' } }),
+      )
+      for (let step = 0; step < 600; step += 1) {
+        const snapshot = peer.last('snapshot')
+        if (snapshot?.kind !== 'snapshot' || snapshot.view.phase !== 'hand') break
+        const view = snapshot.view
+        if (view.currentActor?.playerId === ALICE && view.legal !== null) {
+          await connection.receive(
+            JSON.stringify({
+              kind: 'command',
+              requestId: `act-${step}`,
+              command: {
+                kind: 'act',
+                action: { kind: view.legal.check.enabled ? 'check' : 'call' },
+              },
+            }),
+          )
+        } else await vi.advanceTimersByTimeAsync(100)
+      }
+      return { peer, safe, legacy, hub }
+    }
+
+    it('refuses Midas at the hub when the switch is off', async () => {
+      const { peer, safe } = await runTable('midas', false)
+      expect(peer.last('error')).toMatchObject({ code: 'invalid_message' })
+      expect(safe.wants).not.toHaveBeenCalled()
+      expect(safe.think).not.toHaveBeenCalled()
+    })
+
+    it.each([1000, 8000])(
+      'seats only Midas and grants the configured %i ms budget on every street',
+      async (budgetMs) => {
+        vi.useFakeTimers()
+        const { peer, safe, legacy } = await runTable('midas', true, undefined, budgetMs)
+        const snapshot = peer.last('snapshot')
+        expect(snapshot).toMatchObject({
+          botPreset: 'midas',
+          botSeats: 1,
+          view: { phase: 'between' },
+        })
+        if (snapshot?.kind !== 'snapshot') throw new Error('expected snapshot')
+        expect(snapshot.view.seats.map((seat) => [seat.playerId, seat.name])).toEqual([
+          [ALICE, 'Alice'],
+          ['bot:midas', 'Midas'],
+        ])
+        expect(safe.think.mock.calls.length).toBeGreaterThanOrEqual(4)
+        expect(new Set(safe.think.mock.calls.map(([req]) => req.view.street))).toEqual(
+          new Set(['preflop', 'flop', 'turn', 'river']),
+        )
+        for (const [i, [req, deadline]] of safe.think.mock.calls.entries()) {
+          expect(req.playerId).toBe('bot:midas')
+          expect(deadline).toBe(
+            Math.min(9000, ((req.view.turnDeadlineMs ?? 0) - (safe.started[i] ?? 0)) * 0.7),
+          )
+          expect(deadline).toBeGreaterThanOrEqual(budgetMs)
+        }
+        expect(safe.releaseHand).toHaveBeenCalled()
+        expect(legacy.wants).not.toHaveBeenCalled()
+        expect(legacy.think).not.toHaveBeenCalled()
+      },
+    )
+
+    it('never consults Midas for Nyx or any other preset and preserves seeded messages and clocks', async () => {
+      vi.useFakeTimers()
+      for (const preset of ['champion', 'casual', 'mixed', 'tough', 'random']) {
+        for (const seats of [2, 6]) {
+          if (preset === 'champion' && seats !== 2) continue
+          const start = new Date('2026-11-02T12:00:00Z')
+          vi.setSystemTime(start)
+          const off = await runTable(preset, false, seats)
+          vi.clearAllTimers()
+          vi.setSystemTime(start)
+          const on = await runTable(preset, true, seats)
+          expect(on.safe.wants).not.toHaveBeenCalled()
+          expect(on.safe.think).not.toHaveBeenCalled()
+          expect(on.safe.releaseHand).not.toHaveBeenCalled()
+          expect(on.legacy.think).toHaveBeenCalled()
+          expect(JSON.stringify(on.peer.messages)).toBe(JSON.stringify(off.peer.messages))
+          vi.clearAllTimers()
+        }
       }
     })
   })
@@ -2274,6 +2629,91 @@ describe('bots at the table', () => {
     expect(JSON.stringify(peer.messages)).not.toContain('trace-test')
   })
 
+  it('releases carry records in the live broadcast path after showdown, fold and all-in hands', async () => {
+    vi.useFakeTimers()
+    const cache = new HandSolveCache<object>(true, 0)
+    const released = vi.fn((roomId: string, handNumber: number) =>
+      cache.releaseHand(roomId, handNumber),
+    )
+    const thinkerRelease = vi.fn()
+    const policy: HandAwareBotPolicy = {
+      id: 'hand-recording-live-policy',
+      version: 1,
+      releaseHand: released,
+      decide(context) {
+        const obs = context.observation
+        cache.put(obs, cache.key(obs, `${obs.actor.playerId}:${obs.street}`), {})
+        return {
+          policyId: this.id,
+          policyVersion: 1,
+          observationVersion: 1,
+          fallbackReason: null,
+          decision: obs.legal.check ? { kind: 'check' } : { kind: 'call' },
+        }
+      },
+    }
+    const thinker: BotRiverThinker = {
+      wants: () => false,
+      think: async () => null,
+      close: async () => {},
+      releaseHand: thinkerRelease,
+    }
+    const { hub } = setup(
+      30_000,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      1,
+      undefined,
+      policy,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      thinker,
+    )
+    const { peer, connection } = await sitAndStart(hub)
+    const view = () => {
+      const snapshot = peer.last('snapshot')
+      if (snapshot?.kind !== 'snapshot') throw new Error('expected snapshot')
+      return snapshot.view
+    }
+    let steps = 0
+    for (const [round, finish] of ['call', 'fold', 'allIn'].entries()) {
+      for (; steps < 1_000 && view().handNumber < round + 1; steps += 1) {
+        await vi.advanceTimersByTimeAsync(500)
+      }
+      expect(view().handNumber).toBe(round + 1)
+      for (; steps < 1_000 && view().phase === 'hand'; steps += 1) {
+        const current = view()
+        if (current.currentActor?.playerId === ALICE && current.legal !== null) {
+          const kind =
+            finish === 'fold' && current.legal.fold.enabled
+              ? 'fold'
+              : finish === 'allIn' && current.legal.allIn.enabled
+                ? 'allIn'
+                : current.legal.check.enabled
+                  ? 'check'
+                  : 'call'
+          await connection.receive(
+            JSON.stringify({
+              kind: 'command',
+              requestId: `release-${steps}`,
+              command: { kind: 'act', action: { kind } },
+            }),
+          )
+        } else await vi.advanceTimersByTimeAsync(500)
+      }
+      expect(view().phase).toBe('between')
+      expect(released).toHaveBeenCalledWith('river-one', round + 1)
+      expect(thinkerRelease).toHaveBeenCalledWith('river-one', round + 1)
+      expect(cache.size).toBe(0)
+    }
+    expect(released).toHaveBeenCalledTimes(3)
+    expect(thinkerRelease).toHaveBeenCalledTimes(3)
+  })
+
   it('gives each bot its own exact-once session read of a human after a settled hand', async () => {
     vi.useFakeTimers()
     const observations: BotObservationV1[] = []
@@ -2549,5 +2989,60 @@ describe('bots at the table', () => {
     expect(signed.peer.last('snapshot')?.kind).toBe('snapshot')
     expect(store.load).toHaveBeenCalled()
     expect(onError).toHaveBeenCalledWith('bot opponent memory: load failed', expect.any(Error))
+  })
+})
+
+describe('the name a player sits under', () => {
+  /** A hub whose members, by token, are Alice and Bob, and whose guest is Dev. */
+  function namedHub(seatName: (playerId: string) => Promise<string | null>) {
+    const ledger = new MemoryLedger()
+    const errors: string[] = []
+    const hub = new RoomHub({
+      ledger,
+      verifyToken: async (token) => ({
+        playerId: token === 'alice' ? ALICE : token === 'bob' ? BOB : DEV,
+        anonymous: token === 'dev',
+        admin: false,
+      }),
+      playerNames: { seatName },
+      onError: (context) => errors.push(context),
+      createRoom: (roomId) =>
+        new Room(
+          roomId,
+          defaultRoomConfig({ seed: roomId, inviteCode: 'RIVER2', seedCollectionMs: 0 }),
+        ),
+    })
+    return { hub, errors }
+  }
+
+  async function seatedName(hub: RoomHub, token: string, seat: number): Promise<string | null> {
+    const client = await connectAndEnter(hub, token, 'Guest')
+    await send(client, `${token}-sit`, { kind: 'sit', seat, buyIn: 50_000 })
+    return viewOf(client).seats[seat]?.name ?? null
+  }
+
+  it("seats a member under their account's name, whatever the client sends", async () => {
+    const { hub } = namedHub(async (playerId) => (playerId === ALICE ? 'WilyBadger91' : null))
+    expect(await seatedName(hub, 'alice', 0)).toBe('WilyBadger91')
+  })
+
+  it('seats a guest under the name the client sends, without asking for one', async () => {
+    const asked: string[] = []
+    const { hub } = namedHub(async (playerId) => {
+      asked.push(playerId)
+      return 'NotForGuests'
+    })
+    expect(await seatedName(hub, 'dev', 0)).toBe('Guest')
+    expect(asked).toEqual([])
+  })
+
+  it('seats a member with no usable name, or whose name cannot be read, under the client name', async () => {
+    const { hub, errors } = namedHub(async (playerId) => {
+      if (playerId === BOB) throw new Error('Supabase did not answer')
+      return null
+    })
+    expect(await seatedName(hub, 'alice', 0)).toBe('Guest')
+    expect(await seatedName(hub, 'bob', 1)).toBe('Guest')
+    expect(errors).toEqual(['enter: could not read a member name'])
   })
 })

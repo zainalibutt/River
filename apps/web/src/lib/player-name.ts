@@ -39,6 +39,9 @@ const RESERVED: ReadonlySet<string> = new Set([
   'system',
   'undefined',
   'you',
+  'nell',
+  'nyx',
+  'midas',
   ...[...personalityPool(), championPersonality()].map((bot) => bot.name.toLowerCase()),
 ])
 

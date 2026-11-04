@@ -5,6 +5,7 @@ import {
   bucketInputs,
   bucketsFromIds,
   forward,
+  forwardBatch,
   holdingValues,
   type RiverValueNetwork,
   riverBucketInputs,
@@ -33,6 +34,25 @@ const fixture = JSON.parse(
 const network = valueNetworkFrom(fixture, Float32Array.from(fixture.weights))
 
 describe('the value network in the server', () => {
+  it('batches partial tiles and reuses layer buffers without changing outputs', () => {
+    const columns = network.layers[0]?.columns as number
+    const batch = 5
+    const inputs = new Float32Array(batch * columns)
+    const buffers = network.layers.map((layer) => new Float32Array(batch * layer.rows))
+    for (let visit = 0; visit < 2; visit += 1) {
+      for (let i = 0; i < inputs.length; i += 1) inputs[i] = ((i * 13 + visit * 7) % 23) / 23
+      const actual = forwardBatch(network, inputs, batch, buffers)
+      for (let b = 0; b < batch; b += 1) {
+        const expected = forward(network, inputs.subarray(b * columns, (b + 1) * columns))
+        expected.forEach((value, r) => {
+          expect(Math.abs((actual[b * expected.length + r] as number) - value)).toBeLessThanOrEqual(
+            1e-5,
+          )
+        })
+      }
+    }
+  })
+
   it('builds the inputs training built, from the spot alone', () => {
     expect(fixture.cases.length).toBeGreaterThan(0)
     for (const example of fixture.cases) {
@@ -43,6 +63,15 @@ describe('the value network in the server', () => {
         expect(inputs[index]).toBeCloseTo(value, 4)
       })
     }
+  })
+
+  it('reads a stack deeper or shallower than any training spot as the nearest one trained', () => {
+    const layout = bucketsFromIds(new Uint8Array(COMBOS).fill(0), 4)
+    const ranges = [new Float64Array(COMBOS).fill(1), new Float64Array(COMBOS).fill(1)] as const
+    const { maxStackToPot, minStackToPot } = RIVER_DATA_SETTINGS
+    expect(bucketInputs(layout, ranges, 100 * 200, 200)[0]).toBeCloseTo(Math.log(maxStackToPot), 6)
+    expect(bucketInputs(layout, ranges, 1, 1000)[0]).toBeCloseTo(Math.log(minStackToPot), 6)
+    expect(bucketInputs(layout, ranges, 10 * 200, 200)[0]).toBeCloseTo(Math.log(10), 6)
   })
 
   it('computes what PyTorch computes', () => {

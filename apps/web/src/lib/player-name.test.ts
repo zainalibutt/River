@@ -36,7 +36,17 @@ describe('a chosen name', () => {
   })
 
   it('cannot be the house, a word the table uses, or any bot', () => {
-    for (const name of ['Player', 'guest', 'DEALER', 'River', 'Nell', 'mickey', 'Bernadette']) {
+    for (const name of [
+      'Player',
+      'guest',
+      'DEALER',
+      'River',
+      'Nell',
+      'Nyx',
+      'Midas',
+      'mickey',
+      'Bernadette',
+    ]) {
       expect(nameProblem(name), name).toBe('reserved')
     }
     for (const name of ['SuperAdmin', 'RiverModerator', 'TheOfficial']) {

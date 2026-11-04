@@ -1,18 +1,26 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { config as loadEnv } from 'dotenv'
 import { serveApiRoutes } from './api-routes.js'
 import { createSupabaseTokenVerifier } from './auth.js'
+import { BotApi } from './bot-api.js'
+import { withBotApi } from './bot-api-http.js'
+import { SupabaseBotApiKeyStore } from './bot-api-keys.js'
+import { botCapabilitiesRoute } from './bot-capabilities-route.js'
+import { liveBotThinker, liveSafeBotPolicy, liveSafeConfig } from './bot-live-safe.js'
 import { SupabaseBotOpponentStore } from './bot-opponent-store.js'
-import { workerRiverThinker } from './bot-thinker.js'
-import { readServerConfig } from './config.js'
+import { assertDevelopmentDatabase, readServerConfig } from './config.js'
 import { SupabaseCosmeticStore } from './cosmetic-store.js'
 import { createSupabaseEconomy } from './economy-service.js'
 import { SupabaseLedger } from './ledger.js'
 import { SupabasePlayerHandStore } from './player-hand-store.js'
+import { SupabasePlayerNames } from './player-names.js'
+import { fetchPrivateModels } from './private-models.js'
 import { publicProfileRoute, SupabasePublicProfiles } from './public-profiles.js'
 import { SupabaseTableItemStore } from './table-item-store.js'
 import { tableLinkRoute } from './table-link-route.js'
@@ -52,6 +60,7 @@ async function start(): Promise<void> {
   const startedAtMs = Date.now()
   const config = readServerConfig(process.env)
   const development = process.env.NODE_ENV !== 'production'
+  if (development) assertDevelopmentDatabase(process.env)
   const webDirectory = fileURLToPath(new URL('../../web', import.meta.url))
   const application = next({
     dev: development,
@@ -67,7 +76,49 @@ async function start(): Promise<void> {
   })
   const rememberOpponents = process.env.BOT_OPPONENT_PERSISTENCE === 'true'
   // The OG's river solver, worked out on a worker thread; off unless switched on.
-  const solveRivers = process.env.BOT_RIVER_SOLVER === 'true'
+  const botThinker = liveBotThinker({ ...process.env, BOT_LIVE_SAFE: 'false' })
+  // Midas's models come from a private bucket when one is named. If the copy
+  // fails, Midas stays off and the tables play on with the bots they have.
+  const modelsBucket = process.env.RIVER_MODELS_BUCKET
+  if (process.env.BOT_LIVE_SAFE === 'true' && modelsBucket) {
+    try {
+      const paths = await fetchPrivateModels({
+        supabaseUrl: config.supabaseUrl,
+        serviceRoleKey: config.serviceRoleKey,
+        bucket: modelsBucket,
+        directory: process.env.RIVER_MODELS_DIR || join(tmpdir(), 'river-models'),
+      })
+      Object.assign(process.env, paths)
+      console.log(
+        'private-models',
+        JSON.stringify({ bucket: modelsBucket, set: Object.keys(paths) }),
+      )
+    } catch (error) {
+      process.env.BOT_LIVE_SAFE = 'false'
+      process.stderr.write(`river: private models: ${errorText(error)}\n`)
+    }
+  }
+  const safeConfig = liveSafeConfig(process.env)
+  const safe = safeConfig.enabled
+    ? liveSafeBotPolicy(safeConfig, {
+        onEvent: (event) => {
+          if (event.type === 'ready' || event.reason)
+            console.log('bot-live-safe', JSON.stringify(event))
+        },
+      })
+    : undefined
+  if (safe !== undefined) {
+    setInterval(() => {
+      console.log(
+        'bot-live-safe-summary',
+        JSON.stringify({
+          ...safe.stats,
+          ...safe.diagnostics(),
+          rss: process.memoryUsage().rss,
+        }),
+      )
+    }, 60_000).unref()
+  }
   // Paying back what a crash left seated needs the table its migration makes;
   // off until that migration has been applied and this is switched on.
   const refundCrashes = process.env.TABLE_CRASH_REFUND === 'true'
@@ -76,7 +127,8 @@ async function start(): Promise<void> {
     // A person who opens River alone should find a table with people at it:
     // three to eight of them, in chairs the table's room id picks.
     botSeats: 'random',
-    ...(solveRivers ? { botRiverThinker: workerRiverThinker() } : {}),
+    ...(botThinker === undefined ? {} : { botRiverThinker: botThinker }),
+    ...(safe === undefined ? {} : { midas: { thinker: safe, budgetMs: safeConfig.budgetMs } }),
     ...(rememberOpponents
       ? {
           botOpponentStore: new SupabaseBotOpponentStore({
@@ -86,6 +138,11 @@ async function start(): Promise<void> {
           }),
         }
       : {}),
+    // Members sit under the name on their account; guests under the one they send.
+    playerNames: new SupabasePlayerNames({
+      supabaseUrl: config.supabaseUrl,
+      serviceRoleKey: config.serviceRoleKey,
+    }),
     playerHands: new SupabasePlayerHandStore({
       supabaseUrl: config.supabaseUrl,
       serviceRoleKey: config.serviceRoleKey,
@@ -113,19 +170,47 @@ async function start(): Promise<void> {
   // A short link resolves against the tables this process holds, and a profile
   // is read with the service key it holds, so those routes are answered here.
   // Every other request, the rest of /api included, is Next's.
+  const routes = serveApiRoutes(
+    [
+      botCapabilitiesRoute(safe !== undefined),
+      tableLinkRoute(hub),
+      publicProfileRoute(
+        new SupabasePublicProfiles({
+          supabaseUrl: config.supabaseUrl,
+          serviceRoleKey: config.serviceRoleKey,
+        }),
+      ),
+    ],
+    (request, response) => handle(request, response),
+  )
+  // The public bot API: other people's bots play Nyx over HTTP. Off unless
+  // switched on, and then only after its key table's migration has been applied.
+  let botApi: BotApi | undefined
+  if (process.env.BOT_API === 'true') {
+    botApi = new BotApi()
+    const api = botApi
+    setInterval(() => {
+      api.expire()
+    }, 60_000).unref()
+  }
   const server = createServer(
-    serveApiRoutes(
-      [
-        tableLinkRoute(hub),
-        publicProfileRoute(
-          new SupabasePublicProfiles({
-            supabaseUrl: config.supabaseUrl,
-            serviceRoleKey: config.serviceRoleKey,
-          }),
+    botApi === undefined
+      ? routes
+      : withBotApi(
+          {
+            api: botApi,
+            keys: new SupabaseBotApiKeyStore({
+              supabaseUrl: config.supabaseUrl,
+              serviceRoleKey: config.serviceRoleKey,
+            }),
+            verifyToken: createSupabaseTokenVerifier({ supabaseUrl: config.supabaseUrl }),
+            onError: (error) => {
+              process.stderr.write(`river: bot api: ${errorText(error)}
+`)
+            },
+          },
+          routes,
         ),
-      ],
-      (request, response) => handle(request, response),
-    ),
   )
   const sockets = attachRiverWebSocketServer(server, hub)
   // Next owns hot reload in development and asks for it over its own upgrade.
@@ -151,7 +236,10 @@ async function start(): Promise<void> {
         .catch((error: unknown) => {
           console.error('shutdown: could not settle every table', error)
         })
-        .finally(() => server.close())
+        .finally(async () => {
+          await Promise.all([botThinker?.close(), safe?.close()])
+          server.close()
+        })
     })
   }
   process.once('SIGINT', shutdown)

@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { benchmarkProvenance } from './bot-benchmark-provenance.js'
 import { clusteredEstimate } from './bot-session-evaluation.js'
 
 // Usage: tsx bot-compare-pool.ts <directory> <file prefix> [table lower bound, default -2] [raw|adjusted]
@@ -11,7 +12,7 @@ if (!directory || !prefix || (valueText !== 'raw' && valueText !== 'adjusted')) 
 }
 const tableBound = boundText === undefined ? -2 : Number(boundText)
 const files = readdirSync(directory).filter(
-  (name) => name.startsWith(prefix) && name.endsWith('.json'),
+  (name) => name.startsWith(prefix) && name.endsWith('.json') && !name.endsWith('.provenance.json'),
 )
 interface TableResult {
   readonly table: string
@@ -85,4 +86,18 @@ process.stdout.write(
       .map((t) => t.table)
       .join(', ') || 'none'
   }\n`,
+)
+process.stdout.write(
+  `${JSON.stringify({
+    provenance: benchmarkProvenance('compare-pool', {
+      policies: [],
+      seeds: [],
+      plannedHands: [...pieces.values()]
+        .flat()
+        .reduce((sum, part) => sum + part.perSession.reduce((count, row) => count + row[1], 0), 0),
+      settings: { filePrefix: prefix, estimator: valueText, sourceRunIdentityUnknown: true },
+    }),
+    status: 'retrospective-analysis-only',
+    sourceRunFailures: null,
+  })}\n`,
 )

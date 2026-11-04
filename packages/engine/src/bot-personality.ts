@@ -2,10 +2,16 @@ import type { BotSkill } from './bots.js'
 
 /**
  * Which characters a table's bots are drawn from. The first four are the
- * strength of a full table; 'champion' is the champion alone, for a heads-up
- * match against her.
+ * strength of a full table; 'champion' and 'midas' each seat one heads-up bot.
  */
-export const BOT_TABLE_PRESETS = ['casual', 'mixed', 'tough', 'random', 'champion'] as const
+export const BOT_TABLE_PRESETS = [
+  'casual',
+  'mixed',
+  'tough',
+  'random',
+  'champion',
+  'midas',
+] as const
 export type BotTablePreset = (typeof BOT_TABLE_PRESETS)[number]
 
 export interface BotPersonality {
@@ -158,12 +164,11 @@ const POOL: readonly BotPersonality[] = [
  * balanced rate (the equity core's reference rate), sits in the middle of the
  * OG cast on aggression and tightness, and never tilts. It is kept out of the
  * pool, which the evaluation harness draws its casts from, so no recorded run
- * changes. Its name is as ordinary as the rest; nothing at the table says it
- * is the strongest.
+ * changes. The historical id remains stable when the display name changes.
  */
 const CHAMPION: BotPersonality = {
   id: 'nell',
-  name: 'Nell',
+  name: 'Nyx',
   skill: 'og',
   aggression: 0.625,
   tightness: 0.25,
@@ -178,6 +183,11 @@ const CHAMPION_SALT = 0x51
 
 export function championPersonality(): BotPersonality {
   return CHAMPION
+}
+
+/** Solver opponent; never drawn into the existing table casts or evaluation pool. */
+export function midasPersonality(): BotPersonality {
+  return { ...CHAMPION, id: 'midas', name: 'Midas', chatter: 'silent' }
 }
 
 export function personalityPool(): readonly BotPersonality[] {
@@ -208,6 +218,7 @@ export function pickPersonalitiesForPreset(
   preset: BotTablePreset,
 ): readonly BotPersonality[] {
   if (count <= 0) return []
+  if (preset === 'midas') return [midasPersonality()]
   const others = presetCast(seed, count - 1, preset)
   const at = Math.min(others.length, hashMix(seed, CHAMPION_SALT) % CHAMPION_SPREAD)
   return [...others.slice(0, at), CHAMPION, ...others.slice(at)]

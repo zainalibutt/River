@@ -1,0 +1,196 @@
+{
+  "id": "d8-frozen-v2",
+  "version": 2,
+  "frozenDate": "2026-10-26",
+  "selection": "one equilibrium candidate and one exploitation candidate, locked before play",
+  "reference": "v9g",
+  "comparators": ["v8z", "v9go"],
+  "referenceModels": {
+    "RIVER_TURN_NETWORK": {
+      "label": "turnend-6",
+      "jsonSha256": "5e50ca270df8eec1ad67b7927999b2c6873a8f7f2037c2bbf8d2f4abcb11e34d",
+      "binSha256": "10a9d61b7d00bdf589975405b01a8cdf645077f0b43218342e0139266fefdc36"
+    },
+    "RIVER_FLOP_NETWORK": {
+      "label": "flop2-ck50",
+      "jsonSha256": "8b1245ecd2c09040fb9f0862e8a03af297497c5f84cd974d56226a41cdd3ddff",
+      "binSha256": "a82e78d6071545ec0ee4d9b239ba6218dcbab4e97b32197dbccf76c6cdd0f5d3"
+    },
+    "RIVER_TURN_START_NETWORK": {
+      "label": "turnstart-c1-53k-e50",
+      "jsonSha256": "20848416424b84c6b58c71036c3476257bd9113e0c749e2c64804e17bb52797c",
+      "binSha256": "18f473d54de5790e0e1d0d7cc34a78f20b2c1dc90146e185da273e5f9cb6de36"
+    },
+    "RIVER_RIVER_NETWORK": {
+      "label": "night1-buckets",
+      "jsonSha256": "a02b91b39b6da6616230fa670734dc3aea062aad5ccc96b6d6fcd442f211032d",
+      "binSha256": "321f35f3fcff24a38a7456d96affc523ff94920e169579712e69686aaff8d330"
+    }
+  },
+  "preflopPack": {
+    "version": "v3",
+    "100bbSha256": "36090daa61b214019ac2b4317357d5a53e275e48ff28d220bd84d50893ba1414",
+    "200bbSha256": "847c70afa14e725933f0b60214cdb99235e3415a20333f54aed50b2f888a2ace",
+    "alternatives": "v2 and v4 are separately identified diagnostics, not interchangeable with v3"
+  },
+  "units": "bb/100; shark results are opponent winnings",
+  "primaryTables": ["heads-up-value", "heads-up-camouflaged", "heads-up-reverse-sizing"],
+  "diagnosticTables": [
+    "heads-up-balanced",
+    "heads-up-overbluff",
+    "heads-up-ordinary",
+    "nine-ordinary",
+    "nine-value",
+    "nine-camouflaged",
+    "nine-reverse-sizing"
+  ],
+  "styles": {
+    "seedPrefix": "d8-style-v1",
+    "sessionsPerTable": 300,
+    "handsPerSession": 100,
+    "cast": "rotation",
+    "memory": "public opponentStatsPlugin; fresh each session",
+    "comparison": "paired same deals baseline/candidate; never pool tables before computing style estimates"
+  },
+  "duplicate": {
+    "seedPrefixes": ["d8-duplicate-s0", "d8-duplicate-s1", "d8-duplicate-s2"],
+    "seedSuffix": "-h2h",
+    "sessionsPerSeed": 100,
+    "handsPerSession": 100,
+    "score": "(forward A score - mirrored B score)/2; preserve pair then cluster by seed/session"
+  },
+  "shark": {
+    "seeds": ["d8-shark-s0", "d8-shark-s1", "d8-shark-s2"],
+    "sessionsPerSeed": 1000,
+    "handsPerSession": 100,
+    "runner": "bot-lbr-run.ts",
+    "flags": [],
+    "pairedAgainstReference": true
+  },
+  "shark2Fast": {
+    "seeds": ["d8-shark2f-s0", "d8-shark2f-s1", "d8-shark2f-s2"],
+    "sessionsPerSeed": 100,
+    "handsPerSession": 100,
+    "flags": ["--shark2", "--shark2-fast"],
+    "role": "additional veto and diagnostic, never a global exploitability bound"
+  },
+  "slumbot": {
+    "seeds": [
+      "d8-slum-s0",
+      "d8-slum-s1",
+      "d8-slum-s2",
+      "d8-slum-s3",
+      "d8-slum-s4",
+      "d8-slum-s5",
+      "d8-slum-s6",
+      "d8-slum-s7"
+    ],
+    "handsPerSeed": 2000,
+    "confirmationHands": 48000,
+    "confirmationSeedTemplate": "d8-slum-confirm-b{batch}-s{shard}",
+    "confirmationBatchIndices": [0, 1, 2],
+    "confirmationShardIndices": [0, 1, 2, 3, 4, 5, 6, 7],
+    "confirmation": "three predeclared 16000-hand batches; publish all; no early stopping",
+    "cast": "rotation",
+    "reads": false,
+    "bigBlind": 100,
+    "stack": 20000,
+    "rake": 0,
+    "dealSeedsControlled": false,
+    "seedMeaning": "our action RNG only; Slumbot controls deals"
+  },
+  "estimators": {
+    "report": ["raw", "all-in-valued", "AIVAT-v1", "AIVAT-v2"],
+    "primaryStrength": "raw",
+    "aivat": "raw plus exact action controls; singleton partitions; omit unsupported nodes with explicit coverage; exact late-board chance controls when both holes are known for every hand",
+    "heuristic": "pot-share-uniform-32-v1",
+    "chanceHeuristic": "exact showdown share against actual holding, turn and river only",
+    "allInPreflop": "existing seeded 4000-runout Monte Carlo; approximate, explicitly labeled",
+    "varianceGate": "raw SE/AIVAT SE >= 2 AND all-in-valued SE/AIVAT SE >= 2 on identical observations and clusters",
+    "biasGate": "absolute exact enumerable-game expectation difference < 1e-12",
+    "clustering": "session for duplicate/styles/shark; run for adaptive Slumbot, hand for no-memory Slumbot",
+    "missingness": "failures, missing strategy mass, replay disagreements and missing provenance prevent qualification",
+    "heuristics": ["pot-share-uniform-32-v1", "tracked-range-value-networks-v2"],
+    "v2": {
+      "id": "tracked-range-value-networks-v2",
+      "models": {
+        "flop": {
+          "stem": "flop2-ck50/river-buckets-128",
+          "jsonSha256": "8b1245ecd2c09040fb9f0862e8a03af297497c5f84cd974d56226a41cdd3ddff",
+          "binSha256": "a82e78d6071545ec0ee4d9b239ba6218dcbab4e97b32197dbccf76c6cdd0f5d3"
+        },
+        "turn": {
+          "stem": "turnstart-c1-53k-e50/river-buckets-128",
+          "jsonSha256": "20848416424b84c6b58c71036c3476257bd9113e0c749e2c64804e17bb52797c",
+          "binSha256": "18f473d54de5790e0e1d0d7cc34a78f20b2c1dc90146e185da273e5f9cb6de36"
+        },
+        "river": {
+          "stem": "night1-buckets/river-buckets-128",
+          "jsonSha256": "a02b91b39b6da6616230fa670734dc3aea062aad5ccc96b6d6fcd442f211032d",
+          "binSha256": "321f35f3fcff24a38a7456d96affc523ff94920e169579712e69686aaff8d330"
+        }
+      },
+      "recipe": {
+        "publicState": "pre-decision board, both seats stacks and contributions; own hole indexes the output only",
+        "ranges": "snapshot tracked solver ranges conditioned on public tree path, OOP first; no future actions or opponent hole; unchanged across alternatives",
+        "buckets": "same exact training layout: river strengthRanks, turn expectedStrengthRanks over every river, flop expectedStrengthRanks over every next card; export-specific bucket metadata honored",
+        "projection": "for each legal alternative, opponent matches our new street contribution if affordable; evaluate resulting pot and effective stack with PRE-action ranges; Q = output[actor bucket] * projectedPot - actor.betHand - actionCost",
+        "fold": "-actor.betHand",
+        "preflop": "v1 deterministic pot-share-uniform-32 fallback",
+        "unavailable": "omit postflop action nodes without tracked ranges or exact strategy; record reason; never reconstruct historical policy probabilities from a present policy",
+        "controls": "exact legalised sampler probabilities; sum(p * Q) - Q(taken); no fitted correction coefficient; v1 exact late-board chance controls unchanged",
+        "tuning": "no outcome-dependent calibration, coefficients, clamping, model selection or early stopping",
+        "precision": "network outputs may be inaccurate, especially facing bets or all-in: matching projection ignores fold equity; stronger representation does not imply lower variance",
+        "validation": "enumerable toy with fixed network-derived Q and exact action centering; frozen source/export/spec hashes",
+        "evaluation": "existing logs are retrospective; action AIVAT unavailable without records; report available chance controls separately; future qualification requires freezing before fresh collection"
+      },
+      "recipeSha256": "73dd4bca696b38e5193e814eeb41aa402eb3f7e42a10ade76399ea4580ac5ff3",
+      "sourceSha256": {
+        "./bot-aivat.ts": "2efc5ec298ebfc9dc380e07dc9453f7e3e4e7cf2aed5c15b5d7645c40b435555",
+        "./bot-aivat-v2.ts": "f69f4e48a5ef22c50e594275f1b57238551563de1bbe014deb02dbd1c8ac27c9",
+        "./bot-aivat-state.ts": "faaae8f4ae28c94d1d9785f0c1dc357be14fef1f2df271190274bde15a5808c1",
+        "./bot-service.ts": "46e0afa822fd45f812a1e31f66c6bc48fc94d46129bd0de7363af5eaf49ef25f",
+        "./bot-river-policy.ts": "7e77becef20f9aa8eb88024a4e1edf06d154e8cd99339959679267ee284ada94",
+        "./bot-turn-policy.ts": "f1a7c65a93eb04e9af815a1039366da2c524f4a77e0806fdf5ac29c693a2ec93",
+        "./bot-value-network.ts": "6d81397fd9ebcd27a22e99b1dc0a5703d3f21f18771aef9a02f45d36c2c98416",
+        "./bot-flop-buckets.ts": "f71dcfea9f712f4ffa3d5f75bccd1de11c925d97303fbc475206fc5087293498",
+        "./bot-turn-end-data.ts": "fbb1aaff766b2dacde789d804e87a308871c7a345062a7c907e6dfea657ec851",
+        "./bot-river-value-data.ts": "37b89bc8f48831b925c0305cdd38b5b9a1db5adcf72e0abfacc092a1e6735d11",
+        "./bot-value-simd.ts": "6f99997f94b839f532a1f7ef873c177ec50e9cc6cefaa53357ffcb09fa8fed03",
+        "./bot-value-simd-bytes.ts": "dd9f2a6b1a4d9acc789b66616cec1dbbbe8afa970b08d2575709167f7fd3d295",
+        "./bot-aivat-toy.ts": "ea5c1970770941aae85e7c5bc85ae8ef0aa060f5ec7906f43ca3d0991e47eaab",
+        "./bot-aivat-replay.ts": "98f68d17c051d43dd879a9b3f64774497908cd3d19468549bb08607b31040be9",
+        "./bot-aivat-v2-check.ts": "32937791b451dcbf3bed28f0c2e8b5c436695980447a0d49ccb4c43d9e4c6162",
+        "./bot-benchmark-provenance.ts": "b0ec5937cbf9786a6488e528967ba673a1b14f0fa56a597cabf7ace2eb0bac4b"
+      }
+    }
+  },
+  "gates": {
+    "D2": {
+      "status": "TODO_SOURCE_REQUIRED",
+      "pass": null,
+      "reason": "No numeric D2 definition available in supplied facts or located files; cannot declare pass"
+    },
+    "B6": {
+      "primaryStyleGainMinimumBb100": 15,
+      "pooledStyle95LowerStrictlyAbove": 0,
+      "eachStylePointStrictlyAbove": 0,
+      "sharkPairedExtraWinningsOneSided95UpperStrictlyBelowBb100": 5,
+      "adaptedEligibleRootsMinimumShareEachStreet": 0.05,
+      "meanAdaptedRootActionTvMinimum": 0.02,
+      "budgetOverdraftsMaximum": 0,
+      "p95DecisionLatencyMaximumRelativeToV9g": 3,
+      "productionTurnCertificateRequired": true,
+      "source": "B6 v2 design acceptance, 2026-10-23; older +20 practice gate superseded"
+    }
+  },
+  "runtime": {
+    "maximumThreads": 2,
+    "valueThreads": 1,
+    "vitestMaxWorkers": 1,
+    "processTimeoutSeconds": 540
+  },
+  "provenanceSchema": "river-benchmark-provenance-v1",
+  "freezeRule": "Hash this JSON plus code, models and packs before play. Any change creates a new benchmark version. Existing results are retrospective, not fresh held-out confirmation.",
+  "previousSpecification": "frozen-v1.json"
+}

@@ -92,6 +92,9 @@ ml/data/
 *.onnx
 *.safetensors
 !apps/server/models/*.bin
+# The preflop pack the strongest bot plays loads from apps/server/models/private/preflop.
+apps/server/preflop/v3/*bb.json
+apps/server/preflop/v3/*bb.txt
 
 # Media that is not part of the product
 music/

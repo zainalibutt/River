@@ -107,6 +107,15 @@ export function sampleTurnEndSpot(seed: string, settings: RiverDataSettings): Ri
   return sampleSpot(seed, settings, 4)
 }
 
+/**
+ * A random spot at the end of the flop's betting, before the turn card: as
+ * `sampleRiverSpot` with three board cards, the ranges ordered by the hand
+ * each holding has made so far. See `flopEndRecord`.
+ */
+export function sampleFlopEndSpot(seed: string, settings: RiverDataSettings): RiverSpot {
+  return sampleSpot(seed, settings, 3)
+}
+
 function sampleSpot(seed: string, settings: RiverDataSettings, boardCards: number): RiverSpot {
   const rng = mulberry32(seedFromString(seed))
   const deck = makeDeck()

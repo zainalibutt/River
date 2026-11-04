@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { cardKey } from '@river/engine'
 import type { RiverSpot } from './bot-river-solver.js'
-import { COMBOS, comboIndex52, strengthRanks } from './bot-river-value-data.js'
+import { COMBOS, comboIndex52, RIVER_DATA_SETTINGS, strengthRanks } from './bot-river-value-data.js'
+import { simdForwardBatch } from './bot-value-simd.js'
 
 /**
  * v9's river value network inside the server (docs/bots.md): the weights
  * trained in PyTorch by ml/train_river_buckets.py, read from their float32
- * export, and the network's maths in plain TypeScript, so the server needs no
- * Python and no native library. A spot's ranges are summarised by strength
+ * export, with WASM SIMD batch inference and a TypeScript fallback, so the
+ * server needs no Python or native library. A spot's ranges are summarised by strength
  * exactly as in training, and each holding takes its bucket's value.
  */
 
@@ -22,6 +23,11 @@ export interface ValueNetworkLayer {
 }
 
 export interface RiverValueNetwork {
+  readonly flopBuckets?: {
+    readonly version: 1
+    readonly strength: number
+    readonly potential: number
+  }
   readonly buckets: number
   readonly layers: readonly ValueNetworkLayer[]
   /** For a turn-end network trained on two-dimensional buckets, their slices. */
@@ -37,6 +43,11 @@ export interface RiverValueNetwork {
 }
 
 export interface ValueNetworkDescription {
+  readonly flopBuckets?: {
+    readonly version: 1
+    readonly strength: number
+    readonly potential: number
+  }
   readonly buckets: number
   readonly turnBuckets?: { readonly strength: number; readonly potential: number }
   readonly checked?: boolean
@@ -80,7 +91,14 @@ export function valueNetworkFrom(
     })
   }
   if (layers.length === 0) throw new Error('value network has no layers')
+  if (
+    description.flopBuckets !== undefined &&
+    (description.flopBuckets.version !== 1 ||
+      description.flopBuckets.strength * description.flopBuckets.potential !== description.buckets)
+  )
+    throw new Error('invalid flop bucket metadata')
   return {
+    ...(description.flopBuckets === undefined ? {} : { flopBuckets: description.flopBuckets }),
     buckets: description.buckets,
     layers,
     ...(description.turnBuckets === undefined ? {} : { turnBuckets: description.turnBuckets }),
@@ -100,13 +118,18 @@ export function valueNetworkFrom(
 }
 
 /** The network's output for one input. */
-export function forward(network: RiverValueNetwork, input: Float32Array): Float32Array {
+export function forward(
+  network: RiverValueNetwork,
+  input: Float32Array,
+  buffers?: readonly Float32Array[],
+): Float32Array {
   let current = input
-  for (const layer of network.layers) {
+  for (let index = 0; index < network.layers.length; index += 1) {
+    const layer = network.layers[index] as ValueNetworkLayer
     if (current.length !== layer.columns) {
       throw new Error(`value network layer wants ${layer.columns} inputs, got ${current.length}`)
     }
-    const out = new Float32Array(layer.rows)
+    const out = buffers?.[index] ?? new Float32Array(layer.rows)
     for (let r = 0; r < layer.rows; r += 1) {
       let sum = layer.bias[r] as number
       const row = r * layer.columns
@@ -114,6 +137,84 @@ export function forward(network: RiverValueNetwork, input: Float32Array): Float3
         sum += (layer.weight[row + c] as number) * (current[c] as number)
       }
       out[r] = layer.slope === null || sum > 0 ? sum : layer.slope * sum
+    }
+    current = out
+  }
+  return current
+}
+
+/**
+ * Row-major [batch, columns] inputs and outputs. Four independent dot products
+ * share each weight load in the TS fallback. WASM uses f32x4 accumulation.
+ * Buffers belong to the caller and can be reused per visit. Backend selection
+ * is cached per network on first call (RIVER_VALUE_BACKEND=ts|wasm, auto by default).
+ * Network weights must remain immutable thereafter. Calls are synchronous and
+ * non-reentrant. RIVER_VALUE_THREADS=N opts into N participants (including main)
+ * for row-partitioned WASM inference, with a private WASM instance per worker.
+ * With outputRows, final-layer rows marked zero are left untouched; the caller
+ * must only read requested rows. Hidden layers always compute every row.
+ */
+export function forwardBatch(
+  network: RiverValueNetwork,
+  input: Float32Array,
+  batch: number,
+  buffers: readonly Float32Array[],
+  outputRows?: Uint8Array,
+): Float32Array {
+  if (!Number.isSafeInteger(batch) || batch < 0) throw new Error('invalid value network batch')
+  let length = input.length
+  for (let i = 0; i < network.layers.length; i += 1) {
+    const layer = network.layers[i] as ValueNetworkLayer
+    if (length !== batch * layer.columns) {
+      throw new Error(`value network batch wants ${batch * layer.columns} inputs, got ${length}`)
+    }
+    length = batch * layer.rows
+    if (buffers[i]?.length !== length) throw new Error('invalid value network output buffer')
+  }
+  const accelerated = simdForwardBatch(network, input, batch, buffers, outputRows)
+  if (accelerated !== undefined) return accelerated
+  let current = input
+  for (let index = 0; index < network.layers.length; index += 1) {
+    const { rows, columns, weight, bias, slope } = network.layers[index] as ValueNetworkLayer
+    if (current.length !== batch * columns) {
+      throw new Error(`value network batch wants ${batch * columns} inputs, got ${current.length}`)
+    }
+    const out = buffers[index] as Float32Array
+    for (let b = 0; b < batch; b += 4) {
+      const count = Math.min(4, batch - b)
+      const a = b * columns
+      if (count < 4) {
+        for (let tail = b; tail < batch; tail += 1) {
+          for (let r = 0; r < rows; r += 1) {
+            if (index === network.layers.length - 1 && outputRows?.[r] === 0) continue
+            let sum = bias[r] as number
+            for (let c = 0; c < columns; c += 1) {
+              sum += (weight[r * columns + c] as number) * (current[tail * columns + c] as number)
+            }
+            out[tail * rows + r] = slope === null || sum > 0 ? sum : slope * sum
+          }
+        }
+        break
+      }
+      for (let r = 0; r < rows; r += 1) {
+        if (index === network.layers.length - 1 && outputRows?.[r] === 0) continue
+        let s0 = bias[r] as number
+        let s1 = s0
+        let s2 = s0
+        let s3 = s0
+        const row = r * columns
+        for (let c = 0; c < columns; c += 1) {
+          const w = weight[row + c] as number
+          s0 += w * (current[a + c] as number)
+          s1 += w * (current[a + columns + c] as number)
+          s2 += w * (current[a + 2 * columns + c] as number)
+          s3 += w * (current[a + 3 * columns + c] as number)
+        }
+        out[b * rows + r] = slope === null || s0 > 0 ? s0 : slope * s0
+        if (count > 1) out[(b + 1) * rows + r] = slope === null || s1 > 0 ? s1 : slope * s1
+        if (count > 2) out[(b + 2) * rows + r] = slope === null || s2 > 0 ? s2 : slope * s2
+        if (count > 3) out[(b + 3) * rows + r] = slope === null || s3 > 0 ? s3 : slope * s3
+      }
     }
     current = out
   }
@@ -193,10 +294,20 @@ export function bucketInputs(
   pot: number,
   checked?: readonly [ArrayLike<number>, ArrayLike<number>],
   weighting: 'live' | 'range' = 'live',
+  buffer?: Float32Array,
 ): Float32Array {
   const buckets = layout.held.length
-  const inputs = new Float32Array((checked === undefined ? 3 : 5) * buckets + 1)
-  inputs[0] = Math.log(stack / pot)
+  const inputs = buffer ?? new Float32Array((checked === undefined ? 3 : 5) * buckets + 1)
+  inputs.fill(0)
+  // The training data samples stack to pot within these limits; a deeper or
+  // shallower spot is read as the nearest one the networks have seen rather
+  // than extrapolated (a 200 bb limped pot reaches about 100).
+  inputs[0] = Math.log(
+    Math.min(
+      RIVER_DATA_SETTINGS.maxStackToPot,
+      Math.max(RIVER_DATA_SETTINGS.minStackToPot, stack / pot),
+    ),
+  )
   ranges.forEach((range, player) => {
     let total = 0
     for (let index = 0; index < COMBOS; index += 1) {
@@ -244,7 +355,9 @@ export function bucketInputs(
 }
 
 /** A spot's ranges as weights by `comboIndex52`. */
-export function rangeWeights(spot: RiverSpot): readonly [Float64Array, Float64Array] {
+export function rangeWeights(
+  spot: Pick<RiverSpot, 'ranges'>,
+): readonly [Float64Array, Float64Array] {
   const weights = [new Float64Array(COMBOS), new Float64Array(COMBOS)] as const
   for (const player of [0, 1] as const) {
     const row = weights[player]
@@ -281,13 +394,19 @@ export function holdingValues(
   layout: BucketLayout,
   inputs: Float32Array,
   checked?: readonly [ArrayLike<number>, ArrayLike<number>],
+  buffers?: {
+    readonly layers: readonly Float32Array[]
+    readonly values: readonly [Float32Array, Float32Array]
+  },
 ): readonly [Float32Array, Float32Array] {
   if (network.checked !== undefined && checked === undefined) {
     throw new Error('this network needs the checked-down value of every holding')
   }
   const added = network.checked === undefined ? undefined : checked
-  const out = forward(network, inputs)
-  const values = [new Float32Array(COMBOS), new Float32Array(COMBOS)] as const
+  const out = forward(network, inputs, buffers?.layers)
+  const values = buffers?.values ?? ([new Float32Array(COMBOS), new Float32Array(COMBOS)] as const)
+  values[0].fill(0)
+  values[1].fill(0)
   for (let index = 0; index < COMBOS; index += 1) {
     const bucket = layout.bucketOf[index] as number
     if (bucket < 0) continue
@@ -333,6 +452,28 @@ export function turnNetworkFromEnvironment(): RiverValueNetwork {
   const stem = process.env.RIVER_TURN_NETWORK
   if (stem === undefined || stem === '') {
     throw new Error('v9a needs RIVER_TURN_NETWORK: the turn-end network export, without .bin')
+  }
+  return loadValueNetwork(stem)
+}
+
+/** River network export stem for opt-in per-river turn leaves. */
+export function riverNetworkFromEnvironment(): RiverValueNetwork {
+  const stem = process.env.RIVER_RIVER_NETWORK
+  if (stem === undefined || stem === '') {
+    throw new Error(
+      'per-river carry needs RIVER_RIVER_NETWORK: the river network export, without .bin',
+    )
+  }
+  return loadValueNetwork(stem)
+}
+
+/** Turn-start network export stem for opt-in per-turn flop leaves. */
+export function turnStartNetworkFromEnvironment(): RiverValueNetwork {
+  const stem = process.env.RIVER_TURN_START_NETWORK
+  if (stem === undefined || stem === '') {
+    throw new Error(
+      'per-turn carry needs RIVER_TURN_START_NETWORK: the turn-start network export, without .bin',
+    )
   }
   return loadValueNetwork(stem)
 }

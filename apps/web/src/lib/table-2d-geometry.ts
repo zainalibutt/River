@@ -261,6 +261,23 @@ function clearOf(box: Box, reserved: readonly Box[]): Box {
   return lifted
 }
 
+/**
+ * Keep an upright table's bet off the board. Upright, the board runs nearly rail to rail,
+ * so the seats at either side put their bets on its end cards; such a bet moves to just
+ * above or below the board, whichever side of it the bet was on, with room for its chips.
+ */
+function clearOfBoard(
+  bet: PlanePoint,
+  board: { span: number; v: number; card: { height: number } },
+): PlanePoint {
+  // Half a short stack of chips, so a short table still has room for the seat beyond it.
+  const room = board.card.height * 0.2
+  const reach = board.card.height / 2 + room
+  if (Math.abs(bet.u) >= board.span / 2 + room) return bet
+  if (Math.abs(bet.v - board.v) >= reach) return bet
+  return { u: bet.u, v: board.v + (bet.v > board.v ? reach : -reach) }
+}
+
 /** Lay out a table of `seatCount` seats with `heroSeat` at the player's place. */
 export function tableLayout(
   geometry: TableGeometry,
@@ -277,6 +294,11 @@ export function tableLayout(
   const anchor = anchorSeat(heroSeat)
   const inner = { a: geometry.a - geometry.rail, b: geometry.b - geometry.rail }
   const placardSize = geometry.placard ?? PLACARD
+  const boardCard = geometry.boardCard ?? { width: 100, height: 139 }
+  const holeCard = geometry.holeCard ?? { width: 58, height: 81 }
+  const gap = geometry.boardGap ?? 12
+  const boardSpan = boardCard.width * 5 + gap * 4
+  const boardV = 8
   const seats: SeatSpots[] = []
   for (let seat = 0; seat < count; seat += 1) {
     const offset = (((seat - anchor) % count) + count) % count
@@ -310,6 +332,7 @@ export function tableLayout(
     // The foot's placard only shows for a seat you are not in, and then the HUD at the
     // centre is the prompt to choose a seat, so it stands a little up the felt, clear of it.
     const placardBox = foot ? { ...resting, y: resting.y - 74 } : clearOf(resting, reserved)
+    const bet = ellipsePoint(inner.a * 0.62, inner.b * (foot ? 0.34 : 0.5), spotAngle)
     seats.push({
       seat,
       place,
@@ -326,16 +349,14 @@ export function tableLayout(
         { u: cardsCentre.u - spread.u, v: cardsCentre.v - spread.v },
         { u: cardsCentre.u + spread.u, v: cardsCentre.v + spread.v },
       ],
-      bet: ellipsePoint(inner.a * 0.62, inner.b * (foot ? 0.34 : 0.5), spotAngle),
+      bet:
+        geometry.orientation === 'portrait'
+          ? clearOfBoard(bet, { span: boardSpan, v: boardV, card: boardCard })
+          : bet,
       button: along(ellipsePoint(inner.a * 0.74, inner.b * 0.62, spotAngle), spotAngle, -70),
       facing,
     })
   }
-  const boardCard = geometry.boardCard ?? { width: 100, height: 139 }
-  const holeCard = geometry.holeCard ?? { width: 58, height: 81 }
-  const gap = geometry.boardGap ?? 12
-  const boardSpan = boardCard.width * 5 + gap * 4
-  const boardV = 8
   const board = Array.from({ length: 5 }, (_, index) => ({
     u: -boardSpan / 2 + boardCard.width / 2 + index * (boardCard.width + gap),
     v: boardV,

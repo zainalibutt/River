@@ -1,0 +1,235 @@
+{
+  "toy": {
+    "deals": 6,
+    "paths": 18,
+    "probability": 1,
+    "exactExpectation": -0.008333333333333276,
+    "aivatExpectation": -0.008333333333333401,
+    "bias": -1.249000902703301e-16,
+    "rawVariance": 1.7149305555555556,
+    "aivatVariance": 0.7719305555555556
+  },
+  "result": {
+    "kind": "slumbot",
+    "inputs": [
+      {
+        "name": "slumbot-v9go-a1.jsonl",
+        "sha256": "4c7d56ff740d0ef91705d000ba3bb564bd88552b743321ffbdba8a108e43b417"
+      },
+      {
+        "name": "slumbot-v9go-a2.jsonl",
+        "sha256": "6fcc1492b5017d81e65b488ccd2abd12deaf66e4dddb8e166c634d95ad987a35"
+      },
+      {
+        "name": "slumbot-v9go-a3.jsonl",
+        "sha256": "e0b540a8bc9f08ab0f0717ad92e55ce14d7ecb53fcce6232c31891181110c4df"
+      },
+      {
+        "name": "slumbot-v9go-a4.jsonl",
+        "sha256": "3f6d9dcb3cb2e521601367158443bce377186ba1edcdfb8b5f00154684c74375"
+      },
+      {
+        "name": "slumbot-v9go-a5.jsonl",
+        "sha256": "2ee8f564f876454f7c67897327eddd93ab42c8edbe629dfd6413c8d63daec904"
+      },
+      {
+        "name": "slumbot-v9go-a6.jsonl",
+        "sha256": "28a06ff1c009633801cf7685ec26b1387fbcb0fadeabf384350858c2e4281ee8"
+      },
+      {
+        "name": "slumbot-v9go-a7.jsonl",
+        "sha256": "1127385fc603456248f0dbc04aac97ce20c7ec1be353d50ba6b637454af05681"
+      },
+      {
+        "name": "slumbot-v9go-a8.jsonl",
+        "sha256": "28ef4d7ce1dc8f4aa0ed10d911c0c740d8d3e0c010ca15b21ba8e69940f836f7"
+      },
+      {
+        "name": "slumbot-v9go-a9.jsonl",
+        "sha256": "9046e5c31d350fa39ce0da0cdf75c644075aeef7fb863f9737b570a11399b460"
+      },
+      {
+        "name": "slumbot-v9go-a10.jsonl",
+        "sha256": "5ccedab234beace6b109c18896af8029ae34264947a03348f8269c8e99a298d4"
+      },
+      {
+        "name": "slumbot-v9go-a11.jsonl",
+        "sha256": "6855c5c1fb9ba7e3844931569456f638a87d7e1af5133ff1244437ec636449e5"
+      },
+      {
+        "name": "slumbot-v9go-a12.jsonl",
+        "sha256": "06a03bb728d6ac250089150eb6d615e1d0753d272941a03374c27d528dfd3333"
+      }
+    ],
+    "hands": 38376,
+    "clusters": 38376,
+    "raw": {
+      "hands": 38376,
+      "sessions": 38376,
+      "bigBlindsPer100": -10.388941004794663,
+      "interval95": [-28.494624162395176, 7.71674215280585],
+      "standardError": 9.237471757917673
+    },
+    "valued": {
+      "hands": 38376,
+      "sessions": 38376,
+      "bigBlindsPer100": -12.400513631204683,
+      "interval95": [-28.039126078830613, 3.238098816421248],
+      "standardError": 7.978778793404517
+    },
+    "chanceOnly": {
+      "hands": 38376,
+      "sessions": 38376,
+      "bigBlindsPer100": -14.550626549000501,
+      "interval95": [-31.054542846740283, 1.9532897487392802],
+      "standardError": 8.42025453380422
+    },
+    "aivat": {
+      "hands": 38376,
+      "sessions": 38376,
+      "bigBlindsPer100": -18.22006254102956,
+      "interval95": [-35.77092576789304, -0.6691993141660788],
+      "standardError": 8.954404093676475
+    },
+    "aivatV1": {
+      "hands": 38376,
+      "sessions": 38376,
+      "bigBlindsPer100": -18.22006254102956,
+      "interval95": [-35.77092576789304, -0.6691993141660788],
+      "standardError": 8.954404093676475
+    },
+    "aivatV2": null,
+    "supportedControlsOnly": {
+      "v1": {
+        "hands": 38376,
+        "sessions": 38376,
+        "bigBlindsPer100": -18.22006254102956,
+        "interval95": [-35.77092576789304, -0.6691993141660788],
+        "standardError": 8.954404093676475
+      },
+      "v2": {
+        "hands": 38376,
+        "sessions": 38376,
+        "bigBlindsPer100": -14.550626549000501,
+        "interval95": [-31.054542846740283, 1.9532897487392802],
+        "standardError": 8.42025453380422
+      },
+      "qualification": "Missing action records contribute zero action correction; this is not a network precision measurement"
+    },
+    "heuristic": "pot-share-uniform-32-v1",
+    "networkEvaluations": 0,
+    "knownActions": 48894,
+    "missingActions": 41413,
+    "chanceAvailable": true,
+    "replayFailures": 0,
+    "sourceRunFailures": null,
+    "qualification": "retrospective-analysis-only",
+    "aivatUnavailableReason": null,
+    "standardErrorReduction": {
+      "rawToChanceOnly": 1.097053743545712,
+      "valuedToChanceOnly": 0.9475697868007029,
+      "rawToAivat": 1.0316121163708813,
+      "valuedToAivat": 0.8910452007676384
+    },
+    "varianceGatePassed": false,
+    "provenance": {
+      "schema": "river-benchmark-provenance-v1",
+      "benchmark": "d8-frozen-v2",
+      "specificationSha256": "63cc42a3465163afdfa69600f583247c2fac693bd488bfe19de5d2c9835562b6",
+      "runner": "aivat-replay-slumbot",
+      "startedAt": "2026-10-27T11:05:04.273Z",
+      "commit": "1c2b3327e4ae050f7dc12c4615013a6beca89e95",
+      "sourceSha256": "5a0867247ca5d3cefaa7d89d03b0129ce1725e50917159d62d767addfeda7300",
+      "engineRuntimeSha256": "9d655a1daac401a9abaff83bc87c3dd93b0ab56b2e11ea528666c9a16d9605d3",
+      "lockfileSha256": "171c26948b1943a3cff5ec09deb5db9580218a8e7a3ceccfcff2b76d7177ed43",
+      "models": {
+        "RIVER_FLOP_NETWORK": null,
+        "RIVER_TURN_NETWORK": null,
+        "RIVER_TURN_START_NETWORK": null,
+        "RIVER_RIVER_NETWORK": null
+      },
+      "preflop": {
+        "version": "v3",
+        "files": [
+          {
+            "depth": 100,
+            "sha256": "36090daa61b214019ac2b4317357d5a53e275e48ff28d220bd84d50893ba1414"
+          },
+          {
+            "depth": 200,
+            "sha256": "847c70afa14e725933f0b60214cdb99235e3415a20333f54aed50b2f888a2ace"
+          }
+        ]
+      },
+      "environment": {
+        "node": "v24.13.0",
+        "platform": "win32",
+        "arch": "x64",
+        "RIVER_VALUE_BACKEND": null,
+        "RIVER_VALUE_THREADS": "1",
+        "RIVER_COMPARE_HANDS": null,
+        "RIVER_PREFLOP_PACK": null,
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "UV_THREADPOOL_SIZE": "1"
+      },
+      "heuristic": "pot-share-uniform-32-v1",
+      "policies": ["v9go"],
+      "seeds": [],
+      "plannedHands": 38376,
+      "settings": {
+        "inputs": [
+          {
+            "name": "slumbot-v9go-a1.jsonl",
+            "sha256": "4c7d56ff740d0ef91705d000ba3bb564bd88552b743321ffbdba8a108e43b417"
+          },
+          {
+            "name": "slumbot-v9go-a2.jsonl",
+            "sha256": "6fcc1492b5017d81e65b488ccd2abd12deaf66e4dddb8e166c634d95ad987a35"
+          },
+          {
+            "name": "slumbot-v9go-a3.jsonl",
+            "sha256": "e0b540a8bc9f08ab0f0717ad92e55ce14d7ecb53fcce6232c31891181110c4df"
+          },
+          {
+            "name": "slumbot-v9go-a4.jsonl",
+            "sha256": "3f6d9dcb3cb2e521601367158443bce377186ba1edcdfb8b5f00154684c74375"
+          },
+          {
+            "name": "slumbot-v9go-a5.jsonl",
+            "sha256": "2ee8f564f876454f7c67897327eddd93ab42c8edbe629dfd6413c8d63daec904"
+          },
+          {
+            "name": "slumbot-v9go-a6.jsonl",
+            "sha256": "28a06ff1c009633801cf7685ec26b1387fbcb0fadeabf384350858c2e4281ee8"
+          },
+          {
+            "name": "slumbot-v9go-a7.jsonl",
+            "sha256": "1127385fc603456248f0dbc04aac97ce20c7ec1be353d50ba6b637454af05681"
+          },
+          {
+            "name": "slumbot-v9go-a8.jsonl",
+            "sha256": "28ef4d7ce1dc8f4aa0ed10d911c0c740d8d3e0c010ca15b21ba8e69940f836f7"
+          },
+          {
+            "name": "slumbot-v9go-a9.jsonl",
+            "sha256": "9046e5c31d350fa39ce0da0cdf75c644075aeef7fb863f9737b570a11399b460"
+          },
+          {
+            "name": "slumbot-v9go-a10.jsonl",
+            "sha256": "5ccedab234beace6b109c18896af8029ae34264947a03348f8269c8e99a298d4"
+          },
+          {
+            "name": "slumbot-v9go-a11.jsonl",
+            "sha256": "6855c5c1fb9ba7e3844931569456f638a87d7e1af5133ff1244437ec636449e5"
+          },
+          {
+            "name": "slumbot-v9go-a12.jsonl",
+            "sha256": "06a03bb728d6ac250089150eb6d615e1d0753d272941a03374c27d528dfd3333"
+          }
+        ],
+        "historical": true
+      }
+    }
+  }
+}

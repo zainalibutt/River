@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { parseCard } from '@river/engine'
 import { allInEquityChips } from './bot-allin-equity.js'
+import { benchmarkProvenance } from './bot-benchmark-provenance.js'
 import { botPlayerId } from './bot-service.js'
 import { clusteredEstimate } from './bot-session-evaluation.js'
 import { SLUMBOT_STAKE, slumbotMoves, slumbotRoom } from './bot-slumbot.js'
@@ -107,4 +108,17 @@ process.stdout.write(
 )
 process.stdout.write(
   `on the button: ${describe(onButton(valued, 1))}; in the big blind: ${describe(onButton(valued, 0))}\n`,
+)
+process.stdout.write(
+  `${JSON.stringify({
+    provenance: benchmarkProvenance('slumbot-pool', {
+      policies: [...new Set(hands.map((hand) => hand.focal))],
+      seeds: [],
+      plannedHands: hands.length,
+      settings: { historical: true, sourceRunSeedsUnknown: true },
+    }),
+    status: 'retrospective-analysis-only',
+    replayFailures: disagreements + unreplayable,
+    sourceRunFailures: null,
+  })}\n`,
 )

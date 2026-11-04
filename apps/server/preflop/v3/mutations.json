@@ -1,0 +1,125 @@
+{
+  "baseline": {
+    "exitCode": 0,
+    "failedTests": 0,
+    "failed": []
+  },
+  "results": [
+    {
+      "id": "reverse-regret-update",
+      "killed": true,
+      "exitCode": 1,
+      "failedTests": 4,
+      "failed": [
+        "hand-dependent preflop realisation a flat-factor mutation materially changes BB folding in a cache-independent regression game",
+        "offline preflop solver: independent exhaustive oracle matches the independent range-dependent v2 toy oracle, including blocked/unreachable ranges",
+        "offline preflop solver: independent exhaustive oracle solves the toy with cfr+ and passes exhaustive best response",
+        "offline preflop solver: independent exhaustive oracle solves the toy with dcfr and passes exhaustive best response"
+      ]
+    },
+    {
+      "id": "reverse-equity-winner",
+      "killed": true,
+      "exitCode": 1,
+      "failedTests": 1,
+      "failed": [
+        "preflop equity and exact card removal spot-checks AA/KK, AKs/QQ and 72o/AA with deterministic board sampling"
+      ]
+    },
+    {
+      "id": "ignore-card-removal",
+      "killed": true,
+      "exitCode": 1,
+      "failedTests": 8,
+      "failed": [
+        "preflop equity and exact card removal partitions all 1326 combos and 1624350 ordered legal deals with exact class weights",
+        "preflop equity and exact card removal spot-checks AA/KK, AKs/QQ and 72o/AA with deterministic board sampling",
+        "generated preflop packs v1 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v1 200 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v2 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v2 200 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v3 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v3 200 bb is complete, legal, normalised, correctly labelled and certified"
+      ]
+    },
+    {
+      "id": "remove-stack-cap",
+      "killed": true,
+      "exitCode": 1,
+      "failedTests": 6,
+      "failed": [
+        "offline preflop solver: independent exhaustive oracle matches the independent range-dependent v2 toy oracle, including blocked/unreachable ranges",
+        "offline preflop solver: independent exhaustive oracle matches every BR, profile value and general-sum improvement on the six-card toy",
+        "offline preflop solver: independent exhaustive oracle solves the toy with cfr+ and passes exhaustive best response",
+        "offline preflop solver: independent exhaustive oracle solves the toy with dcfr and passes exhaustive best response",
+        "offline preflop solver: independent exhaustive oracle uses actual blocked node ranges, handles unreachable histories and rejects missing policies",
+        "offline preflop tree and payoff enforces minimum raises, caps and duplicate merging over fractional/short/deep stacks"
+      ]
+    },
+    {
+      "id": "corrupt-best-response",
+      "killed": true,
+      "exitCode": 1,
+      "failedTests": 12,
+      "failed": [
+        "hand-dependent preflop realisation a flat-factor mutation materially changes BB folding in a cache-independent regression game",
+        "offline preflop solver: independent exhaustive oracle matches the independent range-dependent v2 toy oracle, including blocked/unreachable ranges",
+        "offline preflop solver: independent exhaustive oracle matches every BR, profile value and general-sum improvement on the six-card toy",
+        "offline preflop solver: independent exhaustive oracle solves the toy with cfr+ and passes exhaustive best response",
+        "offline preflop solver: independent exhaustive oracle solves the toy with dcfr and passes exhaustive best response",
+        "offline preflop solver: independent exhaustive oracle uses actual blocked node ranges, handles unreachable histories and rejects missing policies",
+        "generated preflop packs v1 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v1 200 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v2 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v2 200 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v3 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v3 200 bb is complete, legal, normalised, correctly labelled and certified"
+      ]
+    },
+    {
+      "id": "halve-reported-exploitability",
+      "killed": true,
+      "exitCode": 1,
+      "failedTests": 8,
+      "failed": [
+        "offline preflop solver: independent exhaustive oracle matches every BR, profile value and general-sum improvement on the six-card toy",
+        "offline preflop solver: independent exhaustive oracle uses actual blocked node ranges, handles unreachable histories and rejects missing policies",
+        "generated preflop packs v1 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v1 200 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v2 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v2 200 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v3 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v3 200 bb is complete, legal, normalised, correctly labelled and certified"
+      ]
+    },
+    {
+      "id": "use-zero-sum-certificate",
+      "killed": true,
+      "exitCode": 1,
+      "failedTests": 8,
+      "failed": [
+        "hand-dependent preflop realisation a flat-factor mutation materially changes BB folding in a cache-independent regression game",
+        "offline preflop solver: independent exhaustive oracle uses actual blocked node ranges, handles unreachable histories and rejects missing policies",
+        "generated preflop packs v1 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v1 200 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v2 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v2 200 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v3 100 bb is complete, legal, normalised, correctly labelled and certified",
+        "generated preflop packs v3 200 bb is complete, legal, normalised, correctly labelled and certified"
+      ]
+    },
+    {
+      "id": "apply-realisation-to-all-in",
+      "killed": true,
+      "exitCode": 1,
+      "failedTests": 4,
+      "failed": [
+        "hand-dependent preflop realisation rewards suitedness/connectivity/pairs and reduces the weak-hand tax at low SPR",
+        "hand-dependent preflop realisation a flat-factor mutation materially changes BB folding in a cache-independent regression game",
+        "offline preflop solver: independent exhaustive oracle matches the independent range-dependent v2 toy oracle, including blocked/unreachable ranges",
+        "offline preflop tree and payoff uses full-pot equity, subtracts total contributions and bypasses realisation for all-ins"
+      ]
+    }
+  ],
+  "seconds": 108.5097509
+}

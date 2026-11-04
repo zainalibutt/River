@@ -14,5 +14,6 @@ export default defineConfig({
     include: ['packages/**/*.test.ts', 'apps/**/*.test.ts', 'hygiene.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
     environment: 'node',
+    globalSetup: ['./vitest.database-guard.ts'],
   },
 })

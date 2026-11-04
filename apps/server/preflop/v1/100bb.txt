@@ -1,0 +1,68 @@
+river-hu-preflop-v1: 100 bb
+Rows/columns AKQJT98765432. Pairs diagonal; suited above; offsuit below.
+F fold, L limp, K check, C call, O open 2.5, R raise 4, T 3bet 9, Q 4bet 22, J jam.
+Cells show all actions >=10%, or the largest action. Whole percentages; JSON is authoritative.
+
+button
+               A           K           Q           J           T           9           8           7           6           5           4           3           2
+A        L63/O37     O86/L14        O100        O100        O100        O100        O100        O100        O100        O100        O100         O98     O65/L35
+K        O76/L24         O99        O100        O100        O100     O78/L22     O52/L48     O73/L27         O97     O86/L14     L52/O48     L87/O13         L96
+Q           O100        O100         O93     O87/L13         O93        O100        O100        O100        O100        O100     O79/L21     L54/O46     L88/O12
+J           O100         O98        O100     L57/O43         L96         O99        O100        O100         O99     O80/L20     L54/O46     O53/L47         L96
+T           O100     L54/O46        O100        O100         O99     O87/L13        O100         O99     L53/O47     O89/L11     L77/O23         L98        L100
+9           O100     L85/O15     O89/L11        O100        O100        O100        O100     O55/L45         L99        L100        L100        L100        L100
+8            O98     L57/O43         O99        O100     O82/L18     L60/O40        O100     L90/O10        L100        L100        L100     F52/L48         F92
+7        O66/L34     O65/L35         O99         O98        O100     O84/L16        L100        O100        L100        L100        L100         F98        F100
+6        L51/O49     O84/L16         O99        O100         O99        L100        L100        L100        O100        L100        L100         F99        F100
+5        O75/L25         O95         O99        O100         L99        L100        L100     F88/L12         F99        O100        L100         F93        F100
+4        L63/O37         O94         O91         O99        L100        L100     F85/L15         F99        F100        F100        O100        F100        F100
+3            L95     O78/L22        O100         O93        L100         L99         F99        F100        F100        F100        F100        O100        F100
+2            L99     L51/O48         O99        L100        L100     F76/L24        F100        F100        F100        F100        F100        F100         L99
+
+button/limp
+               A           K           Q           J           T           9           8           7           6           5           4           3           2
+A           R100        R100        R100        R100        R100        R100        R100        R100        R100        R100        R100        R100        R100
+K           R100        R100        R100        R100        R100        R100        R100        R100        R100        R100        R100        R100        R100
+Q           R100        R100        R100        R100        R100        R100        R100        R100        R100        R100         R96        K100        K100
+J           R100        R100        R100        R100        R100        R100        R100        R100         R98         R94     R82/K18        K100        K100
+T           R100        R100        R100        R100        R100        R100        R100        R100         R98        K100        K100        K100        K100
+9           R100        R100        R100        R100        R100        R100        R100         R99        K100        K100        K100        K100        K100
+8           R100        R100        R100        R100         R98     K74/R26        R100         R99     R84/K16        K100        K100        K100        K100
+7           R100        R100        R100         R99     R85/K15        K100         K92        R100     K64/R36        K100        K100        K100        K100
+6           R100        R100         K97        K100        K100        K100        K100        K100        R100        K100        K100        K100        K100
+5           R100        R100        K100        K100        K100        K100        K100        K100        K100        R100        K100        K100        K100
+4           R100     R69/K31        K100        K100        K100        K100        K100        K100        K100        K100        R100        K100        K100
+3           R100         K98        K100        K100        K100        K100        K100        K100        K100        K100        K100        R100        K100
+2           R100         K99        K100        K100        K100        K100        K100        K100        K100        K100        K100        K100        R100
+
+button/raise-2.5
+               A           K           Q           J           T           9           8           7           6           5           4           3           2
+A           T100        T100        T100        T100        T100        T100        T100        T100        T100         T99     T67/C33         T91         C94
+K           T100        T100        T100        T100        T100     C75/T25        C100        C100        C100        C100        C100        C100        C100
+Q           T100        T100        T100     T90/C10         C93        C100        C100        C100        C100        C100        C100        C100        C100
+J           T100         T99        C100         T99         C99        C100        C100        C100        C100        C100        C100        C100        C100
+T           T100     T72/C28        C100        C100        T100        C100        C100        C100        C100        C100        C100        C100        C100
+9           T100        C100        C100        C100        C100        T100        C100        C100        C100        C100        C100        C100        C100
+8           T100        C100        C100        C100        C100        C100        T100        C100        C100        C100        C100        C100        C100
+7        T83/C17        C100        C100        C100        C100        C100        C100        T100        C100        C100        C100        C100        C100
+6           C100        C100        C100        C100        C100        C100        C100        C100        T100        C100        C100        C100        C100
+5           C100        C100        C100        C100        C100        C100        C100        C100        C100        T100        C100        C100        C100
+4           C100        C100        C100        C100        C100        C100        C100        C100        C100        C100     C68/T32        C100        C100
+3           C100        C100        C100        C100        C100        C100         F99        C100        C100        C100        C100         C90        C100
+2           C100        C100        C100        C100        C100        C100        F100        F100        F100        C100     F64/C36        F100         C98
+
+button/raise-2.5/raise-9
+               A           K           Q           J           T           9           8           7           6           5           4           3           2
+A        J70/Q30         J98     C88/Q12        C100        C100        C100        C100        C100        C100         C99     C88/J12        C100        C100
+K           J100        J100        J100         J99         J95        C100        C100        C100        C100         C91         C92     C50/F49     F51/C49
+Q            C99         C98        J100         J99         J91        C100        C100         C99         C98         C94     F56/C44     F88/C12     F88/C12
+J           C100        C100        C100         J94        C100        C100        C100         C98     F59/C41     F73/C27         F96         F98         F91
+T           C100        C100        C100        C100     C87/Q13        C100        C100         C99         C93         F99         F98         F91     F88/C12
+9           C100     F85/C15     F52/C48     C69/F31         C98        C100        C100        C100     C60/F40     F55/C45     F90/C10         F93         F91
+8           C100         F99        F100         F98         F90     F51/C49        C100         C99     C61/F39     C56/F44     F60/C40     F81/C19     F78/C22
+7           C100        F100        F100        F100         F99        F100     C51/F49        C100     C59/F40     C77/F23     C79/F21     F64/C36     F77/C23
+6           C100        F100        F100        F100        F100         F96         F95     F52/C48        C100         C95     C90/F10     F50/C50     F67/C33
+5           C100        F100        F100        F100         F99         F99         F92     F78/C22     F61/C39        C100         C96     C62/F38     F57/C42
+4            C99        F100        F100        F100         F98         F98         F93     F86/C14     F76/C24     F64/C36     C89/J11     C53/F47     F61/C39
+3            C94        F100        F100        F100         F99         F97         F93     F88/C12     F80/C20     F73/C27     F73/C27     J66/C34     F63/C36
+2        C76/F24        F100        F100         F94         F99         F96         F91     F87/C13     F80/C19     F75/C24     F74/C25     F73/C27         C98

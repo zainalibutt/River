@@ -1,0 +1,53 @@
+{
+  "model": "hand-equity-v2",
+  "bounds": {
+    "min": 0.4,
+    "max": 1.5
+  },
+  "equity": {
+    "floor": 0.2,
+    "ceiling": 0.8,
+    "power": 1
+  },
+  "sprHalfLife": 4,
+  "features": {
+    "pair": 0.13762827471492134,
+    "suited": 0.031916297836206815,
+    "connected": 0.031957176413457924,
+    "highCard": 0,
+    "connectivitySpan": 4,
+    "wheelConnectivity": 0.5
+  },
+  "pots": {
+    "limped": {
+      "ip": {
+        "base": 0.5111726347736881,
+        "equitySlope": 0.9972746705286732
+      },
+      "oop": {
+        "base": 0,
+        "equitySlope": 1.3860310622785448
+      }
+    },
+    "single-raised": {
+      "ip": {
+        "base": 0.004944471104824956,
+        "equitySlope": 1.609987612737462
+      },
+      "oop": {
+        "base": 0,
+        "equitySlope": 1.5290059453928009
+      }
+    },
+    "three-bet-plus": {
+      "ip": {
+        "base": 0,
+        "equitySlope": 1.725421204833488
+      },
+      "oop": {
+        "base": 0,
+        "equitySlope": 1.6634473285268683
+      }
+    }
+  }
+}

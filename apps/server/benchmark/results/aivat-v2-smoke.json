@@ -1,0 +1,100 @@
+{
+  "heuristic": "tracked-range-value-networks-v2",
+  "specificationSha256": "af73320199cbd066cb75b7a596a467e45a999730d214e44ddd7faed53ccf00bd",
+  "qualification": "synthetic-public-state-export-smoke-only; fixture ranges, no strength evidence",
+  "rows": [
+    {
+      "street": "flop",
+      "choices": [
+        {
+          "action": "0",
+          "probability": 0.2,
+          "value": -53.82580757141113
+        },
+        {
+          "action": "1",
+          "probability": 0.3,
+          "value": -107.39864110946655
+        },
+        {
+          "action": "2",
+          "probability": 0.5,
+          "value": -14596.516489982605
+        }
+      ],
+      "meanCorrection": 0,
+      "toy": {
+        "deals": 6,
+        "paths": 18,
+        "probability": 1,
+        "exactExpectation": -0.008333333333333276,
+        "aivatExpectation": -0.008333333333332194,
+        "bias": 1.0824674490095276e-15,
+        "rawVariance": 1.7149305555555556,
+        "aivatVariance": 463.42621112456374
+      }
+    },
+    {
+      "street": "turn",
+      "choices": [
+        {
+          "action": "0",
+          "probability": 0.2,
+          "value": 102.46169567108154
+        },
+        {
+          "action": "1",
+          "probability": 0.3,
+          "value": 204.6222686767578
+        },
+        {
+          "action": "2",
+          "probability": 0.5,
+          "value": 11343.5697555542
+        }
+      ],
+      "meanCorrection": 0,
+      "toy": {
+        "deals": 6,
+        "paths": 18,
+        "probability": 1,
+        "exactExpectation": -0.008333333333333276,
+        "aivatExpectation": -0.008333333333335302,
+        "bias": -2.0261570199409107e-15,
+        "rawVariance": 1.7149305555555556,
+        "aivatVariance": 972.5133262065967
+      }
+    },
+    {
+      "street": "river",
+      "choices": [
+        {
+          "action": "0",
+          "probability": 0.2,
+          "value": 613.6635780334473
+        },
+        {
+          "action": "1",
+          "probability": 0.3,
+          "value": 1224.399757385254
+        },
+        {
+          "action": "2",
+          "probability": 0.5,
+          "value": 30066.261291503906
+        }
+      ],
+      "meanCorrection": 0,
+      "toy": {
+        "deals": 6,
+        "paths": 18,
+        "probability": 1,
+        "exactExpectation": -0.008333333333333276,
+        "aivatExpectation": -0.008333333333339965,
+        "bias": -6.689093723366568e-15,
+        "rawVariance": 1.7149305555555556,
+        "aivatVariance": 27167.025443282593
+      }
+    }
+  ]
+}

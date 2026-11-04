@@ -10,10 +10,12 @@ import {
   heldOutTables,
   ordinaryTables,
 } from './bot-session-campaign.js'
-import { solvedTurnPolicy } from './bot-turn-policy.js'
-import { turnNetworkFromEnvironment } from './bot-value-network.js'
+import { solvedFlopPolicy, solvedTurnPolicy, TURN_POLICY_TUNING } from './bot-turn-policy.js'
+import { loadValueNetwork, turnNetworkFromEnvironment } from './bot-value-network.js'
 
-// Usage: tsx bot-turn-diagnose.ts <table> <seed prefix> <sessions> <first session> <out.json> [v9a|v9b]
+// Usage: tsx bot-turn-diagnose.ts <table> <seed prefix> <sessions> <first session> <out.json> [v9a|v9b|v9bNN|v9c|v9d]
+// v9bNN is v9b whose turn solve doubts NN% of the opponent's moves rather than v8z's 25%.
+// v9d also needs RIVER_FLOP_NETWORK, the flop-end network's export without .bin.
 // Plays v8z and a turn-solving candidate (v9a by default) on the same deals against the champion, as bot-compare-table.ts does, and
 // tags every hand with what the focal seat did at a two-player turn and whether the turn solver
 // chose it, so bot-turn-diagnose-pool.ts can say where the solver's chips are won and lost.
@@ -22,8 +24,11 @@ const [tableName, prefix, sessionsText, firstText, out, candidateName = 'v9a'] =
 const table = [...developmentTables(), ...heldOutTables(), ...ordinaryTables()].find(
   (entry) => entry.name === tableName,
 )
-if (table === undefined || !prefix || !out || !['v9a', 'v9b'].includes(candidateName)) {
-  throw new Error('usage: <table> <seed prefix> <sessions> <first session> <out.json> [v9a|v9b]')
+const parsed = /^v9(a|b|c|d)(\d\d)?$/.exec(candidateName)
+if (table === undefined || !prefix || !out || parsed === null) {
+  throw new Error(
+    'usage: <table> <seed prefix> <sessions> <first session> <out.json> [v9a|v9b|v9bNN|v9c|v9d]',
+  )
 }
 const sessions = Number(sessionsText)
 const first = Number(firstText)
@@ -121,8 +126,31 @@ function play(policy: BotPolicy, solved: () => number) {
 const started = Date.now()
 const base = riverSolverPolicy(pokerGuardPolicy, 'river-solver', 1, RIVER_CANDIDATE_TUNING)
 const baseline = play(base.policy, () => 0)
-const turn = solvedTurnPolicy(turnNetworkFromEnvironment(), {}, candidateName === 'v9b')
-const candidate = play(turn.policy, () => turn.stats.solved)
+const doubtText = parsed?.[2]
+const doubt =
+  doubtText === undefined
+    ? {}
+    : { ranges: { ...TURN_POLICY_TUNING.ranges, cardBlindPrior: Number(doubtText) / 100 } }
+const kind = parsed?.[1]
+const flopStem = process.env.RIVER_FLOP_NETWORK
+if (kind === 'd' && (flopStem === undefined || flopStem === '')) {
+  throw new Error('v9d needs RIVER_FLOP_NETWORK')
+}
+const chained =
+  kind === 'd'
+    ? solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flopStem as string))
+    : null
+const turn =
+  chained === null
+    ? solvedTurnPolicy(turnNetworkFromEnvironment(), doubt, kind !== 'a', kind === 'c')
+    : null
+const candidate =
+  chained === null
+    ? play(
+        (turn as NonNullable<typeof turn>).policy,
+        () => (turn as NonNullable<typeof turn>).stats.solved,
+      )
+    : play(chained.policy, () => chained.turn.solved)
 writeFileSync(
   out,
   JSON.stringify({
@@ -132,7 +160,10 @@ writeFileSync(
     first,
     sessions,
     bigBlind: DEFAULT_STAKE.bigBlind,
-    fallbacks: turn.stats.fallbacks,
+    fallbacks:
+      chained === null
+        ? turn?.stats.fallbacks
+        : { flop: chained.stats.fallbacks, turn: chained.turn.fallbacks },
     hands: baseline.map((before, index) => ({ v8z: before, candidate: candidate[index] })),
   }),
 )

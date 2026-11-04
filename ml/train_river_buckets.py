@@ -16,6 +16,7 @@ the plain network's is. See docs/bots.md.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -24,7 +25,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from river_value_data import COMBOS, check_manifest, load_bucket_ids, load_checked, load_records
+from river_value_data import RECORD, COMBOS, bucket_ids_for, check_manifests, checked_for, records_for, shards
 
 BANDS = [("under 1 pot behind", 0.0, 1.0), ("1 to 10 pots", 1.0, 10.0), ("over 10 pots", 10.0, 1e9)]
 
@@ -176,7 +177,15 @@ def main() -> None:
     parser.add_argument("--batch", type=int, default=512)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--data-in-memory", action="store_true", help="keep the data in main memory even when it fits on the graphics card")
+    parser.add_argument(
+        "--held-out",
+        type=int,
+        default=None,
+        help="spots held out for validation (default a tenth); fewer keeps memory down on a large run",
+    )
     parser.add_argument("--turn-buckets", default=None, help="e.g. 32x4: use the two-dimensional turn buckets' side files")
+    parser.add_argument("--flop-buckets", choices=["32x4"], help="D3 v1 next-card spread side files; flop-end only")
     parser.add_argument(
         "--checked",
         action="store_true",
@@ -195,29 +204,89 @@ def main() -> None:
     *folders, args.out = args.data
     if not folders:
         raise SystemExit("give at least one data folder and an output folder")
-    manifest = check_manifest(folders[0])
-    records = load_records(folders)
+    # Turn-start targets share the row layout, but must never mix teachers or street endpoints.
+    manifest = check_manifests(folders)
+    if args.flop_buckets and (args.turn_buckets or args.checked or manifest.get("kind") != "flop-end" or args.buckets != 128):
+        raise SystemExit("--flop-buckets requires flop-end, 128 buckets, no turn buckets or checked additions")
+    paths = [path for folder in folders for path in shards(folder)]
+    counts = [path.stat().st_size // RECORD.itemsize for path in paths]
+    total = sum(counts)
+    if total < 20:
+        raise SystemExit("need at least 20 records")
     rng = np.random.default_rng(args.seed)
     torch.manual_seed(args.seed)
-    order = rng.permutation(len(records))
-    held = max(10, len(records) // 10)
-    validation_index, training_index = order[:held], order[held:]
+    if args.flop_buckets or manifest.get("d3Snapshot") == 1:
+        torch.use_deterministic_algorithms(True)
+    order = rng.permutation(total)
+    held = max(10, total // 10) if args.held_out is None else max(10, min(args.held_out, total // 2))
+    validation_index, training_index = np.sort(order[:held]), order[held:]
+    is_validation = np.zeros(total, dtype=bool)
+    is_validation[validation_index] = True
     started = time.time()
-    ids = None
     turn_buckets = None
     if args.turn_buckets is not None:
         strength, potential = (int(part) for part in args.turn_buckets.split("x"))
         if strength * potential != args.buckets:
             raise SystemExit(f"{args.turn_buckets} turn buckets do not make {args.buckets}")
-        ids = load_bucket_ids(folders, f"buckets{args.turn_buckets}")
         turn_buckets = {"strength": strength, "potential": potential}
     if args.checked_inputs and not args.checked:
         raise SystemExit("--checked-inputs needs --checked")
-    checked = load_checked(folders) if args.checked else None
-    data = build(records, args.buckets, ids, checked, args.checked_inputs)
-    print(f"bucketed {len(records)} spots into {args.buckets} buckets in {time.time() - started:.0f} s", flush=True)
+    # Shard by shard: only the network's inputs and targets are kept for every spot, and the raw
+    # records only for the held-out spots, so a run larger than memory still trains.
+    data: dict[str, np.ndarray] = {}
+    kept: dict[str, list[np.ndarray]] = {"records": [], "bucket": [], "checked": []}
+    offset = 0
+    for path, count in zip(paths, counts):
+        records = records_for(path, count)
+        ids = None if turn_buckets is None else bucket_ids_for(path, f"buckets{args.turn_buckets}", count)
+        if args.flop_buckets:
+            suffix = "flop-buckets-v1-32x4"
+            side = path.with_suffix(f".{suffix}")
+            meta = json.loads(Path(str(side) + ".json").read_text())
+            if (meta.get("version") != 1 or meta.get("source") != hashlib.sha256(path.read_bytes()).hexdigest()
+                    or meta.get("sha256") != hashlib.sha256(side.read_bytes()).hexdigest()):
+                raise ValueError(f"{side}: stale or corrupt D3 cache")
+            ids = bucket_ids_for(path, suffix, count)
+            if np.any((ids != 255) & (ids >= args.buckets)) or np.any((ids != 255) != (records["strength_rank"] > 0)):
+                raise ValueError(f"{side}: invalid D3 bucket ids or blocked holdings")
+        checked = checked_for(path, count) if args.checked else None
+        part = build(records, args.buckets, ids, checked, args.checked_inputs)
+        for key in ("x", "y", "mask"):
+            # The mask is 0 or 1, so it is kept as bytes here and widened on the device.
+            value = part[key].astype(np.uint8) if key == "mask" else part[key]
+            if key not in data:
+                data[key] = np.empty((total, value.shape[1]), dtype=value.dtype)
+            data[key][offset : offset + count] = value
+        keep = is_validation[offset : offset + count]
+        if keep.any():
+            kept["records"].append(records[keep])
+            kept["bucket"].append(part["bucket"][keep])
+            if checked is not None:
+                kept["checked"].append(checked[keep])
+        offset += count
+    validation = np.concatenate(kept["records"])
+    held_bucket = np.concatenate(kept["bucket"])
+    held_checked = np.concatenate(kept["checked"]) if args.checked else None
+    print(f"bucketed {total} spots into {args.buckets} buckets in {time.time() - started:.0f} s", flush=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    tensors = {key: torch.from_numpy(data[key]).to(device) for key in ("x", "y", "mask")}
+    # The data stays on the graphics card when it fits with a gigabyte to spare; otherwise it
+    # stays in main memory, shared with the arrays rather than copied, and each batch is copied
+    # over. The mask stays bytes either way and is widened batch by batch, so the numbers
+    # trained on are the same.
+    needed = sum(data[key].nbytes for key in ("x", "y", "mask"))
+    home = device
+    if device.type == "cuda" and (args.data_in_memory or needed > torch.cuda.mem_get_info()[0] - 2**30):
+        home = torch.device("cpu")
+        print(f"{needed / 2**30:.1f} GB of data: kept in main memory, copied batch by batch", flush=True)
+    tensors = {key: torch.from_numpy(data[key]) for key in ("x", "y", "mask")}
+    if home.type == "cuda":
+        tensors = {key: value.to(home) for key, value in tensors.items()}
+
+    def batch(index: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        rows = index.to(home)
+        x, y, m = (tensors[key][rows].to(device) for key in ("x", "y", "mask"))
+        return x, y, m.float()
+
     train = torch.from_numpy(training_index).to(device)
     valid = torch.from_numpy(validation_index).to(device)
     inputs, outputs = data["x"].shape[1], data["y"].shape[1]
@@ -233,7 +302,7 @@ def main() -> None:
         shuffled = train[torch.randperm(len(train), device=device)]
         for start in range(0, len(shuffled) - args.batch + 1, args.batch):
             index = shuffled[start : start + args.batch]
-            x, y, m = tensors["x"][index], tensors["y"][index], tensors["mask"][index]
+            x, y, m = batch(index)
             loss = (huber(model(x), y) * m).sum() / m.sum()
             optimiser.zero_grad()
             loss.backward()
@@ -241,7 +310,7 @@ def main() -> None:
             schedule.step()
         model.eval()
         with torch.no_grad():
-            x, y, m = tensors["x"][valid], tensors["y"][valid], tensors["mask"][valid]
+            x, y, m = batch(valid)
             error = (((model(x) - y).abs() * m).sum() / m.sum()).item()
         if error < best[0]:
             best = (error, {k: v.detach().clone() for k, v in model.state_dict().items()})
@@ -251,16 +320,20 @@ def main() -> None:
     model.load_state_dict(best[1])
     model.eval()
     with torch.no_grad():
-        predicted = model(tensors["x"][valid]).cpu().numpy()
-    validation = records[validation_index]
-    bucket = data["bucket"][validation_index]
-    held_checked = None if checked is None else checked[validation_index]
-    report("held-out error of the network, holding by holding:", predicted, validation, bucket, args.buckets, held_checked)
+        predicted = model(batch(valid)[0]).cpu().numpy()
+    report(
+        "held-out error of the network, holding by holding:",
+        predicted,
+        validation,
+        held_bucket,
+        args.buckets,
+        held_checked,
+    )
     report(
         "the floor, if every bucket's value were exact:",
         data["y"][validation_index],
         validation,
-        bucket,
+        held_bucket,
         args.buckets,
         held_checked,
     )
@@ -282,8 +355,15 @@ def main() -> None:
                 "inputs": inputs,
                 "outputs": outputs,
                 "buckets": args.buckets,
+                **({} if not args.flop_buckets else {"flopBuckets": {"version": 1, "strength": 32, "potential": 4}}),
+                "seed": args.seed,
+                "epochs": args.epochs,
+                "trainingSpots": len(training_index),
+                "validationSpots": len(validation_index),
+                "splitSHA256": hashlib.sha256(order.astype("<i8").tobytes()).hexdigest(),
+                **({} if manifest.get("kind") != "turn-start" else {"target": manifest["target"]}),
                 **({} if turn_buckets is None else {"turnBuckets": turn_buckets}),
-                **({} if checked is None else {"checked": True, "checkedInputs": args.checked_inputs or False}),
+                **({} if not args.checked else {"checked": True, "checkedInputs": args.checked_inputs or False}),
                 "width": args.width,
                 "depth": args.depth,
                 "validationBucketError": best[0],

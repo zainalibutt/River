@@ -29,7 +29,8 @@
       "!**/apps/web/public/assets",
       "!**/art/out",
       "!**/docs/board",
-      "!**/apps/web/src/lib/motion-scenes.json"
+      "!**/apps/web/src/lib/motion-scenes.json",
+      "!**/apps/server/preflop/**/*.json"
     ]
   }
 }

@@ -16,23 +16,47 @@ import {
   publicBetSize,
   type RateEstimate,
 } from '@river/engine'
+import { captureCumulativeStrategy } from './bot-aivat.js'
+import { aivatSolverState } from './bot-aivat-state.js'
+import { type LbrQueryPolicy, policyMoveShares } from './bot-lbr-query.js'
 import {
+  decisionClass,
   type MoveClass,
   recordedClass,
   updateRange,
   type WeightedHolding,
 } from './bot-lbr-range.js'
-import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
 import {
+  followWithResolving,
+  type OffTreeState,
+  type OffTreeStats,
+  offTreeStats,
+} from './bot-off-tree.js'
+import { type HandAwareBotPolicy, HandSolveCache, releasePolicyHand } from './bot-policy-hand.js'
+import { type PublicDecision, publicDecisions } from './bot-public-replay.js'
+import { boundedRiverAdaptation, type RiverProposal } from './bot-river-adaptation.js'
+import type { RiverCarrySource } from './bot-river-carry.js'
+import {
+  type CfrOptions,
   comboIndex,
   type Hands,
   prepare,
   type RiverNode,
   type RiverOpponentModel,
+  type RiverSolution,
   type RiverSpot,
   riverReport,
+  riverStrategyValue,
+  riverValues,
   solveRiver,
 } from './bot-river-solver.js'
+import {
+  riverExploitBudget,
+  SAFE_EXPLOIT_CONFIG,
+  type SafeExploitConfig,
+  solveBudgetedStreet,
+} from './bot-safe-exploitation.js'
+import { solveCacheMemory } from './bot-solver-memory.js'
 
 /**
  * How the river solver is set up. Bets and raises are offered at half the pot
@@ -45,7 +69,22 @@ import {
  * their cards, and with `readsWidenRanges` an opponent the reads show betting
  * and raising more than a typical player gets more of that doubt.
  */
-export interface RiverPolicyTuning {
+export interface RiverPolicyTuning extends CfrOptions {
+  readonly safeExploitV2?: boolean
+  readonly safeExploitConfig?: Partial<SafeExploitConfig>
+  readonly offTree?: 'resolve'
+  /**
+   * Use the per-holding re-solving gadget (lane B), with reads and added air
+   * off. Without `carry`, promises retain the historical refreshed-solve path;
+   * that path does not establish safety relative to an earlier street.
+   */
+  readonly safe?: boolean
+  /** Use inherited turn CFVs when an exact recorded turn leaf is available. */
+  readonly carry?: 'per-river'
+  /** Opt in to read proposals constrained by inherited per-holding BR caps. */
+  readonly boundedReads?: boolean
+  /** Compare to max(inherited promise, baseline BR), with the same absolute allowance. */
+  readonly baselineCaps?: boolean
   readonly betSizes: readonly number[]
   readonly maxRaises: number
   readonly iterations: number
@@ -143,6 +182,30 @@ export const RIVER_READS_V8X_TUNING: Partial<RiverPolicyTuning> = {
 const SIZE_FOLD_STRENGTH = 3
 
 export interface RiverPolicyStats {
+  readonly safeExploit: {
+    eligible: number
+    proposed: number
+    accepted: number
+    auditFailures: number
+    actionTV: number
+    modelEVGain: number
+    budgetSpent: number
+    maxBRIncrease: number
+    latencyMs: number
+    roots: {
+      proposed: boolean
+      accepted: boolean
+      actionTV: number
+      modelEVGain: number
+      budget: number
+      budgetSpent: number
+      maxBRIncrease: number
+      auditFailures: number
+      latencyMs: number
+      modelWeight: number
+    }[]
+  }
+  readonly offTree: OffTreeStats
   /** River decisions the solver answered. */
   solved: number
   /** River decisions left to the base policy, by reason. */
@@ -154,11 +217,24 @@ export interface RiverPolicyStats {
   exploitability: number
   /** Summed over solves: holdings left in the two ranges. */
   combos: number
+  carryUsed: number
+  carryFallbacks: number
+  adaptationChecks: number
+  adaptationProposals: number
+  adaptations: number
+  mixtureWeight: number
+  maxCapSlack: number
+  maxCapViolation: number
+  baselineViolations: number
+  baselineHoldingViolations: number
+  maxBaselineViolation: number
+  adaptationMs: number
 }
 
 type Player = 0 | 1
 
 interface SolvedRiver {
+  readonly offTree?: OffTreeState<SolvedRiver>
   readonly spot: RiverSpot
   readonly tree: RiverNode
   readonly strategy: ReadonlyMap<string, Float64Array>
@@ -183,9 +259,28 @@ export function riverSolverPolicy(
   version: number,
   overrides: Partial<RiverPolicyTuning> = {},
   own: KnownShares = () => null,
-): { readonly policy: BotPolicy; readonly stats: RiverPolicyStats } {
+  theirs: KnownShares = () => null,
+  carry: RiverCarrySource = () => null,
+): {
+  readonly policy: HandAwareBotPolicy & LbrQueryPolicy
+  readonly stats: RiverPolicyStats
+  readonly cacheMemory: () => ReturnType<typeof solveCacheMemory>
+} {
   const tuning: RiverPolicyTuning = { ...RIVER_POLICY_TUNING, ...overrides }
   const stats: RiverPolicyStats = {
+    safeExploit: {
+      eligible: 0,
+      proposed: 0,
+      accepted: 0,
+      auditFailures: 0,
+      actionTV: 0,
+      modelEVGain: 0,
+      budgetSpent: 0,
+      maxBRIncrease: 0,
+      latencyMs: 0,
+      roots: [],
+    },
+    offTree: offTreeStats(),
     solved: 0,
     fallbacks: {},
     solves: 0,
@@ -193,12 +288,59 @@ export function riverSolverPolicy(
     solveMs: 0,
     exploitability: 0,
     combos: 0,
+    carryUsed: 0,
+    carryFallbacks: 0,
+    adaptationChecks: 0,
+    adaptationProposals: 0,
+    adaptations: 0,
+    mixtureWeight: 0,
+    maxCapSlack: 0,
+    maxCapViolation: 0,
+    baselineViolations: 0,
+    baselineHoldingViolations: 0,
+    maxBaselineViolation: 0,
+    adaptationMs: 0,
   }
-  const cache = new Map<string, SolvedRiver | string>()
-  const policy: BotPolicy = {
+  const cache = new HandSolveCache<SolvedRiver | string>(
+    tuning.safeExploitV2 === true || tuning.boundedReads === true || tuning.offTree === 'resolve',
+    tuning.cacheSize,
+  )
+  const policy: HandAwareBotPolicy & LbrQueryPolicy = {
     id,
     version,
+    moveShares(context, taken) {
+      if (context.observation.street !== 'river' || context.profile.skill !== 'og') {
+        return policyMoveShares(base, context, taken)
+      }
+      const found = locateRiver(context, base, tuning, cache, stats, own, theirs, carry)
+      if (typeof found === 'string') return null
+      const { solved, node, self, table } = found
+      const hands = solved.hands[self]
+      const width = node.actions.length
+      const matches = node.actions.map(
+        (action) =>
+          decisionClass(
+            decisionFor(node, action, solved.spot, context.observation),
+            context.observation,
+          ) === taken,
+      )
+      return (hole) => {
+        const index =
+          comboIndex(hands, hole as [Card, Card]) ??
+          nearestStrength(hands, hole, context.observation.board)
+        let share = 0
+        for (let action = 0; action < width; action++) {
+          if (matches[action]) share += table[index * width + action] as number
+        }
+        return share
+      }
+    },
+    releaseHand(roomId, handNumber) {
+      cache.releaseHand(roomId, handNumber)
+      releasePolicyHand(base, roomId, handNumber)
+    },
     decide(context) {
+      cache.observe(context.observation)
       const envelope = (decision: BotDecision) => ({
         policyId: id,
         policyVersion: version,
@@ -210,7 +352,7 @@ export function riverSolverPolicy(
       if (context.observation.street !== 'river' || context.profile.skill !== 'og') {
         return baseline()
       }
-      const result = solverDecision(context, base, tuning, cache, stats, own)
+      const result = solverDecision(context, base, tuning, cache, stats, own, theirs, carry)
       if (typeof result === 'string') {
         stats.fallbacks[result] = (stats.fallbacks[result] ?? 0) + 1
         return baseline()
@@ -219,17 +361,66 @@ export function riverSolverPolicy(
       return envelope(result)
     },
   }
-  return { policy, stats }
+  return { policy, stats, cacheMemory: () => solveCacheMemory(cache) }
 }
 
 function solverDecision(
   context: BotPolicyContextV1,
   base: BotPolicy,
   tuning: RiverPolicyTuning,
-  cache: Map<string, SolvedRiver | string>,
+  cache: HandSolveCache<SolvedRiver | string>,
   stats: RiverPolicyStats,
   own: KnownShares,
+  theirs: KnownShares,
+  carry: RiverCarrySource,
 ): BotDecision | string {
+  const found = locateRiver(context, base, tuning, cache, stats, own, theirs, carry)
+  if (typeof found === 'string') return found
+  const { solved, node, self, table } = found
+  const { observation } = context
+  const hole = observation.actor.hole
+  const hands = solved.hands[self]
+  const index =
+    comboIndex(hands, hole as [Card, Card]) ?? nearestStrength(hands, hole, observation.board)
+  const width = node.actions.length
+  const row = table.subarray(index * width, (index + 1) * width)
+  captureCumulativeStrategy(
+    context.rng,
+    row,
+    (index) => decisionFor(node, node.actions[index] as string, solved.spot, observation),
+    1,
+    () => aivatSolverState(solved.spot, solved.tree, solved.strategy, node, self),
+  )
+  const roll = context.rng()
+  let pick = row.length - 1
+  let cumulative = 0
+  for (let action = 0; action < row.length; action += 1) {
+    cumulative += row[action] as number
+    if (roll < cumulative) {
+      pick = action
+      break
+    }
+  }
+  return decisionFor(node, node.actions[pick] as string, solved.spot, observation)
+}
+
+function locateRiver(
+  context: BotPolicyContextV1,
+  base: BotPolicy,
+  tuning: RiverPolicyTuning,
+  cache: HandSolveCache<SolvedRiver | string>,
+  stats: RiverPolicyStats,
+  own: KnownShares,
+  theirs: KnownShares,
+  carry: RiverCarrySource,
+):
+  | {
+      solved: SolvedRiver
+      node: Extract<RiverNode, { kind: 'action' }>
+      self: 0 | 1
+      table: Float64Array
+    }
+  | string {
   const { observation, personality } = context
   const live = observation.seats.filter((seat) => seat.playerId !== null && !seat.folded)
   if (live.length !== 2) return 'not heads-up'
@@ -259,21 +450,29 @@ function solverDecision(
   const opponentId = live.find((seat) => seat.playerId !== observation.actor.playerId)?.playerId
   const read = observation.opponents.find((summary) => summary.playerId === opponentId)
   const doubt = cardBlindShare(read, 'aggressive', tuning)
-  if (tuning.extremeReadsToBase < 1 && doubt >= tuning.extremeReadsToBase) return 'extreme reads'
-  if (tuning.allInToBase && live.some((seat) => seat.playerId === opponentId && seat.allIn)) {
-    return 'facing all-in'
-  }
-  const reads = tuning.exploitReads
-    ? riverReads(
-        observation.opponentStats?.find((entry) => entry.playerId === opponentId),
-        read,
-        tuning,
-      )
-    : null
-  const cacheKey = `${key}|${observation.actor.playerId}${doubt > 0 ? `|${doubt.toFixed(4)}` : ''}${
-    reads === null ? '' : `|${Object.values(reads).map((value) => value.toFixed(4))}`
-  }`
+  const reads =
+    tuning.exploitReads || tuning.boundedReads || tuning.safeExploitV2
+      ? riverReads(
+          observation.opponentStats?.find((entry) => entry.playerId === opponentId),
+          read,
+          tuning,
+        )
+      : null
+  const cacheKey =
+    tuning.safeExploitV2 || tuning.boundedReads || tuning.offTree === 'resolve'
+      ? cache.key(observation, `${observation.actor.playerId}|${observation.board.map(cardKey)}`)
+      : `${key}|${observation.actor.playerId}${doubt > 0 ? `|${doubt.toFixed(4)}` : ''}${
+          reads === null ? '' : `|${Object.values(reads).map((value) => value.toFixed(4))}`
+        }`
   let solved = cache.get(cacheKey)
+  // Once chosen, even new reads that would otherwise trigger a fallback do
+  // not change this river's policy. The flag-off path retains its old guards.
+  if ((!tuning.safeExploitV2 && !tuning.boundedReads) || solved === undefined) {
+    if (tuning.extremeReadsToBase < 1 && doubt >= tuning.extremeReadsToBase) return 'extreme reads'
+    if (tuning.allInToBase && live.some((seat) => seat.playerId === opponentId && seat.allIn)) {
+      return 'facing all-in'
+    }
+  }
   if (solved === undefined) {
     solved = solveSpot(
       observation,
@@ -286,43 +485,39 @@ function solverDecision(
       stats,
       reads,
       own,
+      theirs,
+      carry,
     )
-    cache.set(cacheKey, solved)
-    if (cache.size > tuning.cacheSize) {
-      cache.delete(cache.keys().next().value as string)
-    }
+    cache.put(observation, cacheKey, solved)
   }
   if (typeof solved === 'string') return solved
   const firstActor = (decisions[riverStart] ?? { observation }).observation.actor.playerId
   if (firstActor !== solved.players[0]) return 'order mismatch'
   const self: Player = solved.players[0] === observation.actor.playerId ? 0 : 1
   let node = solved.tree
-  for (const decision of riverStart === -1 ? [] : decisions.slice(riverStart)) {
-    if (node.kind !== 'action') return 'off tree'
-    const index = node.actions.indexOf(translate(node, decision, solved.spot))
-    if (index === -1) return 'off tree'
-    node = node.children[index] as RiverNode
-  }
+  if (tuning.offTree === 'resolve') {
+    const found = followWithResolving(
+      solved,
+      riverStart === -1 ? [] : decisions.slice(riverStart),
+      self,
+      stats.offTree,
+      (next) => cache.put(observation, cacheKey, next),
+    )
+    if (typeof found === 'string') return found
+    solved = found.solved
+    node = found.node
+  } else
+    for (const decision of riverStart === -1 ? [] : decisions.slice(riverStart)) {
+      if (node.kind !== 'action') return 'off tree'
+      const index = node.actions.indexOf(translate(node, decision, solved.spot))
+      if (index === -1) return 'off tree'
+      node = node.children[index] as RiverNode
+    }
   if (node.kind !== 'action' || node.player !== self) return 'off tree'
   const table = solved.strategy.get(node.history)
   const hole = observation.actor.hole
   if (table === undefined || hole.length !== 2) return 'no strategy'
-  const hands = solved.hands[self]
-  const index =
-    comboIndex(hands, hole as [Card, Card]) ?? nearestStrength(hands, hole, observation.board)
-  const width = node.actions.length
-  const row = table.subarray(index * width, (index + 1) * width)
-  const roll = context.rng()
-  let pick = row.length - 1
-  let cumulative = 0
-  for (let action = 0; action < row.length; action += 1) {
-    cumulative += row[action] as number
-    if (roll < cumulative) {
-      pick = action
-      break
-    }
-  }
-  return decisionFor(node, node.actions[pick] as string, solved.spot, observation)
+  return { solved, node, self, table }
 }
 
 function solveSpot(
@@ -336,6 +531,8 @@ function solveSpot(
   stats: RiverPolicyStats,
   reads: RiverReads | null = null,
   own: KnownShares = () => null,
+  theirs: KnownShares = () => null,
+  carrySource: RiverCarrySource = () => null,
 ): SolvedRiver | string {
   const stacks = live.map((seat) => seat.stack + seat.betStreet)
   const stack = Math.min(...stacks)
@@ -352,48 +549,256 @@ function solveSpot(
   const started = performance.now()
   const opponent = players[0] === observation.actor.playerId ? 1 : 0
   const read = observation.opponents.find((summary) => summary.playerId === players[opponent])
-  const ranges = trackRanges(
-    observation.board,
-    preRiver,
-    players,
-    base,
-    personality,
-    key,
-    tuning.minimumWeightShare,
-    (decision, taken) =>
-      decision.observation.actor.playerId === players[opponent]
-        ? cardBlindShare(read, taken, tuning)
-        : 0,
-    (decision, taken, player) =>
-      decision.observation.actor.playerId === observation.actor.playerId
-        ? own(decision, taken, player)
-        : null,
-  )
-  ranges[opponent] = withAir(ranges[opponent], tuning.opponentAir)
+  const safe = tuning.safe === true || tuning.carry === 'per-river'
+  const carry =
+    tuning.carry === 'per-river' && safe
+      ? carrySource(observation, personality, preRiver, players)
+      : null
+  if (tuning.carry === 'per-river') {
+    if (carry === null) stats.carryFallbacks += 1
+    else stats.carryUsed += 1
+  }
+  const known: KnownShares = (decision, taken, player, history) =>
+    decision.observation.actor.playerId === observation.actor.playerId
+      ? own(decision, taken, player, history)
+      : theirs(decision, taken, player, history)
+  const ranges =
+    carry === null
+      ? trackRanges(
+          observation.board,
+          preRiver,
+          players,
+          base,
+          personality,
+          key,
+          safe ? 0 : tuning.minimumWeightShare,
+          (decision, taken) =>
+            decision.observation.actor.playerId !== players[opponent] ||
+            (safe && known(decision, taken, personality, preRiver) !== null)
+              ? 0
+              : cardBlindShare(read, taken, tuning),
+          known,
+          safe,
+        )
+      : ([[], []] as [WeightedHolding[], WeightedHolding[]])
+  if (!safe) ranges[opponent] = withAir(ranges[opponent], tuning.opponentAir)
   const tracked = performance.now()
   stats.trackMs += tracked - started
   const spot: RiverSpot = {
     board: observation.board,
     pot,
     stack,
-    ranges: [combosOf(ranges[0]), combosOf(ranges[1])],
+    ranges:
+      carry?.ranges ??
+      (([0, 1] as const).map((player) =>
+        safe && player === opponent
+          ? combosWithFloor(ranges[player], FULL_SUPPORT_SHARE)
+          : combosOf(ranges[player]),
+      ) as unknown as RiverSpot['ranges']),
     betSizes: tuning.betSizes,
     allIn: true,
     maxRaises: tuning.maxRaises,
   }
   if (spot.ranges[0].length === 0 || spot.ranges[1].length === 0) return 'empty range'
-  const model = reads === null || reads.trust <= 0 ? undefined : readsModel(reads, spot, opponent)
-  const solution = solveRiver(spot, tuning.iterations, model)
+  const model =
+    safe || reads === null || reads.trust <= 0 ? undefined : readsModel(reads, spot, opponent)
+  const guessed =
+    carry === null
+      ? solveRiver(spot, tuning.iterations, model, undefined, undefined, undefined, tuning)
+      : undefined
+  let solution =
+    guessed ??
+    solveRiver(spot, tuning.iterations, undefined, undefined, carry?.gadget, undefined, tuning)
+  let rootGadget = carry?.gadget
+  if (safe && guessed !== undefined) {
+    // Historical fallback: refreshed values, not inherited earlier-street bounds.
+    // Preserve this path for existing policies and count opt-in carry misses.
+    const promises = riverValues(guessed).values[opponent]
+    const flat = [...spot.ranges] as [RiverSpot['ranges'][0], RiverSpot['ranges'][1]]
+    flat[opponent] = flat[opponent].map((entry) => ({ ...entry, weight: 1 }))
+    rootGadget = { player: opponent, promises }
+    solution = solveRiver(
+      { ...spot, ranges: flat },
+      tuning.iterations,
+      undefined,
+      undefined,
+      rootGadget,
+      undefined,
+      tuning,
+    )
+  }
+  if (tuning.safeExploitV2) {
+    const started = performance.now()
+    const config = { ...SAFE_EXPLOIT_CONFIG, ...tuning.safeExploitConfig }
+    // Blind posts are the hand contribution not accounted for by actions.
+    // A short blind underestimates the nominal stake, which is conservative.
+    const bigBlind = Math.max(
+      0,
+      ...observation.seats.map(
+        (seat) =>
+          seat.betHand -
+          (observation.actions ?? [])
+            .filter((action) => action.seat === seat.seat)
+            .reduce((sum, action) => sum + (action.amountCommitted ?? 0), 0),
+      ),
+    )
+    const budget = riverExploitBudget(pot, bigBlind, config)
+    const counters = stats.safeExploit
+    counters.eligible++
+    let chosen: ReturnType<typeof solveBudgetedStreet> | undefined
+    if (reads !== null && reads.trust > 0) {
+      const posterior = trackRanges(
+        observation.board,
+        preRiver,
+        players,
+        base,
+        personality,
+        key,
+        tuning.minimumWeightShare,
+        (decision, taken) =>
+          decision.observation.actor.playerId === players[opponent]
+            ? cardBlindShare(read, taken, tuning)
+            : 0,
+        known,
+      )[opponent]
+      chosen = solveBudgetedStreet(
+        solution,
+        readsModel(reads, solution.spot, opponent),
+        combosOf(posterior),
+        budget,
+        config,
+      )
+      solution = chosen.solution
+    }
+    const root = {
+      proposed: chosen?.proposed ?? false,
+      accepted: (chosen?.weight ?? 0) > 0,
+      actionTV: chosen?.actionTV ?? 0,
+      modelEVGain: chosen?.modelEVGain ?? 0,
+      budget,
+      budgetSpent: chosen?.maxBRIncrease ?? 0,
+      maxBRIncrease: chosen?.maxBRIncrease ?? 0,
+      auditFailures: chosen?.auditFailures ?? 0,
+      latencyMs: performance.now() - started,
+      modelWeight: chosen?.modelWeight ?? 0,
+    }
+    counters.proposed += Number(root.proposed)
+    counters.accepted += Number(root.accepted)
+    counters.actionTV += root.actionTV
+    counters.modelEVGain += root.modelEVGain
+    counters.budgetSpent += root.budgetSpent
+    counters.maxBRIncrease = Math.max(counters.maxBRIncrease, root.maxBRIncrease)
+    counters.auditFailures += root.auditFailures
+    counters.latencyMs += root.latencyMs
+    counters.roots.push(root)
+  } else if (tuning.boundedReads && carry !== null) {
+    const adaptationStarted = performance.now()
+    const chosen = boundedRiverAdaptation(
+      solution,
+      carry.gadget,
+      () => {
+        if (reads === null || reads.trust <= 0) return null
+        // A model posterior is rebuilt separately. Carry's positive support
+        // placeholders must never become posterior evidence for the reads model.
+        const posterior = trackRanges(
+          observation.board,
+          preRiver,
+          players,
+          base,
+          personality,
+          key,
+          tuning.minimumWeightShare,
+          (decision, taken) =>
+            decision.observation.actor.playerId === players[opponent]
+              ? cardBlindShare(read, taken, tuning)
+              : 0,
+          known,
+        )[opponent]
+        return readBasedRiverProposal(solution, combosOf(posterior), reads, opponent, tuning)
+      },
+      tuning.baselineCaps,
+    )
+    stats.adaptationChecks++
+    stats.adaptationProposals += Number(chosen.proposed)
+    stats.adaptations += Number(chosen.weight > 0)
+    stats.mixtureWeight += chosen.weight
+    stats.maxCapSlack = Math.max(stats.maxCapSlack, chosen.cap.maxSlack)
+    stats.maxCapViolation = Math.max(stats.maxCapViolation, chosen.cap.maxViolation)
+    stats.baselineViolations += Number(chosen.baseline.violations > 0)
+    stats.baselineHoldingViolations += chosen.baseline.violations
+    stats.maxBaselineViolation = Math.max(stats.maxBaselineViolation, chosen.baseline.maxViolation)
+    stats.adaptationMs += performance.now() - adaptationStarted
+    solution = chosen.solution
+  }
   stats.solveMs += performance.now() - tracked
   stats.solves += 1
-  stats.exploitability += riverReport(solution).exploitability
+  stats.exploitability += riverReport(guessed ?? solution).exploitability
   stats.combos += spot.ranges[0].length + spot.ranges[1].length
-  return {
-    spot,
-    tree: solution.tree,
-    strategy: solution.strategy,
+  const pack = (result: RiverSolution, state?: OffTreeState<SolvedRiver>): SolvedRiver => ({
+    ...(state === undefined ? {} : { offTree: state }),
+    spot: tuning.offTree === 'resolve' ? result.spot : spot,
+    tree: result.tree,
+    strategy: result.strategy,
     hands: [prepare(spot.ranges[0], spot.board), prepare(spot.ranges[1], spot.board)],
     players,
+  })
+  if (tuning.offTree !== 'resolve') return pack(solution)
+  const gadget = rootGadget ?? {
+    player: opponent,
+    promises: riverValues(solution).values[opponent],
+  }
+  const rootSpot = solution.spot
+  const state: OffTreeState<SolvedRiver> = {
+    failures: new Map(),
+    solve: (tree, fixedStrategies) =>
+      pack(
+        solveRiver(rootSpot, tuning.iterations, undefined, undefined, gadget, tree, {
+          ...tuning,
+          fixedStrategies,
+        }),
+        state,
+      ),
+  }
+  return pack(solution, state)
+}
+
+/** Build the v8z restricted Nash proposal and a FIXED model objective. */
+export function readBasedRiverProposal(
+  baseline: RiverSolution,
+  posterior: RiverSpot['ranges'][0],
+  reads: RiverReads,
+  opponent: Player,
+  tuning: RiverPolicyTuning,
+): RiverProposal | null {
+  if (!posterior.some((h) => h.weight > 0)) return null
+  const ranges = [...baseline.spot.ranges] as [RiverSpot['ranges'][0], RiverSpot['ranges'][1]]
+  ranges[opponent] = posterior
+  const spot = { ...baseline.spot, ranges }
+  const model = readsModel(reads, spot, opponent)
+  const proposed = solveRiver(
+    spot,
+    tuning.iterations,
+    model,
+    undefined,
+    undefined,
+    baseline.tree,
+    tuning,
+  )
+  const fixed = new Map<string, Float64Array>()
+  const hands = prepare(posterior, spot.board)
+  const install = (node: RiverNode) => {
+    if (node.kind !== 'action') return
+    if (node.player === opponent) fixed.set(node.history, model.strategy(node, hands))
+    node.children.forEach(install)
+  }
+  install(baseline.tree)
+  return {
+    solution: proposed,
+    value: (solution) => {
+      const strategy = new Map(solution.strategy)
+      for (const [history, table] of fixed) strategy.set(history, table)
+      return riverStrategyValue({ ...solution, spot, strategy }, opponent === 0 ? 1 : 0)
+    },
   }
 }
 
@@ -406,6 +811,10 @@ export type KnownShares = (
   decision: PublicDecision,
   taken: MoveClass,
   personality: BotPersonality,
+  /** The hand's public decisions up to the river, the one asked about among them. */
+  history: readonly PublicDecision[],
+  /** The player whose view the ranges are tracked for, when the caller knows it. */
+  viewer?: string,
 ) => ((hole: readonly [Card, Card]) => number) | null
 
 /**
@@ -424,6 +833,8 @@ export function trackRanges(
   minimumWeightShare = RIVER_POLICY_TUNING.minimumWeightShare,
   doubt: (decision: PublicDecision, taken: MoveClass) => number = () => 0,
   known: KnownShares = () => null,
+  /** Apply known shares exactly, unsmoothed, as a safe re-solve carries a solver's reaches. */
+  exact = false,
 ): [WeightedHolding[], WeightedHolding[]] {
   const blocked = new Set(board.map(cardKey))
   const deck = makeDeck().filter((card) => !blocked.has(cardKey(card)))
@@ -450,7 +861,8 @@ export function trackRanges(
       taken,
       `${seed}:${index}`,
       doubt(decision, taken),
-      known(decision, taken, personality) ?? undefined,
+      known(decision, taken, personality, preRiver) ?? undefined,
+      exact,
     )
     const heaviest = range.reduce((most, holding) => Math.max(most, holding.weight), 0)
     for (const holding of range) {
@@ -660,6 +1072,26 @@ export function combosOf(range: readonly WeightedHolding[]) {
   return range
     .filter((holding) => holding.weight > 0)
     .map((holding) => ({ hole: holding.hole as [Card, Card], weight: holding.weight }))
+}
+
+/**
+ * Every holding of a tracked range, none left out: a holding the tracking
+ * pruned to nothing keeps `share` of the heaviest holding's weight. A safe
+ * re-solve gives each opponent holding a promise, and only a holding in the
+ * solve can have one, so the opponent can't bring a hand the guess ruled out.
+ */
+/** In a safe re-solve, a holding the tracking pruned keeps this share of the heaviest weight. */
+export const FULL_SUPPORT_SHARE = 1e-4
+
+export function combosWithFloor(range: readonly WeightedHolding[], share: number) {
+  const heaviest = range.reduce((most, holding) => Math.max(most, holding.weight), 0)
+  const floor = heaviest * share
+  return range
+    .filter((holding) => heaviest > 0 && holding.weight >= 0)
+    .map((holding) => ({
+      hole: holding.hole as [Card, Card],
+      weight: Math.max(holding.weight, floor),
+    }))
 }
 
 /**

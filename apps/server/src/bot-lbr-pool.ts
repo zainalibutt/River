@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { benchmarkProvenance } from './bot-benchmark-provenance.js'
 import { clusteredEstimate } from './bot-session-evaluation.js'
 
 // Usage: tsx bot-lbr-pool.ts <directory> <file prefix>
@@ -26,7 +27,10 @@ interface Shard {
   readonly hands: HandRow[]
 }
 const shards = readdirSync(directory)
-  .filter((name) => name.startsWith(prefix) && name.endsWith('.json'))
+  .filter(
+    (name) =>
+      name.startsWith(prefix) && name.endsWith('.json') && !name.endsWith('.provenance.json'),
+  )
   .map((name) => JSON.parse(readFileSync(join(directory, name), 'utf8')) as Shard)
 const focals = [...new Set(shards.map((shard) => shard.focal))].sort()
 const seeds = [...new Set(shards.map((shard) => shard.seed))].sort()
@@ -130,3 +134,14 @@ for (const [index, first] of focals.entries()) {
     }
   }
 }
+process.stdout.write(
+  `${JSON.stringify({
+    provenance: benchmarkProvenance('lbr-pool', {
+      policies: focals,
+      seeds,
+      plannedHands: shards.reduce((sum, shard) => sum + shard.hands.length, 0),
+    }),
+    status: 'retrospective-analysis-only',
+    sourceRunFailures: null,
+  })}\n`,
+)

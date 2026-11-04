@@ -1,0 +1,618 @@
+{
+  "note": "Historical replay at 200 bb through tracePreflop and live legal actions. Exact is local to the translated prefix; unsupported includes subsequent actions after an abstraction terminal. Prefix counters classify each client decision by all preceding actions. No policy decisions or postflop solves.",
+  "files": [
+    {
+      "file": "rotation-2.jsonl",
+      "sha256": "12b285b14147717c096d5ac7a07a957e16995d93e9d12097d716aaf6fbee0961",
+      "hands": 6924,
+      "focals": [
+        "v8z"
+      ],
+      "versions": {
+        "v2": {
+          "all": {
+            "exact": 8568,
+            "translated": 5395,
+            "unsupported": 35,
+            "total": 13998
+          },
+          "slumbot": {
+            "exact": 2578,
+            "translated": 3935,
+            "unsupported": 18,
+            "total": 6531
+          },
+          "client": {
+            "exact": 5990,
+            "translated": 1460,
+            "unsupported": 17,
+            "total": 7467
+          },
+          "raises": {
+            "exact": 65,
+            "translated": 5395,
+            "unsupported": 18,
+            "total": 5478
+          },
+          "slumbotRaises": {
+            "exact": 65,
+            "translated": 3935,
+            "unsupported": 5,
+            "total": 4005
+          },
+          "clientDecisionPrefixes": {
+            "exact": 3462,
+            "translated": 4000,
+            "unsupported": 5,
+            "total": 7467
+          }
+        },
+        "v3": {
+          "all": {
+            "exact": 12489,
+            "translated": 1474,
+            "unsupported": 35,
+            "total": 13998
+          },
+          "slumbot": {
+            "exact": 6499,
+            "translated": 14,
+            "unsupported": 18,
+            "total": 6531
+          },
+          "client": {
+            "exact": 5990,
+            "translated": 1460,
+            "unsupported": 17,
+            "total": 7467
+          },
+          "raises": {
+            "exact": 3986,
+            "translated": 1474,
+            "unsupported": 18,
+            "total": 5478
+          },
+          "slumbotRaises": {
+            "exact": 3986,
+            "translated": 14,
+            "unsupported": 5,
+            "total": 4005
+          },
+          "clientDecisionPrefixes": {
+            "exact": 7300,
+            "translated": 162,
+            "unsupported": 5,
+            "total": 7467
+          }
+        }
+      },
+      "slumbotSizes": {
+        "open: 2 bb vs 1 bb": 3112,
+        "isolation: 3 bb vs 1 bb": 726,
+        "4-bet: 24 bb vs 6.6 bb": 11,
+        "4-bet: 18 bb vs 6.45 bb": 19,
+        "3-bet: 9 bb vs 3.65 bb": 35,
+        "5-bet: 81 bb vs 28.26 bb": 6,
+        "3-bet: 15 bb vs 3.65 bb": 13,
+        "4-bet: 18 bb vs 6.6 bb": 16,
+        "4-bet: 24 bb vs 6.45 bb": 4,
+        "3-bet: 9 bb vs 3.57 bb": 30,
+        "5-bet: 81 bb vs 27.62 bb": 5,
+        "3-bet: 15 bb vs 3.57 bb": 20,
+        "5-bet: 135 bb vs 46.86 bb": 3,
+        "5-bet: 135 bb vs 45.92 bb": 1,
+        "6-bet: 200 bb vs 78.12 bb": 2,
+        "6-bet: 200 bb vs 57.66 bb": 1,
+        "6-bet: 200 bb vs 58.92 bb": 1
+      }
+    },
+    {
+      "file": "rotation.jsonl",
+      "sha256": "2e840179d47789eb2cfb9e540c938ac2bbfa933ded97562855e363bfe19f0f8d",
+      "hands": 1352,
+      "focals": [
+        "v8z"
+      ],
+      "versions": {
+        "v2": {
+          "all": {
+            "exact": 1700,
+            "translated": 1083,
+            "unsupported": 4,
+            "total": 2787
+          },
+          "slumbot": {
+            "exact": 534,
+            "translated": 778,
+            "unsupported": 2,
+            "total": 1314
+          },
+          "client": {
+            "exact": 1166,
+            "translated": 305,
+            "unsupported": 2,
+            "total": 1473
+          },
+          "raises": {
+            "exact": 17,
+            "translated": 1083,
+            "unsupported": 2,
+            "total": 1102
+          },
+          "slumbotRaises": {
+            "exact": 17,
+            "translated": 778,
+            "unsupported": 2,
+            "total": 797
+          },
+          "clientDecisionPrefixes": {
+            "exact": 676,
+            "translated": 795,
+            "unsupported": 2,
+            "total": 1473
+          }
+        },
+        "v3": {
+          "all": {
+            "exact": 2478,
+            "translated": 305,
+            "unsupported": 4,
+            "total": 2787
+          },
+          "slumbot": {
+            "exact": 1312,
+            "translated": 0,
+            "unsupported": 2,
+            "total": 1314
+          },
+          "client": {
+            "exact": 1166,
+            "translated": 305,
+            "unsupported": 2,
+            "total": 1473
+          },
+          "raises": {
+            "exact": 795,
+            "translated": 305,
+            "unsupported": 2,
+            "total": 1102
+          },
+          "slumbotRaises": {
+            "exact": 795,
+            "translated": 0,
+            "unsupported": 2,
+            "total": 797
+          },
+          "clientDecisionPrefixes": {
+            "exact": 1433,
+            "translated": 38,
+            "unsupported": 2,
+            "total": 1473
+          }
+        }
+      },
+      "slumbotSizes": {
+        "open: 2 bb vs 1 bb": 602,
+        "isolation: 3 bb vs 1 bb": 155,
+        "3-bet: 15 bb vs 3.65 bb": 6,
+        "4-bet: 24 bb vs 6.45 bb": 2,
+        "3-bet: 9 bb vs 3.65 bb": 11,
+        "4-bet: 18 bb vs 6.6 bb": 6,
+        "3-bet: 9 bb vs 3.57 bb": 6,
+        "3-bet: 15 bb vs 3.57 bb": 6,
+        "6-bet: 200 bb vs 58.92 bb": 2,
+        "4-bet: 18 bb vs 6.45 bb": 1
+      }
+    },
+    {
+      "file": "v9g-1-fixed.jsonl",
+      "sha256": "d415b9d3171db831383b3634924fa46175a3514e62f3dae526c1a435c0d22154",
+      "hands": 4000,
+      "focals": [
+        "v9g"
+      ],
+      "versions": {
+        "v2": {
+          "all": {
+            "exact": 4984,
+            "translated": 3073,
+            "unsupported": 11,
+            "total": 8068
+          },
+          "slumbot": {
+            "exact": 1508,
+            "translated": 2257,
+            "unsupported": 6,
+            "total": 3771
+          },
+          "client": {
+            "exact": 3476,
+            "translated": 816,
+            "unsupported": 5,
+            "total": 4297
+          },
+          "raises": {
+            "exact": 37,
+            "translated": 3073,
+            "unsupported": 6,
+            "total": 3116
+          },
+          "slumbotRaises": {
+            "exact": 37,
+            "translated": 2257,
+            "unsupported": 3,
+            "total": 2297
+          },
+          "clientDecisionPrefixes": {
+            "exact": 2000,
+            "translated": 2294,
+            "unsupported": 3,
+            "total": 4297
+          }
+        },
+        "v3": {
+          "all": {
+            "exact": 7239,
+            "translated": 818,
+            "unsupported": 11,
+            "total": 8068
+          },
+          "slumbot": {
+            "exact": 3763,
+            "translated": 2,
+            "unsupported": 6,
+            "total": 3771
+          },
+          "client": {
+            "exact": 3476,
+            "translated": 816,
+            "unsupported": 5,
+            "total": 4297
+          },
+          "raises": {
+            "exact": 2292,
+            "translated": 818,
+            "unsupported": 6,
+            "total": 3116
+          },
+          "slumbotRaises": {
+            "exact": 2292,
+            "translated": 2,
+            "unsupported": 3,
+            "total": 2297
+          },
+          "clientDecisionPrefixes": {
+            "exact": 4209,
+            "translated": 85,
+            "unsupported": 3,
+            "total": 4297
+          }
+        }
+      },
+      "slumbotSizes": {
+        "open: 2 bb vs 1 bb": 1809,
+        "isolation: 3 bb vs 1 bb": 400,
+        "3-bet: 9 bb vs 3.57 bb": 14,
+        "4-bet: 24 bb vs 6.45 bb": 4,
+        "4-bet: 24 bb vs 6.6 bb": 3,
+        "4-bet: 18 bb vs 6.45 bb": 5,
+        "3-bet: 9 bb vs 3.65 bb": 23,
+        "3-bet: 15 bb vs 3.57 bb": 11,
+        "4-bet: 18 bb vs 6.6 bb": 11,
+        "5-bet: 81 bb vs 28.26 bb": 2,
+        "3-bet: 15 bb vs 3.65 bb": 12,
+        "6-bet: 200 bb vs 57.66 bb": 1,
+        "6-bet: 200 bb vs 78.12 bb": 1,
+        "5-bet: 135 bb vs 45.92 bb": 1
+      }
+    },
+    {
+      "file": "v9g-2-fixed.jsonl",
+      "sha256": "ac5987d4e293bba05b791b3e0ce876c511dc1bbe1f3757b86fa225b381b58dee",
+      "hands": 4000,
+      "focals": [
+        "v9g"
+      ],
+      "versions": {
+        "v2": {
+          "all": {
+            "exact": 4990,
+            "translated": 3158,
+            "unsupported": 26,
+            "total": 8174
+          },
+          "slumbot": {
+            "exact": 1481,
+            "translated": 2315,
+            "unsupported": 14,
+            "total": 3810
+          },
+          "client": {
+            "exact": 3509,
+            "translated": 843,
+            "unsupported": 12,
+            "total": 4364
+          },
+          "raises": {
+            "exact": 45,
+            "translated": 3158,
+            "unsupported": 14,
+            "total": 3217
+          },
+          "slumbotRaises": {
+            "exact": 45,
+            "translated": 2315,
+            "unsupported": 4,
+            "total": 2364
+          },
+          "clientDecisionPrefixes": {
+            "exact": 2000,
+            "translated": 2360,
+            "unsupported": 4,
+            "total": 4364
+          }
+        },
+        "v3": {
+          "all": {
+            "exact": 7295,
+            "translated": 853,
+            "unsupported": 26,
+            "total": 8174
+          },
+          "slumbot": {
+            "exact": 3786,
+            "translated": 10,
+            "unsupported": 14,
+            "total": 3810
+          },
+          "client": {
+            "exact": 3509,
+            "translated": 843,
+            "unsupported": 12,
+            "total": 4364
+          },
+          "raises": {
+            "exact": 2350,
+            "translated": 853,
+            "unsupported": 14,
+            "total": 3217
+          },
+          "slumbotRaises": {
+            "exact": 2350,
+            "translated": 10,
+            "unsupported": 4,
+            "total": 2364
+          },
+          "clientDecisionPrefixes": {
+            "exact": 4238,
+            "translated": 122,
+            "unsupported": 4,
+            "total": 4364
+          }
+        }
+      },
+      "slumbotSizes": {
+        "open: 2 bb vs 1 bb": 1799,
+        "isolation: 3 bb vs 1 bb": 439,
+        "3-bet: 15 bb vs 3.57 bb": 15,
+        "4-bet: 24 bb vs 6.6 bb": 7,
+        "3-bet: 9 bb vs 3.65 bb": 20,
+        "4-bet: 18 bb vs 6.45 bb": 15,
+        "3-bet: 9 bb vs 3.57 bb": 25,
+        "5-bet: 81 bb vs 27.62 bb": 3,
+        "4-bet: 24 bb vs 6.45 bb": 5,
+        "3-bet: 15 bb vs 3.65 bb": 10,
+        "5-bet: 135 bb vs 46.86 bb": 2,
+        "4-bet: 18 bb vs 6.6 bb": 15,
+        "5-bet: 81 bb vs 28.26 bb": 5,
+        "5-bet: 135 bb vs 45.92 bb": 2,
+        "6-bet: 200 bb vs 57.66 bb": 2
+      }
+    },
+    {
+      "file": "v9g-3-fixed.jsonl",
+      "sha256": "077e984af76c110482d86717df7beb25d93a4b72d343ff9e75602245f1f287cd",
+      "hands": 4000,
+      "focals": [
+        "v9g"
+      ],
+      "versions": {
+        "v2": {
+          "all": {
+            "exact": 4950,
+            "translated": 3145,
+            "unsupported": 11,
+            "total": 8106
+          },
+          "slumbot": {
+            "exact": 1531,
+            "translated": 2268,
+            "unsupported": 6,
+            "total": 3805
+          },
+          "client": {
+            "exact": 3419,
+            "translated": 877,
+            "unsupported": 5,
+            "total": 4301
+          },
+          "raises": {
+            "exact": 31,
+            "translated": 3145,
+            "unsupported": 6,
+            "total": 3182
+          },
+          "slumbotRaises": {
+            "exact": 31,
+            "translated": 2268,
+            "unsupported": 2,
+            "total": 2301
+          },
+          "clientDecisionPrefixes": {
+            "exact": 2000,
+            "translated": 2299,
+            "unsupported": 2,
+            "total": 4301
+          }
+        },
+        "v3": {
+          "all": {
+            "exact": 7214,
+            "translated": 881,
+            "unsupported": 11,
+            "total": 8106
+          },
+          "slumbot": {
+            "exact": 3795,
+            "translated": 4,
+            "unsupported": 6,
+            "total": 3805
+          },
+          "client": {
+            "exact": 3419,
+            "translated": 877,
+            "unsupported": 5,
+            "total": 4301
+          },
+          "raises": {
+            "exact": 2295,
+            "translated": 881,
+            "unsupported": 6,
+            "total": 3182
+          },
+          "slumbotRaises": {
+            "exact": 2295,
+            "translated": 4,
+            "unsupported": 2,
+            "total": 2301
+          },
+          "clientDecisionPrefixes": {
+            "exact": 4215,
+            "translated": 84,
+            "unsupported": 2,
+            "total": 4301
+          }
+        }
+      },
+      "slumbotSizes": {
+        "open: 2 bb vs 1 bb": 1825,
+        "isolation: 3 bb vs 1 bb": 390,
+        "3-bet: 15 bb vs 3.57 bb": 15,
+        "3-bet: 9 bb vs 3.57 bb": 18,
+        "3-bet: 15 bb vs 3.65 bb": 10,
+        "4-bet: 18 bb vs 6.45 bb": 10,
+        "3-bet: 9 bb vs 3.65 bb": 13,
+        "5-bet: 135 bb vs 45.92 bb": 1,
+        "4-bet: 18 bb vs 6.6 bb": 8,
+        "5-bet: 81 bb vs 27.62 bb": 1,
+        "5-bet: 135 bb vs 46.86 bb": 1,
+        "5-bet: 81 bb vs 28.26 bb": 2,
+        "4-bet: 24 bb vs 6.6 bb": 3,
+        "4-bet: 24 bb vs 6.45 bb": 3,
+        "6-bet: 200 bb vs 57.66 bb": 1
+      }
+    },
+    {
+      "file": "v9g-4-fixed.jsonl",
+      "sha256": "1a0b108d0a7ca11a6df3346dacfacdbae86d6c6c6aceb8c005e86d1b00b74285",
+      "hands": 4000,
+      "focals": [
+        "v9g"
+      ],
+      "versions": {
+        "v2": {
+          "all": {
+            "exact": 4923,
+            "translated": 3104,
+            "unsupported": 12,
+            "total": 8039
+          },
+          "slumbot": {
+            "exact": 1512,
+            "translated": 2241,
+            "unsupported": 6,
+            "total": 3759
+          },
+          "client": {
+            "exact": 3411,
+            "translated": 863,
+            "unsupported": 6,
+            "total": 4280
+          },
+          "raises": {
+            "exact": 34,
+            "translated": 3104,
+            "unsupported": 6,
+            "total": 3144
+          },
+          "slumbotRaises": {
+            "exact": 34,
+            "translated": 2241,
+            "unsupported": 5,
+            "total": 2280
+          },
+          "clientDecisionPrefixes": {
+            "exact": 2000,
+            "translated": 2275,
+            "unsupported": 5,
+            "total": 4280
+          }
+        },
+        "v3": {
+          "all": {
+            "exact": 7162,
+            "translated": 865,
+            "unsupported": 12,
+            "total": 8039
+          },
+          "slumbot": {
+            "exact": 3751,
+            "translated": 2,
+            "unsupported": 6,
+            "total": 3759
+          },
+          "client": {
+            "exact": 3411,
+            "translated": 863,
+            "unsupported": 6,
+            "total": 4280
+          },
+          "raises": {
+            "exact": 2273,
+            "translated": 865,
+            "unsupported": 6,
+            "total": 3144
+          },
+          "slumbotRaises": {
+            "exact": 2273,
+            "translated": 2,
+            "unsupported": 5,
+            "total": 2280
+          },
+          "clientDecisionPrefixes": {
+            "exact": 4182,
+            "translated": 93,
+            "unsupported": 5,
+            "total": 4280
+          }
+        }
+      },
+      "slumbotSizes": {
+        "open: 2 bb vs 1 bb": 1810,
+        "isolation: 3 bb vs 1 bb": 372,
+        "4-bet: 18 bb vs 6.6 bb": 12,
+        "4-bet: 24 bb vs 6.6 bb": 6,
+        "3-bet: 9 bb vs 3.57 bb": 19,
+        "3-bet: 15 bb vs 3.65 bb": 12,
+        "3-bet: 9 bb vs 3.65 bb": 15,
+        "4-bet: 24 bb vs 6.45 bb": 5,
+        "4-bet: 18 bb vs 6.45 bb": 15,
+        "3-bet: 15 bb vs 3.57 bb": 7,
+        "5-bet: 81 bb vs 28.26 bb": 2,
+        "6-bet: 200 bb vs 76.56 bb": 1,
+        "6-bet: 200 bb vs 58.92 bb": 3,
+        "6-bet: 200 bb vs 57.66 bb": 1
+      }
+    }
+  ]
+}

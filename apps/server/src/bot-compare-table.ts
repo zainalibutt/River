@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type BotPolicy, championPersonality } from '@river/engine'
+import { beginBenchmark } from './bot-benchmark-provenance.js'
 import { opponentStatsPlugin } from './bot-opponent-reads.js'
 import {
   headsUpButtonGuardPolicy,
@@ -11,6 +12,7 @@ import {
 import {
   RIVER_CANDIDATE_TUNING,
   RIVER_READS_V8X_TUNING,
+  type RiverPolicyStats,
   riverSolverPolicy,
 } from './bot-river-policy.js'
 import { runSessions, type SessionHandResult } from './bot-session-benchmark.js'
@@ -22,11 +24,91 @@ import {
   ordinaryTables,
 } from './bot-session-campaign.js'
 import { clusteredEstimate, pairRuns } from './bot-session-evaluation.js'
-import { solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
-import { turnNetworkFromEnvironment } from './bot-value-network.js'
+import { solvedFlopPolicy, solvedTurnPolicy, turnSolverPolicy } from './bot-turn-policy.js'
+import { v9gPolicy } from './bot-v9g-policy.js'
+import {
+  loadValueNetwork,
+  riverNetworkFromEnvironment,
+  turnNetworkFromEnvironment,
+  turnStartNetworkFromEnvironment,
+} from './bot-value-network.js'
+
+const hybridStats: Record<string, ReturnType<typeof v9gPolicy>['hybrid']> = {}
+const exploitRiverStats: Record<string, RiverPolicyStats | undefined> = {}
+const offTreeStats: Record<string, unknown> = {}
+function v9g(name: string, options: Parameters<typeof v9gPolicy>[0] = {}): BotPolicy {
+  const chain = v9gPolicy(options)
+  riverStats[name] = chain.river
+  hybridStats[name] = chain.hybrid
+  exploitRiverStats[name] = chain.exploitRiver
+  offTreeStats[name] = {
+    ...(chain.preflop === undefined ? {} : { preflop: chain.preflop }),
+    flop: chain.stats.offTree,
+    turn: chain.turn.offTree,
+    river: chain.river.offTree,
+    safeExploit: { turn: chain.turn.safeExploit, river: chain.river.safeExploit },
+  }
+  return chain.policy
+}
+const riverStats: Record<string, RiverPolicyStats> = {}
 
 /** Named focal policies that comparisons can refer to from the command line. */
 export const COMPARABLE_POLICIES: Readonly<Record<string, BotPolicy>> = {
+  /** Inherited promises at both the flop-to-turn and turn-to-river boundaries. */
+  get v9f() {
+    const turnStartNetwork = turnStartNetworkFromEnvironment()
+    const flop = process.env.RIVER_FLOP_NETWORK
+    if (!flop)
+      throw new Error('v9f needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
+    return solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flop), {
+      carry: 'both',
+      turnStartNetwork,
+      riverNetwork: riverNetworkFromEnvironment(),
+    }).policy
+  },
+  /** v9f at live speed: Discounted CFR with 40 rounds on the flop and the turn. */
+  get v9g() {
+    return v9g('v9g')
+  },
+  get v9go() {
+    return v9g('v9go', { offTree: 'resolve' })
+  },
+  get v9gp() {
+    return v9g('v9gp', { offTree: 'resolve', preflopTables: true })
+  },
+  get v9gz() {
+    return v9g('v9gz', { offTree: 'resolve', preflopTables: true, safeExploitV2: true })
+  },
+  get v9gz2() {
+    return v9g('v9gz2', {
+      offTree: 'resolve',
+      preflopTables: true,
+      safeExploitV2: true,
+      safeTurnExploit: true,
+    })
+  },
+  get v9gx() {
+    return v9g('v9gx', { boundedReads: true })
+  },
+  get v9gy() {
+    return v9g('v9gy', { boundedReads: true, baselineCaps: true })
+  },
+  get v9gh() {
+    return v9g('v9gh', { hybridThreshold: 0.35 })
+  },
+  get v9gh50() {
+    return v9g('v9gh50', { hybridThreshold: 0.5 })
+  },
+  /** v9d chain with opt-in inherited per-river turn promises. Loaded only when selected. */
+  get v9e() {
+    const flop = process.env.RIVER_FLOP_NETWORK
+    if (!flop)
+      throw new Error('v9e needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
+    return solvedFlopPolicy(turnNetworkFromEnvironment(), loadValueNetwork(flop), {
+      carry: 'per-river',
+      riverNetwork: riverNetworkFromEnvironment(),
+    }).policy
+  },
   v4: legacyGuardPolicy,
   v5: v5GuardPolicy,
   v6: pokerGuardPolicy,
@@ -131,6 +213,13 @@ const cast =
       : undefined
 const sessions = Number(sessionsText)
 const first = firstText === undefined ? 0 : Number(firstText)
+// Bounded smoke runs may override the campaign's normal session length.
+const smokeHands =
+  process.env.RIVER_COMPARE_HANDS === undefined
+    ? undefined
+    : Number(process.env.RIVER_COMPARE_HANDS)
+if (smokeHands !== undefined && (!Number.isSafeInteger(smokeHands) || smokeHands < 1))
+  throw new Error('RIVER_COMPARE_HANDS must be a positive integer')
 if (
   table === undefined ||
   baseline === undefined ||
@@ -142,16 +231,18 @@ if (
     'usage: <table> <seed prefix> <sessions> <baseline> <candidate: v9a|v9a-reads|v9b|v9h35|v9h50|...> <out.json> [first session] [rotation|champion]',
   )
 }
+const campaignHandsPerSession = campaignSize(table).handsPerSession
 const common = {
   seed: `${prefix}-${table.name}`,
   sessions,
   firstSession: first,
-  handsPerSession: campaignSize(table).handsPerSession,
+  handsPerSession: smokeHands ?? campaignHandsPerSession,
   // The focal seat keeps the public statistics a live bot would; policies that do not read them are unaffected.
   plugin: opponentStatsPlugin(),
   table,
   focalPersonalities: cast,
   allInAdjustment: true,
+  aivat: table.entrants.length === 2,
 }
 interface ComparePiece {
   readonly table: string
@@ -161,6 +252,7 @@ interface ComparePiece {
   readonly first: number
   readonly sessions: number
   readonly baselineHands?: SessionHandResult[]
+  readonly handsPerSession?: number
 }
 /** The baseline's hands from the piece in `directory` that played it on these deals. */
 function cachedBaseline(directory: string, tableName: string) {
@@ -173,6 +265,7 @@ function cachedBaseline(directory: string, tableName: string) {
       piece.baseline === baselinePolicyName &&
       piece.first === first &&
       piece.sessions === sessions &&
+      (piece.handsPerSession ?? campaignHandsPerSession) === common.handsPerSession &&
       piece.baselineHands !== undefined
     ) {
       return { hands: piece.baselineHands, from: join(directory, name) }
@@ -181,6 +274,18 @@ function cachedBaseline(directory: string, tableName: string) {
   throw new Error(`no ${baselinePolicyName} hands for ${tableName} from ${first} in ${directory}`)
 }
 const started = Date.now()
+const provenance = beginBenchmark(out, 'compare-table', {
+  policies: [baselinePolicyName ?? 'unknown', candidateName ?? 'unknown'],
+  seeds: [common.seed],
+  plannedHands: sessions * common.handsPerSession,
+  settings: {
+    table: table.name,
+    cast: castLabel,
+    first,
+    sessions,
+    handsPerSession: common.handsPerSession,
+  },
+})
 const cached = baselineCache === undefined ? undefined : cachedBaseline(baselineCache, table.name)
 const baseHands =
   cached?.hands ??
@@ -219,28 +324,57 @@ const adjusted = summarise(
     return (after.adjustedChips ?? after.focalChips) - (before.adjustedChips ?? before.focalChips)
   }),
 )
+const aivatAvailable =
+  baseHands.every((hand) => hand.aivatChips !== undefined) &&
+  next.hands.every((hand) => hand.aivatChips !== undefined)
+const aivat = aivatAvailable
+  ? summarise(
+      next.hands.map(
+        (hand, index) => (hand.aivatChips as number) - (baseHands[index]?.aivatChips as number),
+      ),
+    )
+  : null
 writeFileSync(
   out,
   JSON.stringify({
     table: table.name,
+    provenance: provenance.provenance,
     prefix,
     cast: castLabel,
     baseline: baselinePolicyName,
     candidate: candidateName,
     first,
     sessions,
+    handsPerSession: common.handsPerSession,
     perSession: raw.perSession,
     estimate: raw.estimate,
     perSessionAdjusted: adjusted.perSession,
     estimateAdjusted: adjusted.estimate,
+    aivat,
+    candidateHands: next.hands,
     baseMs,
     nextMs,
+    river: riverStats,
+    offTree: offTreeStats,
+    hybrid: hybridStats,
+    exploitRiver: exploitRiverStats,
     ...(cached === undefined ? {} : { baselineFrom: cached.from }),
     baselineHands: baseHands,
   }),
 )
+provenance.finish(pairs.length)
 const shown = (estimate: typeof raw.estimate) =>
   `${estimate.bigBlindsPer100.toFixed(1)} (${estimate.interval95.map((v) => v.toFixed(1)).join(' to ')})`
 process.stdout.write(
   `${table.name}: ${shown(raw.estimate)}, all-in valued ${shown(adjusted.estimate)}, ${Math.round(nextMs / 1000)} s\n`,
 )
+
+for (const [name, stats] of Object.entries(riverStats)) {
+  process.stdout.write(`${name} river: ${JSON.stringify(stats)}\n`)
+}
+for (const [name, stats] of Object.entries(hybridStats)) {
+  if (stats !== undefined) process.stdout.write(`${name} hybrid: ${JSON.stringify(stats)}\n`)
+}
+for (const [name, stats] of Object.entries(exploitRiverStats)) {
+  if (stats !== undefined) process.stdout.write(`${name} exploit river: ${JSON.stringify(stats)}\n`)
+}
