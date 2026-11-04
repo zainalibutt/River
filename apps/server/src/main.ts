@@ -8,6 +8,9 @@ import { serveApiRoutes } from './api-routes.js'
 import { createSupabaseTokenVerifier } from './auth.js'
 import { botCapabilitiesRoute } from './bot-capabilities-route.js'
 import { liveBotThinker, liveSafeBotPolicy, liveSafeConfig } from './bot-live-safe.js'
+import { BotApi } from './bot-api.js'
+import { withBotApi } from './bot-api-http.js'
+import { SupabaseBotApiKeyStore } from './bot-api-keys.js'
 import { SupabaseBotOpponentStore } from './bot-opponent-store.js'
 import { assertDevelopmentDatabase, readServerConfig } from './config.js'
 import { SupabaseCosmeticStore } from './cosmetic-store.js'
@@ -143,20 +146,47 @@ async function start(): Promise<void> {
   // A short link resolves against the tables this process holds, and a profile
   // is read with the service key it holds, so those routes are answered here.
   // Every other request, the rest of /api included, is Next's.
+  const routes = serveApiRoutes(
+    [
+      botCapabilitiesRoute(safe !== undefined),
+      tableLinkRoute(hub),
+      publicProfileRoute(
+        new SupabasePublicProfiles({
+          supabaseUrl: config.supabaseUrl,
+          serviceRoleKey: config.serviceRoleKey,
+        }),
+      ),
+    ],
+    (request, response) => handle(request, response),
+  )
+  // The public bot API: other people's bots play Nyx over HTTP. Off unless
+  // switched on, and then only after its key table's migration has been applied.
+  let botApi: BotApi | undefined
+  if (process.env.BOT_API === 'true') {
+    botApi = new BotApi()
+    const api = botApi
+    setInterval(() => {
+      api.expire()
+    }, 60_000).unref()
+  }
   const server = createServer(
-    serveApiRoutes(
-      [
-        botCapabilitiesRoute(safe !== undefined),
-        tableLinkRoute(hub),
-        publicProfileRoute(
-          new SupabasePublicProfiles({
-            supabaseUrl: config.supabaseUrl,
-            serviceRoleKey: config.serviceRoleKey,
-          }),
+    botApi === undefined
+      ? routes
+      : withBotApi(
+          {
+            api: botApi,
+            keys: new SupabaseBotApiKeyStore({
+              supabaseUrl: config.supabaseUrl,
+              serviceRoleKey: config.serviceRoleKey,
+            }),
+            verifyToken: createSupabaseTokenVerifier({ supabaseUrl: config.supabaseUrl }),
+            onError: (error) => {
+              process.stderr.write(`river: bot api: ${errorText(error)}
+`)
+            },
+          },
+          routes,
         ),
-      ],
-      (request, response) => handle(request, response),
-    ),
   )
   const sockets = attachRiverWebSocketServer(server, hub)
   // Next owns hot reload in development and asks for it over its own upgrade.
