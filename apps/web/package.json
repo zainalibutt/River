@@ -18,7 +18,7 @@
     "@river/engine": "0.1.0",
     "@river/server": "0.1.0",
     "@supabase/supabase-js": "2.112.3",
-    "next": "^16.3.6",
+    "next": "^16.4.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "0.185.1"
