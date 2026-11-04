@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { config as loadEnv } from 'dotenv'
@@ -18,6 +20,7 @@ import { createSupabaseEconomy } from './economy-service.js'
 import { SupabaseLedger } from './ledger.js'
 import { SupabasePlayerHandStore } from './player-hand-store.js'
 import { SupabasePlayerNames } from './player-names.js'
+import { fetchPrivateModels } from './private-models.js'
 import { publicProfileRoute, SupabasePublicProfiles } from './public-profiles.js'
 import { SupabaseTableItemStore } from './table-item-store.js'
 import { tableLinkRoute } from './table-link-route.js'
@@ -74,6 +77,27 @@ async function start(): Promise<void> {
   const rememberOpponents = process.env.BOT_OPPONENT_PERSISTENCE === 'true'
   // The OG's river solver, worked out on a worker thread; off unless switched on.
   const botThinker = liveBotThinker({ ...process.env, BOT_LIVE_SAFE: 'false' })
+  // Midas's models come from a private bucket when one is named. If the copy
+  // fails, Midas stays off and the tables play on with the bots they have.
+  const modelsBucket = process.env.RIVER_MODELS_BUCKET
+  if (process.env.BOT_LIVE_SAFE === 'true' && modelsBucket) {
+    try {
+      const paths = await fetchPrivateModels({
+        supabaseUrl: config.supabaseUrl,
+        serviceRoleKey: config.serviceRoleKey,
+        bucket: modelsBucket,
+        directory: process.env.RIVER_MODELS_DIR || join(tmpdir(), 'river-models'),
+      })
+      Object.assign(process.env, paths)
+      console.log(
+        'private-models',
+        JSON.stringify({ bucket: modelsBucket, set: Object.keys(paths) }),
+      )
+    } catch (error) {
+      process.env.BOT_LIVE_SAFE = 'false'
+      process.stderr.write(`river: private models: ${errorText(error)}\n`)
+    }
+  }
   const safeConfig = liveSafeConfig(process.env)
   const safe = safeConfig.enabled
     ? liveSafeBotPolicy(safeConfig, {
