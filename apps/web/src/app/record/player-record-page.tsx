@@ -7,7 +7,7 @@ import { RiverHandHistory } from '@/components/river-hand-history'
 import { RiverWordmark } from '@/components/river-wordmark'
 import { createRiverAuthClient, ensureRiverSession, loadBrowserAuthConfig } from '@/lib/auth'
 import {
-  againstNell,
+  againstNyx,
   type RecordedHand,
   recordedHandFrom,
   type Scorecard,
@@ -96,7 +96,7 @@ export function PlayerRecordPage() {
 
   const hands = loaded.kind === 'ready' ? loaded.hands : []
   const overall = useMemo(() => scorecard(hands), [hands])
-  const nell = useMemo(() => againstNell(hands), [hands])
+  const nyx = useMemo(() => againstNyx(hands), [hands])
   const sittings = useMemo(() => sessions(hands).slice(0, 8), [hands])
   const replayable = useMemo(
     () =>
@@ -175,11 +175,11 @@ export function PlayerRecordPage() {
                 </p>
               ) : null}
 
-              <h3 className="record-heading">Against Nell</h3>
-              {nell.hands === 0 ? (
+              <h3 className="record-heading">Against Nyx</h3>
+              {nyx.hands === 0 ? (
                 <p className="club-folio-note">You have not sat with the champion yet.</p>
               ) : (
-                <ScoreRows card={nell} />
+                <ScoreRows card={nyx} />
               )}
 
               <h3 className="record-heading">Recent sittings</h3>

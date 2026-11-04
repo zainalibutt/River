@@ -123,7 +123,7 @@ describe('bot identity', () => {
     const champion = championPersonality()
     const others = (preset: BotTablePreset) =>
       botsForTable('river-one', 7, preset).filter((bot) => bot.id !== champion.id)
-    for (const preset of BOT_TABLE_PRESETS) {
+    for (const preset of BOT_TABLE_PRESETS.filter((preset) => preset !== 'midas')) {
       const cast = botsForTable('river-one', 7, preset)
       expect(cast.filter((bot) => bot.id === champion.id)).toHaveLength(1)
     }

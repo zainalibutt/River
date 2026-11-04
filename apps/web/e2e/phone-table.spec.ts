@@ -29,8 +29,8 @@ async function phoneFixture(page: Page, seatCount = 9) {
         seat === heroSeat
           ? null
           : seatCount === 2
-            ? 'Nell'
-            : (['Mickey', 'Edna', 'Nell', 'Jules', 'Bernadette', 'Kazimir', 'Blaise', 'Vesper'][
+            ? 'Nyx'
+            : (['Mickey', 'Edna', 'Nyx', 'Jules', 'Bernadette', 'Kazimir', 'Blaise', 'Vesper'][
                 seat
               ] ?? 'Bot'),
       stack: seat === heroSeat ? 0 : 100000,
@@ -281,7 +281,7 @@ test.describe('mobile waiting controls and burns', () => {
         await targets(page)
       })
 
-      test('places the face-down burn beside the community board, not Nell’s private cards', async ({
+      test('places the face-down burn beside the community board, not Nyx’s private cards', async ({
         page,
       }) => {
         const fixture = await phoneFixture(page, 2)
@@ -754,7 +754,7 @@ for (const viewport of [
       await expect(page.locator('.t2d-dealer, .t2d-shoe')).toHaveCount(0)
       await expect(page.locator('.t2d-placard')).toHaveCount(1)
       await expect(page.locator('.phone-dealer')).toHaveText('DEALER')
-      await expect(page.getByRole('img', { name: 'Dealer: Nell', exact: true })).toBeVisible()
+      await expect(page.getByRole('img', { name: 'Dealer: Nyx', exact: true })).toBeVisible()
       const opponent = await page.locator('.t2d-placard').boundingBox()
       if (opponent === null) throw new Error('No heads-up opponent')
       expect(opponent.x + opponent.width / 2).toBeCloseTo(viewport.width / 2, 0)

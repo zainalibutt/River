@@ -50,7 +50,7 @@ function view(): RoomView {
     countdownMs: 0,
     seats: [
       seat(0, 'you', 100_000),
-      seat(1, 'Nell', 87_250),
+      seat(1, 'Nyx', 87_250),
       seat(2, 'Ada', 4_000),
       ...Array.from({ length: 6 }, (_, index) => seat(index + 3, null, 0)),
     ],
@@ -70,10 +70,10 @@ function view(): RoomView {
   }
 }
 
-function table(bigBlind: number | null): string {
+function table(bigBlind: number | null, tableView = view()): string {
   return renderToStaticMarkup(
     createElement(Table2D, {
-      view: view(),
+      view: tableView,
       geometry: LANDSCAPE,
       chipMoments: [],
       showdown: null,
@@ -98,7 +98,7 @@ const hand: HandRecord = {
   stake: { smallBlind: 250, bigBlind: 500 },
   seats: [
     { seat: 0, playerId: 'you', startingStack: 100_000 },
-    { seat: 1, playerId: 'Nell', startingStack: 100_000 },
+    { seat: 1, playerId: 'Nyx', startingStack: 100_000 },
   ],
   actions: [
     { seat: 0, street: 'preflop', action: { kind: 'call' } },
@@ -130,6 +130,19 @@ function history(bigBlind: number | null): string {
 }
 
 describe('amounts at the table', () => {
+  it('shows a thinking cue only on the acting Midas seat', () => {
+    const current = view()
+    current.seats[1] = { ...seat(1, 'bot:midas', 87_250), name: 'Midas', hasHole: true }
+    current.phase = 'hand'
+    current.currentActor = { seat: 1, playerId: 'bot:midas' }
+    expect(table(null, current)).toContain('Thinking…')
+    current.currentActor = { seat: 0, playerId: 'you' }
+    expect(table(null, current)).not.toContain('Thinking…')
+    current.currentActor = { seat: 1, playerId: 'bot:nell' }
+    current.seats[1] = { ...seat(1, 'bot:nell', 87_250), name: 'Nyx' }
+    expect(table(null, current)).not.toContain('Thinking…')
+  })
+
   it('draws other players stacks in chips by default', () => {
     expect(stacks(table(null))).toEqual(['87.25K', '4,000'])
   })

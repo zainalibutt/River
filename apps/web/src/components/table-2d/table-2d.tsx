@@ -869,6 +869,10 @@ function Placard({
           {note}
           {phone && shown !== null ? <b>{formatAmount(shown, true, bigBlind)}</b> : null}
         </span>
+      ) : acting && seat.playerId === 'bot:midas' ? (
+        <span className="t2d-tag" role="status">
+          Thinking…
+        </span>
       ) : flag !== null ? (
         <span className={`t2d-tag ${actionKind(flag)}`}>
           <svg viewBox="0 0 24 24" aria-hidden="true">

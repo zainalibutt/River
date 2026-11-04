@@ -207,7 +207,7 @@ for (const viewport of [
       ).toBe(true)
       for (const name of [
         'Quick Play',
-        'Champion, Nell 1v1',
+        'Champion, Nyx 1v1',
         'Create',
         'Join',
         'Table options',
@@ -236,7 +236,7 @@ for (const viewport of [
             expect(Math.abs(titleCenter - buttonCenter)).toBeLessThanOrEqual(2)
           }
         }
-        if (['Quick Play', 'Champion, Nell 1v1', 'Create'].includes(name)) {
+        if (['Quick Play', 'Champion, Nyx 1v1', 'Create'].includes(name)) {
           const size = page.viewportSize()
           expect(size).not.toBeNull()
           if (box !== null && size !== null)
@@ -254,7 +254,7 @@ for (const viewport of [
       await page.getByRole('button', { name: 'Quick Play', exact: true }).click()
       await expect(page).toHaveURL(/\/table\?new=1&strength=random$/)
       await page.goto('/')
-      await page.getByRole('button', { name: 'Champion, Nell 1v1', exact: true }).click()
+      await page.getByRole('button', { name: 'Champion, Nyx 1v1', exact: true }).click()
       await expect(page).toHaveURL(/\/table\?new=1&strength=champion$/)
       await page.goto('/')
       await page.getByRole('button', { name: 'Create', exact: true }).click()

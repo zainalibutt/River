@@ -36,7 +36,7 @@ describe("a settled hand in each person's record", () => {
       playedAtMs: 1_000,
       roomKind: 'bots',
       isBot: (playerId) => playerId.startsWith('bot:'),
-      nameOf: (playerId) => (playerId === 'bot:nell' ? 'Nell' : playerId),
+      nameOf: (playerId) => (playerId === 'bot:nell' ? 'Nyx' : playerId),
       ownHoleOf: (playerId) => holes.get(playerId) ?? null,
     })
     expect(rows.map((row) => row.playerId)).toEqual(['alice', 'bob'])
@@ -46,7 +46,7 @@ describe("a settled hand in each person's record", () => {
       bigBlind: 500,
       netChips: 2_000,
       showed: true,
-      opponents: ['Nell', 'bob'],
+      opponents: ['Nyx', 'bob'],
     })
     expect(alice?.ownHole).toEqual(holes.get('alice'))
     expect(bob?.ownHole).toEqual(holes.get('bob'))

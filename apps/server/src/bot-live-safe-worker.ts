@@ -1,19 +1,20 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { mulberry32 } from '@river/engine'
+import type { LiveSafeVariant } from './bot-live-safe.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { releasePolicyHand } from './bot-policy-hand.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
 import { actionFor } from './bot-service.js'
 import type { ThinkRequest } from './bot-thinker.js'
-import { type V9gNetworks, v9gPolicy } from './bot-v9g-policy.js'
+import { V9GP_POLICY_OPTIONS, type V9gNetworks, v9gPolicy } from './bot-v9g-policy.js'
 import { valueNetworkBackend } from './bot-value-simd.js'
 
 // Pool workers are the CPU participants. Never create nested inference workers.
 process.env.RIVER_VALUE_THREADS = '1'
 if (process.env.RIVER_VALUE_BACKEND !== 'ts') delete process.env.RIVER_VALUE_BACKEND
-const variant = workerData.variant as 'v9go' | 'v9gp'
+const variant = workerData.variant as LiveSafeVariant
 const create = (networks?: V9gNetworks) =>
-  v9gPolicy({ offTree: 'resolve', preflopTables: variant === 'v9gp' }, networks)
+  v9gPolicy(variant === 'v9go' ? { offTree: 'resolve' } : V9GP_POLICY_OPTIONS[variant], networks)
 const started = performance.now()
 let networks: V9gNetworks | undefined
 let modelError: string | undefined

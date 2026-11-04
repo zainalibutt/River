@@ -1,7 +1,7 @@
 import type { HandRecord } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
-  againstNell,
+  againstNyx,
   type RecordedHand,
   recordedHandFrom,
   SESSION_GAP_MS,
@@ -29,14 +29,14 @@ function hand(overrides: Partial<RecordedHand>): RecordedHand {
 describe('a private record', () => {
   const hands = [
     hand({ playedAtMs: 0, netChips: 1_500, showed: true, opponents: ['Nell'] }),
-    hand({ playedAtMs: 60_000, netChips: -500, showed: true, opponents: ['Nell', 'Jules'] }),
+    hand({ playedAtMs: 60_000, netChips: -500, showed: true, opponents: ['Nyx', 'Jules'] }),
     hand({ playedAtMs: 120_000, netChips: -1_000, bigBlind: 1_000 }),
     hand({ playedAtMs: 120_000 + SESSION_GAP_MS + 1, netChips: 2_000 }),
   ]
 
   it('counts each hand at its own stake and every showdown', () => {
     expect(scorecard(hands)).toEqual({ hands: 4, netBigBlinds: 5, showdowns: 2, showdownsWon: 1 })
-    expect(againstNell(hands)).toEqual({ hands: 2, netBigBlinds: 2, showdowns: 2, showdownsWon: 1 })
+    expect(againstNyx(hands)).toEqual({ hands: 2, netBigBlinds: 2, showdowns: 2, showdownsWon: 1 })
   })
 
   it('splits sittings where play stopped for half an hour, newest first', () => {

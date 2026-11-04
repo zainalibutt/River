@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 /**
  * The private record page against a faked server and database: the scorecard, the hands
- * against Nell, the recent sittings and the replay, with no account or database touched.
+ * against Nyx, the recent sittings and the replay, with no account or database touched.
  */
 
 const PLAYER = '00000000-0000-4000-8000-0000000000e1'
@@ -69,8 +69,8 @@ test('shows a player their own record and replays their hands', async ({ page })
   await page.route('https://river-auth.invalid/rest/v1/player_hands**', (route) =>
     route.fulfill({
       json: [
-        hand(3, 1_500, ['Nell'], '2026-10-09T18:10:00Z'),
-        hand(2, -500, ['Nell'], '2026-10-09T18:05:00Z'),
+        hand(3, 1_500, ['Nyx'], '2026-10-09T18:10:00Z'),
+        hand(2, -500, ['Nyx'], '2026-10-09T18:05:00Z'),
         hand(1, 2_000, ['Jules'], '2026-10-08T12:00:00Z'),
       ],
     }),
@@ -80,7 +80,7 @@ test('shows a player their own record and replays their hands', async ({ page })
   await expect(folio).toContainText('Your record')
   await expect(folio).toContainText('+6 bb')
   await expect(folio).toContainText('A short record: over 3 hands')
-  await expect(folio).toContainText('Against Nell')
+  await expect(folio).toContainText('Against Nyx')
   await expect(folio).toContainText('+2 bb')
   await expect(folio.locator('.record-sittings li')).toHaveCount(2)
   await page.screenshot({ path: 'test-results/player-record.png' })

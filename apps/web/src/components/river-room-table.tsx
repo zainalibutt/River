@@ -2463,6 +2463,11 @@ function RoomSeat({
         aria-label={`Inspect ${seat.name}`}
       />
       {marker}
+      {active && seat.playerId === 'bot:midas' ? (
+        <span className="seat-thinking" role="status">
+          Thinking…
+        </span>
+      ) : null}
       {seat.dealer ? (
         <span className="seat-dealer" role="img" aria-label="Dealer">
           D

@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url'
 import { config as loadEnv } from 'dotenv'
 import { serveApiRoutes } from './api-routes.js'
 import { createSupabaseTokenVerifier } from './auth.js'
-import { type LiveSafeBotPolicy, liveBotThinker } from './bot-live-safe.js'
+import { botCapabilitiesRoute } from './bot-capabilities-route.js'
+import { liveBotThinker, liveSafeBotPolicy, liveSafeConfig } from './bot-live-safe.js'
 import { SupabaseBotOpponentStore } from './bot-opponent-store.js'
 import { assertDevelopmentDatabase, readServerConfig } from './config.js'
 import { SupabaseCosmeticStore } from './cosmetic-store.js'
@@ -69,14 +70,17 @@ async function start(): Promise<void> {
   })
   const rememberOpponents = process.env.BOT_OPPONENT_PERSISTENCE === 'true'
   // The OG's river solver, worked out on a worker thread; off unless switched on.
-  const botThinker = liveBotThinker(process.env, {
-    onEvent: (event) => {
-      if (event.type === 'ready' || event.reason)
-        console.log('bot-live-safe', JSON.stringify(event))
-    },
-  })
-  if (process.env.BOT_LIVE_SAFE === 'true' && botThinker !== undefined) {
-    const safe = botThinker as LiveSafeBotPolicy
+  const botThinker = liveBotThinker({ ...process.env, BOT_LIVE_SAFE: 'false' })
+  const safeConfig = liveSafeConfig(process.env)
+  const safe = safeConfig.enabled
+    ? liveSafeBotPolicy(safeConfig, {
+        onEvent: (event) => {
+          if (event.type === 'ready' || event.reason)
+            console.log('bot-live-safe', JSON.stringify(event))
+        },
+      })
+    : undefined
+  if (safe !== undefined) {
     setInterval(() => {
       console.log(
         'bot-live-safe-summary',
@@ -97,6 +101,7 @@ async function start(): Promise<void> {
     // three to eight of them, in chairs the table's room id picks.
     botSeats: 'random',
     ...(botThinker === undefined ? {} : { botRiverThinker: botThinker }),
+    ...(safe === undefined ? {} : { midas: { thinker: safe, budgetMs: safeConfig.budgetMs } }),
     ...(rememberOpponents
       ? {
           botOpponentStore: new SupabaseBotOpponentStore({
@@ -141,6 +146,7 @@ async function start(): Promise<void> {
   const server = createServer(
     serveApiRoutes(
       [
+        botCapabilitiesRoute(safe !== undefined),
         tableLinkRoute(hub),
         publicProfileRoute(
           new SupabasePublicProfiles({
@@ -177,7 +183,7 @@ async function start(): Promise<void> {
           console.error('shutdown: could not settle every table', error)
         })
         .finally(async () => {
-          await botThinker?.close()
+          await Promise.all([botThinker?.close(), safe?.close()])
           server.close()
         })
     })

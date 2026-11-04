@@ -3459,6 +3459,22 @@ button.verify-pill.verify-mismatch {
   transform: translateX(-50%);
 }
 
+/* Midas's turn cue stays visible when the full name plates are closed. */
+.seat-thinking {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--club-hairline-strong);
+  border-radius: 3px;
+  background: var(--river-room);
+  color: var(--river-cream);
+  font-size: 10px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
 .seat-pin {
   position: absolute;
   bottom: 0;
