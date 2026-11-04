@@ -16,7 +16,8 @@ import { join, relative } from 'node:path'
 
 const [dir, bucket = 'river-models'] = process.argv.slice(2)
 const url = process.env.SUPABASE_URL?.replace(/\/$/, '')
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+// A key pasted with the placeholder brackets still around it is cleaned up.
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim().replace(/^<|>$/g, '')
 if (!dir || !url || !key)
   throw new Error('usage: SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... <dir> [bucket]')
 
@@ -28,7 +29,10 @@ const env = {
   RIVER_TURN_RESIDUAL: 'residual/residual-0',
   RIVER_PREFLOP_PRIVATE_DIR: 'preflop',
 }
-const headers = { apikey: key, authorization: `Bearer ${key}` }
+// A new-style secret key (sb_secret_...) goes in apikey alone; a legacy JWT goes in both.
+const headers = key.startsWith('sb_')
+  ? { apikey: key }
+  : { apikey: key, authorization: `Bearer ${key}` }
 
 function walk(at) {
   return readdirSync(at).flatMap((name) => {
@@ -51,8 +55,9 @@ const made = await fetch(`${url}/storage/v1/bucket`, {
   headers: { ...headers, 'content-type': 'application/json' },
   body: JSON.stringify({ id: bucket, name: bucket, public: false }),
 })
-if (!made.ok && !/already exists|Duplicate/i.test(await made.text()))
-  throw new Error(`bucket ${bucket}: ${made.status}`)
+const madeText = made.ok ? '' : await made.text()
+if (!made.ok && !/already exists|Duplicate/i.test(madeText))
+  throw new Error(`bucket ${bucket}: ${made.status} ${madeText}`)
 const bucketInfo = await fetch(`${url}/storage/v1/bucket/${bucket}`, { headers })
 if (!bucketInfo.ok || (await bucketInfo.json()).public !== false)
   throw new Error(`bucket ${bucket} is not private; stopping before any upload`)
