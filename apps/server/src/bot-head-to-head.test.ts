@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { championPair, duplicateScores, playDeals } from './bot-head-to-head.js'
+import { championPair, duplicateScores, headToHeadPolicy, playDeals } from './bot-head-to-head.js'
 import { alwaysCallPolicy, alwaysFoldPolicy } from './bot-lbr.js'
 
 describe('duplicate heads-up matches', () => {
@@ -27,4 +27,11 @@ describe('duplicate heads-up matches', () => {
       expect(mirrored[index]?.handClass).toBe(hand.handClass)
     })
   }, 120_000)
+})
+
+describe('head-to-head names with a preflop pack directory', () => {
+  it('accepts only v9gp names with a directory after @', () => {
+    expect(headToHeadPolicy('v9x@somewhere')).toBeUndefined()
+    expect(headToHeadPolicy('v9gpw2@')).toBeUndefined()
+  })
 })

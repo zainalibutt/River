@@ -105,6 +105,22 @@ export function loadPreflopPack(
   }
   return pack
 }
+const packsFrom = new Map<string, PreflopPack>()
+
+/**
+ * A pack's table read from an explicit directory rather than the versioned
+ * default, for experiments that pit a re-solved pack against the one in play.
+ */
+export function loadPreflopPackFrom(dir: string, depth: number): PreflopPack {
+  const path = join(dir, `${depth}bb.json`)
+  let pack = packsFrom.get(path)
+  if (!pack) {
+    pack = JSON.parse(readFileSync(path, 'utf8')) as PreflopPack
+    packsFrom.set(path, pack)
+  }
+  return pack
+}
+
 export function selectPreflopDepth(effective: number, depths: readonly number[] = PREFLOP_DEPTHS) {
   if (!Number.isFinite(effective) || effective <= 0 || depths.length === 0)
     throw new Error('invalid preflop depth')

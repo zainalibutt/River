@@ -15,8 +15,11 @@ import {
   exactPreflopRanges,
   hasPreflopPack,
   loadPreflopPack,
+  loadPreflopPackFrom,
+  PREFLOP_DEPTHS,
   preflopClass,
   preflopLiveAction,
+  preflopPackDir,
   pseudoHarmonicLower,
   samplePreflopAction,
   selectPreflopDepth,
@@ -386,5 +389,13 @@ describe('the preflop pack switch', () => {
     expect(defaultPreflopPackVersion('v4')).toBe('v4')
     expect(() => defaultPreflopPackVersion('v9')).toThrow()
     expect(loadPreflopPack(100, 'v4').metadata).toBeDefined()
+  })
+})
+
+describe('packs read from a directory', () => {
+  it.skipIf(!hasPreflopPack('v3'))('reads the same table the versioned loader reads', () => {
+    for (const depth of PREFLOP_DEPTHS) {
+      expect(loadPreflopPackFrom(preflopPackDir('v3'), depth)).toEqual(loadPreflopPack(depth, 'v3'))
+    }
   })
 })

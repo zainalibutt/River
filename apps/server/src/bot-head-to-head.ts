@@ -16,13 +16,23 @@ import { loadValueNetwork, turnNetworkFromEnvironment } from './bot-value-networ
 // cards the other had. Both play as the champion, with the same public reads of each other.
 // A hand's score for A is half of (A's chips in the first run minus B's chips in the second),
 // all-in valued; the estimate clusters by session. Policies: v8z, v9a, v9b, v9c, and v9d,
-// plus v9g, v9go, v9gp, v9gpw (warm flop re-solves), v9gpw2 (warm, 2x iterations).
+// plus v9g, v9go, v9gp, v9gpw (warm flop re-solves), v9gpw2 (warm, 2x iterations), and
+// any v9gp name with @<dir> to play the preflop packs in that directory.
 // v9d and the v9g policies also need RIVER_FLOP_NETWORK, the flop-end network's export without .bin.
 const [nameA, nameB, prefix, sessionsText, out, firstText = '0', handsText = '100'] =
   process.argv.slice(2)
 
 /** A fresh instance of a named policy, so the two runs share no caches. */
 export function headToHeadPolicy(name: string): BotPolicy | undefined {
+  // `v9gpw2@<dir>` plays v9gpw2 with the preflop packs in <dir> (<dir>/100bb.json and
+  // 200bb.json), so a re-solved pack can meet the one in play.
+  const at = name.indexOf('@')
+  if (at > 0) {
+    const base = name.slice(0, at)
+    const dir = name.slice(at + 1)
+    if ((base !== 'v9gp' && base !== 'v9gpw' && base !== 'v9gpw2') || dir === '') return undefined
+    return v9gPolicy({ ...V9GP_POLICY_OPTIONS[base], preflopPackDir: dir }).policy
+  }
   if (name === 'v9g') return v9gPolicy().policy
   if (name === 'v9go') return v9gPolicy({ offTree: 'resolve' }).policy
   if (name === 'v9gp' || name === 'v9gpw' || name === 'v9gpw2')

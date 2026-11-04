@@ -4,7 +4,7 @@ import {
 } from './bot-flop-diagnostics.js'
 import type { TurnStartLeafOptions } from './bot-flop-turn-leaves.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
-import { tablePreflopPolicy } from './bot-preflop-tables.js'
+import { loadPreflopPackFrom, PREFLOP_DEPTHS, tablePreflopPolicy } from './bot-preflop-tables.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
 import type { SafeExploitConfig } from './bot-safe-exploitation.js'
 import type { SafeTurnExploitConfig } from './bot-safe-turn-exploitation.js'
@@ -34,6 +34,8 @@ export interface V9gOptions {
   readonly baselineCaps?: boolean
   readonly hybridThreshold?: number
   readonly preflopTables?: boolean
+  /** With preflopTables: read the packs from this directory instead of the version in play. */
+  readonly preflopPackDir?: string
   readonly safeExploitV2?: boolean
   readonly safeTurnExploit?: boolean
   readonly safeTurnExploitConfig?: Partial<SafeTurnExploitConfig>
@@ -117,6 +119,7 @@ export function v9gPolicy(
     baselineCaps,
     hybridThreshold,
     preflopTables = false,
+    preflopPackDir,
     safeExploitV2 = false,
     safeTurnExploit = false,
     safeTurnExploitConfig,
@@ -140,7 +143,14 @@ export function v9gPolicy(
   const residual = turnResidualOptionsFromEnvironment()
   const flop = process.env.RIVER_FLOP_NETWORK
   if (!flop) throw new Error('v9g needs RIVER_FLOP_NETWORK: the flop network export, without .bin')
-  const preflop = preflopTables ? tablePreflopPolicy(pokerGuardPolicy) : undefined
+  const preflop = preflopTables
+    ? tablePreflopPolicy(
+        pokerGuardPolicy,
+        preflopPackDir === undefined
+          ? undefined
+          : PREFLOP_DEPTHS.map((depth) => loadPreflopPackFrom(preflopPackDir, depth)),
+      )
+    : undefined
   const loadedNetworks = sharedNetworks ?? {
     turn: turnNetworkFromEnvironment(),
     flop: loadValueNetwork(flop),
