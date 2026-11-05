@@ -16,18 +16,14 @@ export const AIVAT_HEURISTIC = 'pot-share-uniform-32-v1'
 export const AIVAT_V2_HEURISTIC = 'tracked-range-value-networks-v2'
 /** The v2 recipe and models, frozen again over the sources that changed after v2. */
 export const AIVAT_V3_HEURISTIC = 'tracked-range-value-networks-v3'
-/** The v3 recipe and models, frozen again after the bit-identical SIMD unroll. */
-export const AIVAT_V4_HEURISTIC = 'tracked-range-value-networks-v4'
 export type AivatHeuristicId =
   | typeof AIVAT_HEURISTIC
   | typeof AIVAT_V2_HEURISTIC
   | typeof AIVAT_V3_HEURISTIC
-  | typeof AIVAT_V4_HEURISTIC
-export type AivatNetworkVersion = 'v2' | 'v3' | 'v4'
+export type AivatNetworkVersion = 'v2' | 'v3'
 export const AIVAT_NETWORK_HEURISTICS = {
   v2: AIVAT_V2_HEURISTIC,
   v3: AIVAT_V3_HEURISTIC,
-  v4: AIVAT_V4_HEURISTIC,
 } as const
 
 /** Pre-action reaches, out of position first. Never inferred from future cards. */
