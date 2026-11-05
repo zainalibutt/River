@@ -4,6 +4,7 @@ import type { LiveSafeVariant } from './bot-live-safe.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { releasePolicyHand } from './bot-policy-hand.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
+import { setSolveDeadline, takeShortenedSolves } from './bot-river-solver.js'
 import { actionFor } from './bot-service.js'
 import type { ThinkRequest } from './bot-thinker.js'
 import { V9GP_POLICY_OPTIONS, type V9gNetworks, v9gPolicy } from './bot-v9g-policy.js'
@@ -56,10 +57,12 @@ parentPort?.on('message', (message) => {
     parentPort?.postMessage({ type: 'released', ...diagnostics() })
     return
   }
-  const { request, id, safe } = message as {
+  const received = performance.now()
+  const { request, id, safe, stopAfterMs } = message as {
     request: ThinkRequest
     id: number
     safe: boolean
+    stopAfterMs?: number
   }
   const act = (policy: typeof baseline.policy) => {
     let invalid = false
@@ -124,7 +127,18 @@ parentPort?.on('message', (message) => {
         ),
       )
     const before = new Map(counts())
-    const action = act(policy)
+    // 2x keeps adding iterations only while there is time, and never stops a
+    // solve below its 1x count. Other variants play exactly as they did.
+    takeShortenedSolves()
+    if (variant === 'v9gpw2' && stopAfterMs !== undefined)
+      setSolveDeadline(received + stopAfterMs, 0.5)
+    let action: ReturnType<typeof act>
+    try {
+      action = act(policy)
+    } finally {
+      setSolveDeadline(undefined)
+    }
+    const shortened = takeShortenedSolves()
     const internalFallback = counts().find(
       ([reason, count]) => count > (before.get(reason) ?? 0),
     )?.[0]
@@ -140,6 +154,7 @@ parentPort?.on('message', (message) => {
       id,
       action: reason === null ? action : fallback,
       reason,
+      shortened,
       ...diagnostics(),
     })
   } catch {

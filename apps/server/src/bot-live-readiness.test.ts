@@ -28,6 +28,7 @@ function batch(firstHand: number, values: number[]): ReadinessBatch {
       guardFallbacks: 0,
       workerStarts: 2,
       coldStartMs: 1,
+      shortenedSolves: 0,
       fallbacks: {},
     },
     rss: [],
