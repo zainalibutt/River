@@ -43,7 +43,7 @@ describe('WASM SIMD value inference', () => {
   it('preserves the original SIMD dot-product bits across batch blocks, tails and masks', () => {
     vi.stubEnv('RIVER_VALUE_BACKEND', 'wasm')
     const f = Math.fround
-    for (const columns of [3, 4, 7, 8, 9, 385, 641]) {
+    for (const columns of [3, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 385, 641]) {
       const network = randomNetwork([columns, 9, 5])
       for (const batch of [1, 2, 3, 4, 5, 7, 8, 9, 49]) {
         const input = Float32Array.from({ length: batch * columns }, (_, i) => (i % 17) / 7 - 1)

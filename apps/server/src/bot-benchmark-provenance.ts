@@ -2,13 +2,18 @@ import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { AIVAT_HEURISTIC, AIVAT_V2_HEURISTIC, AIVAT_V3_HEURISTIC } from './bot-aivat.js'
+import {
+  AIVAT_HEURISTIC,
+  AIVAT_V2_HEURISTIC,
+  AIVAT_V3_HEURISTIC,
+  AIVAT_V4_HEURISTIC,
+} from './bot-aivat.js'
 import { flopDiagnosticsFromEnvironment } from './bot-flop-diagnostics.js'
 import { type PreflopPackVersion, preflopPackFile } from './bot-preflop-tables.js'
 import { V9GP_POLICY_OPTIONS, type V9gOptions } from './bot-v9g-policy.js'
 
 const root = fileURLToPath(new URL('../../..', import.meta.url))
-const specification = fileURLToPath(new URL('../benchmark/frozen-v3.json', import.meta.url))
+const specification = fileURLToPath(new URL('../benchmark/frozen-v4.json', import.meta.url))
 const digest = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex')
 
 /** Read refs without invoking git or changing its index, locks, refs or config. */
@@ -138,7 +143,7 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
   )
   return {
     schema: 'river-benchmark-provenance-v1',
-    benchmark: 'd8-frozen-v3',
+    benchmark: 'd8-frozen-v4',
     specificationSha256: digest(readFileSync(specification)),
     runner,
     startedAt: new Date().toISOString(),
@@ -152,11 +157,13 @@ export function benchmarkProvenance(runner: string, workload: BenchmarkWorkload)
     preflop: { version: pack, files: preflop },
     environment: { node: process.version, platform: process.platform, arch: process.arch, ...env },
     heuristic:
-      process.env.RIVER_AIVAT_HEURISTIC === 'v3'
-        ? AIVAT_V3_HEURISTIC
-        : process.env.RIVER_AIVAT_HEURISTIC === 'v2'
-          ? AIVAT_V2_HEURISTIC
-          : AIVAT_HEURISTIC,
+      process.env.RIVER_AIVAT_HEURISTIC === 'v4'
+        ? AIVAT_V4_HEURISTIC
+        : process.env.RIVER_AIVAT_HEURISTIC === 'v3'
+          ? AIVAT_V3_HEURISTIC
+          : process.env.RIVER_AIVAT_HEURISTIC === 'v2'
+            ? AIVAT_V2_HEURISTIC
+            : AIVAT_HEURISTIC,
     ...workload,
     policyOptions: Object.fromEntries(
       workload.policies

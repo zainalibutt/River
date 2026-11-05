@@ -111,10 +111,10 @@ export function networkActionValue(
 
 /** Content-addressed exports. No training, calibration or outcome-dependent
  * coefficients. The spec is read before play and its digest travels in logs.
- * v2 refuses to load once a pinned source changes; v3 is the live freeze. */
+ * Older versions refuse to load once a pinned source changes; v4 is the live freeze. */
 export function frozenNetworkHeuristic(
   modelRoot: string,
-  version: AivatNetworkVersion = 'v3',
+  version: AivatNetworkVersion = 'v4',
 ): AivatValueHeuristic {
   const id = AIVAT_NETWORK_HEURISTICS[version]
   const bytes = readFileSync(aivatSpecification(version))
@@ -186,8 +186,8 @@ let selectedKey: string | undefined
 export function aivatHeuristicFromEnvironment(): AivatValueHeuristic | undefined {
   const version = process.env.RIVER_AIVAT_HEURISTIC ?? 'v1'
   if (version === 'v1') return undefined
-  if (version !== 'v2' && version !== 'v3')
-    throw new Error('RIVER_AIVAT_HEURISTIC must be v1, v2 or v3')
+  if (version !== 'v2' && version !== 'v3' && version !== 'v4')
+    throw new Error('RIVER_AIVAT_HEURISTIC must be v1, v2, v3 or v4')
   const root = process.env.RIVER_AIVAT_MODEL_ROOT
   if (!root) throw new Error(`AIVAT ${version} needs RIVER_AIVAT_MODEL_ROOT`)
   const key = `${version}:${root}`
