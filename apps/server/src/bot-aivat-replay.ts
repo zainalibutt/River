@@ -7,6 +7,7 @@ import {
   AIVAT_NETWORK_HEURISTICS,
   AIVAT_V2_HEURISTIC,
   AIVAT_V3_HEURISTIC,
+  AIVAT_V4_HEURISTIC,
   type AivatDecision,
   type AivatNetworkVersion,
   aivatChips,
@@ -106,7 +107,7 @@ export function replaySlumbotHand(hand: AivatLoggedHand, chanceAvailable: boolea
     (key) => AIVAT_NETWORK_HEURISTICS[key] === version,
   )
   if (network) {
-    // Each run replays against the spec it recorded, so v2 logs stay checkable after v3.
+    // Each run replays against its recorded spec, so v2 and v3 logs stay checkable after v4.
     const specHash = createHash('sha256')
       .update(readFileSync(new URL(`../benchmark/frozen-${network}.json`, import.meta.url)))
       .digest('hex')
@@ -229,6 +230,7 @@ if (process.argv[1]?.endsWith('bot-aivat-replay.ts')) {
     const aivatV1 = versions.has(AIVAT_HEURISTIC) ? aivat : null
     const aivatV2 = versions.has(AIVAT_V2_HEURISTIC) ? aivat : null
     const aivatV3 = versions.has(AIVAT_V3_HEURISTIC) ? aivat : null
+    const aivatV4 = versions.has(AIVAT_V4_HEURISTIC) ? aivat : null
     result = {
       kind: 'slumbot',
       inputs: identity,
@@ -241,16 +243,20 @@ if (process.argv[1]?.endsWith('bot-aivat-replay.ts')) {
       aivatV1,
       aivatV2,
       aivatV3,
+      aivatV4,
       supportedControlsOnly: {
         v1: aivatV1 ?? chanceOnly,
         v2: aivatV2 ?? chanceOnly,
         v3: aivatV3 ?? chanceOnly,
+        v4: aivatV4 ?? chanceOnly,
         qualification:
           'Missing action records contribute zero action correction; this is not a network precision measurement',
       },
       heuristic: [...versions][0] ?? null,
       networkEvaluations:
-        versions.has(AIVAT_V2_HEURISTIC) || versions.has(AIVAT_V3_HEURISTIC)
+        versions.has(AIVAT_V2_HEURISTIC) ||
+        versions.has(AIVAT_V3_HEURISTIC) ||
+        versions.has(AIVAT_V4_HEURISTIC)
           ? hands.reduce(
               (sum, hand) =>
                 sum +

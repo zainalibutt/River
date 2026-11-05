@@ -83,36 +83,43 @@ const denseRows = (width) => {
       simd(12, ...new Array(16).fill(0))
       set(22 + b) // v128.const 0
     }
-    constant(0)
-    set(11)
-    emit(0x02, 0x40, 0x03, 0x40)
-    get(11)
-    constant(4)
-    add()
-    get(5)
-    emit(0x4b, 0x0d, 1)
-    get(20)
-    get(11)
-    constant(4)
-    mul()
-    add()
-    simd(0, 2, 0)
-    set(30)
-    for (let b = 0; b < width; b++) {
-      get(22 + b)
-      get(30)
-      get(12 + b)
+    const accumulate = (offset) => {
+      get(20)
       get(11)
       constant(4)
       mul()
       add()
-      simd(0, 2, 0)
-      simd(230)
-      simd(228)
-      set(22 + b) // f32x4.mul; f32x4.add
+      simd(0, 2, offset * 4)
+      set(30)
+      for (let b = 0; b < width; b++) {
+        get(22 + b)
+        get(30)
+        get(12 + b)
+        get(11)
+        constant(4)
+        mul()
+        add()
+        simd(0, 2, offset * 4)
+        simd(230)
+        simd(228)
+        set(22 + b) // f32x4.mul; f32x4.add, original lane order
+      }
     }
-    advance(11, 4)
-    emit(0x0c, 0, 0x0b, 0x0b)
+    constant(0)
+    set(11)
+    // Unroll only the independent loop bookkeeping. Each accumulator still
+    // adds every four-column product in exactly the original sequence.
+    for (const step of [16, 4]) {
+      emit(0x02, 0x40, 0x03, 0x40)
+      get(11)
+      constant(step)
+      add()
+      get(5)
+      emit(0x4b, 0x0d, 1)
+      for (let offset = 0; offset < step; offset += 4) accumulate(offset)
+      advance(11, step)
+      emit(0x0c, 0, 0x0b, 0x0b)
+    }
     for (let b = 0; b < width; b++) {
       get(2)
       get(10)
