@@ -17,6 +17,11 @@ export interface LiveSafeConfig {
   threads: number
   maxHands: number
   maxDecisionsPerHand: number
+  /**
+   * How long before the budget a 2x solve stops adding iterations and plays
+   * the best answer it has, never fewer than the 1x count. 0 turns it off.
+   */
+  anytimeMarginMs: number
 }
 
 function integer(text: string | undefined, fallback: number, min: number, max: number): number {
@@ -32,6 +37,7 @@ export function liveSafeConfig(env: NodeJS.ProcessEnv = process.env): LiveSafeCo
     threads: integer(env.BOT_LIVE_SAFE_THREADS, 2, 1, 4),
     maxHands: integer(env.BOT_LIVE_SAFE_MAX_HANDS, 8, 1, 64),
     maxDecisionsPerHand: integer(env.BOT_LIVE_SAFE_MAX_DECISIONS, 64, 1, 256),
+    anytimeMarginMs: integer(env.BOT_LIVE_SAFE_ANYTIME_MARGIN_MS, 2_000, 0, 7_999),
   }
 }
 
@@ -44,6 +50,8 @@ export interface LiveSafeEvent {
   coldStartMs?: number
   modelError?: string
   backends?: string[]
+  /** Solves this decision cut short at the deadline, each after at least its 1x count. */
+  shortened?: number
 }
 
 export interface LiveSafeBotPolicy extends BotRiverThinker {
@@ -56,6 +64,7 @@ export interface LiveSafeBotPolicy extends BotRiverThinker {
     guardFallbacks: number
     workerStarts: number
     coldStartMs: number
+    shortenedSolves: number
   }
   diagnostics(): { activeHands: number; chains: number; entries: number; bytes: number }
 }
@@ -75,6 +84,7 @@ interface Slot {
     roomId: string
     handNumber: number
     baseline: TurnAction | null
+    shortened: number
     finish(action: TurnAction | null, reason: string | null): void
   } | null
   ready: Promise<void> | null
@@ -113,6 +123,7 @@ export function liveSafeBotPolicy(
     guardFallbacks: 0,
     workerStarts: 0,
     coldStartMs: 0,
+    shortenedSolves: 0,
   }
   const emit = (event: LiveSafeEvent) => {
     try {
@@ -163,6 +174,7 @@ export function liveSafeBotPolicy(
       } else if (message.type === 'released' || message.type === 'result') {
         slot.memory = { chains: message.chains, entries: message.entries, bytes: message.bytes }
         if (message.type === 'result' && message.id === slot.pending?.id) {
+          if (slot.pending !== null) slot.pending.shortened = message.shortened ?? 0
           slot.pending?.finish(message.action, message.reason)
         }
       } else if (message.type === 'baseline' && message.id === slot.pending?.id) {
@@ -238,7 +250,12 @@ export function liveSafeBotPolicy(
           return null
         }
       }
-      const report = (action: TurnAction | null, reason: string | null, baseline: boolean) => {
+      const report = (
+        action: TurnAction | null,
+        reason: string | null,
+        baseline: boolean,
+        shortened = 0,
+      ) => {
         const chosen = action ?? guard()
         // Before the river v8z delegates to this exact guard, with the same RNG.
         const usedV8z = baseline || (chosen !== null && request.view.street !== 'river')
@@ -253,6 +270,7 @@ export function liveSafeBotPolicy(
           ms: performance.now() - started,
           reason,
           fallback: reason === null ? null : usedV8z ? 'v8z' : 'guard',
+          ...(shortened > 0 ? { shortened } : {}),
         })
         return chosen
       }
@@ -296,6 +314,8 @@ export function liveSafeBotPolicy(
           if (settled) return
           settled = true
           clearTimeout(timer)
+          const shortened = slot.pending?.id === id ? slot.pending.shortened : 0
+          stats.shortenedSolves += shortened
           slot.pending = null
           const why = failure ?? reason
           if (why !== null && hand !== undefined) {
@@ -308,7 +328,7 @@ export function liveSafeBotPolicy(
               stop(slot)
             }
           }
-          resolve(report(action, why, action !== null && why !== null))
+          resolve(report(action, why, action !== null && why !== null, shortened))
         }
         const timer = setTimeout(
           () => {
@@ -318,7 +338,14 @@ export function liveSafeBotPolicy(
           },
           Math.max(1, budget - (performance.now() - started)),
         )
-        slot.pending = { id, roomId, handNumber: request.view.handNumber, baseline: null, finish }
+        slot.pending = {
+          id,
+          roomId,
+          handNumber: request.view.handNumber,
+          baseline: null,
+          shortened: 0,
+          finish,
+        }
         try {
           start(slot)
           slot.worker?.postMessage({
@@ -326,6 +353,15 @@ export function liveSafeBotPolicy(
             id,
             request,
             safe: eligible && reason === null,
+            // Relative, so the two threads need not share a clock origin.
+            ...(config.anytimeMarginMs > 0
+              ? {
+                  stopAfterMs: Math.max(
+                    1,
+                    budget - (performance.now() - started) - config.anytimeMarginMs,
+                  ),
+                }
+              : {}),
           })
         } catch {
           stop(slot)

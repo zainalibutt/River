@@ -23,6 +23,7 @@ active turn, beside the existing seat clock.
 | `BOT_LIVE_SAFE_THREADS` | 2 | Pool size 1-4; one inference participant per worker, no nested workers. Parallelism is across tables. |
 | `BOT_LIVE_SAFE_MAX_HANDS` | 8 | Tracked bot/room/hand identities, 1-64. Bot-v-bot can consume two per table. |
 | `BOT_LIVE_SAFE_MAX_DECISIONS` | 64 | Safe decisions per tracked hand, 1-256. |
+| `BOT_LIVE_SAFE_ANYTIME_MARGIN_MS` | 2000 | v9gpw2 only, 0-7999 (0 turns it off). Once the budget has this much left, each re-solve stops adding iterations and plays the average it has, never below the 1x count. On a loaded 16-thread desktop, 20 hands at an 8000 ms budget: plain 2x hit the budget once and handed 3 decisions to v8z; with the margin, 44 of 44 decisions were Midas, the flop at most 6.2 s, and 14 solves stopped early. |
 | `RIVER_VALUE_BACKEND` | auto | WASM SIMD with TypeScript fallback; `ts` forces TypeScript. Live workers treat `wasm` as auto. |
 | `RIVER_TURN_NETWORK` | required | Turn-end export stem, no extension. |
 | `RIVER_FLOP_NETWORK` | required | Flop-end export stem, no extension. |
