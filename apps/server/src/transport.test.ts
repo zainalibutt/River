@@ -2364,7 +2364,7 @@ describe('bots at the table', () => {
       expect(safe.think).not.toHaveBeenCalled()
     })
 
-    it.each([1000, 8000])(
+    it.each([1000, 8000, 10000])(
       'seats only Midas and grants the configured %i ms budget on every street',
       async (budgetMs) => {
         vi.useFakeTimers()
@@ -2387,7 +2387,7 @@ describe('bots at the table', () => {
         for (const [i, [req, deadline]] of safe.think.mock.calls.entries()) {
           expect(req.playerId).toBe('bot:midas')
           expect(deadline).toBe(
-            Math.min(9000, ((req.view.turnDeadlineMs ?? 0) - (safe.started[i] ?? 0)) * 0.7),
+            Math.min(budgetMs, ((req.view.turnDeadlineMs ?? 0) - (safe.started[i] ?? 0)) * 0.7),
           )
           expect(deadline).toBeGreaterThanOrEqual(budgetMs)
         }
