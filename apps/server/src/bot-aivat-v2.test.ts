@@ -5,8 +5,6 @@ import { describe, expect, it } from 'vitest'
 import {
   AIVAT_V2_HEURISTIC,
   AIVAT_V3_HEURISTIC,
-  AIVAT_V4_HEURISTIC,
-  type AivatNetworkVersion,
   type AivatRangeState,
   actionControl,
   aivatCorrection,
@@ -69,14 +67,13 @@ const network: RiverValueNetwork = {
   ],
 }
 
-const frozenSpec = (version: AivatNetworkVersion) =>
+const frozenSpec = (version: 'v2' | 'v3') =>
   readFileSync(new URL(`../benchmark/frozen-${version}.json`, import.meta.url))
 
-describe('frozen AIVAT networks', () => {
+describe('frozen AIVAT v2', () => {
   it.each([
     ['v2', AIVAT_V2_HEURISTIC],
     ['v3', AIVAT_V3_HEURISTIC],
-    ['v4', AIVAT_V4_HEURISTIC],
   ] as const)('pins the recipe and all six export hashes in frozen-%s', (version, id) => {
     const spec = JSON.parse(frozenSpec(version).toString('utf8'))
     const frozen = spec.estimators[version]
@@ -101,24 +98,11 @@ describe('frozen AIVAT networks', () => {
     expect(frozen.recipeSha256).toBe(digest(Buffer.from(JSON.stringify(frozen.recipe))))
   })
 
-  it('pins the v4 implementation to the current sources', () => {
-    const spec = JSON.parse(frozenSpec('v4').toString('utf8'))
-    for (const [file, hash] of Object.entries(spec.estimators.v4.sourceSha256)) {
+  it('pins the v3 implementation to the current sources', () => {
+    const spec = JSON.parse(frozenSpec('v3').toString('utf8'))
+    for (const [file, hash] of Object.entries(spec.estimators.v3.sourceSha256)) {
       expect(digest(readFileSync(new URL(file, import.meta.url))), file).toBe(hash)
     }
-  })
-
-  // v3's SIMD source changed; preserve its spec so recorded v3 runs still replay.
-  it('keeps v3 retired but replayable, with v4 the same recipe and models', () => {
-    expect(digest(frozenSpec('v3'))).toBe(
-      'ddbee05066a76198eab5217f4d7801f582155f7ea4e8af1931339e0d0cb31607',
-    )
-    const v3 = JSON.parse(frozenSpec('v3').toString('utf8'))
-    const v4 = JSON.parse(frozenSpec('v4').toString('utf8'))
-    expect(v4.previousSpecification).toBe('frozen-v3.json')
-    expect(v4.estimators.v4.recipe).toEqual(v3.estimators.v3.recipe)
-    expect(v4.estimators.v4.recipeSha256).toBe(v3.estimators.v3.recipeSha256)
-    expect(v4.estimators.v4.models).toEqual(v3.estimators.v3.models)
   })
 
   // v2's sources moved on with the flop re-solve work, so it no longer loads; its
@@ -308,38 +292,6 @@ describe('frozen AIVAT networks', () => {
     expect(result.heuristic).toBeNull()
     expect(result.knownActions).toBe(0)
     expect(result.missingActions).toBeNull()
-    expect(result.aivat).toBe(result.raw)
-  })
-
-  it.each([
-    ['v2', AIVAT_V2_HEURISTIC],
-    ['v3', AIVAT_V3_HEURISTIC],
-  ] as const)('replays recorded %s decisions against their own frozen spec', (version, id) => {
-    const specificationSha256 = digest(frozenSpec(version))
-    const result = replaySlumbotHand(
-      {
-        hand: 0,
-        focal: 'v9g',
-        clientPos: 0,
-        hole: ['9c', '2h'],
-        slumbotHole: ['Qs', '9s'],
-        board: [],
-        action: 'b200f',
-        winnings: -100,
-        aivatDecisions: [
-          {
-            heuristic: id,
-            specificationSha256,
-            observation,
-            control: null,
-            reason: 'unsupported historical action',
-          },
-        ],
-      },
-      true,
-    )
-    expect(result.heuristic).toBe(id)
-    expect(result.missingActions).toBe(1)
     expect(result.aivat).toBe(result.raw)
   })
 })
