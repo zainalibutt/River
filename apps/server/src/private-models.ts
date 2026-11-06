@@ -70,10 +70,10 @@ export async function fetchPrivateModels(
   const timeoutMs = options.timeoutMs ?? 60_000
   async function download(path: string): Promise<Uint8Array> {
     const response = await request(`${base}/${path.split('/').map(encodeURIComponent).join('/')}`, {
-      headers: {
-        apikey: options.serviceRoleKey,
-        authorization: `Bearer ${options.serviceRoleKey}`,
-      },
+      // A new-style secret key goes in apikey alone; a legacy JWT goes in both.
+      headers: options.serviceRoleKey.startsWith('sb_')
+        ? { apikey: options.serviceRoleKey }
+        : { apikey: options.serviceRoleKey, authorization: `Bearer ${options.serviceRoleKey}` },
       signal: AbortSignal.timeout(timeoutMs),
     })
     if (!response.ok) throw new Error(`private models: ${path} answered ${response.status}`)
