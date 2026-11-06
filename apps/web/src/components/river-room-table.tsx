@@ -49,6 +49,7 @@ import {
   upgradeRiverSession,
 } from '@/lib/auth'
 import { sizingPresets } from '@/lib/betting'
+import { botAdmissionDestination } from '@/lib/bot-capabilities'
 import { affordableBuyIn } from '@/lib/buy-in'
 import { type ChipMoment, chipMomentFor } from '@/lib/chip-flow'
 import { readoutFor } from '@/lib/hand-readout'
@@ -666,6 +667,11 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             return
           }
           if (message.kind === 'error') {
+            const destination = botAdmissionDestination(message.code)
+            if (destination !== null) {
+              window.location.assign(destination)
+              return
+            }
             const refused = seatRequestRef.current
             if (
               refused !== null &&

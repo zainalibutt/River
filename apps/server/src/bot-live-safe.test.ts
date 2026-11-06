@@ -113,6 +113,25 @@ describe('live safe policy routing and hard budget', () => {
     expect(liveSafeConfig({ BOT_LIVE_SAFE_VARIANT: variant }).variant).toBe(variant)
   })
 
+  it('defaults seats to one fewer than the validated worker count, with a minimum of one', () => {
+    for (const [threads, seats] of [
+      [1, 1],
+      [2, 1],
+      [3, 2],
+      [4, 3],
+    ]) {
+      expect(liveSafeConfig({ BOT_LIVE_SAFE_THREADS: String(threads) }).seats).toBe(seats)
+    }
+    expect(liveSafeConfig({ BOT_LIVE_SAFE_THREADS: '99' }).seats).toBe(1)
+    expect(liveSafeConfig({ BOT_LIVE_SAFE_THREADS: '4', BOT_LIVE_SAFE_SEATS: '2' }).seats).toBe(2)
+    expect(liveSafeConfig({ BOT_LIVE_SAFE_SEATS: '5' }).seats).toBe(5)
+    for (const value of ['0', '-1', '1.5', 'bad', 'Infinity']) {
+      expect(liveSafeConfig({ BOT_LIVE_SAFE_THREADS: '4', BOT_LIVE_SAFE_SEATS: value }).seats).toBe(
+        3,
+      )
+    }
+  })
+
   it('defaults unknown variants to v9gpw2', () => {
     expect(liveSafeConfig({ BOT_LIVE_SAFE_VARIANT: 'unknown' }).variant).toBe('v9gpw2')
   })

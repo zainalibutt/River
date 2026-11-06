@@ -357,7 +357,7 @@ export interface RoomHubOptions {
    */
   botRiverThinker?: BotRiverThinker
   /** Present only with BOT_LIVE_SAFE=true. Reserved for the Midas heads-up preset. */
-  midas?: { thinker: BotRiverThinker; budgetMs: number }
+  midas?: { thinker: BotRiverThinker; budgetMs: number; seats?: number }
   botOpponentStore?: BotOpponentStore
   /** Where each person's private record of their hands is written; none in tests. */
   playerHands?: PlayerHandStore
@@ -664,6 +664,8 @@ export class RoomHub {
   private readonly botTrace: BotDecisionTraceSink | undefined
   private readonly botRiverThinker: BotRiverThinker | undefined
   private readonly midas: RoomHubOptions['midas']
+  /** Includes buy-ins in flight, so different room queues cannot over-admit. */
+  private readonly midasTables = new Set<string>()
   private readonly botOpponentStore: BotOpponentStore | undefined
   private readonly playerHands: PlayerHandStore | undefined
   private readonly actionShadow: ActionShadowPort | undefined
@@ -712,6 +714,27 @@ export class RoomHub {
                 }),
           }),
         ))
+  }
+
+  botCapabilities(): { midasAvailable: boolean; midasSeats: number; midasSeatsFree: number } {
+    const configured = this.midas?.seats ?? 1
+    const midasSeats =
+      this.midas === undefined
+        ? 0
+        : Number.isSafeInteger(configured) && configured > 0
+          ? configured
+          : 1
+    return {
+      midasAvailable: this.midas !== undefined,
+      midasSeats,
+      midasSeatsFree: Math.max(0, midasSeats - this.midasTables.size),
+    }
+  }
+
+  private releaseEmptyMidasTable(state: RoomState): void {
+    if (state.botPreset === 'midas' && humansIn(state.room.viewFor('')) === 0) {
+      this.midasTables.delete(state.room.id)
+    }
   }
 
   connect(peer: ClientPeer): {
@@ -899,6 +922,10 @@ export class RoomHub {
     }
     const name = await this.seatName(player, message.name.trim())
     const exists = this.rooms.has(message.roomId)
+    if (!exists && message.botPreset === 'midas' && this.botCapabilities().midasSeatsFree === 0) {
+      this.error(connection, message.requestId, 'midas_busy', 'Midas is busy, try again shortly')
+      return
+    }
     const room = this.room(message.roomId, message)
     await this.enqueue(room, async () => {
       if (
@@ -1198,7 +1225,18 @@ export class RoomHub {
     }
     let result: RoomResult
     if (command.kind === 'sit' || command.kind === 'rebuy') {
-      result = await this.debitThenApply(connection, state, requestId, serverCommand, command)
+      if (command.kind === 'sit' && state.botPreset === 'midas') {
+        if (!this.midasTables.has(state.room.id) && this.botCapabilities().midasSeatsFree === 0) {
+          this.error(connection, requestId, 'midas_busy', 'Midas is busy, try again shortly')
+          return
+        }
+        this.midasTables.add(state.room.id)
+      }
+      try {
+        result = await this.debitThenApply(connection, state, requestId, serverCommand, command)
+      } finally {
+        this.releaseEmptyMidasTable(state)
+      }
     } else if (command.kind === 'stand' || command.kind === 'leave') {
       result = await this.applyThenCredit(connection, state, requestId, serverCommand)
     } else if (command.kind === 'kick') {
@@ -1683,6 +1721,7 @@ export class RoomHub {
     }
     await Promise.all(closing)
     await Promise.all(this.pendingOpponentWrites.values())
+    this.midasTables.clear()
   }
 
   /**
@@ -2231,6 +2270,8 @@ export class RoomHub {
     events: RoomEvent[],
     requester?: ConnectionState,
   ): void {
+    // Covers stand, leave, kick, reconnect expiry and an all-in leaver's settlement.
+    this.releaseEmptyMidasTable(state)
     for (const event of events) {
       if (event.kind !== 'handRecorded') continue
       if (this.botPolicy !== undefined) {

@@ -20,7 +20,7 @@ import {
   loadBrowserAuthConfig,
   signInToRiver,
 } from '@/lib/auth'
-import { midasAvailable } from '@/lib/bot-capabilities'
+import { botCapabilities, MIDAS_BUSY_MESSAGE } from '@/lib/bot-capabilities'
 import {
   describeNameStatus,
   isNameStatus,
@@ -85,14 +85,22 @@ export function ClubMenu() {
   const closingMotion = useRef<Animation | null>(null)
   const visibleViewport = useVisibleViewport()
   const [me, setMe] = useState<Me | null>(null)
-  const [midas, setMidas] = useState(false)
+  const [midas, setMidas] = useState({ midasAvailable: false, midasSeats: 0, midasSeatsFree: 0 })
+  const [midasRefused, setMidasRefused] = useState(false)
   useEffect(() => {
     let cancelled = false
-    void midasAvailable().then((available) => {
-      if (!cancelled) setMidas(available)
-    })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    setMidasRefused(new URLSearchParams(window.location.search).get('midas') === 'busy')
+    const refresh = async () => {
+      const capabilities = await botCapabilities()
+      if (cancelled) return
+      setMidas(capabilities)
+      timer = setTimeout(() => void refresh(), 5_000)
+    }
+    void refresh()
     return () => {
       cancelled = true
+      clearTimeout(timer)
     }
   }, [])
   // Where this member's public profile lives, once their name is known to have one.
@@ -419,9 +427,15 @@ export function ClubMenu() {
             </button>
           </section>
           <BotChallenges
-            midasAvailable={midas}
+            midasAvailable={midas.midasAvailable}
+            midasSeatsFree={midas.midasSeatsFree}
             onSelect={(preset) => router.push(startTableHref({ bots: 'fill', preset }))}
           />
+          {midasRefused ? (
+            <p className="club-capsule-sub club-error" role="status">
+              {MIDAS_BUSY_MESSAGE}
+            </p>
+          ) : null}
           <section className="club-home-friends" aria-labelledby="club-friends-title">
             <div>
               <h2 id="club-friends-title">Friends</h2>
