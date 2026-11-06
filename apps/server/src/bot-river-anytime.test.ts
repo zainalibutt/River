@@ -6,6 +6,7 @@ import {
   type RiverSpot,
   setSolveDeadline,
   solveRiver,
+  takeBelowFloorSolves,
   takeShortenedSolves,
 } from './bot-river-solver.js'
 
@@ -44,6 +45,7 @@ function tables(solution: RiverSolution) {
 afterEach(() => {
   setSolveDeadline(undefined)
   takeShortenedSolves()
+  takeBelowFloorSolves()
 })
 
 describe('solve deadline', () => {
@@ -83,5 +85,30 @@ describe('solve deadline', () => {
   it('refuses a floor outside (0, 1]', () => {
     expect(() => setSolveDeadline(0, 0)).toThrow('floor')
     expect(() => setSolveDeadline(Number.NaN)).toThrow('finite')
+  })
+})
+
+describe('hard stop', () => {
+  it('stops below the floor once the hard stop has passed, and counts it', () => {
+    setSolveDeadline(performance.now() - 2, 0.5, performance.now() - 1)
+    const cut = solve(80)
+    expect(cut.cfrState?.iterations).toBe(1)
+    expect(takeShortenedSolves()).toBe(1)
+    expect(takeBelowFloorSolves()).toBe(1)
+    setSolveDeadline(undefined)
+    expect(tables(cut)).toEqual(tables(solve(1)))
+  })
+
+  it('cuts a 1x solve only at the hard stop', () => {
+    const now = performance.now()
+    setSolveDeadline(now - 1, 1, now + 60_000)
+    expect(solve(40).cfrState?.iterations).toBe(40)
+    setSolveDeadline(now - 1, 1, now - 1)
+    expect(solve(40).cfrState?.iterations).toBe(1)
+    expect(takeBelowFloorSolves()).toBe(1)
+  })
+
+  it('refuses a hard stop before the soft deadline', () => {
+    expect(() => setSolveDeadline(10, 0.5, 5)).toThrow('later hard stop')
   })
 })
