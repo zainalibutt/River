@@ -45,7 +45,13 @@ function request(): ThinkRequest {
 }
 
 class FakeWorker extends EventEmitter {
-  readonly sent: { type: string; safe?: boolean; id?: number; stopAfterMs?: number }[] = []
+  readonly sent: {
+    type: string
+    safe?: boolean
+    id?: number
+    stopAfterMs?: number
+    hardStopAfterMs?: number
+  }[] = []
   readonly terminate = vi.fn(async () => 0)
   constructor(
     private readonly respond: (worker: FakeWorker, message: FakeWorker['sent'][number]) => void,
@@ -312,6 +318,9 @@ describe('live safe policy routing and hard budget', () => {
       const sent = worker.sent.find((message) => message.type === 'think')?.stopAfterMs
       expect(sent).toBeGreaterThan(5000)
       expect(sent).toBeLessThanOrEqual(6000)
+      const hard = worker.sent.find((message) => message.type === 'think')?.hardStopAfterMs
+      expect(hard).toBeGreaterThan(7000)
+      expect(hard).toBeLessThanOrEqual(7250)
       expect(policy.stats.shortenedSolves).toBe(2)
       expect(policy.stats.fallbacks).toEqual({})
       expect(events.find((event) => event.type === 'decision')?.shortened).toBe(2)

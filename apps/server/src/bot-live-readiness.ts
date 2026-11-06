@@ -16,6 +16,7 @@ import {
   type LiveSafeVariant,
   liveSafeBotPolicy,
   liveSafeConfig,
+  MAX_LIVE_SAFE_BUDGET_MS,
 } from './bot-live-safe.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { actionFor, botPlayerId } from './bot-service.js'
@@ -143,7 +144,7 @@ async function main() {
     ![1, 2, 4].includes(threads) ||
     !Number.isFinite(budgetMs) ||
     budgetMs < 1 ||
-    budgetMs > 8000 ||
+    budgetMs > MAX_LIVE_SAFE_BUDGET_MS ||
     !['v9go', 'v9gp', 'v9gpw', 'v9gpw2'].includes(variant)
   )
     throw new Error('invalid hands, threads, budget-ms or variant')

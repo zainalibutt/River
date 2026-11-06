@@ -4,7 +4,7 @@ import type { LiveSafeVariant } from './bot-live-safe.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { releasePolicyHand } from './bot-policy-hand.js'
 import { RIVER_CANDIDATE_TUNING, riverSolverPolicy } from './bot-river-policy.js'
-import { setSolveDeadline, takeShortenedSolves } from './bot-river-solver.js'
+import { setSolveDeadline, takeBelowFloorSolves, takeShortenedSolves } from './bot-river-solver.js'
 import { actionFor } from './bot-service.js'
 import type { ThinkRequest } from './bot-thinker.js'
 import { V9GP_POLICY_OPTIONS, type V9gNetworks, v9gPolicy } from './bot-v9g-policy.js'
@@ -58,11 +58,12 @@ parentPort?.on('message', (message) => {
     return
   }
   const received = performance.now()
-  const { request, id, safe, stopAfterMs } = message as {
+  const { request, id, safe, stopAfterMs, hardStopAfterMs } = message as {
     request: ThinkRequest
     id: number
     safe: boolean
     stopAfterMs?: number
+    hardStopAfterMs?: number
   }
   const act = (policy: typeof baseline.policy) => {
     let invalid = false
@@ -127,11 +128,16 @@ parentPort?.on('message', (message) => {
         ),
       )
     const before = new Map(counts())
-    // 2x keeps adding iterations only while there is time, and never stops a
-    // solve below its 1x count. Other variants play exactly as they did.
+    // 2x adds iterations past its 1x count only while there is time. Every
+    // variant stops at the hard stop, below 1x if it must, rather than time out.
     takeShortenedSolves()
-    if (variant === 'v9gpw2' && stopAfterMs !== undefined)
-      setSolveDeadline(received + stopAfterMs, 0.5)
+    takeBelowFloorSolves()
+    const hardAt =
+      hardStopAfterMs === undefined ? Number.POSITIVE_INFINITY : received + hardStopAfterMs
+    const softAt =
+      variant === 'v9gpw2' && stopAfterMs !== undefined ? received + stopAfterMs : hardAt
+    if (Number.isFinite(softAt))
+      setSolveDeadline(softAt, variant === 'v9gpw2' ? 0.5 : 1, Math.max(softAt, hardAt))
     let action: ReturnType<typeof act>
     try {
       action = act(policy)
@@ -139,6 +145,7 @@ parentPort?.on('message', (message) => {
       setSolveDeadline(undefined)
     }
     const shortened = takeShortenedSolves()
+    const belowFloor = takeBelowFloorSolves()
     const internalFallback = counts().find(
       ([reason, count]) => count > (before.get(reason) ?? 0),
     )?.[0]
@@ -155,6 +162,7 @@ parentPort?.on('message', (message) => {
       action: reason === null ? action : fallback,
       reason,
       shortened,
+      belowFloor,
       ...diagnostics(),
     })
   } catch {

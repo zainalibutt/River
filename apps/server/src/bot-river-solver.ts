@@ -36,19 +36,32 @@ export interface RiverSpot {
 export type Player = 0 | 1
 
 /**
- * Live play only: once the clock passes `at` (performance.now()), every solve
- * stops after its current iteration as soon as it has run `floor` of the
- * iterations it was asked for. Fewer DCFR iterations is still a well-formed
- * average, and carried values come from that same average. Offline runs never
- * set it, so their solves stay bit-identical.
+ * Live play only. Past `at` (performance.now()), every solve stops after its
+ * current iteration once it has run `floor` of the iterations it was asked
+ * for. Past `hardAt`, it stops after its current iteration whatever it has
+ * run, so a slow machine plays a rougher average instead of running out the
+ * clock. Fewer DCFR iterations is still a well-formed average, and carried
+ * values come from that same average. Offline runs never set a deadline, so
+ * their solves stay bit-identical.
  */
-let solveDeadline: { readonly at: number; readonly floor: number } | undefined
+let solveDeadline:
+  | { readonly at: number; readonly floor: number; readonly hardAt: number }
+  | undefined
 let shortenedSolves = 0
+let belowFloorSolves = 0
 
-export function setSolveDeadline(at: number | undefined, floor = 0.5): void {
-  if (at !== undefined && !(Number.isFinite(at) && floor > 0 && floor <= 1))
-    throw new Error('a solve deadline needs a finite time and a floor in (0, 1]')
-  solveDeadline = at === undefined ? undefined : { at, floor }
+export function setSolveDeadline(
+  at: number | undefined,
+  floor = 0.5,
+  hardAt = Number.POSITIVE_INFINITY,
+): void {
+  if (at === undefined) {
+    solveDeadline = undefined
+    return
+  }
+  if (!(Number.isFinite(at) && floor > 0 && floor <= 1 && hardAt >= at))
+    throw new Error('a solve deadline needs a finite time, a floor in (0, 1] and a later hard stop')
+  solveDeadline = { at, floor, hardAt }
 }
 
 /** How many solves the deadline has cut short since this was last read. */
@@ -58,10 +71,23 @@ export function takeShortenedSolves(): number {
   return count
 }
 
+/** How many of those were cut by the hard stop, below their floor. */
+export function takeBelowFloorSolves(): number {
+  const count = belowFloorSolves
+  belowFloorSolves = 0
+  return count
+}
+
 function pastDeadline(iteration: number, iterations: number): boolean {
   if (solveDeadline === undefined || iteration >= iterations) return false
+  const now = performance.now()
+  if (now >= solveDeadline.hardAt) {
+    shortenedSolves += 1
+    if (iteration < Math.ceil(iterations * solveDeadline.floor)) belowFloorSolves += 1
+    return true
+  }
   if (iteration < Math.ceil(iterations * solveDeadline.floor)) return false
-  if (performance.now() < solveDeadline.at) return false
+  if (now < solveDeadline.at) return false
   shortenedSolves += 1
   return true
 }

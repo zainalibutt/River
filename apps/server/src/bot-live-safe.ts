@@ -4,6 +4,9 @@ import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { actionFor } from './bot-service.js'
 import { type BotRiverThinker, workerRiverThinker } from './bot-thinker.js'
 
+/** The longest a live decision may think; Midas tables widen their turn clock to fit it. */
+export const MAX_LIVE_SAFE_BUDGET_MS = 10_000
+
 export type LiveSafeVariant = 'v9go' | 'v9gp' | 'v9gpw' | 'v9gpw2'
 
 export function liveSafeVariant(value: string | undefined): LiveSafeVariant {
@@ -22,6 +25,12 @@ export interface LiveSafeConfig {
    * the best answer it has, never fewer than the 1x count. 0 turns it off.
    */
   anytimeMarginMs: number
+  /**
+   * How long before the budget every solve stops, below its 1x count if it
+   * must, so a slow machine plays a rougher answer instead of timing out.
+   * 0 turns it off.
+   */
+  hardMarginMs: number
 }
 
 function integer(text: string | undefined, fallback: number, min: number, max: number): number {
@@ -33,11 +42,12 @@ export function liveSafeConfig(env: NodeJS.ProcessEnv = process.env): LiveSafeCo
   return {
     enabled: env.BOT_LIVE_SAFE === 'true',
     variant: liveSafeVariant(env.BOT_LIVE_SAFE_VARIANT),
-    budgetMs: integer(env.BOT_LIVE_SAFE_BUDGET_MS, 8_000, 1, 8_000),
+    budgetMs: integer(env.BOT_LIVE_SAFE_BUDGET_MS, 8_000, 1, MAX_LIVE_SAFE_BUDGET_MS),
     threads: integer(env.BOT_LIVE_SAFE_THREADS, 2, 1, 4),
     maxHands: integer(env.BOT_LIVE_SAFE_MAX_HANDS, 8, 1, 64),
     maxDecisionsPerHand: integer(env.BOT_LIVE_SAFE_MAX_DECISIONS, 64, 1, 256),
-    anytimeMarginMs: integer(env.BOT_LIVE_SAFE_ANYTIME_MARGIN_MS, 2_000, 0, 7_999),
+    anytimeMarginMs: integer(env.BOT_LIVE_SAFE_ANYTIME_MARGIN_MS, 2_000, 0, 9_999),
+    hardMarginMs: integer(env.BOT_LIVE_SAFE_HARD_MARGIN_MS, 750, 0, 9_999),
   }
 }
 
@@ -52,6 +62,8 @@ export interface LiveSafeEvent {
   backends?: string[]
   /** Solves this decision cut short at the deadline, each after at least its 1x count. */
   shortened?: number
+  /** Of those, solves the hard stop cut below their 1x count. */
+  belowFloor?: number
 }
 
 export interface LiveSafeBotPolicy extends BotRiverThinker {
@@ -65,6 +77,7 @@ export interface LiveSafeBotPolicy extends BotRiverThinker {
     workerStarts: number
     coldStartMs: number
     shortenedSolves: number
+    belowFloorSolves: number
   }
   diagnostics(): { activeHands: number; chains: number; entries: number; bytes: number }
 }
@@ -85,6 +98,7 @@ interface Slot {
     handNumber: number
     baseline: TurnAction | null
     shortened: number
+    belowFloor: number
     finish(action: TurnAction | null, reason: string | null): void
   } | null
   ready: Promise<void> | null
@@ -124,6 +138,7 @@ export function liveSafeBotPolicy(
     workerStarts: 0,
     coldStartMs: 0,
     shortenedSolves: 0,
+    belowFloorSolves: 0,
   }
   const emit = (event: LiveSafeEvent) => {
     try {
@@ -174,7 +189,10 @@ export function liveSafeBotPolicy(
       } else if (message.type === 'released' || message.type === 'result') {
         slot.memory = { chains: message.chains, entries: message.entries, bytes: message.bytes }
         if (message.type === 'result' && message.id === slot.pending?.id) {
-          if (slot.pending !== null) slot.pending.shortened = message.shortened ?? 0
+          if (slot.pending !== null) {
+            slot.pending.shortened = message.shortened ?? 0
+            slot.pending.belowFloor = message.belowFloor ?? 0
+          }
           slot.pending?.finish(message.action, message.reason)
         }
       } else if (message.type === 'baseline' && message.id === slot.pending?.id) {
@@ -255,6 +273,7 @@ export function liveSafeBotPolicy(
         reason: string | null,
         baseline: boolean,
         shortened = 0,
+        belowFloor = 0,
       ) => {
         const chosen = action ?? guard()
         // Before the river v8z delegates to this exact guard, with the same RNG.
@@ -271,6 +290,7 @@ export function liveSafeBotPolicy(
           reason,
           fallback: reason === null ? null : usedV8z ? 'v8z' : 'guard',
           ...(shortened > 0 ? { shortened } : {}),
+          ...(belowFloor > 0 ? { belowFloor } : {}),
         })
         return chosen
       }
@@ -314,8 +334,11 @@ export function liveSafeBotPolicy(
           if (settled) return
           settled = true
           clearTimeout(timer)
-          const shortened = slot.pending?.id === id ? slot.pending.shortened : 0
+          const mine = slot.pending?.id === id ? slot.pending : null
+          const shortened = mine?.shortened ?? 0
+          const belowFloor = mine?.belowFloor ?? 0
           stats.shortenedSolves += shortened
+          stats.belowFloorSolves += belowFloor
           slot.pending = null
           const why = failure ?? reason
           if (why !== null && hand !== undefined) {
@@ -328,7 +351,7 @@ export function liveSafeBotPolicy(
               stop(slot)
             }
           }
-          resolve(report(action, why, action !== null && why !== null, shortened))
+          resolve(report(action, why, action !== null && why !== null, shortened, belowFloor))
         }
         const timer = setTimeout(
           () => {
@@ -344,6 +367,7 @@ export function liveSafeBotPolicy(
           handNumber: request.view.handNumber,
           baseline: null,
           shortened: 0,
+          belowFloor: 0,
           finish,
         }
         try {
@@ -359,6 +383,14 @@ export function liveSafeBotPolicy(
                   stopAfterMs: Math.max(
                     1,
                     budget - (performance.now() - started) - config.anytimeMarginMs,
+                  ),
+                }
+              : {}),
+            ...(config.hardMarginMs > 0
+              ? {
+                  hardStopAfterMs: Math.max(
+                    1,
+                    budget - (performance.now() - started) - config.hardMarginMs,
                   ),
                 }
               : {}),

@@ -31,6 +31,7 @@ import type { AdminAction, AdminOutcome, BanList } from './admin.js'
 import { applyAdminAction, MemoryBanList } from './admin.js'
 import type { AuthenticatedPlayer, TokenVerifier } from './auth.js'
 import type { ActionShadowPort, PreparedActionShadow } from './bot-learning-shadow.js'
+import { MAX_LIVE_SAFE_BUDGET_MS } from './bot-live-safe.js'
 import type { BotOpponentObservation, BotOpponentStore } from './bot-opponent-store.js'
 import { releasePolicyHand } from './bot-policy-hand.js'
 import {
@@ -1576,7 +1577,9 @@ export class RoomHub {
     if (settings?.botPreset === 'midas' && this.midas !== undefined) {
       // The thinker gets 70% of the remaining clock. Leave another poll plus
       // scheduling headroom, including when a caller supplies shorter clocks.
-      const minimum = Math.ceil((Math.min(8_000, this.midas.budgetMs) + 100) / 0.7)
+      const minimum = Math.ceil(
+        (Math.min(MAX_LIVE_SAFE_BUDGET_MS, this.midas.budgetMs) + 100) / 0.7,
+      )
       room.config.turnBudgetsMs = Object.fromEntries(
         Object.entries(room.config.turnBudgetsMs).map(([street, ms]) => [
           street,
