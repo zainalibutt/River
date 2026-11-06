@@ -2099,7 +2099,12 @@ export class RoomHub {
         : this.botRiverThinker
     if (thinker?.wants(seen, actor, personality) === true) {
       slow = undefined
-      const deadline = Math.min(RIVER_THINK_CAP_MS, this.remainingTurnMs(state) * 0.7)
+      // Midas's own budget (up to MAX_LIVE_SAFE_BUDGET_MS) replaces the general cap at its table.
+      const cap =
+        thinker === this.midas?.thinker && this.midas !== undefined
+          ? this.midas.budgetMs
+          : RIVER_THINK_CAP_MS
+      const deadline = Math.min(cap, this.remainingTurnMs(state) * 0.7)
       thinker
         .think(
           {

@@ -72,9 +72,10 @@ Timeouts, solver errors and internal chain fallbacks are counted and use v8z.
 That hand stays on v8z, including after worker replacement, so invalidated carry
 is never reused. Fallback can use another free worker while the old one retires.
 
-The room passes `min(RIVER_THINK_CAP_MS, remaining turn * 0.7)` to the thinker
-(`RIVER_THINK_CAP_MS` is 9,000 ms); the worker controller also caps this at
-`BOT_LIVE_SAFE_BUDGET_MS` (at most 8,000 ms). Only Midas tables clamp each
+The room passes `min(cap, remaining turn * 0.7)` to the thinker, where the cap
+is `BOT_LIVE_SAFE_BUDGET_MS` (at most 10,000 ms) at a Midas table and
+`RIVER_THINK_CAP_MS` (9,000 ms) elsewhere; the worker controller also caps it at
+`BOT_LIVE_SAFE_BUDGET_MS`. Only Midas tables clamp each
 street's clock to at least `ceil((configured budget + 100 ms) / 0.7)` for poll
 and scheduling headroom. Standard clocks already exceed this minimum. Other
 tables' clock configuration is untouched.
