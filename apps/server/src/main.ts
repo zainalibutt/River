@@ -128,7 +128,9 @@ async function start(): Promise<void> {
     // three to eight of them, in chairs the table's room id picks.
     botSeats: 'random',
     ...(botThinker === undefined ? {} : { botRiverThinker: botThinker }),
-    ...(safe === undefined ? {} : { midas: { thinker: safe, budgetMs: safeConfig.budgetMs } }),
+    ...(safe === undefined
+      ? {}
+      : { midas: { thinker: safe, budgetMs: safeConfig.budgetMs, seats: safeConfig.seats } }),
     ...(rememberOpponents
       ? {
           botOpponentStore: new SupabaseBotOpponentStore({
@@ -172,7 +174,7 @@ async function start(): Promise<void> {
   // Every other request, the rest of /api included, is Next's.
   const routes = serveApiRoutes(
     [
-      botCapabilitiesRoute(safe !== undefined),
+      botCapabilitiesRoute(hub),
       tableLinkRoute(hub),
       publicProfileRoute(
         new SupabasePublicProfiles({

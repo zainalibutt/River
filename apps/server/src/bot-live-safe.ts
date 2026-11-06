@@ -18,6 +18,8 @@ export interface LiveSafeConfig {
   variant: LiveSafeVariant
   budgetMs: number
   threads: number
+  /** Concurrent human-occupied Midas tables admitted by the room hub. */
+  seats: number
   maxHands: number
   maxDecisionsPerHand: number
   /**
@@ -39,11 +41,13 @@ function integer(text: string | undefined, fallback: number, min: number, max: n
 }
 
 export function liveSafeConfig(env: NodeJS.ProcessEnv = process.env): LiveSafeConfig {
+  const threads = integer(env.BOT_LIVE_SAFE_THREADS, 2, 1, 4)
   return {
     enabled: env.BOT_LIVE_SAFE === 'true',
     variant: liveSafeVariant(env.BOT_LIVE_SAFE_VARIANT),
     budgetMs: integer(env.BOT_LIVE_SAFE_BUDGET_MS, 8_000, 1, MAX_LIVE_SAFE_BUDGET_MS),
-    threads: integer(env.BOT_LIVE_SAFE_THREADS, 2, 1, 4),
+    threads,
+    seats: integer(env.BOT_LIVE_SAFE_SEATS, Math.max(1, threads - 1), 1, Number.MAX_SAFE_INTEGER),
     maxHands: integer(env.BOT_LIVE_SAFE_MAX_HANDS, 8, 1, 64),
     maxDecisionsPerHand: integer(env.BOT_LIVE_SAFE_MAX_DECISIONS, 64, 1, 256),
     anytimeMarginMs: integer(env.BOT_LIVE_SAFE_ANYTIME_MARGIN_MS, 2_000, 0, 9_999),

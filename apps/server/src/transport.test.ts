@@ -257,6 +257,216 @@ async function connectAndEnter(hub: RoomHub, token: string, name: string) {
   return { peer, connection }
 }
 
+describe('Midas table admission', () => {
+  function admission(seats = 1) {
+    const ledger = new MemoryLedger()
+    const hub = new RoomHub({
+      ledger,
+      verifyToken: async (token) => ({
+        playerId: token === 'alice' ? ALICE : token === 'bob' ? BOB : DEV,
+        anonymous: true,
+        admin: false,
+      }),
+      midas: {
+        seats,
+        budgetMs: 8000,
+        thinker: { wants: () => false, think: async () => null, close: async () => {} },
+      },
+      createRoom: (roomId, settings) =>
+        new Room(
+          roomId,
+          defaultRoomConfig({
+            seed: roomId,
+            inviteCode: 'RIVER2',
+            reconnectGraceMs: 100,
+            seedCollectionMs: 0,
+            maxSeats: settings?.maxSeats ?? 6,
+            randomBytes: (size: number) => Buffer.alloc(size, 0x2a),
+          }),
+        ),
+    })
+    return { hub, ledger }
+  }
+
+  async function enter(hub: RoomHub, token: string, roomId: string, botPreset = 'midas') {
+    const peer = new TestPeer()
+    const connection = hub.connect(peer)
+    await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: token }))
+    await connection.receive(
+      JSON.stringify({
+        kind: 'enter',
+        requestId: `enter-${token}`,
+        roomId,
+        name: token,
+        botPreset,
+        inviteCode: 'river2',
+      }),
+    )
+    return { peer, connection }
+  }
+
+  it('takes one seat per occupied table and releases it on stand and leave', async () => {
+    const { hub } = admission()
+    const alice = await enter(hub, 'alice', 'midas-one')
+    expect(hub.botCapabilities()).toEqual({
+      midasAvailable: true,
+      midasSeats: 1,
+      midasSeatsFree: 1,
+    })
+    await send(alice, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+    const bob = await enter(hub, 'bob', 'midas-one')
+    await send(bob, 'sit-bob', { kind: 'sit', seat: 1, buyIn: 50_000 })
+    expect(bob.peer.last('error')).toBeUndefined()
+    await send(alice, 'stand', { kind: 'stand' })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+    await send(bob, 'leave', { kind: 'leave' })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(1)
+    await send(alice, 'sit-again', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+    await send(alice, 'stand-again', { kind: 'stand' })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(1)
+  })
+
+  it('refuses creation and sitting at the cap without debiting or disrupting existing tables', async () => {
+    const { hub, ledger } = admission()
+    const alice = await enter(hub, 'alice', 'midas-one')
+    const bob = await enter(hub, 'bob', 'midas-two')
+    await send(alice, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    const writes = ledger.entries.length
+    await send(bob, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    expect(bob.peer.last('error')).toMatchObject({
+      code: 'midas_busy',
+      message: 'Midas is busy, try again shortly',
+    })
+    expect(ledger.entries).toHaveLength(writes)
+    const refused = await enter(hub, 'dev', 'midas-three')
+    expect(refused.peer.last('error')).toMatchObject({ code: 'midas_busy' })
+    expect(refused.peer.last('snapshot')).toBeUndefined()
+    await send(alice, 'rebuy', { kind: 'rebuy', amount: 10_000 })
+    expect(alice.peer.last('error')).toBeUndefined()
+    expect(viewOf(alice).seats[0]?.stack).toBe(60_000)
+    // Other presets can still be created and occupied at the Midas cap.
+    const ordinary = await enter(hub, 'dev', 'champion-one', 'champion')
+    await send(ordinary, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    expect(ordinary.peer.last('error')).toBeUndefined()
+    await send(alice, 'leave', { kind: 'leave' })
+    await send(bob, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    expect(viewOf(bob).seats[0]?.playerId).toBe(BOB)
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+  })
+
+  it('reserves before an awaited buy-in so concurrent room queues cannot exceed the cap', async () => {
+    const { hub } = admission()
+    const alice = await enter(hub, 'alice', 'midas-one')
+    const bob = await enter(hub, 'bob', 'midas-two')
+    await Promise.all([
+      send(alice, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 }),
+      send(bob, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 }),
+    ])
+    expect(
+      [alice, bob].filter((client) => client.peer.last('error')?.kind === 'error'),
+    ).toHaveLength(1)
+    expect(
+      [alice, bob]
+        .flatMap((client) => viewOf(client).seats)
+        .filter((seat) => seat.playerId !== null),
+    ).toHaveLength(1)
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+  })
+
+  it('returns the reservation after ledger and room buy-in refusals', async () => {
+    const { hub, ledger } = admission()
+    const alice = await enter(hub, 'alice', 'midas-one')
+    ledger.balances.set(ALICE, 0)
+    await send(alice, 'no-money', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    expect(alice.peer.last('error')).toMatchObject({ code: 'command_rejected' })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(1)
+    ledger.balances.set(ALICE, 100_000)
+    await send(alice, 'bad-seat', { kind: 'sit', seat: 8, buyIn: 50_000 })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(1)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    await send(alice, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+  })
+
+  it('keeps capacity across reconnect grace and releases on expiry', async () => {
+    vi.useFakeTimers()
+    const { hub } = admission()
+    const alice = await enter(hub, 'alice', 'midas-one')
+    await send(alice, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    await alice.connection.close()
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+    await vi.advanceTimersByTimeAsync(50)
+    const returned = await enter(hub, 'alice', 'midas-one')
+    await vi.advanceTimersByTimeAsync(100)
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+    await returned.connection.close()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(hub.botCapabilities().midasSeatsFree).toBe(1)
+  })
+
+  it('retains an all-in leaver until settlement and releases after the last human leaves', async () => {
+    vi.useFakeTimers()
+    const { hub } = admission()
+    const alice = await enter(hub, 'alice', 'midas-one')
+    const bob = await enter(hub, 'bob', 'midas-one')
+    await send(alice, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    await send(bob, 'sit', { kind: 'sit', seat: 1, buyIn: 50_000 })
+    await send(alice, 'deal', { kind: 'startHand' })
+    await send(alice, 'shove', { kind: 'act', action: { kind: 'allIn' } })
+    await send(alice, 'leave', { kind: 'leave' })
+    expect(viewOf(bob).seats[0]).toMatchObject({ playerId: ALICE, disconnected: true })
+    // Bob's fold settles Alice's deferred leave; the table still belongs to Bob.
+    await send(bob, 'fold', { kind: 'act', action: { kind: 'fold' } })
+    expect(viewOf(bob).seats[0]?.playerId).toBeNull()
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+    await send(bob, 'leave', { kind: 'leave' })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(1)
+  })
+
+  it('releases on kick and process settlement, idempotently', async () => {
+    const { hub } = admission(2)
+    const alice = await enter(hub, 'alice', 'midas-one')
+    const bob = await enter(hub, 'bob', 'midas-one')
+    await send(bob, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    await send(alice, 'kick', { kind: 'kick', targetPlayerId: BOB, reason: 'host' })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(2)
+    await send(alice, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(1)
+    await hub.settleAllTables()
+    expect(hub.botCapabilities().midasSeatsFree).toBe(2)
+    await hub.settleAllTables()
+    expect(hub.botCapabilities().midasSeatsFree).toBe(2)
+  })
+
+  it('holds the last human seat through an all-in leave and frees it on bot settlement', async () => {
+    vi.useFakeTimers()
+    const { hub } = admission()
+    const alice = await enter(hub, 'alice', 'midas-one')
+    await send(alice, 'sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    await send(alice, 'deal', { kind: 'startHand' })
+    expect(viewOf(alice).currentActor?.playerId).toBe(ALICE)
+    await send(alice, 'stand', { kind: 'stand' })
+    expect(alice.peer.last('error')).toMatchObject({ code: 'command_rejected' })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+    await send(alice, 'shove', { kind: 'act', action: { kind: 'allIn' } })
+    await send(alice, 'leave', { kind: 'leave' })
+    expect(viewOf(alice).seats[0]).toMatchObject({ playerId: ALICE, disconnected: true })
+    expect(hub.botCapabilities().midasSeatsFree).toBe(0)
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(hub.botCapabilities().midasSeatsFree).toBe(1)
+  })
+
+  it('reports zero seats when Midas is off', () => {
+    expect(setup().hub.botCapabilities()).toEqual({
+      midasAvailable: false,
+      midasSeats: 0,
+      midasSeatsFree: 0,
+    })
+  })
+})
+
 describe('wire protocol parsing', () => {
   it('reads a look at the cards as a social command', () => {
     expect(
