@@ -1059,6 +1059,42 @@
   width: min(100%, 392px);
 }
 
+/* A seat left behind by Back: still held, with the way back to it. */
+.club-seat-held {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--club-brass-bright);
+  border-radius: 12px;
+  background: rgb(10 12 10 / 78%);
+  color: var(--river-cream);
+}
+
+.club-seat-held p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.club-seat-held span {
+  color: var(--river-cream-dim);
+  font-size: 13px;
+}
+
+.club-seat-held button {
+  flex: none;
+  padding: 10px 16px;
+  border: 1px solid var(--club-brass-bright);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--river-amber-bright);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .club-home-play {
   display: grid;
   gap: 8px;

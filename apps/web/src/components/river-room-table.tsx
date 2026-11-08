@@ -110,6 +110,8 @@ import { tableSound } from '@/lib/table-sound'
 import {
   initialRoomTarget,
   LAST_TABLE_KEY,
+  markLeftSeated,
+  rememberedTable,
   rememberTable,
   shortTableLink,
 } from '@/lib/table-target'
@@ -1420,6 +1422,37 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     if (typeof window === 'undefined' || view.inviteCode.length === 0 || lab !== undefined) return
     rememberTable({ roomId, inviteCode: view.inviteCode, venueId })
   }, [roomId, venueId, view.inviteCode, lab])
+
+  // Back at the table: any note about a seat left behind is answered. Going
+  // away still seated - Back, a closed tab - leaves one, so the club can say
+  // the seat is held and the chips are on their way back.
+  useEffect(() => {
+    if (lab !== undefined) return
+    // Only coming back to the table the note is about answers it; a fresh
+    // Quick Play table leaves the old seat's note standing.
+    const answer = () => {
+      if (rememberedTable()?.roomId === roomId) markLeftSeated(false)
+    }
+    answer()
+    const away = () => {
+      // A tab another tab took over is not holding a seat open.
+      if (kickRef.current !== null) return
+      const current = viewRef.current
+      if (current.seats.some((seat) => seat.playerId === current.selfId)) markLeftSeated(true)
+    }
+    // Forward can bring this page back from the browser's cache without
+    // mounting it again; being here answers the note all the same.
+    const back = () => answer()
+    window.addEventListener('pagehide', away)
+    window.addEventListener('pageshow', back)
+    return () => {
+      window.removeEventListener('pagehide', away)
+      window.removeEventListener('pageshow', back)
+      // Back inside the app is a route change, not a page going away: the
+      // table unmounts and pagehide never fires.
+      away()
+    }
+  }, [lab, roomId])
 
   // A fresh token for the friends route; the motion lab has no account and gets none.
   const friendsToken = useCallback(async () => {

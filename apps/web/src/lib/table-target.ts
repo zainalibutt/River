@@ -80,6 +80,54 @@ export function tableAddress(table: Omit<RememberedTable, 'atMs'>): string {
   return `${TABLE_PATH}?${query.toString()}`
 }
 
+/** When this browser last left a table while still seated at it. */
+export const LEFT_SEATED_KEY = 'river:left-seated-at'
+/**
+ * How long a seat is held for a player who leaves without standing up. The
+ * server's reconnect grace (reconnectGraceMs); once it runs out the seat is
+ * released and its stack paid back to the bankroll.
+ */
+export const SEAT_HOLD_MS = 30_000
+
+/**
+ * Milliseconds left on a seat this browser walked away from, or 0. Only while
+ * a table is still remembered: standing up forgets the table, so leaving
+ * properly never shows as a held seat.
+ */
+export function seatHoldRemaining(
+  leftAtRaw: string | null,
+  tableRemembered: boolean,
+  nowMs: number,
+): number {
+  if (!tableRemembered || leftAtRaw === null) return 0
+  const leftAt = Number(leftAtRaw)
+  if (!Number.isFinite(leftAt) || leftAt > nowMs) return 0
+  return Math.max(0, SEAT_HOLD_MS - (nowMs - leftAt))
+}
+
+/** The held seat this browser left, read from storage; 0 when there is none. */
+export function heldSeatRemaining(nowMs = Date.now()): number {
+  try {
+    return seatHoldRemaining(
+      window.localStorage.getItem(LEFT_SEATED_KEY),
+      rememberedTable() !== null,
+      nowMs,
+    )
+  } catch {
+    return 0
+  }
+}
+
+/** Note that this browser is leaving a table it is still seated at, or clear the note. */
+export function markLeftSeated(left: boolean, nowMs = Date.now()): void {
+  try {
+    if (left) window.localStorage.setItem(LEFT_SEATED_KEY, String(nowMs))
+    else window.localStorage.removeItem(LEFT_SEATED_KEY)
+  } catch {
+    // Storage can be unavailable. The note is a courtesy, not the seat.
+  }
+}
+
 /** Whether this browser kept the table. */
 function storeTable(table: Omit<RememberedTable, 'atMs'>): boolean {
   try {
