@@ -90,6 +90,8 @@ interface PlayerState {
   name: string
   seat: number | null
   disconnected: boolean
+  /** When the player last disconnected, or null while connected. */
+  disconnectedAtMs?: number | null
 }
 
 /**
@@ -157,6 +159,7 @@ export function defaultRoomConfig(overrides: Partial<RoomConfig> & { seed: strin
     inviteCode: overrides.inviteCode ?? newInviteCode(randomSource),
     hostPlayerId: overrides.hostPlayerId ?? '',
     reconnectGraceMs: overrides.reconnectGraceMs ?? 30_000,
+    reloadHoldMs: overrides.reloadHoldMs ?? 10_000,
     seedCollectionMs: overrides.seedCollectionMs ?? 1_500,
     randomBytes: randomSource ?? randomBytes,
     turnBudgetsMs: overrides.turnBudgetsMs ?? DEFAULT_TURN_BUDGETS_MS,
@@ -487,11 +490,15 @@ export class Room implements RoomHandle {
    * ordinary fold and the turn moves on; off it, the turn in progress keeps its
    * player and its clock unless the fold has decided the hand.
    */
-  private forfeit(playerId: string, events: RoomEvent[]): void {
+  private forfeit(
+    playerId: string,
+    events: RoomEvent[],
+    eventKind: 'acted' | 'awayPlayed' = 'acted',
+  ): void {
     const betting = this.betting
     if (betting === null) return
     const theirTurn = this.pendingPlayerId === playerId
-    if (!this.apply(playerId, { kind: 'fold' }, events, 'acted', true)) return
+    if (!this.apply(playerId, { kind: 'fold' }, events, eventKind, true)) return
     if (theirTurn || betting.finished || betting.toActId !== this.pendingPlayerId) {
       this.pendingPlayerId = null
       this.turnDeadlineMs = null
@@ -817,10 +824,12 @@ export class Room implements RoomHandle {
       return this.reject(playerId, 'already disconnected')
     }
     player.disconnected = true
+    player.disconnectedAtMs = this.now()
+    // A turn already running keeps its clock. Playing it away here folded
+    // anybody who reloaded or pressed Back while facing a bet, before they
+    // could get back to the table; the deadline still ends the turn the usual
+    // way if they do not return in time.
     const events: RoomEvent[] = [{ kind: 'disconnected', playerId }]
-    if (this.phase === 'hand' && this.pendingPlayerId === playerId) {
-      this.drive(events)
-    }
     return { ok: true, events }
   }
 
@@ -835,6 +844,7 @@ export class Room implements RoomHandle {
     // left, so there is nothing to tell anyone.
     if (!player.disconnected) return { ok: true, events: [] }
     player.disconnected = false
+    player.disconnectedAtMs = null
     return this.result({ kind: 'reconnected', playerId })
   }
 
@@ -853,10 +863,11 @@ export class Room implements RoomHandle {
     const events: RoomEvent[] = []
     if (this.phase === 'hand' && this.betting !== null) {
       const player = this.betting.players.find((item) => item.id === targetPlayerId)
+      // Off their turn, the turn in progress keeps its player and its clock.
+      // Re-driving it here restarted that clock, and played away at once a
+      // player who had only stepped out for a reload.
       if (player !== undefined && !player.folded && !player.allIn) {
-        this.apply(targetPlayerId, { kind: 'fold' }, events, 'awayPlayed')
-        this.pendingPlayerId = null
-        this.drive(events)
+        this.forfeit(targetPlayerId, events, 'awayPlayed')
       }
     }
     this.releaseSeat(target)
@@ -871,6 +882,9 @@ export class Room implements RoomHandle {
     const player = this.players.get(playerId)
     if (player === undefined || !player.disconnected)
       return this.reject(playerId, 'not disconnected')
+    // A turn held for a player who dropped mid-reload ends on its own deadline,
+    // not when the reconnect grace runs out partway through it.
+    if (this.heldTurnFor(playerId)) return this.reject(playerId, 'turn still running')
     return this.kick(this.config.hostPlayerId, playerId, 'idle')
   }
 
@@ -982,7 +996,7 @@ export class Room implements RoomHandle {
         this.applyAway(actorId, events)
         continue
       }
-      if (player.disconnected) {
+      if (player.disconnected && !this.mayStillReturn(player)) {
         this.pendingPlayerId = null
         this.turnDeadlineMs = null
         this.applyAway(actorId, events)
@@ -1003,6 +1017,27 @@ export class Room implements RoomHandle {
     if (this.phase === 'hand' && this.betting !== null && this.betting.finished) {
       this.settle(events)
     }
+  }
+
+  /**
+   * A player who dropped moments ago - a reload, Back then Forward - gets their
+   * turn on the normal clock. One gone for longer, or one leaving after an
+   * all-in, is played away at once so the table does not wait on them.
+   */
+  /** Whether the player owns the turn in progress and its clock is still running. */
+  heldTurnFor(playerId: string): boolean {
+    return (
+      this.phase === 'hand' &&
+      this.pendingPlayerId === playerId &&
+      this.turnDeadlineMs !== null &&
+      this.now() < this.turnDeadlineMs
+    )
+  }
+
+  private mayStillReturn(player: PlayerState): boolean {
+    const since = player.disconnectedAtMs
+    if (since === null || since === undefined) return false
+    return this.now() - since < this.config.reloadHoldMs
   }
 
   private applyAway(playerId: string, events: RoomEvent[]): void {

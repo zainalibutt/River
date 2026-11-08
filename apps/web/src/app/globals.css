@@ -3890,6 +3890,38 @@ button.verify-pill.verify-mismatch {
   white-space: nowrap;
 }
 
+/* The keys that do what the buttons do, shown once a keyboard is on them. */
+.action-keys {
+  position: absolute;
+  bottom: -34px;
+  left: 50%;
+  margin: 0;
+  color: rgb(244 236 220 / 78%);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  pointer-events: none;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 85%);
+  transform: translateX(-50%);
+  transition: opacity 140ms var(--ease-out);
+  white-space: nowrap;
+}
+
+.action-menu:focus-within .action-keys {
+  opacity: 1;
+}
+
+.action-keys kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  margin: 0 0.3em 0 0.7em;
+  padding: 1px 4px;
+  border: 1px solid rgb(244 236 220 / 40%);
+  border-radius: 4px;
+  font: inherit;
+  text-align: center;
+}
+
 .action-base {
   position: absolute;
   border-radius: 50%;

@@ -51,6 +51,13 @@ export interface RoomConfig {
   inviteCode: string
   hostPlayerId: string
   reconnectGraceMs: number
+  /**
+   * How long after a disconnect a turn that reaches the player still waits on
+   * the normal clock rather than being played away at once. Long enough for a
+   * reload or a Back-then-Forward; short enough that a player who has gone for
+   * good does not hold every later turn up.
+   */
+  reloadHoldMs: number
   seedCollectionMs: number
   randomBytes: (size: number) => Uint8Array
   turnBudgetsMs: Record<Street, number>

@@ -34,6 +34,7 @@ import { RiverSoundControl } from '@/components/river-sound-control'
 import type { HoleSeat } from '@/components/river-venue-scene'
 import { RollingAmount } from '@/components/rolling-amount'
 import { Table2D, type TablePresentation } from '@/components/table-2d/table-2d'
+import { TableModal } from '@/components/table-modal'
 import {
   ActionPin,
   CardBack,
@@ -134,6 +135,24 @@ function isBotPlayerId(playerId: string | null): boolean {
 
 /** Mirrors the server: a second press inside most of a look is the same look. */
 const LOOK_INTERVAL_MS = 1_200
+/** A Tab released this soon is a tap: it moves to your actions instead of reading the table. */
+const TAB_TAP_MS = 250
+
+/**
+ * Whether the last input was a key rather than a pointer. A keyboard player
+ * whose focus was dropped - the DEAL button they pressed is gone - is put back
+ * on their actions when the turn comes; a mouse player's focus is left alone.
+ */
+let keyboardDriven = false
+
+/** The first control a keyboard player can press in the action area. */
+function focusFirstAction(): boolean {
+  const target = document.querySelector<HTMLElement>(
+    '.action-menu button:not(:disabled), .raise-layer button:not(:disabled), .ram button:not(:disabled)',
+  )
+  target?.focus({ preventScroll: true })
+  return target !== null
+}
 
 /** How many chip moments the running list keeps. The scene only reads the newest few. */
 const CHIP_HISTORY = 16
@@ -1007,6 +1026,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   // It used to turn the cards over in the corner and nothing else: your character sat
   // perfectly still while you read your hand, and nobody else saw you do it.
   const lastLook = useRef(0)
+  const tabDownAt = useRef<number | null>(null)
   const heroHolding = useRef(false)
   useEffect(() => {
     const current = viewRef.current
@@ -1041,7 +1061,8 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     const down = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return
-      if (event.code === 'Space') setPeek(true)
+      // Space on a focused button presses that button; it must not also peek.
+      if (event.code === 'Space' && !(event.target instanceof HTMLButtonElement)) setPeek(true)
       // Hold to read the table: names, stacks and state, on demand.
       //
       // The reference uses Tab and so does this now. It was Shift, because Tab
@@ -1062,32 +1083,69 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
       const current = viewRef.current
       const inHand =
         current.phase === 'hand' && current.seats.some((seat) => seat.playerId === current.selfId)
+      //
+      // Held, Tab reads the table. Tapped, it moves to your actions, so a
+      // keyboard player is never stuck outside the buttons. Once focus is on a
+      // control, Tab goes back to moving between controls as it does anywhere.
       if (event.key === 'Tab' && inHand) {
-        event.preventDefault()
-        setPlatesHeld(true)
+        const focused = document.activeElement
+        const onControl =
+          focused instanceof HTMLElement && focused !== document.body && focused.isConnected
+        if (!onControl) {
+          event.preventDefault()
+          if (!event.repeat) tabDownAt.current = performance.now()
+          setPlatesHeld(true)
+        }
       }
-      if (event.key.toLowerCase() === 'c') {
+      // Letter shortcuts never fire with a modifier: Ctrl+C is copy, not call.
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+      const key = event.key.toLowerCase()
+      if (key === 'c') {
         if (view.legal?.check.enabled) command({ kind: 'act', action: { kind: 'check' } })
         else if (view.legal?.call.enabled) command({ kind: 'act', action: { kind: 'call' } })
+      }
+      // Fold by key only when facing a bet. With a free check, folding is the
+      // mistake the fold button asks a hold for, and a key cannot be held to
+      // confirm it the same way.
+      if (key === 'f' && view.legal?.fold.enabled && !view.legal.check.enabled) {
+        command({ kind: 'act', action: { kind: 'fold' } })
       }
     }
     const up = (event: KeyboardEvent) => {
       if (event.code === 'Space') setPeek(false)
       if (event.key === 'Shift' || event.key === 'Tab') setPlatesHeld(false)
+      if (event.key === 'Tab' && tabDownAt.current !== null) {
+        const tapped = performance.now() - tabDownAt.current < TAB_TAP_MS
+        tabDownAt.current = null
+        if (tapped) focusFirstAction()
+      }
     }
     // A key held when the window loses focus never sends its keyup, so the
     // plates would stay up for good after an alt-tab.
     const drop = () => {
       setPeek(false)
       setPlatesHeld(false)
+      tabDownAt.current = null
     }
+    const pointer = () => {
+      keyboardDriven = false
+    }
+    // Capture, so a key pressed inside a dialog - which stops its keys from
+    // reaching the table's shortcuts - still counts as keyboard use.
+    const keyed = () => {
+      keyboardDriven = true
+    }
+    window.addEventListener('keydown', keyed, true)
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     window.addEventListener('blur', drop)
+    window.addEventListener('pointerdown', pointer)
     return () => {
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', drop)
+      window.removeEventListener('pointerdown', pointer)
+      window.removeEventListener('keydown', keyed, true)
     }
   }, [command, view.legal])
 
@@ -1212,6 +1270,24 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   }, [repFlash])
 
   const localTurn = view.currentActor?.playerId === view.selfId
+
+  // One panel at a time: opening History over Settings stacked two modals.
+  const openPanel = (panel: 'history' | 'settings' | 'verify') => {
+    setHistoryOpen(panel === 'history')
+    setSettingsOpen(panel === 'settings')
+    setVerifyOpen(panel === 'verify')
+  }
+  // Your turn closes any panel. They cover the action area, and the clock
+  // runs behind them, so a player reading the history was timed out unseen.
+  const myTurnKey = localTurn
+    ? `${view.handNumber}:${view.street}:${view.turnDeadlineMs ?? ''}`
+    : null
+  useEffect(() => {
+    if (myTurnKey === null) return
+    setHistoryOpen(false)
+    setSettingsOpen(false)
+    setVerifyOpen(false)
+  }, [myTurnKey])
 
   useInterfaceSound()
   useEffect(() => {
@@ -1633,7 +1709,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 disabled={view.commit === null}
                 aria-label={verifyStatusLabel(verify.status)}
                 title={verifyStatusLabel(verify.status)}
-                onClick={() => setVerifyOpen(true)}
+                onClick={() => openPanel('verify')}
               >
                 {/* The eight-character commit read as loose hexadecimal to
                     anyone not already convinced. The full figure lives in the
@@ -1650,7 +1726,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 className={`settings-toggle${settingsOpen ? ' open' : ''}`}
                 aria-haspopup="dialog"
                 aria-expanded={settingsOpen}
-                onClick={() => setSettingsOpen((open) => !open)}
+                onClick={() => (settingsOpen ? setSettingsOpen(false) : openPanel('settings'))}
               >
                 SETTINGS
               </button>
@@ -1664,86 +1740,76 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               />
             ) : null}
             {verifyOpen ? (
-              <div className="modal-backdrop" role="presentation">
-                <section
-                  className="modal verify-modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="verify-title"
-                >
-                  <button
-                    className="modal-close"
-                    type="button"
-                    onClick={() => setVerifyOpen(false)}
-                  >
-                    CLOSE
-                  </button>
-                  <p className="eyebrow">FAIRNESS</p>
-                  <h2 id="verify-title">{verifyHeadline(verify.status)}</h2>
+              <TableModal
+                className="verify-modal"
+                labelledBy="verify-title"
+                onClose={() => setVerifyOpen(false)}
+              >
+                <button className="modal-close" type="button" onClick={() => setVerifyOpen(false)}>
+                  CLOSE
+                </button>
+                <p className="eyebrow">FAIRNESS</p>
+                <h2 id="verify-title">{verifyHeadline(verify.status)}</h2>
 
-                  <dl className="verify-rows">
-                    <dt>COMMIT</dt>
-                    <dd>
-                      <code>{view.commit ?? '--'}</code>
-                    </dd>
-                    {view.revealedSeed === null ? null : (
-                      <>
-                        <dt>REVEALED SERVER SEED</dt>
-                        <dd>
-                          <code>{view.revealedSeed}</code>
-                        </dd>
-                        <dt>RECOMPUTED</dt>
-                        <dd>
-                          <code>{verify.recomputedCommit ?? '--'}</code>
-                        </dd>
-                        <dt>DECK ENTROPY</dt>
-                        <dd>
-                          <code>{verify.deckEntropy ?? '--'}</code>
-                        </dd>
-                      </>
-                    )}
-                  </dl>
-
-                  {view.clientSeeds === null ? null : (
-                    <ul className="verify-seeds">
-                      {[...view.clientSeeds]
-                        .sort((left, right) => left.seat - right.seat)
-                        .map((entry) => (
-                          <li key={entry.playerId}>
-                            <span>SEAT {entry.seat + 1}</span>
-                            <code>{entry.seed.slice(0, 16)}</code>
-                            {entry.defaulted ? <em>SERVER DEFAULT</em> : null}
-                          </li>
-                        ))}
-                    </ul>
+                <dl className="verify-rows">
+                  <dt>COMMIT</dt>
+                  <dd>
+                    <code>{view.commit ?? '--'}</code>
+                  </dd>
+                  {view.revealedSeed === null ? null : (
+                    <>
+                      <dt>REVEALED SERVER SEED</dt>
+                      <dd>
+                        <code>{view.revealedSeed}</code>
+                      </dd>
+                      <dt>RECOMPUTED</dt>
+                      <dd>
+                        <code>{verify.recomputedCommit ?? '--'}</code>
+                      </dd>
+                      <dt>DECK ENTROPY</dt>
+                      <dd>
+                        <code>{verify.deckEntropy ?? '--'}</code>
+                      </dd>
+                    </>
                   )}
+                </dl>
 
-                  <p role="status" className={`verify-verdict verify-${verify.status}`}>
-                    {verifyCopy(verify.status)}
-                  </p>
-                </section>
-              </div>
+                {view.clientSeeds === null ? null : (
+                  <ul className="verify-seeds">
+                    {[...view.clientSeeds]
+                      .sort((left, right) => left.seat - right.seat)
+                      .map((entry) => (
+                        <li key={entry.playerId}>
+                          <span>SEAT {entry.seat + 1}</span>
+                          <code>{entry.seed.slice(0, 16)}</code>
+                          {entry.defaulted ? <em>SERVER DEFAULT</em> : null}
+                        </li>
+                      ))}
+                  </ul>
+                )}
+
+                <p role="status" className={`verify-verdict verify-${verify.status}`}>
+                  {verifyCopy(verify.status)}
+                </p>
+              </TableModal>
             ) : null}
             {settingsOpen ? (
-              <div className="modal-backdrop" role="presentation">
-                <section
-                  className="modal settings-modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="settings-title"
+              <TableModal
+                className="settings-modal"
+                labelledBy="settings-title"
+                onClose={() => setSettingsOpen(false)}
+              >
+                <button
+                  className="modal-close"
+                  type="button"
+                  onClick={() => setSettingsOpen(false)}
                 >
-                  <button
-                    className="modal-close"
-                    type="button"
-                    onClick={() => setSettingsOpen(false)}
-                  >
-                    CLOSE
-                  </button>
-                  <p className="eyebrow">THIS BROWSER</p>
-                  <h2 id="settings-title">Settings</h2>
-                  <RiverSettings preferences={preferences} onChange={setPreferences} />
-                </section>
-              </div>
+                  CLOSE
+                </button>
+                <p className="eyebrow">THIS BROWSER</p>
+                <h2 id="settings-title">Settings</h2>
+                <RiverSettings preferences={preferences} onChange={setPreferences} />
+              </TableModal>
             ) : null}
             {/* The venue picker lived here, shown before the first hand. It is
                 gone for the same reason the stepper on the private table screen
@@ -1939,7 +2005,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 type="button"
                 className="verify-pill history-pill"
                 aria-label={`Hand history, ${hands.length} hands recorded`}
-                onClick={() => setHistoryOpen(true)}
+                onClick={() => openPanel('history')}
               >
                 <span>HANDS</span>
                 <strong>{hands.length}</strong>
@@ -2695,11 +2761,20 @@ function ActionMenu({
     setLit(null)
   }, [turnKey])
 
+  const hasTurn = legal !== null
+  useEffect(() => {
+    if (!hasTurn || turnKey.length === 0 || !keyboardDriven) return
+    const focused = document.activeElement
+    if (focused === null || focused === document.body || !focused.isConnected) focusFirstAction()
+  }, [hasTurn, turnKey])
+
   useEffect(() => {
     if (legal === null) return
     const onKey = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return
+      // Ctrl+R is reload and Shift is held to read the table: neither raises.
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
       const key = event.key.toLowerCase()
       if (!raising && key === 'r' && legal.raiseTo.enabled) {
         event.preventDefault()
@@ -2896,6 +2971,22 @@ function ActionMenu({
     <section className="action-menu" aria-label="Your action">
       <TurnArc key={turnKey} remainingMs={remainingMs} budgetMs={budgetMs} />
       <p className="action-label">{lit === null ? 'YOUR TURN' : labels[lit]}</p>
+      {/* Shown only once a keyboard is on the buttons: the keys that skip them. */}
+      <p className="action-keys" aria-hidden="true">
+        <kbd>C</kbd> {checking ? 'CHECK' : 'CALL'}
+        {legal.raiseTo.enabled ? (
+          <>
+            {' '}
+            <kbd>R</kbd> {checking ? 'BET' : 'RAISE'}
+          </>
+        ) : null}
+        {checking ? null : (
+          <>
+            {' '}
+            <kbd>F</kbd> FOLD
+          </>
+        )}
+      </p>
       <div className="action-base" data-lit={lit ?? undefined}>
         <span className="action-seams" />
       </div>
@@ -2905,6 +2996,7 @@ function ActionMenu({
           duration={0}
           disabled={!(checking || legal.call.enabled)}
           ariaLabel={labels.call}
+          keyShortcut="C"
           onComplete={() => onAction(checking ? { kind: 'check' } : { kind: 'call' })}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2918,6 +3010,7 @@ function ActionMenu({
             type="button"
             className="action-button"
             aria-label={labels.raise}
+            aria-keyshortcuts="R"
             onClick={() => setRaising(true)}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2947,6 +3040,7 @@ function ActionMenu({
           duration={checking ? 400 : 0}
           disabled={!legal.fold.enabled}
           ariaLabel={checking ? 'Fold, hold to confirm' : 'Fold'}
+          keyShortcut={checking ? undefined : 'F'}
           onComplete={() => onAction({ kind: 'fold' })}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -3246,6 +3340,7 @@ function HoldAction({
   className,
   style,
   ariaLabel,
+  keyShortcut,
   onComplete,
   onAnimationEnd,
   children,
@@ -3255,6 +3350,8 @@ function HoldAction({
   className: string
   style?: CSSProperties
   ariaLabel?: string
+  /** The key that does the same, announced to assistive technology. */
+  keyShortcut?: string | undefined
   onComplete: () => void
   onAnimationEnd?: () => void
   children: React.ReactNode
@@ -3288,6 +3385,7 @@ function HoldAction({
       className={`${className}${holding ? ' holding' : ''}`}
       disabled={disabled}
       aria-label={ariaLabel}
+      aria-keyshortcuts={keyShortcut}
       style={{ ...style, '--hold-duration': `${duration}ms` } as CSSProperties}
       onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
         if (event.button !== 0) return

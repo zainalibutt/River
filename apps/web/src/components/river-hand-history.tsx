@@ -3,6 +3,7 @@
 import type { Card, HandRecord } from '@river/engine'
 import { buildReplay, frameAt, streetBoundaries } from '@river/engine'
 import { useMemo, useState } from 'react'
+import { TableModal } from '@/components/table-modal'
 import {
   handsPlayed,
   netChips,
@@ -34,73 +35,64 @@ export function RiverHandHistory({ hands, selfId, bigBlind, onClose }: RiverHand
   const showdowns = showdownPercent(rows)
 
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section
-        className="modal history-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="history-title"
-      >
-        <button className="modal-close" type="button" onClick={onClose}>
-          CLOSE
-        </button>
-        <p className="eyebrow">THIS SESSION</p>
-        <h2 id="history-title">Hand history</h2>
+    <TableModal className="history-modal" labelledBy="history-title" onClose={onClose}>
+      <button className="modal-close" type="button" onClick={onClose}>
+        CLOSE
+      </button>
+      <p className="eyebrow">THIS SESSION</p>
+      <h2 id="history-title">Hand history</h2>
 
-        <dl className="history-summary">
-          <div>
-            <dt className="history-stat-key">HANDS PLAYED</dt>
-            <dd className="history-stat-value">{played}</dd>
-          </div>
-          <div>
-            <dt className="history-stat-key">NET</dt>
-            <dd className={`history-stat-value ${net > 0 ? 'up' : net < 0 ? 'down' : ''}`}>
-              {net > 0 ? '+' : ''}
-              {formatAmount(net, false, bigBlind)}
-            </dd>
-          </div>
-          <div>
-            <dt className="history-stat-key">WENT TO SHOWDOWN</dt>
-            <dd className="history-stat-value">{showdowns === null ? '--' : `${showdowns}%`}</dd>
-          </div>
-        </dl>
+      <dl className="history-summary">
+        <div>
+          <dt className="history-stat-key">HANDS PLAYED</dt>
+          <dd className="history-stat-value">{played}</dd>
+        </div>
+        <div>
+          <dt className="history-stat-key">NET</dt>
+          <dd className={`history-stat-value ${net > 0 ? 'up' : net < 0 ? 'down' : ''}`}>
+            {net > 0 ? '+' : ''}
+            {formatAmount(net, false, bigBlind)}
+          </dd>
+        </div>
+        <div>
+          <dt className="history-stat-key">WENT TO SHOWDOWN</dt>
+          <dd className="history-stat-value">{showdowns === null ? '--' : `${showdowns}%`}</dd>
+        </div>
+      </dl>
 
-        {rows.length === 0 ? (
-          <p className="history-empty">
-            No hands yet. Every hand this table plays is recorded here, with the seed that dealt it.
-          </p>
-        ) : (
-          <ol className="history-list">
-            {rows.map((row) => {
-              const open = openHand === row.sessionNumber
-              return (
-                <li key={row.sessionNumber} className={`history-row outcome-${row.outcome}`}>
-                  <button
-                    type="button"
-                    className="history-head"
-                    aria-expanded={open}
-                    onClick={() => setOpenHand(open ? null : row.sessionNumber)}
-                  >
-                    <span className="history-number">{row.label}</span>
-                    <span className="history-street">{streetLabel(row.street)}</span>
-                    <span className="history-pot">
-                      {formatAmount(row.potChips, false, bigBlind)}
-                    </span>
-                    <span className="history-outcome">{outcomeLabel(row, bigBlind)}</span>
-                    <span className="history-toggle" aria-hidden="true">
-                      {open ? '−' : '+'}
-                    </span>
-                  </button>
-                  {open ? (
-                    <HandReplay record={row.record} label={row.label} bigBlind={bigBlind} />
-                  ) : null}
-                </li>
-              )
-            })}
-          </ol>
-        )}
-      </section>
-    </div>
+      {rows.length === 0 ? (
+        <p className="history-empty">
+          No hands yet. Every hand this table plays is recorded here, with the seed that dealt it.
+        </p>
+      ) : (
+        <ol className="history-list">
+          {rows.map((row) => {
+            const open = openHand === row.sessionNumber
+            return (
+              <li key={row.sessionNumber} className={`history-row outcome-${row.outcome}`}>
+                <button
+                  type="button"
+                  className="history-head"
+                  aria-expanded={open}
+                  onClick={() => setOpenHand(open ? null : row.sessionNumber)}
+                >
+                  <span className="history-number">{row.label}</span>
+                  <span className="history-street">{streetLabel(row.street)}</span>
+                  <span className="history-pot">{formatAmount(row.potChips, false, bigBlind)}</span>
+                  <span className="history-outcome">{outcomeLabel(row, bigBlind)}</span>
+                  <span className="history-toggle" aria-hidden="true">
+                    {open ? '−' : '+'}
+                  </span>
+                </button>
+                {open ? (
+                  <HandReplay record={row.record} label={row.label} bigBlind={bigBlind} />
+                ) : null}
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </TableModal>
   )
 }
 
