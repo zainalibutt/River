@@ -192,3 +192,109 @@ function multiStreetRecord(...kinds: TurnAction['kind'][]): HandRecord {
     ],
   })
 }
+
+describe('buildReplay pot amounts', () => {
+  const recorded = (
+    seat: number,
+    street: Street,
+    value: TurnAction,
+    amountCommitted: number,
+    potBefore: number,
+  ) => ({ seat, street, action: value, amountCommitted, potBefore })
+
+  it('counts an all in that raises at what it put in, and the call that follows', () => {
+    const frames = buildReplay(
+      record({
+        seats: [
+          { seat: 0, playerId: 'alice', startingStack: 100_000 },
+          { seat: 1, playerId: 'bob', startingStack: 20_000 },
+        ],
+        actions: [
+          recorded(0, 'preflop', { kind: 'raiseTo', to: 1_500 }, 1_250, 750),
+          recorded(1, 'preflop', { kind: 'allIn' }, 19_500, 2_000),
+          recorded(0, 'preflop', { kind: 'call' }, 18_500, 21_500),
+        ],
+        potSize: 40_000,
+      }),
+    )
+    expect(frames.map((frame) => frame.potAfter)).toEqual([750, 2_000, 21_500, 40_000, 40_000])
+  })
+
+  it('starts from the blinds actually posted, short or out of seat order', () => {
+    const frames = buildReplay(
+      record({
+        seats: [
+          { seat: 0, playerId: 'alice', startingStack: 300 },
+          { seat: 1, playerId: 'bob', startingStack: 100_000 },
+        ],
+        actions: [recorded(1, 'preflop', { kind: 'call' }, 50, 550)],
+        potSize: 600,
+      }),
+    )
+    expect(frames[0]?.potAfter).toBe(550)
+    expect(frames[1]?.potAfter).toBe(600)
+  })
+
+  it('caps a short call at what the caller had', () => {
+    const frames = buildReplay(
+      record({
+        seats: [
+          { seat: 0, playerId: 'alice', startingStack: 100_000 },
+          { seat: 1, playerId: 'bob', startingStack: 3_000 },
+        ],
+        actions: [
+          recorded(0, 'preflop', { kind: 'raiseTo', to: 10_000 }, 9_750, 750),
+          recorded(1, 'preflop', { kind: 'call' }, 2_500, 10_500),
+        ],
+        potSize: 13_000,
+      }),
+    )
+    expect(frames[2]?.potAfter).toBe(13_000)
+  })
+
+  it('works an all in out of the stack when a record has no amounts', () => {
+    const frames = buildReplay(
+      record({
+        seats: [
+          { seat: 0, playerId: 'alice', startingStack: 100_000 },
+          { seat: 1, playerId: 'bob', startingStack: 20_000 },
+        ],
+        actions: [
+          action(0, 'preflop', 'raiseTo', 1_500),
+          action(1, 'preflop', 'allIn'),
+          action(0, 'preflop', 'call'),
+        ],
+        potSize: 0,
+      }),
+    )
+    expect(frames.map((frame) => frame.potAfter)).toEqual([750, 2_000, 21_500, 40_000, 40_000])
+  })
+
+  it('starts an old record from the blinds a short stack could post', () => {
+    const frames = buildReplay(
+      record({
+        seats: [
+          { seat: 0, playerId: 'alice', startingStack: 100 },
+          { seat: 1, playerId: 'bob', startingStack: 100_000 },
+        ],
+        actions: [],
+        potSize: 0,
+      }),
+    )
+    expect(frames[0]?.potAfter).toBe(600)
+  })
+
+  it('has an old record call the full big blind when the big blind was short', () => {
+    const frames = buildReplay(
+      record({
+        seats: [
+          { seat: 0, playerId: 'alice', startingStack: 100_000 },
+          { seat: 1, playerId: 'bob', startingStack: 300 },
+        ],
+        actions: [action(0, 'preflop', 'call')],
+        potSize: 0,
+      }),
+    )
+    expect(frames.map((frame) => frame.potAfter)).toEqual([550, 800, 800])
+  })
+})
