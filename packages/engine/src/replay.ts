@@ -19,44 +19,35 @@ const CARDS_BY_STREET: Record<Street, number> = {
 }
 
 export function buildReplay(record: HandRecord): readonly ReplayFrame[] {
-  const blinds = record.stake.smallBlind + record.stake.bigBlind
+  const first = record.actions[0]
+  // The table records what each action actually put in and the pot before it,
+  // so a recorded hand is replayed from those: an all in carries no amount of
+  // its own, a short stack calls for less than the bet, and blinds are posted
+  // by position, which the seat list does not say. Older records without the
+  // amounts fall back to working them out.
+  const recorded =
+    first?.potBefore !== undefined &&
+    record.actions.every((entry) => entry.amountCommitted !== undefined)
+  const inferred = recorded ? null : inferAmounts(record)
+  const startPot =
+    first?.potBefore !== undefined && recorded ? first.potBefore : (inferred?.blinds ?? 0)
   const frames: ReplayFrame[] = [
     {
       index: 0,
       street: 'preflop',
       label: 'Deal',
-      potAfter: blinds,
+      potAfter: startPot,
       boardAfter: [],
       actingSeat: null,
     },
   ]
 
-  let pot = blinds
+  const amounts = inferred?.amounts ?? record.actions.map((entry) => entry.amountCommitted ?? 0)
+  let pot = startPot
   let street: Street = 'preflop'
-  let currentBet = record.stake.bigBlind
-  let committed = new Map<number, number>()
-  seedBlinds(record, committed)
-
-  for (const action of record.actions) {
-    if (action.street !== street) {
-      street = action.street
-      currentBet = 0
-      committed = new Map()
-    }
-    const contribution = committed.get(action.seat) ?? 0
-    let extra = 0
-    if (action.action.kind === 'raiseTo') {
-      extra = Math.max(0, action.action.to - contribution)
-      currentBet = action.action.to
-      committed.set(action.seat, action.action.to)
-    } else if (action.action.kind === 'call') {
-      extra = Math.max(0, currentBet - contribution)
-      committed.set(action.seat, Math.max(currentBet, contribution))
-    } else if (action.action.kind === 'allIn') {
-      extra = Math.max(0, currentBet - contribution)
-      committed.set(action.seat, Math.max(currentBet, contribution))
-    }
-    pot += extra
+  record.actions.forEach((action, index) => {
+    street = action.street
+    pot += amounts[index] ?? 0
     frames.push({
       index: frames.length,
       street,
@@ -65,7 +56,7 @@ export function buildReplay(record: HandRecord): readonly ReplayFrame[] {
       boardAfter: boardFor(record, street),
       actingSeat: action.seat,
     })
-  }
+  })
 
   const settled = record.potSize > 0 ? record.potSize : pot
   frames.push({
@@ -77,6 +68,49 @@ export function buildReplay(record: HandRecord): readonly ReplayFrame[] {
     actingSeat: null,
   })
   return frames
+}
+
+/**
+ * Chips each action put in, for a record that does not say. Capped by what the
+ * seat had left, so an all in is the rest of the stack and a short call is
+ * what the caller could cover. Blinds are assumed posted by the first two
+ * seats listed, which is only right when that is where they sat.
+ */
+function inferAmounts(record: HandRecord): { blinds: number; amounts: number[] } {
+  const left = new Map(record.seats.map((seat) => [seat.seat, seat.startingStack]))
+  let committed = new Map<number, number>()
+  const post = (seat: number | undefined, blind: number) => {
+    if (seat === undefined) return
+    const amount = Math.min(blind, left.get(seat) ?? 0)
+    committed.set(seat, amount)
+    left.set(seat, (left.get(seat) ?? 0) - amount)
+  }
+  post(record.seats[0]?.seat, record.stake.smallBlind)
+  post(record.seats[1]?.seat, record.stake.bigBlind)
+  const blinds = [...committed.values()].reduce((sum, amount) => sum + amount, 0)
+  // A short big blind does not lower the bet: a covering caller still owes the
+  // full blind, as the betting engine has it.
+  let currentBet = record.stake.bigBlind
+  let street: Street = 'preflop'
+  const amounts = record.actions.map((action) => {
+    if (action.street !== street) {
+      street = action.street
+      currentBet = 0
+      committed = new Map()
+    }
+    const before = committed.get(action.seat) ?? 0
+    const stack = left.get(action.seat) ?? 0
+    let extra = 0
+    if (action.action.kind === 'raiseTo') extra = action.action.to - before
+    else if (action.action.kind === 'call') extra = currentBet - before
+    else if (action.action.kind === 'allIn') extra = stack
+    extra = Math.min(stack, Math.max(0, extra))
+    committed.set(action.seat, before + extra)
+    left.set(action.seat, stack - extra)
+    currentBet = Math.max(currentBet, before + extra)
+    return extra
+  })
+  return { blinds, amounts }
 }
 
 export function frameAt(frames: readonly ReplayFrame[], index: number): ReplayFrame | null {
@@ -122,15 +156,4 @@ function formatChips(amount: number): string {
 
 function boardFor(record: HandRecord, street: Street): Card[] {
   return record.board.slice(0, CARDS_BY_STREET[street])
-}
-
-function seedBlinds(record: HandRecord, committed: Map<number, number>): void {
-  const small = record.seats[0]
-  const big = record.seats[1]
-  if (small !== undefined) {
-    committed.set(small.seat, Math.min(record.stake.smallBlind, small.startingStack))
-  }
-  if (big !== undefined) {
-    committed.set(big.seat, Math.min(record.stake.bigBlind, big.startingStack))
-  }
 }
