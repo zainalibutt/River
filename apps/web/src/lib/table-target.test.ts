@@ -6,6 +6,8 @@ import {
   LAST_TABLE_KEY,
   LAST_TABLE_TTL_MS,
   rememberTable,
+  SEAT_HOLD_MS,
+  seatHoldRemaining,
   shortTableLink,
 } from './table-target'
 
@@ -317,5 +319,23 @@ describe('invite links', () => {
     ]) {
       expect(inviteDestination(pasted, 'https://playriver.uk'), pasted).toBeNull()
     }
+  })
+})
+
+describe('seatHoldRemaining', () => {
+  it('counts down from the moment the seat was left', () => {
+    expect(seatHoldRemaining('1000', true, 1000)).toBe(SEAT_HOLD_MS)
+    expect(seatHoldRemaining('1000', true, 11_000)).toBe(SEAT_HOLD_MS - 10_000)
+    expect(seatHoldRemaining('1000', true, 1000 + SEAT_HOLD_MS)).toBe(0)
+  })
+
+  it('says nothing once the table is forgotten, as standing up forgets it', () => {
+    expect(seatHoldRemaining('1000', false, 2000)).toBe(0)
+  })
+
+  it('ignores a missing, garbled or future note', () => {
+    expect(seatHoldRemaining(null, true, 2000)).toBe(0)
+    expect(seatHoldRemaining('soon', true, 2000)).toBe(0)
+    expect(seatHoldRemaining('5000', true, 2000)).toBe(0)
   })
 })

@@ -31,7 +31,12 @@ import {
 import { profilePath } from '@/lib/profile'
 import { riverMusic } from '@/lib/river-music'
 import { startTableHref } from '@/lib/start-table'
-import { inviteDestination } from '@/lib/table-target'
+import {
+  heldSeatRemaining,
+  inviteDestination,
+  LEFT_SEATED_KEY,
+  TABLE_PATH,
+} from '@/lib/table-target'
 import { useInterfaceSound } from '@/lib/use-interface-sound'
 import { useVisibleViewport } from '@/lib/use-visible-viewport'
 
@@ -121,6 +126,74 @@ export function ClubMenu() {
     if (client === null) throw new Error('not signed in yet')
     return (await ensureRiverSession(client)).access_token
   }, [])
+  // A seat walked away from without standing up - Back from a table - is
+  // still held, with the buy-in on it. Said here, with the way back, until the
+  // hold runs out and the stack is paid back; then the balance is read again.
+  const [seatHeldMs, setSeatHeldMs] = useState(0)
+  const [seatReleasing, setSeatReleasing] = useState(false)
+  const meRef = useRef(me)
+  meRef.current = me
+  useEffect(() => {
+    let timer: number | undefined
+    let poll: number | undefined
+    const readBalance = async (): Promise<number | null> => {
+      try {
+        const response = await fetch('/api/me', {
+          headers: { authorization: `Bearer ${await accessToken()}` },
+          cache: 'no-store',
+        })
+        if (!response.ok) return null
+        const body = (await response.json()) as Me
+        setMe((current) => (current === null ? body : { ...current, balance: body.balance }))
+        return body.balance
+      } catch {
+        return null
+      }
+    }
+    // The hold ending is not the payout: a release waits out a hand being
+    // dealt or a turn still on its clock. Read the balance until the stack
+    // lands, for a minute and a half at most.
+    const awaitRelease = () => {
+      const before = meRef.current?.balance ?? null
+      let reads = 0
+      setSeatReleasing(true)
+      poll = window.setInterval(() => {
+        reads += 1
+        void readBalance().then((balance) => {
+          const landed = balance !== null && before !== null && balance > before
+          if ((landed || reads >= 18) && poll !== undefined) {
+            window.clearInterval(poll)
+            poll = undefined
+            setSeatReleasing(false)
+          }
+        })
+      }, 5_000)
+    }
+    const tick = () => {
+      const left = heldSeatRemaining()
+      setSeatHeldMs(left)
+      if (left > 0) return
+      window.clearInterval(timer)
+      timer = undefined
+      if (poll === undefined) awaitRelease()
+    }
+    const start = () => {
+      if (timer !== undefined || heldSeatRemaining() === 0) return
+      tick()
+      timer = window.setInterval(tick, 1_000)
+    }
+    start()
+    // A table closed in another tab after this one opened.
+    const stored = (event: StorageEvent) => {
+      if (event.key === LEFT_SEATED_KEY) start()
+    }
+    window.addEventListener('storage', stored)
+    return () => {
+      window.clearInterval(timer)
+      window.clearInterval(poll)
+      window.removeEventListener('storage', stored)
+    }
+  }, [accessToken])
   const [signIn, setSignIn] = useState<'idle' | 'editing' | 'sent' | 'error'>('idle')
   const [returning, setReturning] = useState(false)
   const [email, setEmail] = useState('')
@@ -413,6 +486,27 @@ export function ClubMenu() {
 
       <div className="club-home-body">
         <main className="club-home-content">
+          {seatHeldMs > 0 ? (
+            <section className="club-seat-held" aria-label="Your seat">
+              <p role="status">
+                <strong>You are still seated at your table.</strong>
+                <span>
+                  Your seat is held for {Math.ceil(seatHeldMs / 1000)} s. After that it is released
+                  and your chips come back to your balance.
+                </span>
+              </p>
+              <button type="button" onClick={() => router.push(TABLE_PATH)}>
+                Return to table
+              </button>
+            </section>
+          ) : seatReleasing ? (
+            <section className="club-seat-held" aria-label="Your seat">
+              <p role="status">
+                <strong>Releasing your seat.</strong>
+                <span>Your chips show in your balance as soon as the table lets the seat go.</span>
+              </p>
+            </section>
+          ) : null}
           <section className="club-home-play" aria-label="Solo play">
             <button
               type="button"
