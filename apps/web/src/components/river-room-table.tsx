@@ -1681,7 +1681,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 }}
               >
                 {leaveState === 'idle'
-                  ? 'LEAVE TABLE'
+                  ? 'HOLD TO LEAVE'
                   : leaveState === 'waiting'
                     ? 'LEAVING AFTER HAND'
                     : 'LEAVING'}
@@ -2329,9 +2329,12 @@ function waitingCopy(
   if (view.phase !== 'open') return null
   if (seatedCount === 0) return 'Taking your seat…'
   if (seatedCount + botSeats < 2) return 'Waiting for one more player.'
-  return isHost
-    ? 'Table is ready. DEAL when your group is seated.'
-    : 'Waiting for the host to deal.'
+  if (!isHost) return 'Waiting for the host to deal.'
+  // With bots filling the seats there is no group to wait for.
+  // Bots sit down on the deal, so until then the felt looks empty: say who is coming.
+  if (botSeats === 1) return 'Table is ready. Press DEAL and your opponent sits down.'
+  if (botSeats > 1) return `Table is ready. Press DEAL and ${botSeats} players sit down.`
+  return 'Table is ready. DEAL when your group is seated.'
 }
 
 function kickCopy(reason: Exclude<KickState, null>['reason']): string {
@@ -2405,6 +2408,13 @@ function TableCluster({
             ? hero.hole.map((card) => <PlayingCard key={`${card.rank}${card.suit}`} card={card} />)
             : [<CardBack key="first" />, <CardBack key="second" />]}
           {hero.folded ? <span className="fold-stamp" aria-hidden="true" /> : null}
+          {/* The phone says it under its cards; the desktop said nothing, and
+              face-down cards read as a hand nobody can see. */}
+          {peek || hero.folded ? null : (
+            <span className="hero-peek-hint" aria-hidden="true">
+              HOLD TO PEEK
+            </span>
+          )}
         </button>
       ) : null}
       {hero === undefined ? null : (
@@ -3013,6 +3023,9 @@ function ActionMenu({
             {checking ? MENU_ICON.check : MENU_ICON.call}
           </svg>
         </HoldAction>
+        <span className="action-caption" aria-hidden="true">
+          {labels.call}
+        </span>
       </span>
       <span className="action-slot raise" {...slotEvents('raise')}>
         {legal.raiseTo.enabled ? (
@@ -3040,6 +3053,9 @@ function ActionMenu({
             </svg>
           </HoldAction>
         )}
+        <span className="action-caption" aria-hidden="true">
+          {labels.raise}
+        </span>
       </span>
       <span className="action-slot fold" {...slotEvents('fold')}>
         {/* Folding when checking is free is always a mistake, so it is the one
@@ -3057,6 +3073,11 @@ function ActionMenu({
             {MENU_ICON.fold}
           </svg>
         </HoldAction>
+        {/* Said, because a fold that wants a hold looked like a button that
+            had not heard the click, and the second click landed on Check. */}
+        <span className="action-caption" aria-hidden="true">
+          {checking ? 'HOLD TO FOLD' : 'FOLD'}
+        </span>
       </span>
     </section>
   )

@@ -1588,6 +1588,19 @@ button.invite-chip.showing-code {
     inset 0 0 0 1px var(--river-brass);
 }
 
+.hero-cards .hero-peek-hint {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  color: rgb(244 236 220 / 70%);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  pointer-events: none;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 85%);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
 .hud-corner > .leave-table {
   position: relative;
   overflow: hidden;
@@ -4009,6 +4022,22 @@ button.verify-pill.verify-mismatch {
   position: absolute;
   width: 66px;
   height: 66px;
+}
+
+/* Every action says what it is: icons alone timed a new player out. */
+.action-caption {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  color: rgb(244 236 220 / 82%);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgb(0 0 0 / 90%);
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .action-slot.call {
