@@ -1843,6 +1843,8 @@ export class RoomHub {
     const seat = view.seats.find((item) => item.playerId === playerId)
     if (seat !== undefined && !seat.disconnected) return true
     if (view.phase === 'seeding') return false
+    // Their turn is still on its clock; the deadline settles it, then retry.
+    if (state.room.heldTurnFor(playerId)) return false
     const result = state.room.submit({ kind: 'expireReconnect', playerId })
     if (!result.ok) {
       // Without a seat nothing is at stake: the player is already gone, or back.
