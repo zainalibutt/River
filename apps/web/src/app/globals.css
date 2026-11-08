@@ -1702,6 +1702,16 @@ button.invite-chip.showing-code {
     color: var(--river-cream-dim);
   }
 
+  .viewport-turn {
+    margin: 8px 0 0;
+    padding: 10px 18px;
+    border: 1px solid var(--club-brass-bright);
+    border-radius: 999px;
+    color: var(--river-amber-bright);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
   .viewport-rotate,
   .viewport-small {
     display: grid;

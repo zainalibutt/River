@@ -2286,6 +2286,16 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
         <div className="viewport-small">
           <strong>Turn your phone upright.</strong>
           <span>The phone table is laid out upright, with your controls at the bottom.</span>
+          {/* The table is hidden sideways, and its clock is not: without this a
+              rotate on your turn ended in a timeout nobody saw coming. */}
+          {localTurn && turnRemaining !== null ? (
+            <p className="viewport-turn" role="status">
+              Your turn: {Math.max(0, Math.ceil(turnRemaining / 1000))} s left
+              {view.legal?.call.enabled
+                ? `, ${formatAmount(view.legal.call.amount, false, bigBlind)} to call`
+                : ''}
+            </p>
+          ) : null}
         </div>
       </div>
       {arriving ? (
