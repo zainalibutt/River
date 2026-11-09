@@ -42,6 +42,7 @@ import { HandRecorder } from './hand-recorder.js'
 import type {
   AwayPolicy,
   KickReason,
+  RabbitOffer,
   RoomCommand,
   RoomConfig,
   RoomEvent,
@@ -228,6 +229,13 @@ export class Room implements RoomHandle {
   /** Players who show a losing hand at a showdown rather than throwing it away. */
   private readonly alwaysShow = new Set<string>()
   private drawPile: DrawPile | null = null
+  /** The undealt board of a hand that ended early, until the next hand starts. */
+  private rabbit: {
+    handNumber: number
+    cards: Card[]
+    dealtIn: Set<string>
+    shown: boolean
+  } | null = null
   private currentCommit: string | null = null
   private pendingServerSeed: string | null = null
   private currentServerSeed: string | null = null
@@ -413,7 +421,55 @@ export class Room implements RoomHandle {
         return this.expireReconnect(command.playerId)
       case 'showHands':
         return this.showHands(command.playerId, command.always)
+      case 'rabbitHunt':
+        return this.rabbitHunt(command.playerId)
     }
+  }
+
+  /**
+   * The rabbit on offer to this player now, or null: only to somebody dealt into that
+   * hand, and with its cards only once somebody has turned them over.
+   */
+  rabbitFor(playerId: string): RabbitOffer | null {
+    const rabbit = this.rabbit
+    if (rabbit === null || !rabbit.dealtIn.has(playerId)) return null
+    const live =
+      rabbit.handNumber === this.handNumber
+        ? this.phase === 'between'
+        : rabbit.handNumber === this.handNumber - 1
+    if (!live) return null
+    return {
+      handNumber: rabbit.handNumber,
+      cards: rabbit.shown ? rabbit.cards.map((card) => ({ ...card })) : null,
+    }
+  }
+
+  /**
+   * Turn over the rabbit for the hand last settled. Once per hand, by anybody dealt in,
+   * never while the hand those cards belong to is live.
+   */
+  private rabbitHunt(playerId: string): RoomResult {
+    const rabbit = this.rabbit
+    // The gap after an early fold is three seconds, too short to decide in, so the
+    // rabbit stays on offer through the next hand: another deck, so it tells nothing
+    // about the hand being played. It goes when that hand settles.
+    const settled =
+      rabbit !== null &&
+      (rabbit.handNumber === this.handNumber
+        ? this.phase === 'between'
+        : rabbit.handNumber === this.handNumber - 1)
+    if (rabbit === null || !settled) {
+      return this.reject(playerId, 'no rabbit to hunt')
+    }
+    if (!rabbit.dealtIn.has(playerId)) return this.reject(playerId, 'not in that hand')
+    if (rabbit.shown) return { ok: true, events: [] }
+    rabbit.shown = true
+    return this.result({
+      kind: 'rabbit',
+      handNumber: rabbit.handNumber,
+      playerId,
+      cards: rabbit.cards.map((card) => ({ ...card })),
+    })
   }
 
   /** A preference, not an action: it changes nothing anybody else can see until a showdown. */
@@ -1170,6 +1226,8 @@ export class Room implements RoomHandle {
     }
     const winners = new Set<string>()
     const muckedPlayerIds: string[] = []
+    // The last hand's rabbit has had its hand to be asked for.
+    this.rabbit = null
     this.advanceBoard(betting.street, events)
     // An all-in run-out: the streets betting never reached are dealt in the message that
     // ends the hand, some before this point and some by advanceBoard above. The table turns
@@ -1184,6 +1242,18 @@ export class Room implements RoomHandle {
       this.syncStacks(betting)
       winners.add(winnerId)
       events.push({ kind: 'uncontested', playerId: winnerId, amount })
+      // Kept, not sent: the next cards off this hand's deck, read now while it is still
+      // the hand's, and turned over only if somebody asks once the hand is settled.
+      const missing = 5 - this.board.length
+      if (this.drawPile !== null && missing > 0) {
+        const drawPile = this.drawPile
+        this.rabbit = {
+          handNumber: this.handNumber,
+          cards: Array.from({ length: missing }, () => drawPile.next()),
+          dealtIn: new Set(betting.players.map((player) => player.id)),
+          shown: false,
+        }
+      }
     } else {
       this.revealed = true
       // The house rule: hands are shown in the dealer's order and a hand that cannot beat

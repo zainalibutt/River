@@ -1,10 +1,13 @@
 import {
   claimDaily,
+  DAILY_WHEEL_PRIZES,
+  dailyWheelSegment,
   deriveEconomyState,
   type EconomyConfig,
   type EconomyStatus,
   economyStatus,
   type LedgerRow,
+  utcDay,
 } from '@river/engine'
 
 /**
@@ -100,7 +103,7 @@ export async function readEconomyStatus(
 }
 
 export type DailyClaim =
-  | { kind: 'granted'; delta: number; balance: number; status: EconomyStatus }
+  | { kind: 'granted'; delta: number; segment: number; balance: number; status: EconomyStatus }
   | { kind: 'already-claimed'; status: EconomyStatus }
 
 /** Claims today's daily chips for this player, once, by the engine's rule. */
@@ -111,7 +114,9 @@ export async function claimDailyChips(
 ): Promise<DailyClaim> {
   const [rows, config] = await Promise.all([readRows(rest, playerId), readConfig(rest)])
   const state = { ...deriveEconomyState(rows, true, nowMs), playerId }
-  const decision = claimDaily(state, config, nowMs)
+  // Keyed exactly as the table's claim is, so either one pays the same prize, once.
+  const segment = await dailyWheelSegment(rest.serviceRoleKey, playerId, utcDay(nowMs))
+  const decision = claimDaily(state, config, nowMs, DAILY_WHEEL_PRIZES[segment])
   if (decision === null) {
     return { kind: 'already-claimed', status: economyStatus(state, config, nowMs) }
   }
@@ -132,6 +137,7 @@ export async function claimDailyChips(
   return {
     kind: 'granted',
     delta: decision.delta,
+    segment,
     balance: Number.isFinite(balance) ? balance : state.balance + decision.delta,
     status: economyStatus(decision.nextState, config, nowMs),
   }

@@ -62,6 +62,7 @@ import { type PlayerHandStore, playerHandRows } from './player-hand-store.js'
 import type { PlayerNames } from './player-names.js'
 import type {
   Emote,
+  RabbitOffer,
   RoomCommand,
   RoomEvent,
   RoomResult,
@@ -103,6 +104,8 @@ export type ClientRoomCommand =
   | { kind: 'rebuy'; amount: number }
   /** Show a losing hand at a showdown rather than throwing it away. */
   | { kind: 'showHands'; always: boolean }
+  /** Turn over the board a hand that ended early never dealt. */
+  | { kind: 'rabbitHunt' }
 
 export type ClientSocialCommand =
   | { kind: 'chat'; text: string }
@@ -173,6 +176,8 @@ export type ServerMessage =
        */
       botSeats: number
       botPreset: BotTablePreset
+      /** The rabbit this player may hunt or has seen, after a hand that ended early. */
+      rabbit: RabbitOffer | null
     }
   | { kind: 'social'; roomId: string; requestId: string | null; event: SocialEvent }
   | { kind: 'tables'; requestId: string; tables: TableSummary[] }
@@ -472,6 +477,8 @@ function roomCommand(value: unknown): ClientRoomCommand | null {
         : null
     case 'showHands':
       return typeof value.always === 'boolean' ? { kind: 'showHands', always: value.always } : null
+    case 'rabbitHunt':
+      return { kind: 'rabbitHunt' }
     default:
       return null
   }
@@ -1312,6 +1319,7 @@ export class RoomHub {
       ownedCosmetics: connection.ownedCosmetics.map((entry) => ({ ...entry })),
       botSeats: state.botSeats,
       botPreset: state.botPreset,
+      rabbit: state.room.rabbitFor(player.playerId),
       events: result.events,
     }
     this.completed.set(cacheKey, reply)
@@ -1565,6 +1573,8 @@ export class RoomHub {
         return { ...command, playerId }
       case 'showHands':
         return { ...command, playerId }
+      case 'rabbitHunt':
+        return { kind: 'rabbitHunt', playerId }
     }
   }
 
@@ -2736,6 +2746,7 @@ export class RoomHub {
       ownedCosmetics: connection.ownedCosmetics.map((entry) => ({ ...entry })),
       botSeats: state.botSeats,
       botPreset: state.botPreset,
+      rabbit: state.room.rabbitFor(player.playerId),
       events,
     })
   }

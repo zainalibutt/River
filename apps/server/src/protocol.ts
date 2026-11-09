@@ -99,6 +99,8 @@ export type RoomCommand =
   | { kind: 'expireReconnect'; playerId: string }
   /** Whether this player shows a losing hand at a showdown rather than throwing it away. */
   | { kind: 'showHands'; playerId: string; always: boolean }
+  /** Turn over the cards that would have come, after a hand that ended before the river. */
+  | { kind: 'rabbitHunt'; playerId: string }
 
 export type RoomEvent =
   | { kind: 'joined'; playerId: string; name: string }
@@ -128,6 +130,12 @@ export type RoomEvent =
   | { kind: 'timedOut'; playerId: string; action: TurnAction }
   | { kind: 'awayPlayed'; playerId: string; action: TurnAction }
   | { kind: 'uncontested'; playerId: string; amount: number }
+  /**
+   * The rabbit: the board cards a hand that ended early never dealt, turned over on a
+   * player's ask once the hand is settled. They come off the same committed deck in the
+   * order they would have been dealt, and they change no chips and no record.
+   */
+  | { kind: 'rabbit'; handNumber: number; playerId: string; cards: Card[] }
   | {
       kind: 'showdown'
       awards: { playerId: string; amount: number }[]
@@ -168,6 +176,12 @@ export interface RoomSeatView {
   busted: boolean
   disconnected: boolean
   dealer: boolean
+}
+
+/** The rabbit as one player may see it: offered to those dealt in, its cards once turned. */
+export interface RabbitOffer {
+  handNumber: number
+  cards: Card[] | null
 }
 
 export interface RoomView {
