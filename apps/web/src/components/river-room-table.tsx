@@ -1507,7 +1507,9 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
           }}
           peek={peek}
           onPeek={setPeek}
-          localTurn={localTurn}
+          // A tab another tab took over shows no turn: its buttons would look
+          // live and do nothing. It offers to play here instead.
+          localTurn={localTurn && kick === null}
           connected={connection === 'connected'}
           status={
             kick === null
@@ -1537,6 +1539,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
               seated={selfSeat !== null}
               kicked={kick !== null}
+              rejoinLabel={kick?.reason === 'duplicate-session' ? 'PLAY HERE' : 'RETURN TO TABLE'}
               preset={preset}
               onPreset={setPreset}
               presetArmable={false}
@@ -2272,6 +2275,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
               seated={selfSeat !== null}
               kicked={kick !== null}
+              rejoinLabel={kick?.reason === 'duplicate-session' ? 'PLAY HERE' : 'RETURN TO TABLE'}
               preset={preset}
               onPreset={setPreset}
               presetArmable={presetArmable}
@@ -2765,6 +2769,7 @@ function ActionMenu({
   canDeal,
   seated,
   kicked,
+  rejoinLabel,
   onRejoin,
   preset,
   onPreset,
@@ -2792,6 +2797,8 @@ function ActionMenu({
   canDeal: boolean
   seated: boolean
   kicked: boolean
+  /** What the way back says: PLAY HERE when another tab has the seat. */
+  rejoinLabel: string
   onRejoin: () => void
   preset: PresetKind | null
   onPreset: (kind: PresetKind | null) => void
@@ -2852,7 +2859,7 @@ function ActionMenu({
     return (
       <div className="ram ram-solo">
         <button type="button" onClick={onRejoin}>
-          RETURN TO TABLE
+          {rejoinLabel}
         </button>
       </div>
     )
