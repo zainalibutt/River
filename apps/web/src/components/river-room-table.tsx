@@ -53,6 +53,7 @@ import { sizingPresets } from '@/lib/betting'
 import { botAdmissionDestination } from '@/lib/bot-capabilities'
 import { affordableBuyIn } from '@/lib/buy-in'
 import { type ChipMoment, chipMomentFor } from '@/lib/chip-flow'
+import { coachLine, firstHandPlayed, markFirstHandPlayed } from '@/lib/first-hand'
 import { readoutFor } from '@/lib/hand-readout'
 import { type SessionHand, withSettledHands } from '@/lib/history'
 import { phoneViewport } from '@/lib/phone-layout'
@@ -553,6 +554,10 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     setSaveDismissed(true)
   }
   const [hands, setHands] = useState<readonly SessionHand[]>([])
+  // A hand played to the end here ends the first-hand coaching for good.
+  useEffect(() => {
+    if (hands.length > 0) markFirstHandPlayed()
+  }, [hands.length])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [tables, setTables] = useState<readonly TableSummary[]>([])
   const [lobbyOpen, setLobbyOpen] = useState(false)
@@ -2804,6 +2809,11 @@ function ActionMenu({
 }) {
   const [lit, setLit] = useState<MenuSlot | null>(null)
   const [raising, setRaising] = useState(false)
+  // Read per turn rather than once: the first hand ends between two turns.
+  const [coaching, setCoaching] = useState(false)
+  useEffect(() => {
+    if (turnKey.length > 0) setCoaching(!firstHandPlayed())
+  }, [turnKey])
   const legal = localTurn ? view.legal : null
 
   // A raise layer left open, or a slot left lit, must not survive into the
@@ -3024,6 +3034,15 @@ function ActionMenu({
     <section className="action-menu" aria-label="Your action">
       <TurnArc key={turnKey} remainingMs={remainingMs} budgetMs={budgetMs} />
       <p className="action-label">{lit === null ? 'YOUR TURN' : labels[lit]}</p>
+      {coaching ? (
+        <p className="action-coach" role="note">
+          {coachLine(
+            checking,
+            checking ? 'Check' : `Call ${formatAmount(legal.call.amount, false, bigBlind)}`,
+            legal.raiseTo.enabled,
+          )}
+        </p>
+      ) : null}
       {/* Shown only once a keyboard is on the buttons: the keys that skip them. */}
       <p className="action-keys" aria-hidden="true">
         <kbd>C</kbd> {checking ? 'CHECK' : 'CALL'}
