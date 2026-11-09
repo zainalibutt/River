@@ -2,6 +2,7 @@
 
 import type { EconomyStatus } from '@river/engine'
 import { useCallback, useEffect, useState } from 'react'
+import { DailyWheel, WHEEL_SPIN_MS } from '@/components/daily-wheel'
 
 /**
  * Daily chips, where a player can see them: on the menu's player capsule.
@@ -50,6 +51,7 @@ export function DailyChips({
   onBalance: (balance: number) => void
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' })
+  const [wheelOpen, setWheelOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
   const call = useCallback(
@@ -62,7 +64,13 @@ export function DailyChips({
       if (!response.ok) throw new Error(`daily chips ${response.status}`)
       return response.json() as Promise<
         | { status: EconomyStatus }
-        | { kind: 'granted'; delta: number; balance: number; status: EconomyStatus }
+        | {
+            kind: 'granted'
+            delta: number
+            segment: number
+            balance: number
+            status: EconomyStatus
+          }
         | { kind: 'already-claimed'; status: EconomyStatus }
       >
     },
@@ -91,49 +99,60 @@ export function DailyChips({
 
   if (phase.kind === 'loading' || phase.kind === 'unavailable') return null
   const status = phase.status
-  const claim = async () => {
-    if (phase.kind !== 'ready') return
+  // The wheel claims, then turns to what the server granted. The balance and the
+  // capsule change only once it has settled, so the count does not give the prize away.
+  const spin = async (): Promise<{ segment: number; delta: number } | null> => {
+    if (phase.kind !== 'ready') return null
     setPhase({ kind: 'claiming', status })
     try {
       const body = await call('POST')
       if ('kind' in body && body.kind === 'granted') {
-        onBalance(body.balance)
-        setPhase({ kind: 'claimed', delta: body.delta, status: body.status })
-      } else {
-        setPhase({ kind: 'ready', status: body.status })
+        const granted = body
+        window.setTimeout(() => {
+          onBalance(granted.balance)
+          setPhase({ kind: 'claimed', delta: granted.delta, status: granted.status })
+        }, WHEEL_SPIN_MS)
+        return { segment: granted.segment, delta: granted.delta }
       }
+      setPhase({ kind: 'ready', status: body.status })
+      return null
     } catch {
       setPhase({ kind: 'ready', status })
+      return null
     }
   }
 
   return (
     <div className="club-daily" aria-live="polite">
+      {wheelOpen ? (
+        <DailyWheel
+          prizes={status.daily.prizes}
+          onSpin={spin}
+          onClose={() => setWheelOpen(false)}
+        />
+      ) : null}
       <div className="club-capsule-label">Daily chips</div>
       {phase.kind === 'claimed' ? (
         <div className="club-daily-line">
           <strong>+{phase.delta.toLocaleString('en-GB')}</strong>
           <span className="club-capsule-sub">
-            Day {status.daily.streakDay} · next in {untilText(status.daily.nextAtMs, now)}
+            Next spin in {untilText(status.daily.nextAtMs, now)}
           </span>
         </div>
       ) : status.daily.claimable ? (
         <div className="club-daily-line">
-          {/* A present to open rather than a figure to read: the amount is the surprise,
-              and stays in the button's name for anyone who cannot see the icon. */}
+          {/* The present now opens the day's spin: what it pays is the wheel's, not a sum. */}
           <button
             type="button"
             className="club-daily-claim"
-            aria-label={`Claim ${status.daily.amount.toLocaleString('en-GB')}`}
-            title={`Claim ${status.daily.amount.toLocaleString('en-GB')} chips`}
+            aria-label="Spin the daily wheel"
+            title="Spin the daily wheel"
             disabled={phase.kind === 'claiming'}
-            onClick={() => void claim()}
+            onClick={() => setWheelOpen(true)}
           >
             <GiftMark />
           </button>
-          <span className="club-capsule-sub">
-            {status.daily.streakDay > 1 ? `Day ${status.daily.streakDay} streak` : 'Day 1'}
-          </span>
+          <span className="club-capsule-sub">Free spin ready</span>
         </div>
       ) : (
         <div className="club-daily-line">

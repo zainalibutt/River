@@ -1,5 +1,13 @@
 import type { EconomyConfig, EconomyState } from '@river/engine'
-import { claimDaily, claimRescue, deriveEconomyState, type LedgerRow, utcDay } from '@river/engine'
+import {
+  claimDaily,
+  claimRescue,
+  DAILY_WHEEL_PRIZES,
+  dailyWheelSegment,
+  deriveEconomyState,
+  type LedgerRow,
+  utcDay,
+} from '@river/engine'
 import type { Ledger, LedgerEntry } from './ledger.js'
 
 export type GrantOutcome =
@@ -14,6 +22,8 @@ export interface EconomyDeps {
   readConfig(): Promise<EconomyConfig>
   apply(entry: LedgerEntry): Promise<number>
   seated(playerId: string): Promise<boolean>
+  /** The server secret the daily wheel is keyed by; without it the flat daily gift pays. */
+  wheelSecret?: string
 }
 
 export interface EconomyRestClient {
@@ -39,7 +49,11 @@ export async function claimDailyFor(
   const config = await deps.readConfig()
   const rows = await deps.readRows(playerId)
   const state = { ...deriveEconomyState(rows, await deps.seated(playerId), nowMs), playerId }
-  const decision = claimDaily(state, config, nowMs)
+  const prize =
+    deps.wheelSecret === undefined
+      ? undefined
+      : DAILY_WHEEL_PRIZES[await dailyWheelSegment(deps.wheelSecret, playerId, utcDay(nowMs))]
+  const decision = claimDaily(state, config, nowMs, prize)
   if (decision === null) {
     return { kind: 'ineligible', reason: 'already-claimed' }
   }
@@ -109,6 +123,8 @@ export function createSupabaseEconomy(options: SupabaseEconomyOptions): Supabase
       return loadEconomyConfig({ supabaseUrl: baseUrl, serviceRoleKey: options.serviceRoleKey })
     },
     apply: (entry: LedgerEntry) => options.ledger.apply(entry),
+    // The service key never leaves the server, so it keys the wheel with no new secret to deploy.
+    wheelSecret: options.serviceRoleKey,
   }
 }
 
