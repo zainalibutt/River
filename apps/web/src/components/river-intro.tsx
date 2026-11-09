@@ -118,6 +118,10 @@ export function RiverIntro() {
       gate.current?.focus()
       const key = (event: KeyboardEvent) => {
         if (event.key === 'Enter' || event.key === ' ') return
+        // Tab moves focus and a modifier on its own is half a shortcut: neither
+        // is somebody choosing to come in. Tab entering also left focus on the
+        // menu's Sound button, so the next Enter muted the game.
+        if (event.key === 'Tab' || ['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return
         enter()
       }
       window.addEventListener('keydown', key)
@@ -192,6 +196,12 @@ export function RiverIntro() {
             <span className="intro-gate-click">Click to enter</span>
           </span>
         </button>
+      ) : null}
+      {phase === 'film' || phase === 'ident' ? (
+        <p className="intro-skip" aria-hidden="true">
+          <span className="intro-gate-tap">Tap to skip</span>
+          <span className="intro-gate-click">Press any key to skip</span>
+        </p>
       ) : null}
       {phase === 'film' ? (
         <video
