@@ -3916,9 +3916,10 @@ button.verify-pill.verify-mismatch {
 /* First hand only: what the wheel's three buttons mean, beside the wheel. */
 .action-coach {
   position: absolute;
-  top: 54px;
+  /* Low and wide: level with the wheel it sat over the next seat's medallion. */
+  top: 150px;
   right: calc(100% + 18px);
-  width: 230px;
+  width: 300px;
   margin: 0;
   padding: 12px 14px;
   border: 1px solid var(--river-brass-lit);
