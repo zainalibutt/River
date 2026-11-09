@@ -554,6 +554,9 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     setSaveDismissed(true)
   }
   const [hands, setHands] = useState<readonly SessionHand[]>([])
+  // The rabbit for the hand just ended early: offered once it is settled, its cards once
+  // somebody asks, gone when the next hand is dealt.
+  const [rabbit, setRabbit] = useState<{ handNumber: number; cards: Card[] | null } | null>(null)
   // Bumped on every reconnect, so the felt lays the next view out rather than dealing it.
   const [resync, setResync] = useState(0)
   // A hand played to the end here ends the first-hand coaching for good.
@@ -833,6 +836,9 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             setShowdown(plan)
             setShowdownAtMs(-1)
           }
+          // The server says what rabbit this player may hunt or has seen, in every
+          // snapshot, so a reload or a missed reveal finds it as it stands.
+          setRabbit(message.rabbit ?? null)
           if (message.events.some((event) => event.kind === 'handStarted')) {
             setHeldPeeks([])
             // A showdown still being told when the next hand is dealt is over: what it held
@@ -1526,42 +1532,48 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               : kickCopy(kick.reason)
           }
           waitingActions={
-            <ActionMenu
-              view={shownView}
-              localTurn={false}
-              raiseTo={raiseTo}
-              onRaiseTo={setRaiseTo}
-              onAction={(action) => command({ kind: 'act', action })}
-              onDeal={() => command({ kind: 'startHand' })}
-              rebuyAmount={entryBuyIn}
-              onRebuy={(amount) =>
-                setSeatRequest((current) => toggleSeatRequest(current, { kind: 'rebuy', amount }))
-              }
-              onStand={() =>
-                setSeatRequest((current) => toggleSeatRequest(current, { kind: 'stand' }))
-              }
-              pendingSeat={pendingSeat}
-              balance={balance}
-              claimsEnabled={connection === 'connected'}
-              onClaimDaily={() => socketRef.current?.claimDaily()}
-              onClaimRescue={() => socketRef.current?.claimRescue()}
-              canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
-              seated={selfSeat !== null}
-              kicked={kick !== null}
-              rejoinLabel={kick?.reason === 'duplicate-session' ? 'PLAY HERE' : 'RETURN TO TABLE'}
-              preset={preset}
-              onPreset={setPreset}
-              presetArmable={false}
-              remainingMs={turnRemaining}
-              budgetMs={view.turnBudgetMs}
-              turnKey={`${view.handNumber}:${view.street}:${view.currentActor?.playerId ?? ''}:${view.turnDeadlineMs ?? ''}`}
-              onRejoin={() => {
-                kickRef.current = null
-                setKick(null)
-                socketRef.current?.enter(roomId, nameRef.current, joinCode || undefined)
-              }}
-              bigBlind={bigBlind}
-            />
+            <>
+              <RabbitHunt
+                rabbit={rabbit}
+                onHunt={() => socketRef.current?.command({ kind: 'rabbitHunt' })}
+              />
+              <ActionMenu
+                view={shownView}
+                localTurn={false}
+                raiseTo={raiseTo}
+                onRaiseTo={setRaiseTo}
+                onAction={(action) => command({ kind: 'act', action })}
+                onDeal={() => command({ kind: 'startHand' })}
+                rebuyAmount={entryBuyIn}
+                onRebuy={(amount) =>
+                  setSeatRequest((current) => toggleSeatRequest(current, { kind: 'rebuy', amount }))
+                }
+                onStand={() =>
+                  setSeatRequest((current) => toggleSeatRequest(current, { kind: 'stand' }))
+                }
+                pendingSeat={pendingSeat}
+                balance={balance}
+                claimsEnabled={connection === 'connected'}
+                onClaimDaily={() => socketRef.current?.claimDaily()}
+                onClaimRescue={() => socketRef.current?.claimRescue()}
+                canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
+                seated={selfSeat !== null}
+                kicked={kick !== null}
+                rejoinLabel={kick?.reason === 'duplicate-session' ? 'PLAY HERE' : 'RETURN TO TABLE'}
+                preset={preset}
+                onPreset={setPreset}
+                presetArmable={false}
+                remainingMs={turnRemaining}
+                budgetMs={view.turnBudgetMs}
+                turnKey={`${view.handNumber}:${view.street}:${view.currentActor?.playerId ?? ''}:${view.turnDeadlineMs ?? ''}`}
+                onRejoin={() => {
+                  kickRef.current = null
+                  setKick(null)
+                  socketRef.current?.enter(roomId, nameRef.current, joinCode || undefined)
+                }}
+                bigBlind={bigBlind}
+              />
+            </>
           }
           raiseTo={raiseTo}
           onRaiseTo={setRaiseTo}
@@ -2263,6 +2275,10 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 {presetNotice}
               </div>
             )}
+            <RabbitHunt
+              rabbit={rabbit}
+              onHunt={() => socketRef.current?.command({ kind: 'rabbitHunt' })}
+            />
             <ActionMenu
               view={shownView}
               localTurn={localTurn}
@@ -3574,5 +3590,38 @@ function UpgradePanel({
         How River uses your email
       </a>
     </form>
+  )
+}
+
+/**
+ * The rabbit: after a hand that ended before the river, the cards that would have come.
+ * A button while nobody has asked, then the cards themselves, until the next deal.
+ */
+function RabbitHunt({
+  rabbit,
+  onHunt,
+}: {
+  rabbit: { handNumber: number; cards: Card[] | null } | null
+  onHunt: () => void
+}) {
+  if (rabbit === null) return null
+  if (rabbit.cards === null)
+    return (
+      <div className="rabbit-hunt">
+        <button type="button" onClick={onHunt}>
+          RABBIT HUNT
+        </button>
+        <span>See what would have come</span>
+      </div>
+    )
+  return (
+    <section className="rabbit-hunt shown" aria-label="The cards that would have come">
+      <span>WOULD HAVE COME</span>
+      <div className="rabbit-cards">
+        {rabbit.cards.map((card) => (
+          <PlayingCard key={`${card.rank}${card.suit}`} card={card} />
+        ))}
+      </div>
+    </section>
   )
 }

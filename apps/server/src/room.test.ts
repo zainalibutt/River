@@ -866,3 +866,64 @@ describe('per-player projection and adversarial hidden information', () => {
     expect(roomA.viewFor('alice').phase).toBe('between')
   })
 })
+
+describe('rabbit hunt', () => {
+  it('turns over the board a preflop fold never dealt, in deal order, once', () => {
+    const room = makeRoom('rabbit', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    expect(room.submit({ kind: 'rabbitHunt', playerId: 'bob' }).ok).toBe(false)
+    const actor = room.viewFor('alice').currentActor?.playerId ?? 'alice'
+    room.submit({ kind: 'act', playerId: actor, action: { kind: 'fold' } })
+    expect(room.viewFor('alice').phase).toBe('between')
+    const hunted = room.submit({ kind: 'rabbitHunt', playerId: 'bob' })
+    expect(hunted.ok).toBe(true)
+    const rabbit = hunted.events.find((event) => event.kind === 'rabbit')
+    expect(rabbit?.kind === 'rabbit' ? rabbit.cards : null).toEqual(deckOf('5h 5c Ks Kd Qs'))
+    expect(room.submit({ kind: 'rabbitHunt', playerId: 'alice' }).events).toEqual([])
+  })
+
+  it('refuses anybody not dealt into the hand', () => {
+    const room = makeRoom('rabbit-outsider', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'join', playerId: 'cara', name: 'cara' })
+    room.submit({ kind: 'startHand' })
+    const actor = room.viewFor('alice').currentActor?.playerId ?? 'alice'
+    room.submit({ kind: 'act', playerId: actor, action: { kind: 'fold' } })
+    expect(room.submit({ kind: 'rabbitHunt', playerId: 'cara' }).ok).toBe(false)
+  })
+
+  it('keeps the rabbit on offer through the next hand, then lets it go', () => {
+    const room = makeRoom('rabbit-next', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    const actor = room.viewFor('alice').currentActor?.playerId ?? 'alice'
+    room.submit({ kind: 'act', playerId: actor, action: { kind: 'fold' } })
+    room.submit({ kind: 'startHand' })
+    expect(room.viewFor('alice').phase).toBe('hand')
+    const hunted = room.submit({ kind: 'rabbitHunt', playerId: 'alice' })
+    expect(hunted.events.some((event) => event.kind === 'rabbit')).toBe(true)
+  })
+
+  it('shows the offer, then the cards, only to players dealt in', () => {
+    const room = makeRoom('rabbit-view', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'join', playerId: 'cara', name: 'cara' })
+    room.submit({ kind: 'startHand' })
+    expect(room.rabbitFor('alice')).toBeNull()
+    const actor = room.viewFor('alice').currentActor?.playerId ?? 'alice'
+    room.submit({ kind: 'act', playerId: actor, action: { kind: 'fold' } })
+    expect(room.rabbitFor('alice')).toEqual({ handNumber: 1, cards: null })
+    expect(room.rabbitFor('cara')).toBeNull()
+    room.submit({ kind: 'rabbitHunt', playerId: 'bob' })
+    expect(room.rabbitFor('alice')?.cards).toEqual(deckOf('5h 5c Ks Kd Qs'))
+  })
+
+  it('has nothing to hunt after a showdown', () => {
+    const room = makeRoom('rabbit-showdown', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    playToPhase(room, 'between')
+    expect(room.submit({ kind: 'rabbitHunt', playerId: 'bob' }).ok).toBe(false)
+  })
+})

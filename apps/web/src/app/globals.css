@@ -5134,3 +5134,56 @@ button.verify-pill.verify-mismatch {
   position: static;
   margin-top: 10px;
 }
+
+/* The rabbit, at the head of the table: the board the last hand never dealt. */
+.rabbit-hunt {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  z-index: 23;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  transform: translateX(-50%);
+  color: var(--river-cream-dim);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.rabbit-hunt button {
+  padding: 9px 18px;
+  border: 1px solid var(--river-brass-lit);
+  border-radius: 999px;
+  background: rgb(10 13 12 / 80%);
+  color: var(--river-amber-bright);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.rabbit-hunt.shown {
+  padding: 8px 12px 10px;
+  border: 1px dashed var(--river-brass-lit);
+  border-radius: 10px;
+  background: rgb(10 13 12 / 72%);
+}
+
+.rabbit-cards {
+  display: flex;
+  gap: 6px;
+  opacity: 0.85;
+}
+
+.rabbit-cards .playing-card {
+  width: 44px;
+  height: 62px;
+}
+
+/* On the phone it sits in the dock, in the flow, above the waiting controls. */
+.phone-table .rabbit-hunt {
+  position: static;
+  transform: none;
+  margin-bottom: 8px;
+}

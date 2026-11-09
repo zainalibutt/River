@@ -102,6 +102,7 @@ function sceneSocket(scene: MotionScene, timeline: Timeline): SocketLike {
             events: step.events,
             botSeats: 0,
             botPreset: BOT_TABLE_PRESETS[0],
+            rabbit: null,
           })
         }
       }, 16)
