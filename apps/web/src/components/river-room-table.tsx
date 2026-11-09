@@ -554,6 +554,8 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     setSaveDismissed(true)
   }
   const [hands, setHands] = useState<readonly SessionHand[]>([])
+  // Bumped on every reconnect, so the felt lays the next view out rather than dealing it.
+  const [resync, setResync] = useState(0)
   // A hand played to the end here ends the first-hand coaching for good.
   useEffect(() => {
     if (hands.length > 0) markFirstHandPlayed()
@@ -948,6 +950,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
         unsubscribeState = socket.subscribeState((state: RiverSocketState) => {
           if (state === 'connected') {
             retryMs = RECONNECT_FIRST_MS
+            setResync((count) => count + 1)
             setConnection('connected')
             setNotice(null)
             return
@@ -1505,6 +1508,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             onSelect: setSelectedSeat,
             onHeroDealt: setHeroDealt,
             onPresentation: setPresentation,
+            resync,
             showingSeat: showing,
             bubbles,
             heldPeeks,
@@ -1700,6 +1704,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               onSelect={setSelectedSeat}
               onHeroDealt={setHeroDealt}
               onPresentation={setPresentation}
+              resync={resync}
               showingSeat={showing}
               bubbles={bubbles}
               heldPeeks={heldPeeks}

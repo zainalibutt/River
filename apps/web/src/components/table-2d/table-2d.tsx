@@ -108,6 +108,12 @@ export interface Table2DProps {
   platesHeld?: boolean
   /** Amounts in this many chips to the big blind, as Settings can ask, or in chips when null. */
   bigBlind?: number | null
+  /**
+   * Counts reconnects. The first view after one is laid out as it stands, like a page
+   * load: dealing it from the last hand the felt saw flashed that hand's board over the
+   * new one while its cards were collected.
+   */
+  resync?: number
   /** The seat whose hand the showdown is telling right now, lit until the next one. */
   showingSeat?: number | null
   phone?: boolean
@@ -185,8 +191,14 @@ export function Table2D(props: Table2DProps) {
   const [schedule, setSchedule] = useState(0)
   const [now, setNow] = useState(() => tableNow())
 
+  const resyncSeen = useRef(props.resync ?? 0)
   useEffect(() => {
     const at = tableNow()
+    // Wait for the view the reconnect brings, not the render that announced it.
+    if ((props.resync ?? 0) !== resyncSeen.current && previous.current !== view) {
+      resyncSeen.current = props.resync ?? 0
+      choreography.current = emptyChoreography()
+    }
     if (props.showdown === null) {
       showdownStart.current = null
     } else if (showdownStart.current?.plan !== props.showdown) {
@@ -217,7 +229,7 @@ export function Table2D(props: Table2DProps) {
     )
     previous.current = view
     setSchedule((count) => count + 1)
-  }, [view, props.showdown])
+  }, [view, props.showdown, props.resync])
 
   // The all-in moment: the first shove of a hand lifts that player's placard, pulses the room
   // amber once and sets the words over the felt. Repeats inside one hand are not a moment.
