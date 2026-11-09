@@ -25,6 +25,7 @@ describe('heads-up menu challenges', () => {
     expect(markup).toContain('aria-label="Champion, Nyx 1v1"')
     expect(markup).not.toContain('disabled')
     expect(markup).not.toContain('Midas is busy')
+    expect(markup).toContain('trained poker AI')
   })
 
   it('keeps Midas visible but disabled with a clear busy reason when capacity is full', () => {

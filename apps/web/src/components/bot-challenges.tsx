@@ -46,7 +46,8 @@ export function BotChallenges({
           <span className="club-home-challenge">
             <span className="club-home-action-title">Midas</span>
             <span className="club-home-action-detail">
-              {midasSeatsFree === 0 ? MIDAS_BUSY_MESSAGE : '1v1'}
+              {/* "Midas · 1v1" said nothing about who Midas is. */}
+              {midasSeatsFree === 0 ? MIDAS_BUSY_MESSAGE : "River's trained poker AI · 1v1"}
             </span>
           </span>
         </button>
