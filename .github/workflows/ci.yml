@@ -54,4 +54,4 @@ jobs:
       - run: npm ci
       - run: npm run build --workspace @river/engine
       - run: node scripts/dev-db.mjs start
-      - run: node scripts/dev-db.mjs exec npx vitest run apps/server/src/ledger.local.test.ts apps/server/src/player-names.local.test.ts apps/server/src/bot-opponent-store.local.test.ts
+      - run: node scripts/dev-db.mjs exec npx vitest run apps/server/src/ledger.local.test.ts apps/server/src/player-names.local.test.ts apps/server/src/bot-opponent-store.local.test.ts apps/server/src/player-erasure.local.test.ts
