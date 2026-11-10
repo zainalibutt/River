@@ -94,6 +94,9 @@ export async function claimRescueFor(
   return { kind: 'granted', delta: decision.delta, balance, ref: decision.ref }
 }
 
+/** Ledger rows read at a time, under the rows Supabase returns for one request. */
+const LEDGER_PAGE = 500
+
 export function createSupabaseEconomy(options: SupabaseEconomyOptions): SupabaseEconomy {
   const baseUrl = options.supabaseUrl.replace(/\/$/, '')
   const request = options.fetch ?? fetch
@@ -103,21 +106,34 @@ export function createSupabaseEconomy(options: SupabaseEconomyOptions): Supabase
     'content-type': 'application/json',
   })
   return {
+    // Read a page at a time: Supabase returns at most a fixed number of rows to
+    // one request, and a long-standing player's history is longer than that.
+    // Read whole, it was cut short, and the balance and the daily streak worked
+    // out from it were wrong.
     async readRows(playerId: string): Promise<LedgerRow[]> {
-      const query = new URL(`${baseUrl}/rest/v1/chip_ledger`)
-      query.searchParams.set('player_id', `eq.${playerId}`)
-      query.searchParams.set('select', 'ref,reason,delta')
-      const body = await readJson(request, query, headers())
-      if (!Array.isArray(body)) {
-        throw new Error('Supabase returned an invalid ledger rows response')
+      const rows: LedgerRow[] = []
+      for (let offset = 0; ; offset += LEDGER_PAGE) {
+        const query = new URL(`${baseUrl}/rest/v1/chip_ledger`)
+        query.searchParams.set('player_id', `eq.${playerId}`)
+        query.searchParams.set('select', 'ref,reason,delta')
+        query.searchParams.set('order', 'id.asc')
+        query.searchParams.set('limit', String(LEDGER_PAGE))
+        query.searchParams.set('offset', String(offset))
+        const body = await readJson(request, query, headers())
+        if (!Array.isArray(body)) {
+          throw new Error('Supabase returned an invalid ledger rows response')
+        }
+        rows.push(
+          ...body
+            .filter((item) => typeof item === 'object' && item !== null)
+            .map((item) => ({
+              ref: String(item.ref ?? ''),
+              reason: String(item.reason ?? ''),
+              delta: Number(item.delta ?? 0),
+            })),
+        )
+        if (body.length < LEDGER_PAGE) return rows
       }
-      return body
-        .filter((item) => typeof item === 'object' && item !== null)
-        .map((item) => ({
-          ref: String(item.ref ?? ''),
-          reason: String(item.reason ?? ''),
-          delta: Number(item.delta ?? 0),
-        }))
     },
     async readConfig(): Promise<EconomyConfig> {
       return loadEconomyConfig({ supabaseUrl: baseUrl, serviceRoleKey: options.serviceRoleKey })

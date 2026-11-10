@@ -49,17 +49,34 @@ function base(rest: EconomyRest): string {
   return rest.supabaseUrl.replace(/\/$/, '')
 }
 
+/** Ledger rows read at a time, under the rows Supabase returns for one request. */
+const LEDGER_PAGE = 500
+
+/**
+ * A player's whole ledger, a page at a time. Supabase returns at most a fixed
+ * number of rows to one request, so a long history read whole was cut short and
+ * the balance and streak worked out from it were wrong.
+ */
 async function readRows(rest: EconomyRest, playerId: string): Promise<LedgerRow[]> {
-  const query = new URL(`${base(rest)}/rest/v1/chip_ledger`)
-  query.searchParams.set('player_id', `eq.${playerId}`)
-  query.searchParams.set('select', 'ref,reason,delta')
-  const body = await readJson(rest, query)
-  if (!Array.isArray(body)) throw new Error('Supabase returned an invalid ledger')
-  return body.map((item: Record<string, unknown>) => ({
-    ref: String(item.ref ?? ''),
-    reason: String(item.reason ?? ''),
-    delta: Number(item.delta ?? 0),
-  }))
+  const rows: LedgerRow[] = []
+  for (let offset = 0; ; offset += LEDGER_PAGE) {
+    const query = new URL(`${base(rest)}/rest/v1/chip_ledger`)
+    query.searchParams.set('player_id', `eq.${playerId}`)
+    query.searchParams.set('select', 'ref,reason,delta')
+    query.searchParams.set('order', 'id.asc')
+    query.searchParams.set('limit', String(LEDGER_PAGE))
+    query.searchParams.set('offset', String(offset))
+    const body = await readJson(rest, query)
+    if (!Array.isArray(body)) throw new Error('Supabase returned an invalid ledger')
+    rows.push(
+      ...body.map((item: Record<string, unknown>) => ({
+        ref: String(item.ref ?? ''),
+        reason: String(item.reason ?? ''),
+        delta: Number(item.delta ?? 0),
+      })),
+    )
+    if (body.length < LEDGER_PAGE) return rows
+  }
 }
 
 async function readConfig(rest: EconomyRest): Promise<EconomyConfig> {
