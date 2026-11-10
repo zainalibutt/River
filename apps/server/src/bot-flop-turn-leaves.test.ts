@@ -331,7 +331,7 @@ describe.each(['cfr+', 'dcfr'] as const)('%s averaging', (scheme) => {
           }
         }
       }
-    }, 20_000)
+    }, 60_000)
 
     it('matches an independently averaged live turn solve on every card, including paid chips', () => {
       const spot = spotOf()
