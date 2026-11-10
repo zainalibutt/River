@@ -51,10 +51,17 @@ export async function GET(request: Request): Promise<Response> {
       cache: 'no-store',
       signal: AbortSignal.timeout(5_000),
     })
-    if (response.ok) {
-      const rows = (await response.json()) as { balance?: number }[]
-      const row = rows[0]
-      if (row !== undefined && Number.isFinite(row.balance)) balance = Number(row.balance)
+    // A refused or malformed answer is a bankroll nobody could read, not an empty one.
+    if (!response.ok) throw new Error(`balance read failed with ${response.status}`)
+    const rows = (await response.json()) as unknown
+    if (!Array.isArray(rows)) throw new Error('balance read returned no rows')
+    const row = rows[0] as { balance?: unknown } | undefined
+    // No row is a player who has never had a chip: a real zero.
+    if (row !== undefined) {
+      const value = Number(row.balance)
+      if (!Number.isSafeInteger(value) || value < 0)
+        throw new Error('balance read returned no balance')
+      balance = value
     }
   } catch {
     // A bankroll that cannot be read is shown as unknown by the client rather
