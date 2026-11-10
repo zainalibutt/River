@@ -32,6 +32,7 @@ describe('Supabase token verifier', () => {
       playerId: PLAYER_ID,
       anonymous: true,
       admin: false,
+      exp: expect.any(Number),
     })
   })
 
@@ -41,6 +42,7 @@ describe('Supabase token verifier', () => {
       playerId: PLAYER_ID,
       anonymous: false,
       admin: false,
+      exp: expect.any(Number),
     })
   })
 
@@ -51,6 +53,7 @@ describe('Supabase token verifier', () => {
       playerId: PLAYER_ID,
       anonymous: false,
       admin: true,
+      exp: expect.any(Number),
     })
   })
 
@@ -100,5 +103,23 @@ describe('Supabase token verifier', () => {
       .setExpirationTime(0)
       .sign(privateKey)
     await expect(isolated(invalid)).rejects.toThrow()
+  })
+})
+
+it('retains the signed expiry and rejects a signed session without an expiry', async () => {
+  const { privateKey, publicKey } = await generateKeyPair('ES256')
+  const verify = createSupabaseTokenVerifier({
+    supabaseUrl: SUPABASE_URL,
+    getKey: async () => publicKey,
+  })
+  const token = new SignJWT({ role: 'authenticated' })
+    .setProtectedHeader({ alg: 'ES256' })
+    .setSubject(PLAYER_ID)
+    .setIssuer(`${SUPABASE_URL}/auth/v1`)
+    .setAudience('authenticated')
+  await expect(verify(await token.sign(privateKey))).rejects.toThrow('no valid expiry')
+  const exp = Math.floor(Date.now() / 1_000) + 300
+  await expect(verify(await token.setExpirationTime(exp).sign(privateKey))).resolves.toMatchObject({
+    exp,
   })
 })

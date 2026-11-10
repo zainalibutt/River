@@ -52,6 +52,7 @@ import {
   thinkingMs,
 } from './bot-service.js'
 import type { BotRiverThinker } from './bot-thinker.js'
+import { readServerResourceConfig } from './config.js'
 import type { CosmeticOutcome, CosmeticStore, OwnedCosmetic } from './cosmetic-service.js'
 import { buyCosmetic, wearCosmetic } from './cosmetic-service.js'
 import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-service.js'
@@ -199,6 +200,8 @@ interface ConnectionState {
   ownedItems: OwnedItem[]
   ownedCosmetics: OwnedCosmetic[]
   identityUpgraded: boolean
+  closed: boolean
+  authTimer: ReturnType<typeof setTimeout> | null
 }
 
 /**
@@ -228,6 +231,8 @@ interface RoomState {
   room: Room
   connections: Set<ConnectionState>
   queue: Promise<void>
+  pendingTasks: number
+  lastActivityMs: number
   reconnectTimers: Map<string, ReturnType<typeof setTimeout>>
   /**
    * Each player's current seating, named after the request that seated them,
@@ -347,6 +352,7 @@ function voiceEventFor(event: RoomEvent, listenerId: string): VoiceEvent | null 
 export type HubErrorReporter = (context: string, error: unknown) => void
 
 export interface RoomHubOptions {
+  roomIdleTimeoutMs?: number
   verifyToken: TokenVerifier
   ledger: Ledger
   onError?: HubErrorReporter
@@ -656,6 +662,8 @@ export class RoomHub {
   private readonly tableItems: TableItemStore | undefined
   private readonly cosmetics: CosmeticStore | undefined
   private readonly createRoom: (roomId: string, settings?: RoomCreationSettings) => Room
+  private readonly roomIdleTimeoutMs: number
+  private readonly evictionTimer: ReturnType<typeof setInterval>
   private readonly rooms = new Map<string, RoomState>()
   private readonly activePlayers = new Map<string, ConnectionState>()
   private readonly completed = new Map<string, ServerMessage>()
@@ -698,6 +706,12 @@ export class RoomHub {
   >()
 
   constructor(options: RoomHubOptions) {
+    this.roomIdleTimeoutMs =
+      options.roomIdleTimeoutMs ?? readServerResourceConfig(process.env).roomIdleTimeoutMs
+    this.evictionTimer = setInterval(
+      () => this.evictIdleRooms(),
+      Math.min(60_000, this.roomIdleTimeoutMs),
+    ).unref()
     this.verifyToken = options.verifyToken
     this.bans = options.bans ?? new MemoryBanList()
     this.ledger = options.ledger
@@ -738,6 +752,69 @@ export class RoomHub {
         ))
   }
 
+  private evictIdleRooms(): void {
+    if (this.settling) return
+    for (const [roomId, state] of this.rooms) {
+      if (state.connections.size > 0 || state.pendingTasks > 0) continue
+      if (Date.now() - state.lastActivityMs < this.roomIdleTimeoutMs) continue
+      const view = state.room.viewFor('')
+      if (view.phase === 'hand' || view.phase === 'seeding' || humansIn(view) > 0) continue
+      // Even a bot-shaped id can still hold a seating backed by the ledger.
+      if ([...state.seatings.keys()].some((playerId) => this.seatHeld(state, playerId))) continue
+      if (
+        [...this.pendingPayouts.values()].some(
+          (pending) =>
+            pending.seating?.ref.startsWith(`${roomId}:`) ||
+            pending.entry.ref.startsWith(`${roomId}:`),
+        )
+      )
+        continue
+      if (
+        state.seedTimer !== null ||
+        state.turnTimer !== null ||
+        state.botTimer !== null ||
+        state.nextHandTimer !== null ||
+        state.reconnectTimers.size > 0 ||
+        state.speechTimers.size > 0 ||
+        state.peekTimers.size > 0
+      )
+        continue
+      this.clearRoomTimers(state)
+      this.releaseEmptyMidasTable(state)
+      this.rooms.delete(roomId)
+    }
+  }
+
+  private clearRoomTimers(state: RoomState): void {
+    this.clearSeedFinalization(state)
+    this.clearTurnTimeout(state)
+    this.clearBotTurn(state)
+    this.clearNextHand(state)
+    for (const timer of state.reconnectTimers.values()) clearTimeout(timer)
+    state.reconnectTimers.clear()
+    for (const timer of state.speechTimers) clearTimeout(timer)
+    state.speechTimers.clear()
+    for (const timer of state.peekTimers.values()) clearTimeout(timer)
+    state.peekTimers.clear()
+  }
+
+  private cacheReply(key: string, message: ServerMessage): void {
+    this.completed.set(key, message)
+    while (this.completed.size > 10_000) {
+      const oldest = this.completed.keys().next().value
+      if (oldest === undefined) break
+      this.completed.delete(oldest)
+    }
+  }
+
+  private sessionExpired(connection: ConnectionState): boolean {
+    if (connection.player?.exp === undefined || Date.now() < connection.player.exp * 1_000)
+      return false
+    connection.peer.close(4005, 'Session expired')
+    void this.disconnect(connection)
+    return true
+  }
+
   botCapabilities(): { midasAvailable: boolean; midasSeats: number; midasSeatsFree: number } {
     const configured = this.midas?.seats ?? 1
     const midasSeats =
@@ -771,7 +848,13 @@ export class RoomHub {
       ownedItems: [],
       ownedCosmetics: [],
       identityUpgraded: false,
+      closed: false,
+      authTimer: null,
     }
+    connection.authTimer = setTimeout(() => {
+      connection.peer.close(4000, 'Authentication timeout')
+      void this.disconnect(connection)
+    }, 10_000).unref()
     return {
       receive: (raw) => this.receive(connection, raw),
       close: () => this.disconnect(connection),
@@ -779,6 +862,7 @@ export class RoomHub {
   }
 
   private async receive(connection: ConnectionState, raw: string): Promise<void> {
+    if (connection.closed || this.sessionExpired(connection)) return
     const message = parseClientMessage(raw, this.midas !== undefined)
     if (message === null) {
       this.error(connection, null, 'invalid_message', 'Invalid client message')
@@ -830,6 +914,7 @@ export class RoomHub {
       return
     }
     await this.enqueue(room, async () => {
+      if (connection.closed || this.sessionExpired(connection)) return
       if (message.kind === 'resync') {
         this.snapshot(connection, room, message.requestId, [])
       } else if (message.kind === 'social') {
@@ -854,10 +939,17 @@ export class RoomHub {
       player = await this.verifyToken(accessToken)
     } catch (error) {
       this.onError('authenticate: token rejected', error)
-      connection.peer.close(4003, 'Authentication failed')
+      if (!connection.closed) connection.peer.close(4003, 'Authentication failed')
+      await this.disconnect(connection)
       return
     }
 
+    if (connection.closed) return
+    if (player.exp !== undefined && Date.now() >= player.exp * 1_000) {
+      connection.peer.close(4005, 'Session expired')
+      await this.disconnect(connection)
+      return
+    }
     try {
       const previous = this.activePlayers.get(player.playerId)
       if (previous !== undefined) {
@@ -880,8 +972,12 @@ export class RoomHub {
         if (previous.roomId !== null) this.scheduleHandoverCheck(previous.roomId, player.playerId)
         connection.identityUpgraded = previous.player?.anonymous === true && !player.anonymous
       }
+      if (connection.closed) return
       connection.player = player
       connection.balance = await this.ledger.balance(player.playerId)
+      if (connection.closed || this.sessionExpired(connection)) return
+      if (connection.authTimer !== null) clearTimeout(connection.authTimer)
+      connection.authTimer = null
       this.activePlayers.set(player.playerId, connection)
       this.send(connection, {
         kind: 'authenticated',
@@ -894,10 +990,12 @@ export class RoomHub {
         admin: player.admin,
       })
     } catch (error) {
+      if (connection.closed) return
       this.onError('authenticate: session could not be opened', error)
       connection.player = null
       this.activePlayers.delete(player.playerId)
-      connection.peer.close(4004, 'Could not open your session')
+      if (!connection.closed) connection.peer.close(4004, 'Could not open your session')
+      await this.disconnect(connection)
     }
   }
 
@@ -950,6 +1048,7 @@ export class RoomHub {
     }
     const room = this.room(message.roomId, message)
     await this.enqueue(room, async () => {
+      if (connection.closed || this.sessionExpired(connection)) return
       if (
         exists &&
         message.inviteCode?.trim().toUpperCase() !== room.room.config.inviteCode.toUpperCase()
@@ -1299,7 +1398,7 @@ export class RoomHub {
         code: 'command_rejected',
         message: rejected?.message ?? 'Command rejected',
       }
-      this.completed.set(cacheKey, message)
+      this.cacheReply(cacheKey, message)
       this.send(connection, message)
       return
     }
@@ -1337,11 +1436,7 @@ export class RoomHub {
       rabbit: state.room.rabbitFor(player.playerId),
       events: result.events,
     }
-    this.completed.set(cacheKey, reply)
-    if (this.completed.size > 10_000) {
-      const oldest = this.completed.keys().next().value
-      if (oldest !== undefined) this.completed.delete(oldest)
-    }
+    this.cacheReply(cacheKey, reply)
     if (command.kind === 'leave') {
       state.connections.delete(connection)
       connection.roomId = null
@@ -1581,6 +1676,10 @@ export class RoomHub {
   }
 
   private async disconnect(connection: ConnectionState): Promise<void> {
+    if (connection.closed) return
+    connection.closed = true
+    if (connection.authTimer !== null) clearTimeout(connection.authTimer)
+    connection.authTimer = null
     const player = connection.player
     if (player === null) return
     const active = this.activePlayers.get(player.playerId)
@@ -1649,6 +1748,8 @@ export class RoomHub {
       room,
       connections: new Set(),
       queue: Promise.resolve(),
+      pendingTasks: 0,
+      lastActivityMs: Date.now(),
       reconnectTimers: new Map(),
       seatings: new Map(),
       seedTimer: null,
@@ -1698,6 +1799,7 @@ export class RoomHub {
    */
   async settleAllTables(): Promise<void> {
     this.settling = true
+    clearInterval(this.evictionTimer)
     // Let whatever each table was already doing finish, then nothing else runs.
     await Promise.all([...this.rooms.values()].map((state) => state.queue))
     await Promise.all(this.pendingOpponentWrites.values())
@@ -2359,9 +2461,16 @@ ${entry.ref}`
     // a bot playing on after its chips were paid out could settle the hand a
     // second time.
     if (this.settling) return
+    state.pendingTasks += 1
+    state.lastActivityMs = Date.now()
     const next = state.queue.then(task, task)
     state.queue = next.catch(() => undefined)
-    await next
+    try {
+      await next
+    } finally {
+      state.pendingTasks -= 1
+      state.lastActivityMs = Date.now()
+    }
   }
 
   private broadcast(

@@ -250,7 +250,6 @@ export class Room implements RoomHandle {
   private revealedFallbacks: FallbackSeed[] | null = null
   private settledClientSeeds: FairnessClientSeed[] | null = null
   private status: string | null = null
-  private readonly eventLog: RoomEvent[] = []
   private readonly recorder = new HandRecorder()
   /**
    * Players who left while all in. Their hand plays out with their seat in it,
@@ -556,7 +555,6 @@ export class Room implements RoomHandle {
     this.migrateHost(playerId)
     events.push({ kind: 'left', playerId })
     if (this.phase === 'seeding' && this.activeSeats().length < 2) this.callOffDeal(events)
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -731,7 +729,6 @@ export class Room implements RoomHandle {
       },
     ]
     if (this.config.seedCollectionMs === 0) this.finalizeSeedsInto(events)
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -753,7 +750,6 @@ export class Room implements RoomHandle {
     ) {
       this.finalizeSeedsInto(events)
     }
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -761,7 +757,6 @@ export class Room implements RoomHandle {
     if (this.phase !== 'seeding') return this.reject(null, 'seed collection is not active')
     const events: RoomEvent[] = []
     this.finalizeSeedsInto(events)
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -974,7 +969,6 @@ export class Room implements RoomHandle {
         this.removedAfterHand.add(targetPlayerId)
         target.disconnected = true
         events.push({ kind: 'kicked', playerId: targetPlayerId, reason })
-        this.log(events)
         return { ok: true, events }
       }
     }
@@ -982,7 +976,6 @@ export class Room implements RoomHandle {
     this.players.delete(targetPlayerId)
     this.migrateHost(targetPlayerId)
     events.push({ kind: 'kicked', playerId: targetPlayerId, reason })
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -998,19 +991,11 @@ export class Room implements RoomHandle {
 
   private reject(playerId: string | null, message: string): RoomResult {
     const event: RoomEvent = { kind: 'rejected', playerId, message }
-    this.eventLog.push(event)
     return { ok: false, events: [event] }
   }
 
   private result(event: RoomEvent): RoomResult {
-    this.eventLog.push(event)
     return { ok: true, events: [event] }
-  }
-
-  private log(events: RoomEvent[]): void {
-    for (const event of events) {
-      this.eventLog.push(event)
-    }
   }
 
   private apply(
