@@ -63,7 +63,10 @@ begin
   delete from public.friendships where player_a = p_player_id or player_b = p_player_id;
   delete from public.player_blocks where blocker = p_player_id or blocked = p_player_id;
   delete from public.table_invites where from_player = p_player_id or to_player = p_player_id;
-  delete from public.bot_api_keys where player_id = p_player_id;
+  -- The bot API's keys arrived in a later migration than some databases have.
+  if to_regclass('public.bot_api_keys') is not null then
+    execute 'delete from public.bot_api_keys where player_id = $1' using p_player_id;
+  end if;
   delete from public.player_table_items where player_id = p_player_id;
   delete from public.player_cosmetics where player_id = p_player_id;
   delete from public.bot_opponent_observations where player_id = p_player_id;
