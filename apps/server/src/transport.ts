@@ -57,7 +57,7 @@ import { buyCosmetic, wearCosmetic } from './cosmetic-service.js'
 import type { EconomyDeps, GrantOutcome, SupabaseEconomy } from './economy-service.js'
 import { claimDailyFor, claimRescueFor } from './economy-service.js'
 import { isFairnessSeed } from './fairness.js'
-import type { Ledger, LedgerEntry, Seating, SeatingStore } from './ledger.js'
+import type { Ledger, LedgerEntry, SeatDebit, Seating, SeatingStore } from './ledger.js'
 import { type PlayerHandStore, playerHandRows } from './player-hand-store.js'
 import type { PlayerNames } from './player-names.js'
 import type {
@@ -211,6 +211,8 @@ const RELEASE_RETRY_MS = 1_000
 const RELEASE_RETRY_MAX_MS = 30_000
 /** Attempts to return a stack before it is left to the error log. */
 const PAY_OUT_ATTEMPTS = 12
+/** Tries at a called-off hand's bet for a player already gone, inside a shutdown's grace. */
+const SHUTDOWN_VOID_ATTEMPTS = 3
 const OPPONENT_WRITE_RETRY_MS = [250, 1_000] as const
 
 function retryDelay(attempt: number): number {
@@ -681,6 +683,19 @@ export class RoomHub {
   private readonly playerNames: PlayerNames | undefined
   /** Seatings that have ended whose close the book has not taken yet. */
   private readonly unconfirmedCloses = new Map<string, Seating>()
+  /** Set by `settleAllTables`: every table is frozen where it stands, to be paid out. */
+  private settling = false
+  /**
+   * Stacks owed to players whose seat has gone, by player and ledger reference
+   * (two players' requests can share an id, and so a reference), until the
+   * ledger takes them. Their seatings stay open in the book meanwhile: closing
+   * one with its money still owed is what used to leave a failed payout with
+   * nothing to pay it back, not even the crash refund.
+   */
+  private readonly pendingPayouts = new Map<
+    string,
+    { seating: Seating | undefined; entry: LedgerEntry }
+  >()
 
   constructor(options: RoomHubOptions) {
     this.verifyToken = options.verifyToken
@@ -1408,37 +1423,19 @@ export class RoomHub {
       .seats.find((seat) => seat.playerId === serverCommand.targetPlayerId)
     const stack = targetSeat?.stack ?? 0
     const seating = state.seatings.get(serverCommand.targetPlayerId)
-    if (stack > 0) {
-      try {
-        await this.applyToSeating('close', seating, {
-          playerId: serverCommand.targetPlayerId,
-          delta: stack,
-          reason: 'table_kick_cash_out',
-          ref: `${connection.roomId}:${requestId}:credit`,
-        })
-      } catch (error) {
-        return {
-          ok: false,
-          events: [
-            {
-              kind: 'rejected',
-              playerId: serverCommand.byPlayerId,
-              message: error instanceof Error ? error.message : 'Ledger credit failed',
-            },
-          ],
-        }
-      }
-    }
+    // The room decides first, and only a seat it has released is paid. Paying
+    // first and taking it back on a refusal could fail halfway, and left the
+    // player with their stack twice when the take-back did.
     const result = state.room.submit(serverCommand)
-    if (!result.ok && stack > 0) {
-      // Still seated, so still open.
-      await this.applyToSeating('open', seating, {
-        playerId: serverCommand.targetPlayerId,
-        delta: -stack,
-        reason: 'table_kick_cash_out_refund',
-        ref: `${connection.roomId}:${requestId}:refund`,
-      })
+    if (!result.ok || stack === 0 || this.seatHeld(state, serverCommand.targetPlayerId)) {
+      return result
     }
+    await this.payOut(seating, {
+      playerId: serverCommand.targetPlayerId,
+      delta: stack,
+      reason: 'table_kick_cash_out',
+      ref: `${connection.roomId}:${requestId}:credit`,
+    })
     return result
   }
 
@@ -1468,12 +1465,28 @@ export class RoomHub {
           ? { ...before, buyIn: before.buyIn + amount }
           : undefined
     try {
-      connection.balance = await this.applyToSeating('open', seating, {
+      const debit = await this.debitSeat(seating, {
         playerId: player.playerId,
         delta: -amount,
         reason,
         ref: `${connection.roomId}:${requestId}:debit`,
       })
+      connection.balance = debit.balance
+      if (debit.replay) {
+        // The ledger has this request's debit already, so it was carried out
+        // before, by this server or one before it, whose answer is forgotten.
+        // Seating the player now would hand them a stack nobody paid for.
+        return {
+          ok: false,
+          events: [
+            {
+              kind: 'rejected' as const,
+              playerId: player.playerId,
+              message: 'that request was already handled',
+            },
+          ],
+        }
+      }
     } catch (error) {
       return {
         ok: false,
@@ -1520,38 +1533,27 @@ export class RoomHub {
       .viewFor(player.playerId)
       .seats.find((item) => item.playerId === player.playerId)
     const amount = seat?.stack ?? 0
-    if (amount === 0) return state.room.submit(serverCommand)
     const seating = state.seatings.get(player.playerId)
-    try {
-      connection.balance = await this.applyToSeating('close', seating, {
-        playerId: player.playerId,
-        delta: amount,
-        reason: serverCommand.kind === 'stand' ? 'table_cash_out' : 'table_leave',
-        ref: `${connection.roomId}:${requestId}:credit`,
-      })
-    } catch (error) {
-      return {
-        ok: false,
-        events: [
-          {
-            kind: 'rejected' as const,
-            playerId: player.playerId,
-            message: error instanceof Error ? error.message : 'Ledger credit failed',
-          },
-        ],
-      }
-    }
+    // The room decides first: a stand it refuses, mid-hand say, moves no chips
+    // at all. Crediting first and debiting back on a refusal could fail on the
+    // way back, by which time the chips might already be spent, and the player
+    // kept both. Once the seat is released its stack is owed, and paid until
+    // the ledger takes it.
     const result = state.room.submit(serverCommand)
-    if (!result.ok) {
-      // A stand the room refused, mid-hand say, leaves the seat taken and open.
-      connection.balance = await this.applyToSeating('open', seating, {
-        playerId: player.playerId,
-        delta: -amount,
-        reason: serverCommand.kind === 'stand' ? 'table_cash_out_refund' : 'table_leave_refund',
-        ref: `${connection.roomId}:${requestId}:refund`,
-      })
-    }
+    // An all-in leave keeps its seat until the hand settles, and is paid then.
+    if (!result.ok || amount === 0 || this.seatHeld(state, player.playerId)) return result
+    const balance = await this.payOut(seating, {
+      playerId: player.playerId,
+      delta: amount,
+      reason: serverCommand.kind === 'stand' ? 'table_cash_out' : 'table_leave',
+      ref: `${connection.roomId}:${requestId}:credit`,
+    })
+    if (balance !== null) connection.balance = balance
     return result
+  }
+
+  private seatHeld(state: RoomState, playerId: string): boolean {
+    return state.room.viewFor('').seats.some((seat) => seat.playerId === playerId)
   }
 
   private withPlayer(command: ClientRoomCommand, playerId: string): RoomCommand {
@@ -1695,21 +1697,30 @@ export class RoomHub {
    * next start, from the seatings this closes here and a crash never does.
    */
   async settleAllTables(): Promise<void> {
+    this.settling = true
+    // Let whatever each table was already doing finish, then nothing else runs.
+    await Promise.all([...this.rooms.values()].map((state) => state.queue))
     await Promise.all(this.pendingOpponentWrites.values())
     const closing: Promise<void>[] = []
     for (const state of this.rooms.values()) {
       const view = state.room.viewFor('')
+      // A hand cut off by the shutdown is called off: its pot was never
+      // awarded, so each player gets back what they put in it, with their stack.
+      // Paying stacks alone lost every chip already bet.
+      const inPot = state.room.unsettledContributions()
       for (const seat of view.seats) {
         const playerId = seat.playerId
         // Bots have no bankroll to return anything to, and crediting one would
         // mint chips against an id no account owns.
         if (playerId === null || state.botCast.has(playerId)) continue
-        if (seat.stack > 0) {
+        const owed = seat.stack + (inPot.get(playerId) ?? 0)
+        inPot.delete(playerId)
+        if (owed > 0) {
           try {
             const ref = this.seatingRef(state, playerId)
             await this.applyToSeating('close', state.seatings.get(playerId), {
               playerId,
-              delta: seat.stack,
+              delta: owed,
               reason: 'table_shutdown_cash_out',
               ref: `${ref}:shutdown`,
             })
@@ -1724,6 +1735,38 @@ export class RoomHub {
         const seating = state.seatings.get(playerId)
         if (seating !== undefined) closing.push(this.closeSeatingNow(seating))
       }
+      // Bets from players who folded out by leaving during the hand. Their
+      // seatings closed when they left, so these go to the ledger alone, under
+      // a reference naming the hand, which lands once however often this runs.
+      for (const [playerId, amount] of inPot) {
+        if (state.botCast.has(playerId) || isBotPlayer(playerId)) continue
+        const entry = {
+          playerId,
+          delta: amount,
+          reason: 'table_shutdown_void',
+          ref: `${state.room.id}:hand-${view.handNumber}:${playerId}:void`,
+        }
+        // Their seating is closed, so no crash refund would ever find this:
+        // it is tried a few times before the process goes, then reported.
+        for (let attempt = 0; attempt < SHUTDOWN_VOID_ATTEMPTS; attempt += 1) {
+          try {
+            await this.ledger.apply(entry)
+            break
+          } catch (error) {
+            this.onError(
+              `settleAllTables: could not return ${amount} chips bet in a called-off hand`,
+              error,
+            )
+            if (attempt + 1 < SHUTDOWN_VOID_ATTEMPTS) {
+              await new Promise<void>((resolve) => setTimeout(resolve, retryDelay(attempt)))
+            }
+          }
+        }
+      }
+    }
+    // Stacks still owed to players who have already gone, tried once more.
+    for (const key of [...this.pendingPayouts.keys()]) {
+      await this.tryPayOut(key, PAY_OUT_ATTEMPTS)
     }
     // And any seating that ended earlier whose close has not been written yet.
     for (const seating of this.unconfirmedCloses.values()) {
@@ -1897,18 +1940,52 @@ export class RoomHub {
    * it, retrying until the ledger takes it. The reference names one seating,
    * so a retry after a lost reply cannot pay twice.
    */
-  private async payOut(
-    seating: Seating | undefined,
-    entry: LedgerEntry,
-    attempt = 0,
-  ): Promise<void> {
+  private payOut(seating: Seating | undefined, entry: LedgerEntry): Promise<number | null> {
+    const key = `${entry.playerId}
+${entry.ref}`
+    this.pendingPayouts.set(key, { seating, entry })
+    return this.tryPayOut(key, 0)
+  }
+
+  /**
+   * One attempt at a payout still owed, scheduling the next on a failure. The
+   * balance after it, or null while it is still owed. One that runs out of
+   * attempts stays owed: a graceful shutdown tries it again, and its seating,
+   * still open, is what the next server's crash refund pays back otherwise.
+   */
+  private async tryPayOut(key: string, attempt: number): Promise<number | null> {
+    const pending = this.pendingPayouts.get(key)
+    if (pending === undefined) return null
     try {
-      await this.applyToSeating('close', seating, entry)
+      const balance = await this.applyToSeating('close', pending.seating, pending.entry)
+      if (this.pendingPayouts.get(key) === pending) this.pendingPayouts.delete(key)
+      return balance
     } catch (error) {
-      this.onError(`payOut: could not return ${entry.delta} chips`, error)
-      if (attempt + 1 >= PAY_OUT_ATTEMPTS) return
-      setTimeout(() => void this.payOut(seating, entry, attempt + 1), retryDelay(attempt))
+      this.onError(`payOut: could not return ${pending.entry.delta} chips`, error)
+      if (attempt + 1 < PAY_OUT_ATTEMPTS) {
+        setTimeout(() => void this.tryPayOut(key, attempt + 1), retryDelay(attempt))
+      }
+      return null
     }
+  }
+
+  /** Whether a payout for this seating is still owed, which keeps it open in the book. */
+  private owesPayout(seating: Seating): boolean {
+    const key = seatingKey(seating)
+    for (const pending of this.pendingPayouts.values()) {
+      if (pending.seating !== undefined && seatingKey(pending.seating) === key) return true
+    }
+    return false
+  }
+
+  /** Debit a buy-in or rebuy, with its seating when the book keeps one, saying whether it was new. */
+  private async debitSeat(seating: Seating | undefined, entry: LedgerEntry): Promise<SeatDebit> {
+    const store = this.seatingStore
+    const written =
+      store !== undefined && seating !== undefined && seating.buyIn > 0 ? { ...seating } : undefined
+    if (this.ledger.debitSeat !== undefined) return this.ledger.debitSeat(entry, written)
+    // A ledger that cannot say whether an entry is new: development and tests.
+    return { balance: await this.applyToSeating('open', seating, entry), replay: false }
   }
 
   /**
@@ -1955,7 +2032,9 @@ export class RoomHub {
   private closeSeatingIfGone(state: RoomState, playerId: string): void {
     const seating = state.seatings.get(playerId)
     if (seating === undefined || seating.buyIn <= 0) return
-    if (state.room.viewFor('').seats.some((seat) => seat.playerId === playerId)) return
+    if (this.seatHeld(state, playerId)) return
+    // Its stack is still owed; the payout closes it when the ledger takes it.
+    if (this.owesPayout(seating)) return
     this.recordSeatingClosed(seating)
   }
 
@@ -2276,6 +2355,10 @@ export class RoomHub {
   }
 
   private async enqueue(state: RoomState, task: () => Promise<void>): Promise<void> {
+    // A table being settled for a shutdown takes nothing more: a turn timer or
+    // a bot playing on after its chips were paid out could settle the hand a
+    // second time.
+    if (this.settling) return
     const next = state.queue.then(task, task)
     state.queue = next.catch(() => undefined)
     await next

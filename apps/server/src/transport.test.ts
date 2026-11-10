@@ -19,7 +19,7 @@ import { type HandAwareBotPolicy, HandSolveCache } from './bot-policy-hand.js'
 import { type BotDecisionTrace, randomBotTable } from './bot-service.js'
 import type { BotRiverThinker, ThinkRequest } from './bot-thinker.js'
 import type { LedgerRow, SupabaseEconomy } from './economy-service.js'
-import type { Ledger, LedgerEntry, Seating, SeatingStore } from './ledger.js'
+import type { Ledger, LedgerEntry, SeatDebit, Seating, SeatingStore } from './ledger.js'
 import { defaultRoomConfig, Room, stakeForId, turnBudgetsForPreset } from './room.js'
 import type {
   ClientPeer,
@@ -63,6 +63,13 @@ class MemoryLedger implements Ledger, SeatingStore {
       })
     }
     return balance
+  }
+
+  async debitSeat(entry: LedgerEntry, seating: Seating | undefined): Promise<SeatDebit> {
+    const replay = this.refs.has(`${entry.playerId}:${entry.ref}`)
+    const balance =
+      seating === undefined ? await this.apply(entry) : await this.openWith(entry, seating)
+    return { balance, replay }
   }
 
   async closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {
@@ -145,6 +152,20 @@ class DyingBook implements Ledger, SeatingStore {
 
   closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {
     return this.write(() => this.book.closeWith(entry, seating))
+  }
+
+  debitSeat(entry: LedgerEntry, seating: Seating | undefined): Promise<SeatDebit> {
+    return this.write(() => this.book.debitSeat(entry, seating))
+  }
+}
+
+/** A ledger whose credits fail while `refusing` is set, as an unreachable database would. */
+class RefusingCredits extends MemoryLedger {
+  refusing = false
+
+  override async apply(entry: LedgerEntry): Promise<number> {
+    if (this.refusing && entry.delta > 0) throw new Error('the ledger is unreachable')
+    return super.apply(entry)
   }
 }
 
@@ -1446,7 +1467,7 @@ describe('leaving in the middle of a hand', () => {
     const host = clients[0]
     if (host === undefined) throw new Error('nobody to deal')
     await send(host, 'deal', { kind: 'startHand' })
-    return { ledger, clients, total: await everyChip(ledger, host) }
+    return { ledger, hub, clients, total: await everyChip(ledger, host) }
   }
 
   it('folds and pays out a player who leaves on their own turn', async () => {
@@ -1523,6 +1544,61 @@ describe('leaving in the middle of a hand', () => {
     expect(await ledger.balance(ALICE)).toBe(50_000)
     expect(await everyChip(ledger, bob)).toBe(total)
   })
+
+  it('plays out the hand of an all-in player the host removes, then pays what it won', async () => {
+    // Deuces for Alice, aces for Bob.
+    const { ledger, clients, total } = await dealTo(['alice', 'bob'], '2c As 2d Ad 5h 5c Ks Kd Qs')
+    const [alice] = clients as [Client, Client]
+    const bob = clients[1] as Client
+    await send(alice, 'alice-call', { kind: 'act', action: { kind: 'call' } })
+    await send(bob, 'bob-shove', { kind: 'act', action: { kind: 'allIn' } })
+    await send(alice, 'kick-bob', { kind: 'kick', targetPlayerId: BOB, reason: 'host' })
+    // Removed, but his cards and his share of the pot stay in the hand.
+    expect(viewOf(alice).seats[1]).toMatchObject({ playerId: BOB, disconnected: true })
+    expect(ledger.entries.filter((entry) => entry.playerId === BOB && entry.delta > 0)).toEqual([])
+    await send(alice, 'alice-call-shove', { kind: 'act', action: { kind: 'call' } })
+    expect(viewOf(alice).phase).toBe('between')
+    expect(viewOf(alice).seats[1]?.playerId).toBeNull()
+    expect(ledger.entries.filter((entry) => entry.reason === 'table_leave')).toEqual([
+      { playerId: BOB, delta: 100_000, reason: 'table_leave', ref: 'river-one:bob-sit:leave' },
+    ])
+    expect(await ledger.balance(BOB)).toBe(150_000)
+    expect(await everyChip(ledger, alice)).toBe(total)
+  })
+
+  it('moves no chips for a stand the room refuses', async () => {
+    const { ledger, clients } = await dealTo(['alice', 'bob'])
+    const [alice] = clients as [Client, Client]
+    const before = ledger.entries.length
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    expect(alice.peer.last('error')).toMatchObject({ code: 'command_rejected' })
+    expect(viewOf(alice).seats[0]?.playerId).toBe(ALICE)
+    expect(ledger.entries).toHaveLength(before)
+  })
+
+  it('gives back what each player bet when a shutdown cuts a hand off', async () => {
+    const { ledger, hub, clients } = await dealTo(['alice', 'bob', 'dev'])
+    const [alice, bob] = clients as [Client, Client, Client]
+    await send(alice, 'alice-call', { kind: 'act', action: { kind: 'call' } })
+    // Bob folds out by leaving, with his blind in the pot, and is paid his stack.
+    await send(bob, 'bob-leave', { kind: 'leave' })
+    expect(viewOf(alice).phase).toBe('hand')
+    expect(viewOf(alice).pot).toBeGreaterThan(0)
+    await hub.settleAllTables()
+    // The hand never ended, so its pot goes back where it came from.
+    for (const playerId of [ALICE, BOB, DEV]) {
+      expect(await ledger.balance(playerId)).toBe(100_000)
+    }
+    expect(ledger.entries).toContainEqual(
+      expect.objectContaining({ playerId: BOB, reason: 'table_shutdown_void' }),
+    )
+    // Frozen: the hand cannot play on and pay its pot a second time.
+    const settled = ledger.entries.length
+    const dev = clients[2] as Client
+    await send(dev, 'dev-check', { kind: 'act', action: { kind: 'check' } })
+    await send(alice, 'alice-stand-late', { kind: 'stand' })
+    expect(ledger.entries).toHaveLength(settled)
+  })
 })
 
 describe('buy-ins a crash left behind', () => {
@@ -1548,6 +1624,76 @@ describe('buy-ins a crash left behind', () => {
     expect(viewOf(alice).seats[0]?.stack).toBe(0)
     return { alice, bob }
   }
+
+  it('refuses a sit the ledger has already paid for, once the server has forgotten it', async () => {
+    const ledger = new MemoryLedger()
+    const alice = await sitDown(hubOver(ledger, { book: true }), 'alice', 0)
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    // A new server, with no memory of having answered it, hears the sit again.
+    const again = await sitDown(hubOver(ledger, { book: true }), 'alice', 0)
+    expect(again.peer.last('error')).toMatchObject({
+      code: 'command_rejected',
+      message: 'that request was already handled',
+    })
+    expect(viewOf(again).seats[0]?.playerId).toBeNull()
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
+
+  it('keeps a seating open while its stack is owed, and pays it when the ledger is back', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new RefusingCredits()
+    const hub = hubOver(ledger, { book: true })
+    const alice = await sitDown(hub, 'alice', 0)
+    ledger.refusing = true
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    // Stood up, owed her stack, and her seating still open for it.
+    expect(viewOf(alice).seats[0]?.playerId).toBeNull()
+    expect(await ledger.balance(ALICE)).toBe(50_000)
+    expect([...ledger.seatings.values()].every((entry) => !entry.closed)).toBe(true)
+    ledger.refusing = false
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    expect([...ledger.seatings.values()].every((entry) => entry.closed)).toBe(true)
+    vi.setSystemTime(RESTART)
+    expect(await hubOver(ledger, { book: true }).refundCrashedSeatings(RESTART)).toBe(0)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
+
+  it('owes two players their stacks apart when their requests share an id', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new RefusingCredits()
+    const hub = hubOver(ledger, { book: true })
+    const alice = await sitDown(hub, 'alice', 0)
+    const bob = await sitDown(hub, 'bob', 1)
+    ledger.refusing = true
+    await send(alice, 'stand', { kind: 'stand' })
+    await send(bob, 'stand', { kind: 'stand' })
+    ledger.refusing = false
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    expect(await ledger.balance(BOB)).toBe(100_000)
+    expect([...ledger.seatings.values()].every((entry) => entry.closed)).toBe(true)
+  })
+
+  it('leaves a payout that never landed for the crash refund, not closed and lost', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new RefusingCredits()
+    const hub = hubOver(ledger, { book: true })
+    const alice = await sitDown(hub, 'alice', 0)
+    ledger.refusing = true
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    await vi.runAllTimersAsync()
+    await hub.settleAllTables()
+    expect(await ledger.balance(ALICE)).toBe(50_000)
+    ledger.refusing = false
+    vi.setSystemTime(RESTART)
+    expect(await hubOver(ledger, { book: true }).refundCrashedSeatings(RESTART)).toBe(1)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
 
   it('pays back the buy-in and rebuys of a seating a crash left open, once', async () => {
     vi.useFakeTimers()
