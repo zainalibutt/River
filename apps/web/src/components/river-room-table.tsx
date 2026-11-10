@@ -604,12 +604,29 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   // is against what was seen then, not only against the snapshot that reveals.
   const evidenceRef = useRef<HandEvidence | null>(null)
   const ownSeedRef = useRef<{ handNumber: number; seed: string } | null>(null)
+  const settledRef = useRef<{ handNumber: number; seed: string; result: VerifyResult } | null>(null)
   useEffect(() => {
     let cancelled = false
     const ownSeed =
       ownSeedRef.current?.handNumber === view.handNumber ? ownSeedRef.current.seed : null
     const evidence = observeHand(evidenceRef.current, view, ownSeed)
     evidenceRef.current = evidence
+    const settled = settledRef.current
+    if (
+      settled !== null &&
+      settled.handNumber === view.handNumber &&
+      settled.seed === view.revealedSeed
+    ) {
+      setVerify(settled.result)
+      return
+    }
+    const seats = view.seats.map((seat) =>
+      seat.playerId === view.selfId &&
+      (seat.hole?.length ?? 0) === 0 &&
+      evidence.ownHole.length === 2
+        ? { ...seat, hole: [...evidence.ownHole] }
+        : seat,
+    )
     const fallbacks =
       view.fallbackCommit != null && view.fallbackSeeds != null
         ? { commit: view.fallbackCommit, seeds: view.fallbackSeeds }
@@ -618,15 +635,24 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
       view.commit,
       view.revealedSeed,
       view.clientSeeds,
-      { board: view.board, seats: view.seats },
+      { board: view.board, seats },
       fallbacks,
     ).then((result) => {
       if (cancelled) return
-      setVerify(
+      const checked: VerifyResult =
         result.status === 'match' && !evidenceAgrees(evidence, view)
           ? { ...result, status: 'mismatch' }
-          : result,
-      )
+          : result
+      // Once a hand is revealed its verdict is final: what happens at the
+      // table afterwards, a stand that clears the seat, cannot change it.
+      if (view.revealedSeed !== null && checked.status !== 'live') {
+        settledRef.current = {
+          handNumber: view.handNumber,
+          seed: view.revealedSeed,
+          result: checked,
+        }
+      }
+      setVerify(checked)
     })
     return () => {
       cancelled = true

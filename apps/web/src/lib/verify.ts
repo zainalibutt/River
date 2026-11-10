@@ -249,6 +249,8 @@ export interface HandEvidence {
   ownSeed: string | null
   ownHole: readonly Card[]
   board: readonly Card[]
+  /** A view during the hand rewrote a board card it had already shown. */
+  boardRewritten: boolean
 }
 
 /** The parts of a table view the evidence is read from. */
@@ -283,6 +285,7 @@ export function observeHand(
           ownSeed: null,
           ownHole: [],
           board: [],
+          boardRewritten: false,
         }
   if (ownSeed !== null && evidence.ownSeed === null) evidence.ownSeed = ownSeed
   if (view.revealedSeed !== null) return evidence
@@ -294,7 +297,13 @@ export function observeHand(
   if (evidence.ownHole.length === 0 && hole !== null && hole !== undefined && hole.length === 2) {
     evidence.ownHole = [...hole]
   }
-  if (view.board.length > evidence.board.length) evidence.board = [...view.board]
+  // The board only ever grows: a card already shown that changes is caught
+  // here, whatever the reveal says later.
+  if (!evidence.board.every((card, index) => sameCard(view.board[index], card))) {
+    evidence.boardRewritten = true
+  } else if (view.board.length > evidence.board.length) {
+    evidence.board = [...view.board]
+  }
   return evidence
 }
 
@@ -305,6 +314,7 @@ export function observeHand(
  */
 export function evidenceAgrees(evidence: HandEvidence, view: EvidenceView): boolean {
   if (evidence.handNumber !== view.handNumber) return true
+  if (evidence.boardRewritten) return false
   if (evidence.commit !== null && evidence.commit !== view.commit) return false
   if (
     evidence.fallbackCommit !== null &&
@@ -312,14 +322,11 @@ export function evidenceAgrees(evidence: HandEvidence, view: EvidenceView): bool
   ) {
     return false
   }
+  // A player who has stood up since no longer shows their cards; the ones
+  // they were dealt are checked against the deck from the evidence instead.
   const hole = view.seats.find((seat) => seat.playerId === view.selfId)?.hole ?? []
-  if (evidence.ownHole.length === 2) {
-    if (
-      hole.length !== 2 ||
-      !evidence.ownHole.every((card, index) => sameCard(hole[index], card))
-    ) {
-      return false
-    }
+  if (evidence.ownHole.length === 2 && hole.length === 2) {
+    if (!evidence.ownHole.every((card, index) => sameCard(hole[index], card))) return false
   }
   if (!evidence.board.every((card, index) => sameCard(view.board[index], card))) return false
   if (evidence.ownSeed !== null && view.clientSeeds !== null) {

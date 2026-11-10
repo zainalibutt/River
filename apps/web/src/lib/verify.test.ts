@@ -178,6 +178,17 @@ describe('holding the reveal to what the hand showed', () => {
     ).toBe(false)
   })
 
+  it('catches a flop rewritten during the hand even when the reveal matches it', () => {
+    const rewritten = observeHand(seen, { ...during, board: cards('Tc 9s 4c') }, null)
+    const revealedLater = { ...reveal, board: cards('Tc 9s 4c Qs 3c') }
+    expect(evidenceAgrees(observeHand(rewritten, revealedLater, null), revealedLater)).toBe(false)
+  })
+
+  it('still agrees after the player stands up and their cards leave the seat', () => {
+    const stood = { ...reveal, seats: [{ playerId: 'alice', hole: null }] }
+    expect(evidenceAgrees(observeHand(seen, stood, null), stood)).toBe(true)
+  })
+
   it('has nothing to hold a hand to that it joined at the reveal', () => {
     expect(evidenceAgrees(observeHand(null, reveal, null), reveal)).toBe(true)
   })
