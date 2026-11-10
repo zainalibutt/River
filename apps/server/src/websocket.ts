@@ -28,17 +28,14 @@ export function attachRiverWebSocketServer(
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
       return
     }
-    // Behind one trusted proxy, the address it saw is the hop it appended last.
-    // Earlier hops are whatever the client chose to send, so they name nobody.
-    const forwarded = request.headers['x-forwarded-for']
-    const lastHop = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded)
-      ?.split(',')
-      .map((hop) => hop.trim())
-      .filter((hop) => hop.length > 0)
-      .at(-1)
+    // Behind a trusted proxy, the client's address is the one the proxy names
+    // in X-Real-IP; Railway sets it. X-Forwarded-For is not used: its hops are
+    // partly whatever the client sent, and the chain is not fixed.
+    const realIp = request.headers['x-real-ip']
+    const named = (Array.isArray(realIp) ? realIp[0] : realIp)?.trim()
     const remote = request.socket.remoteAddress ?? 'unknown'
-    const trusted = config.trustProxy && lastHop !== undefined && isIP(lastHop) !== 0
-    const ip = trusted ? lastHop : remote
+    const trusted = config.trustProxy && named !== undefined && isIP(named) !== 0
+    const ip = trusted ? named : remote
     // An untrusted private address is a proxy in front of every player, or a
     // developer's own machine, so counting it per address would cap the whole
     // game at one address's share.

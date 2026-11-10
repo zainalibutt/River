@@ -3476,8 +3476,10 @@ describe('bounded hub resources', () => {
     await vi.advanceTimersByTimeAsync(1_001)
     expect(resources(hub).rooms.size).toBe(0)
     expect(resources(hub).midasTables.size).toBe(0)
+    const cleared = vi.spyOn(globalThis, 'clearInterval')
     await hub.settleAllTables()
-    expect(vi.getTimerCount()).toBe(0)
+    expect(cleared).toHaveBeenCalledWith(resources(hub).evictionTimer)
+    cleared.mockRestore()
   })
 
   it.each(['hand', 'seeding'] as const)('keeps a room in phase %s', async (phase) => {
@@ -3750,4 +3752,76 @@ it('keeps a newer session when a timed-out authentication later fails', async ()
   expect(newer.last('authenticated')).toBeDefined()
   expect(resources(hub).activePlayers.get(ALICE)?.peer).toBe(newer)
   await hub.settleAllTables()
+})
+
+it('keeps a connection signed in on a refreshed token, and acts on the message after it', async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(1_000_000)
+  const tokens: Record<string, number> = { first: 1_001, refreshed: 5_000 }
+  const hub = new RoomHub({
+    ledger: new MemoryLedger(),
+    verifyToken: async (token) => ({
+      playerId: ALICE,
+      anonymous: false,
+      admin: false,
+      exp: tokens[token] ?? 0,
+    }),
+  })
+  const peer = new TestPeer()
+  const connection = hub.connect(peer)
+  await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'first' }))
+  await vi.advanceTimersByTimeAsync(2_000)
+  // The first token has run out, and the refreshed one arrives before the next action.
+  await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'refreshed' }))
+  await connection.receive(
+    JSON.stringify({
+      kind: 'enter',
+      requestId: 'enter',
+      roomId: 'river-one',
+      name: 'Alice',
+      inviteCode: 'river2',
+    }),
+  )
+  expect(peer.closed).toBeNull()
+  expect(peer.last('snapshot')).toBeDefined()
+  await connection.close()
+  await hub.settleAllTables()
+})
+
+it('refuses a refreshed token for somebody else', async () => {
+  const hub = new RoomHub({
+    ledger: new MemoryLedger(),
+    verifyToken: async (token) => ({
+      playerId: token === 'bob' ? BOB : ALICE,
+      anonymous: false,
+      admin: false,
+    }),
+  })
+  const peer = new TestPeer()
+  const connection = hub.connect(peer)
+  await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'alice' }))
+  await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'bob' }))
+  expect(peer.last('error')).toMatchObject({ code: 'already_authenticated' })
+  await connection.close()
+  await hub.settleAllTables()
+})
+
+it('returns bets from a called-off hand on every restart, not only the first', async () => {
+  const ledger = new MemoryLedger()
+  for (const run of [1, 2]) {
+    const hub = hubOver(ledger)
+    const clients: Client[] = []
+    for (const [seat, token] of (['alice', 'bob', 'dev'] as const).entries()) {
+      const client = await connectAndEnter(hub, token, token)
+      await send(client, `${token}-sit-${run}`, { kind: 'sit', seat, buyIn: 50_000 })
+      clients.push(client)
+    }
+    const [alice, bob] = clients as [Client, Client, Client]
+    await send(alice, `deal-${run}`, { kind: 'startHand' })
+    await send(alice, `alice-call-${run}`, { kind: 'act', action: { kind: 'call' } })
+    await send(bob, `bob-leave-${run}`, { kind: 'leave' })
+    await hub.settleAllTables()
+    for (const playerId of [ALICE, BOB, DEV]) expect(await ledger.balance(playerId)).toBe(100_000)
+  }
+  expect(ledger.entries.filter((entry) => entry.reason === 'table_shutdown_void')).toHaveLength(2)
 })

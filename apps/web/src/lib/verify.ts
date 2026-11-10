@@ -239,3 +239,98 @@ export async function verifyHand(
   }
   return { status: 'match', recomputedCommit, deckEntropy, cardsChecked }
 }
+
+/** What a table showed one player during one hand, before its seed was revealed. */
+export interface HandEvidence {
+  handNumber: number
+  commit: string | null
+  fallbackCommit: string | null
+  /** The seed this browser sent for the hand, if it sent one. */
+  ownSeed: string | null
+  ownHole: readonly Card[]
+  board: readonly Card[]
+}
+
+/** The parts of a table view the evidence is read from. */
+export interface EvidenceView {
+  handNumber: number
+  commit: string | null
+  fallbackCommit?: string | null
+  revealedSeed: string | null
+  clientSeeds: readonly VerifyClientSeed[] | null
+  board: readonly Card[]
+  seats: readonly { playerId: string | null; hole: readonly Card[] | null }[]
+  selfId: string
+}
+
+/**
+ * Fold one view into what this hand has shown so far. Only views from before
+ * the reveal count: the commitments as first seen, this player's own cards,
+ * and the board as it grew.
+ */
+export function observeHand(
+  previous: HandEvidence | null,
+  view: EvidenceView,
+  ownSeed: string | null,
+): HandEvidence {
+  const evidence: HandEvidence =
+    previous !== null && previous.handNumber === view.handNumber
+      ? { ...previous }
+      : {
+          handNumber: view.handNumber,
+          commit: null,
+          fallbackCommit: null,
+          ownSeed: null,
+          ownHole: [],
+          board: [],
+        }
+  if (ownSeed !== null && evidence.ownSeed === null) evidence.ownSeed = ownSeed
+  if (view.revealedSeed !== null) return evidence
+  if (evidence.commit === null && view.commit !== null) evidence.commit = view.commit
+  if (evidence.fallbackCommit === null && view.fallbackCommit != null) {
+    evidence.fallbackCommit = view.fallbackCommit
+  }
+  const hole = view.seats.find((seat) => seat.playerId === view.selfId)?.hole
+  if (evidence.ownHole.length === 0 && hole !== null && hole !== undefined && hole.length === 2) {
+    evidence.ownHole = [...hole]
+  }
+  if (view.board.length > evidence.board.length) evidence.board = [...view.board]
+  return evidence
+}
+
+/**
+ * Whether the revealing view tells the same story the hand showed: the same
+ * commitments, this player's own cards and seed, and a board that only grew.
+ * A view that swapped them all at the reveal would otherwise check out.
+ */
+export function evidenceAgrees(evidence: HandEvidence, view: EvidenceView): boolean {
+  if (evidence.handNumber !== view.handNumber) return true
+  if (evidence.commit !== null && evidence.commit !== view.commit) return false
+  if (
+    evidence.fallbackCommit !== null &&
+    evidence.fallbackCommit !== (view.fallbackCommit ?? null)
+  ) {
+    return false
+  }
+  const hole = view.seats.find((seat) => seat.playerId === view.selfId)?.hole ?? []
+  if (evidence.ownHole.length === 2) {
+    if (
+      hole.length !== 2 ||
+      !evidence.ownHole.every((card, index) => sameCard(hole[index], card))
+    ) {
+      return false
+    }
+  }
+  if (!evidence.board.every((card, index) => sameCard(view.board[index], card))) return false
+  if (evidence.ownSeed !== null && view.clientSeeds !== null) {
+    const mine = view.clientSeeds.find((entry) => entry.playerId === view.selfId)
+    if (
+      mine !== undefined &&
+      !mine.defaulted &&
+      mine.seed.toLowerCase() !== evidence.ownSeed.toLowerCase()
+    ) {
+      return false
+    }
+  }
+  return true
+}

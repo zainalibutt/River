@@ -176,24 +176,29 @@ describe('WebSocket admission', () => {
     expect(sockets.clients.size).toBe(2)
   })
 
-  it('caps by the hop the trusted proxy appended, whatever the client put before it', async () => {
+  it('caps by the address the trusted proxy names, whatever the client forwards', async () => {
     const { sockets, url } = await startAdapter({ maxSocketsPerIp: 1, trustProxy: true })
-    const first = await openClient(url, { 'x-forwarded-for': '198.51.100.7, 192.0.2.1' })
-    // The same player, claiming to be somebody else in the hop it controls.
-    expect(await rejectedUpgrade(url, { 'x-forwarded-for': '203.0.113.9, 192.0.2.1' })).toBe(503)
-    await openClient(url, { 'x-forwarded-for': '192.0.2.1, 192.0.2.2' })
+    const first = await openClient(url, {
+      'x-real-ip': '192.0.2.1',
+      'x-forwarded-for': '198.51.100.7',
+    })
+    // The same player, claiming to be somebody else in the header it controls.
+    expect(
+      await rejectedUpgrade(url, { 'x-real-ip': '192.0.2.1', 'x-forwarded-for': '203.0.113.9' }),
+    ).toBe(503)
+    await openClient(url, { 'x-real-ip': '192.0.2.2' })
     const serverClient = [...sockets.clients][0]
     const closed = new Promise<void>((resolve) => serverClient?.once('close', resolve))
     first.close()
     await closed
-    await openClient(url, { 'x-forwarded-for': '192.0.2.1' })
+    await openClient(url, { 'x-real-ip': '192.0.2.1' })
     expect(sockets.clients.size).toBe(2)
   })
 
   it('still caps every socket together when the forwarding header is unusable', async () => {
     const { sockets, url } = await startAdapter({ maxSockets: 1, trustProxy: true })
-    await openClient(url, { 'x-forwarded-for': 'invalid' })
-    expect(await rejectedUpgrade(url, { 'x-forwarded-for': 'also-invalid' })).toBe(503)
+    await openClient(url, { 'x-real-ip': 'invalid' })
+    expect(await rejectedUpgrade(url, { 'x-real-ip': 'also-invalid' })).toBe(503)
     expect(sockets.clients.size).toBe(1)
   })
 

@@ -231,6 +231,12 @@ interface RoomState {
   room: Room
   connections: Set<ConnectionState>
   queue: Promise<void>
+  /**
+   * This table's life in this process. A table's id and its hand numbers come
+   * round again after a restart or an eviction, so a reference that must name
+   * one hand once and for ever carries this too.
+   */
+  incarnation: string
   pendingTasks: number
   lastActivityMs: number
   reconnectTimers: Map<string, ReturnType<typeof setTimeout>>
@@ -798,6 +804,35 @@ export class RoomHub {
     state.peekTimers.clear()
   }
 
+  /**
+   * A signed-in connection handing over the token its client has just
+   * refreshed. The same player, so nothing about the session changes but how
+   * long it lasts and whether it still holds developer rights.
+   */
+  private async reauthenticate(
+    connection: ConnectionState,
+    current: AuthenticatedPlayer,
+    accessToken: string,
+  ): Promise<void> {
+    let player: AuthenticatedPlayer
+    try {
+      player = await this.verifyToken(accessToken)
+    } catch (error) {
+      this.onError('reauthenticate: token rejected', error)
+      return
+    }
+    if (connection.closed || connection.player !== current) return
+    if (player.playerId !== current.playerId) {
+      this.error(connection, null, 'already_authenticated', 'Connection is already authenticated')
+      return
+    }
+    connection.player = {
+      ...current,
+      admin: player.admin,
+      ...(player.exp === undefined ? {} : { exp: player.exp }),
+    }
+  }
+
   private cacheReply(key: string, message: ServerMessage): void {
     this.completed.set(key, message)
     while (this.completed.size > 10_000) {
@@ -862,16 +897,19 @@ export class RoomHub {
   }
 
   private async receive(connection: ConnectionState, raw: string): Promise<void> {
-    if (connection.closed || this.sessionExpired(connection)) return
+    if (connection.closed) return
     const message = parseClientMessage(raw, this.midas !== undefined)
     if (message === null) {
       this.error(connection, null, 'invalid_message', 'Invalid client message')
       return
     }
+    // A fresh token is taken even after the old one has run out: it is how a
+    // connection stays signed in without dropping the player's next action.
     if (message.kind === 'authenticate') {
       await this.authenticate(connection, message.accessToken)
       return
     }
+    if (this.sessionExpired(connection)) return
     if (connection.player === null) {
       this.error(connection, message.requestId, 'unauthenticated', 'Authenticate before joining')
       return
@@ -927,7 +965,7 @@ export class RoomHub {
 
   private async authenticate(connection: ConnectionState, accessToken: string): Promise<void> {
     if (connection.player !== null) {
-      this.error(connection, null, 'already_authenticated', 'Connection is already authenticated')
+      await this.reauthenticate(connection, connection.player, accessToken)
       return
     }
     // Only the token check may report an authentication failure. Everything
@@ -1748,6 +1786,7 @@ export class RoomHub {
       room,
       connections: new Set(),
       queue: Promise.resolve(),
+      incarnation: randomUUID().replace(/-/g, '').slice(0, 12),
       pendingTasks: 0,
       lastActivityMs: Date.now(),
       reconnectTimers: new Map(),
@@ -1846,7 +1885,7 @@ export class RoomHub {
           playerId,
           delta: amount,
           reason: 'table_shutdown_void',
-          ref: `${state.room.id}:hand-${view.handNumber}:${playerId}:void`,
+          ref: `${state.room.id}:${state.incarnation}:hand-${view.handNumber}:${playerId}:void`,
         }
         // Their seating is closed, so no crash refund would ever find this:
         // it is tried a few times before the process goes, then reported.

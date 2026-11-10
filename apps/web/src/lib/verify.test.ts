@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto'
 import { parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
+  evidenceAgrees,
   isVerifySeed,
+  observeHand,
   recomputeCommit,
   recomputeDeck,
   recomputeDeckEntropy,
@@ -134,5 +136,49 @@ describe('checking the cards themselves', () => {
       seeds: committed,
     })
     expect(chosen.status).toBe('mismatch')
+  })
+})
+
+describe('holding the reveal to what the hand showed', () => {
+  const cards = (text: string) => text.split(' ').map((card) => parseCard(card))
+  const during = {
+    handNumber: 4,
+    commit: 'c'.repeat(64),
+    fallbackCommit: 'f'.repeat(64),
+    revealedSeed: null,
+    clientSeeds: null,
+    board: cards('Tc 9s 5c'),
+    seats: [{ playerId: 'alice', hole: cards('2d 7c') }],
+    selfId: 'alice',
+  }
+  const reveal = {
+    ...during,
+    revealedSeed: 'a'.repeat(64),
+    board: cards('Tc 9s 5c Qs 3c'),
+    clientSeeds: [{ playerId: 'alice', seat: 0, seed: 'b'.repeat(64), defaulted: false }],
+  }
+  const seen = observeHand(null, during, 'b'.repeat(64))
+
+  it('agrees with a reveal that tells the same story', () => {
+    expect(evidenceAgrees(observeHand(seen, reveal, null), reveal)).toBe(true)
+  })
+
+  it('catches a reveal that swaps the commitment, the cards or the seed', () => {
+    expect(evidenceAgrees(seen, { ...reveal, commit: 'd'.repeat(64) })).toBe(false)
+    expect(evidenceAgrees(seen, { ...reveal, fallbackCommit: 'e'.repeat(64) })).toBe(false)
+    expect(evidenceAgrees(seen, { ...reveal, board: cards('Tc 9s 4c Qs 3c') })).toBe(false)
+    expect(
+      evidenceAgrees(seen, { ...reveal, seats: [{ playerId: 'alice', hole: cards('2d 7s') }] }),
+    ).toBe(false)
+    expect(
+      evidenceAgrees(seen, {
+        ...reveal,
+        clientSeeds: [{ playerId: 'alice', seat: 0, seed: 'e'.repeat(64), defaulted: false }],
+      }),
+    ).toBe(false)
+  })
+
+  it('has nothing to hold a hand to that it joined at the reveal', () => {
+    expect(evidenceAgrees(observeHand(null, reveal, null), reveal)).toBe(true)
   })
 })
