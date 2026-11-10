@@ -103,7 +103,8 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong>Seatings.</strong> When you sit down at a table and when you leave, with your
-              buy-in, so a seat lost to a server crash can be refunded.
+              buy-in, so a seat lost to a server crash can be refunded. A crash refund pays back
+              what you bought in with, since your stack at that moment is lost with the server.
             </li>
             <li>
               <strong>Your hand record.</strong> One row per hand you played: the actions at the
