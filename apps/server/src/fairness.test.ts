@@ -1,7 +1,13 @@
 import { makeDeck } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import type { FairnessClientSeed } from './fairness.js'
-import { deckEntropy, fairDeck, fairnessCommit, fairShuffle } from './fairness.js'
+import {
+  deckEntropy,
+  fairDeck,
+  fairnessCommit,
+  fairShuffle,
+  fallbackSeedsCommit,
+} from './fairness.js'
 import type { RoomEvent } from './protocol.js'
 import { defaultRoomConfig, Room } from './room.js'
 
@@ -9,6 +15,8 @@ const ALICE_SEED = '11'.repeat(32)
 const BOB_SEED = '22'.repeat(32)
 const SERVER_SEED_ONE = '33'.repeat(32)
 const SERVER_SEED_TWO = '44'.repeat(32)
+const FALLBACK_ZERO = '55'.repeat(32)
+const FALLBACK_TWO = '66'.repeat(32)
 
 function seeds(...values: string[]): (size: number) => Uint8Array {
   let cursor = 0
@@ -56,13 +64,22 @@ describe('multiplayer fairness', () => {
         seed: 'legacy-room-value',
         inviteCode: 'RIVER2',
         seedCollectionMs: 1_000,
-        randomBytes: seeds(SERVER_SEED_ONE),
+        // The server's seed, then a fallback for each seat, all before any player seed.
+        randomBytes: seeds(SERVER_SEED_ONE, FALLBACK_ZERO, FALLBACK_TWO),
       }),
     )
     seatTwo(room)
     const committed = room.submit({ kind: 'startHand' })
     expect(committed.events).toEqual([
-      { kind: 'seedCommitted', handNumber: 1, commit: fairnessCommit(SERVER_SEED_ONE) },
+      {
+        kind: 'seedCommitted',
+        handNumber: 1,
+        commit: fairnessCommit(SERVER_SEED_ONE),
+        fallbackCommit: fallbackSeedsCommit([
+          { seat: 0, seed: FALLBACK_ZERO },
+          { seat: 2, seed: FALLBACK_TWO },
+        ]),
+      },
     ])
     const commitment = committed.events.find(
       (event): event is Extract<RoomEvent, { kind: 'seedCommitted' }> =>
@@ -95,6 +112,35 @@ describe('multiplayer fairness', () => {
     expect(view.board).toEqual(deck.slice(4, 9))
     expect(view.revealedSeed).toBe(SERVER_SEED_ONE)
     expect(view.clientSeeds).toEqual(reveal?.clientSeeds)
+  })
+
+  it('deals a player who sends no seed the fallback committed before any seed arrived', () => {
+    const room = new Room(
+      'committed-fallback',
+      defaultRoomConfig({
+        seed: 'legacy-room-value',
+        inviteCode: 'RIVER2',
+        seedCollectionMs: 1_000,
+        randomBytes: seeds(SERVER_SEED_ONE, FALLBACK_ZERO, FALLBACK_TWO),
+      }),
+    )
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    const fallbackCommit = room.viewFor('alice').fallbackCommit
+    // Bob sends his seed; Alice never does, and the deal goes ahead without her.
+    room.submit({ kind: 'submitSeed', playerId: 'bob', seed: BOB_SEED })
+    room.submit({ kind: 'finalizeSeeds' })
+    settle(room)
+    const view = room.viewFor('alice')
+    expect(view.clientSeeds).toEqual([
+      { playerId: 'alice', seat: 0, seed: FALLBACK_ZERO, defaulted: true },
+      { playerId: 'bob', seat: 2, seed: BOB_SEED, defaulted: false },
+    ])
+    expect(view.fallbackSeeds).toEqual([
+      { seat: 0, seed: FALLBACK_ZERO },
+      { seat: 2, seed: FALLBACK_TWO },
+    ])
+    expect(fallbackSeedsCommit(view.fallbackSeeds ?? [])).toBe(fallbackCommit)
   })
 
   it('uses independent per-hand seeds and defaults missing client entropy', () => {

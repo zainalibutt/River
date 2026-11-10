@@ -35,6 +35,43 @@ export function freshFairnessSeed(source: (size: number) => Uint8Array = randomB
   return Buffer.from(bytes).toString('hex')
 }
 
+/** One seat's fallback seed: what it is dealt with if its player sends none. */
+export interface FallbackSeed {
+  seat: number
+  seed: string
+}
+
+/**
+ * The commitment to every seat's fallback seed, published with the server's
+ * own commitment before any player seed arrives: SHA-256 over each seat as four
+ * big-endian bytes and its seed, in seat order.
+ *
+ * Drawn at the deal instead, a fallback was picked by the server after it had
+ * seen every other seed, which is enough to choose the deck. Drawn and
+ * committed when the hand starts, it is fixed before anything is known, and
+ * revealed with the server seed so anyone can check it.
+ */
+export function fallbackSeedsCommit(seeds: readonly FallbackSeed[]): string {
+  const ordered = [...seeds].sort((left, right) => left.seat - right.seat)
+  return Buffer.from(
+    hashBytes(...ordered.flatMap((entry) => [uint32be(entry.seat), hexBytes(entry.seed)])),
+  ).toString('hex')
+}
+
+/**
+ * A fallback for a seat that had none drawn for it, derived from the committed
+ * server seed so it too was fixed before any player seed arrived.
+ */
+export function derivedFallbackSeed(serverSeed: string, seat: number): string {
+  return Buffer.from(
+    hashBytes(
+      hexBytes(serverSeed),
+      new TextEncoder().encode('river:fallback-seed'),
+      uint32be(seat),
+    ),
+  ).toString('hex')
+}
+
 export function fairnessCommit(seed: string): string {
   return Buffer.from(hashBytes(hexBytes(seed))).toString('hex')
 }

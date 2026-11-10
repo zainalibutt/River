@@ -32,9 +32,12 @@ import {
   streetDealMs,
 } from '@river/engine'
 import {
+  derivedFallbackSeed,
   type FairnessClientSeed,
+  type FallbackSeed,
   fairDeck,
   fairnessCommit,
+  fallbackSeedsCommit,
   freshFairnessSeed,
   isFairnessSeed,
 } from './fairness.js'
@@ -241,6 +244,10 @@ export class Room implements RoomHandle {
   private currentServerSeed: string | null = null
   private revealedSeed: string | null = null
   private pendingClientSeeds = new Map<string, string>()
+  /** Each dealt seat's fallback seed, drawn and committed as the hand starts. */
+  private pendingFallbacks = new Map<number, string>()
+  private fallbackCommit: string | null = null
+  private revealedFallbacks: FallbackSeed[] | null = null
   private settledClientSeeds: FairnessClientSeed[] | null = null
   private status: string | null = null
   private readonly eventLog: RoomEvent[] = []
@@ -375,6 +382,11 @@ export class Room implements RoomHandle {
           ? this.config.turnBudgetsMs[this.lastStreet]
           : null,
       commit: this.currentCommit,
+      fallbackCommit: this.fallbackCommit,
+      fallbackSeeds:
+        this.revealedSeed === null || this.revealedFallbacks === null
+          ? null
+          : this.revealedFallbacks.map((entry) => ({ ...entry })),
       revealedSeed: this.revealedSeed,
       clientSeeds:
         this.revealedSeed === null || this.settledClientSeeds === null
@@ -579,6 +591,8 @@ export class Room implements RoomHandle {
     this.dealerSeat = this.dealerBeforeDeal
     this.pendingServerSeed = null
     this.currentCommit = null
+    this.fallbackCommit = null
+    this.pendingFallbacks.clear()
     this.pendingClientSeeds.clear()
     // Before the first hand, the host deals it; after one, the gap between
     // hands deals the next once two players are seated again.
@@ -695,9 +709,26 @@ export class Room implements RoomHandle {
     this.pendingServerSeed = freshFairnessSeed(this.config.randomBytes)
     this.currentServerSeed = null
     this.currentCommit = fairnessCommit(this.pendingServerSeed)
+    // Every seat's fallback, drawn now, before any player seed can arrive, and
+    // committed with the server's seed, in the order they used to be drawn at
+    // the deal so a deterministic table deals the decks it always did.
+    this.pendingFallbacks.clear()
+    this.revealedFallbacks = null
+    for (const seat of active) {
+      this.pendingFallbacks.set(
+        this.seats.indexOf(seat),
+        freshFairnessSeed(this.config.randomBytes),
+      )
+    }
+    this.fallbackCommit = fallbackSeedsCommit(this.fallbackList())
     this.phase = 'seeding'
     const events: RoomEvent[] = [
-      { kind: 'seedCommitted', handNumber: this.handNumber, commit: this.currentCommit },
+      {
+        kind: 'seedCommitted',
+        handNumber: this.handNumber,
+        commit: this.currentCommit,
+        fallbackCommit: this.fallbackCommit,
+      },
     ]
     if (this.config.seedCollectionMs === 0) this.finalizeSeedsInto(events)
     this.log(events)
@@ -749,10 +780,14 @@ export class Room implements RoomHandle {
       const playerId = seat.playerId
       if (playerId === null) throw new Error('active seat missing player')
       const submitted = this.pendingClientSeeds.get(playerId)
+      const seatIndex = this.seatOfPlayer(playerId)
       return {
         playerId,
-        seat: this.seatOfPlayer(playerId),
-        seed: submitted ?? freshFairnessSeed(this.config.randomBytes),
+        seat: seatIndex,
+        seed:
+          submitted ??
+          this.pendingFallbacks.get(seatIndex) ??
+          derivedFallbackSeed(serverSeed, seatIndex),
         defaulted: submitted === undefined,
       }
     })
@@ -1335,6 +1370,7 @@ export class Room implements RoomHandle {
     }
     this.awardRep(winners, events)
     this.revealedSeed = this.currentServerSeed
+    this.revealedFallbacks = this.fallbackList()
     events.push({
       kind: 'seedRevealed',
       handNumber: this.handNumber,
@@ -1492,6 +1528,12 @@ export class Room implements RoomHandle {
       }
       return seat
     })
+  }
+
+  private fallbackList(): FallbackSeed[] {
+    return [...this.pendingFallbacks]
+      .map(([seat, seed]) => ({ seat, seed }))
+      .sort((left, right) => left.seat - right.seat)
   }
 
   private activeSeats(): SeatState[] {

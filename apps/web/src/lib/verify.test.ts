@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto'
+import { parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
   isVerifySeed,
   recomputeCommit,
+  recomputeDeck,
   recomputeDeckEntropy,
+  recomputeFallbackCommit,
   type VerifyClientSeed,
   verifyHand,
 } from './verify.js'
@@ -77,5 +80,59 @@ describe('client-side fairness verification', () => {
     expect(isVerifySeed(SERVER_SEED)).toBe(true)
     expect(isVerifySeed('abc')).toBe(false)
     expect(isVerifySeed(`${'a'.repeat(63)}z`)).toBe(false)
+  })
+})
+
+describe('checking the cards themselves', () => {
+  const cards = (text: string) => text.split(' ').map((card) => parseCard(card))
+  // The server's own fairDeck for these seeds, printed from apps/server/src/fairness.ts.
+  const SERVER_DECK = cards('2d 4c 7c 7s Tc 9s 5c Qs 3c')
+  const commit = serverCommit(SERVER_SEED)
+  /** Heads up with Alice on the button: she is dealt first, then the board after both. */
+  const dealt = (aliceHole: string, board: string) => ({
+    board: cards(board),
+    seats: [
+      { seat: 0, hole: cards(aliceHole), dealer: true },
+      { seat: 2, hole: null, dealer: false },
+    ],
+  })
+
+  it('shuffles exactly as the server does', async () => {
+    const deck = await recomputeDeck(SERVER_SEED, seats)
+    expect(deck?.slice(0, 9)).toEqual(SERVER_DECK)
+    expect(new Set(deck?.map((card) => card.rank + card.suit)).size).toBe(52)
+  })
+
+  it('passes a hand whose shown cards are the ones the deck deals', async () => {
+    const result = await verifyHand(commit, SERVER_SEED, seats, dealt('2d 7c', 'Tc 9s 5c Qs 3c'))
+    expect(result).toMatchObject({ status: 'match', cardsChecked: 7 })
+  })
+
+  it('fails a hand whose seed matches its commit but whose cards were not the deck', async () => {
+    const swapped = await verifyHand(commit, SERVER_SEED, seats, dealt('2d 7c', 'Tc 9s 5c Qs As'))
+    expect(swapped.status).toBe('mismatch')
+    const wrongHole = await verifyHand(commit, SERVER_SEED, seats, dealt('7c 2d', 'Tc 9s 5c Qs 3c'))
+    expect(wrongHole.status).toBe('mismatch')
+  })
+
+  it('fails a filled-in seed that is not the fallback committed before the deal', async () => {
+    const committed = [
+      { seat: 0, seed: ALICE_SEED },
+      { seat: 2, seed: 'd'.repeat(64) },
+    ]
+    const fallbackCommit = (await recomputeFallbackCommit(committed)) ?? ''
+    const defaulted = seats.map((entry) => ({ ...entry, defaulted: entry.playerId === 'alice' }))
+    const honest = await verifyHand(commit, SERVER_SEED, defaulted, undefined, {
+      commit: fallbackCommit,
+      seeds: committed,
+    })
+    expect(honest.status).toBe('match')
+    // Bob's seed is the one filled in now, and it is not what was committed for him.
+    const swapped = seats.map((entry) => ({ ...entry, defaulted: entry.playerId === 'bob' }))
+    const chosen = await verifyHand(commit, SERVER_SEED, swapped, undefined, {
+      commit: fallbackCommit,
+      seeds: committed,
+    })
+    expect(chosen.status).toBe('mismatch')
   })
 })
