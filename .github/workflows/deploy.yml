@@ -28,8 +28,8 @@ jobs:
     name: Gates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Check the token is present
         # Railway reports a missing token as NOT_AUTHENTICATED, which reads as
         # an outage rather than as an unset secret. Read through env rather
@@ -66,7 +66,8 @@ jobs:
             echo "error."
             exit 1
           fi
-      - run: npm i -g @railway/cli
+      # Pinned, so a deploy behaves the same until the pin is moved on purpose.
+      - run: npm i -g @railway/cli@5.71.0
       - name: Deploy
         # A project-scoped token already carries the project, so only the
         # service needs naming. --ci streams the build and exits on the

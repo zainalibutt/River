@@ -18,8 +18,8 @@ jobs:
         # 24 is what the work is actually done on.
         node: [22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -27,3 +27,31 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+
+  # Committed secrets: every commit a push or pull request adds.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The tests that need Postgres, Auth and REST: the ledger's transactions and
+  # locks, the seating book, names and bot memory, against a local Supabase
+  # stack started from this commit's migrations. They skip themselves in the
+  # job above, which has no database.
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace @river/engine
+      - run: node scripts/dev-db.mjs start
+      - run: node scripts/dev-db.mjs exec npx vitest run apps/server/src/ledger.local.test.ts apps/server/src/player-names.local.test.ts apps/server/src/bot-opponent-store.local.test.ts
