@@ -72,6 +72,16 @@ describe.skipIf(!local)('erasing a player keeps the ledger and nothing else', ()
     expect(await ledger.balance(playerId)).toBe(balance)
   })
 
+  it('moves no chips for an erased player, whatever token is still about', async () => {
+    const playerId = await player()
+    expect((await erase(playerId)).status).toBe(204)
+    await expect(
+      ledger.apply({ playerId, delta: -1, reason: 'table_buy_in', ref: `after-${randomUUID()}` }),
+    ).rejects.toThrow('erased player')
+    // Erasing again is harmless, for the records a table writes in the hour after.
+    expect((await erase(playerId)).status).toBe(204)
+  })
+
   it('refuses to delete an account whose player has not been erased', async () => {
     const playerId = await player()
     const deleted = await fetch(`${url}/auth/v1/admin/users/${playerId}`, {
