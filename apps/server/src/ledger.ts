@@ -8,6 +8,28 @@ export interface LedgerEntry {
 export interface Ledger {
   balance(playerId: string): Promise<number>
   apply(entry: LedgerEntry): Promise<number>
+  /**
+   * Debit a buy-in or rebuy and, when `seating` is given, write it open at its
+   * size, together, saying whether the debit was new. A replay moves nothing
+   * and writes nothing. A ledger without it cannot tell a replay apart.
+   */
+  debitSeat?(entry: LedgerEntry, seating: Seating | undefined): Promise<SeatDebit>
+}
+
+/** The ledger refused an entry because the bankroll could not cover it. */
+export function isInsufficientBalance(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('insufficient balance')
+}
+
+/** What a seat's debit did: the balance after it, and whether the ledger already had it. */
+export interface SeatDebit {
+  balance: number
+  /**
+   * The ledger already held this entry, so nothing moved now. A request the
+   * server has forgotten answering looks like this, and is refused rather than
+   * carried out a second time for nothing.
+   */
+  replay: boolean
 }
 
 /** One person's time in one seat, from the buy-in that opened it to whatever ended it. */
@@ -159,6 +181,35 @@ export class SupabaseLedger implements Ledger, SeatingStore {
       p_buy_in: seating.buyIn,
       p_opened_at: new Date(seating.openedAtMs).toISOString(),
     })
+  }
+
+  async debitSeat(entry: LedgerEntry, seating: Seating | undefined): Promise<SeatDebit> {
+    if (!Number.isSafeInteger(entry.delta) || entry.delta >= 0) {
+      throw new Error('a seat debit must be a negative safe integer')
+    }
+    const response = await this.send(`${this.baseUrl}/rest/v1/rpc/apply_seat_debit`, {
+      method: 'POST',
+      body: JSON.stringify({
+        p_player_id: entry.playerId,
+        p_delta: entry.delta,
+        p_reason: entry.reason,
+        p_ref: entry.ref,
+        ...(seating === undefined
+          ? {}
+          : {
+              p_seating_ref: seating.ref,
+              p_buy_in: seating.buyIn,
+              p_opened_at: new Date(seating.openedAtMs).toISOString(),
+            }),
+      }),
+    })
+    const body = await this.read(response)
+    if (typeof body !== 'object' || body === null) {
+      throw new Error('Supabase returned an invalid seat debit')
+    }
+    const { balance, replay } = body as Record<string, unknown>
+    if (typeof replay !== 'boolean') throw new Error('Supabase returned an invalid seat debit')
+    return { balance: asSafeBalance(balance), replay }
   }
 
   async closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {

@@ -1,5 +1,5 @@
 import { canEquip, itemCatalogue, type TableItem } from '@river/engine'
-import type { Ledger } from './ledger.js'
+import { isInsufficientBalance, type Ledger } from './ledger.js'
 
 export interface OwnedItem {
   itemId: string
@@ -52,6 +52,10 @@ export function equippedItems(
  * The ledger ref is deterministic per player and item, so a replayed purchase
  * hits the unique index and debits nothing. This is the guard rather than a
  * check-then-write, which would race a double click into two debits.
+ *
+ * The ledger checks the balance, not this: a purchase charged once whose item
+ * never landed is put right by buying it again, which debits nothing, and a
+ * balance check here refused exactly that retry once the chips were spent.
  */
 export async function purchaseItem(
   playerId: string,
@@ -66,15 +70,18 @@ export async function purchaseItem(
     return { kind: 'refused', reason: 'already-owned' }
   }
 
-  const balance = await deps.ledger.balance(playerId)
-  if (balance < item.priceChips) return { kind: 'refused', reason: 'insufficient-chips' }
-
-  const next = await deps.ledger.apply({
-    playerId,
-    delta: -item.priceChips,
-    reason: 'table_item',
-    ref: `item:${playerId}:${itemId}`,
-  })
+  let next: number
+  try {
+    next = await deps.ledger.apply({
+      playerId,
+      delta: -item.priceChips,
+      reason: 'table_item',
+      ref: `item:${playerId}:${itemId}`,
+    })
+  } catch (error) {
+    if (isInsufficientBalance(error)) return { kind: 'refused', reason: 'insufficient-chips' }
+    throw error
+  }
   await deps.store.add(playerId, item)
   return { kind: 'purchased', itemId, balance: next }
 }

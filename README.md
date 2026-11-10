@@ -27,8 +27,11 @@ characters on tables that support them.
   seated player contributes one, and the deck is a deterministic shuffle of
   both. After the hand anyone can recompute it. See [fairness](docs/fairness.md).
 - **Chips that cannot go missing.** An append-only ledger in Postgres with
-  idempotent references, server-side seat settlement, and recovery that pays
-  back players a crashed server left seated.
+  idempotent references and one entry at a time per player, server-side seat
+  settlement, and recovery for every way a seat ends. A deploy calls off any
+  hand in progress and pays each player their stack and what they had bet in
+  it. A crash pays back each open seat's buy-in and rebuys: the stack at that
+  moment lived only in the memory the crash lost.
 - **Bots that are measured, not tuned by eye.** Rule-based tiers, a CFR+ river
   solver running in a worker thread, value networks trained in PyTorch and run
   in plain TypeScript, evaluated on held-out seeds against a best-response

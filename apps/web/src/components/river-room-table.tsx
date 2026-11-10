@@ -124,7 +124,13 @@ import {
   venueOf,
   worldSeats,
 } from '@/lib/venue'
-import { type VerifyResult, verifyHand } from '@/lib/verify'
+import {
+  evidenceAgrees,
+  type HandEvidence,
+  observeHand,
+  type VerifyResult,
+  verifyHand,
+} from '@/lib/verify'
 
 const boardSlots = ['flop-one', 'flop-two', 'flop-three', 'turn', 'river'] as const
 
@@ -261,9 +267,9 @@ function emptyView(selfId = 'pending', venueId: VenueId = DEFAULT_VENUE): RoomVi
 function verifyStatusLabel(status: VerifyResult['status']): string {
   switch (status) {
     case 'match':
-      return 'Fairness verified, commit matches the revealed seed'
+      return 'Fairness verified, the seeds and the cards match'
     case 'mismatch':
-      return 'Fairness check failed, commit does not match'
+      return 'Fairness check failed, the seeds or the cards do not match'
     case 'live':
       return 'Fairness commit published, seed still hidden'
     default:
@@ -287,9 +293,9 @@ function verifyHeadline(status: VerifyResult['status']): string {
 function verifyCopy(status: VerifyResult['status']): string {
   switch (status) {
     case 'match':
-      return 'Recomputed in your browser: the revealed seed hashes to the commit published before the deal. Nobody could have chosen this deck after seeing a card.'
+      return 'Recomputed in your browser: the revealed seed hashes to the commit published before the deal, and the deck it makes with every player seed deals each card you saw. Nobody could have chosen this deck after seeing a card.'
     case 'mismatch':
-      return 'The revealed seed does not hash to the published commit. Do not keep playing at this table.'
+      return 'The revealed seeds do not match what was committed before the deal, or the deck they make does not deal the cards on this table. Do not keep playing at this table.'
     case 'live':
       return 'The commit is published and the server seed stays hidden until the hand settles. Your own seed is mixed in, so the deck is not the server’s alone.'
     default:
@@ -574,6 +580,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     status: 'idle',
     recomputedCommit: null,
     deckEntropy: null,
+    cardsChecked: 0,
   })
   // The table comes up from black when this screen first appears, and at no
   // other time. The veil belongs to the screen rather than to the connection,
@@ -593,15 +600,64 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     return () => window.clearTimeout(timer)
   }, [])
 
+  // What this table showed during each hand, kept so the check at the reveal
+  // is against what was seen then, not only against the snapshot that reveals.
+  const evidenceRef = useRef<HandEvidence | null>(null)
+  const ownSeedRef = useRef<{ handNumber: number; seed: string } | null>(null)
+  const settledRef = useRef<{ handNumber: number; seed: string; result: VerifyResult } | null>(null)
   useEffect(() => {
     let cancelled = false
-    void verifyHand(view.commit, view.revealedSeed, view.clientSeeds).then((result) => {
-      if (!cancelled) setVerify(result)
+    const ownSeed =
+      ownSeedRef.current?.handNumber === view.handNumber ? ownSeedRef.current.seed : null
+    const evidence = observeHand(evidenceRef.current, view, ownSeed)
+    evidenceRef.current = evidence
+    const settled = settledRef.current
+    if (
+      settled !== null &&
+      settled.handNumber === view.handNumber &&
+      settled.seed === view.revealedSeed
+    ) {
+      setVerify(settled.result)
+      return
+    }
+    const seats = view.seats.map((seat) =>
+      seat.playerId === view.selfId &&
+      (seat.hole?.length ?? 0) === 0 &&
+      evidence.ownHole.length === 2
+        ? { ...seat, hole: [...evidence.ownHole] }
+        : seat,
+    )
+    const fallbacks =
+      view.fallbackCommit != null && view.fallbackSeeds != null
+        ? { commit: view.fallbackCommit, seeds: view.fallbackSeeds }
+        : null
+    void verifyHand(
+      view.commit,
+      view.revealedSeed,
+      view.clientSeeds,
+      { board: view.board, seats },
+      fallbacks,
+    ).then((result) => {
+      if (cancelled) return
+      const checked: VerifyResult =
+        result.status === 'match' && !evidenceAgrees(evidence, view)
+          ? { ...result, status: 'mismatch' }
+          : result
+      // Once a hand is revealed its verdict is final: what happens at the
+      // table afterwards, a stand that clears the seat, cannot change it.
+      if (view.revealedSeed !== null && checked.status !== 'live') {
+        settledRef.current = {
+          handNumber: view.handNumber,
+          seed: view.revealedSeed,
+          result: checked,
+        }
+      }
+      setVerify(checked)
     })
     return () => {
       cancelled = true
     }
-  }, [view.commit, view.revealedSeed, view.clientSeeds])
+  }, [view])
   const socketRef = useRef<RiverSocket | null>(null)
   const authRef = useRef<SupabaseClient | null>(null)
   const kickRef = useRef<KickState>(null)
@@ -659,6 +715,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     let disposed = false
     let unsubscribeMessage: (() => void) | null = null
     let unsubscribeState: (() => void) | null = null
+    let unsubscribeAuth: (() => void) | null = null
     // One retry pending at a time, backing off while the server stays away. A lost socket
     // and a failed attempt can both ask for one, and two would open two sockets.
     let retryMs = RECONNECT_FIRST_MS
@@ -683,6 +740,14 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
           const session = await ensureRiverSession(auth)
           if (disposed) return
           accessToken = session.access_token
+          // Each refreshed token goes to the server over the open socket.
+          unsubscribeAuth?.()
+          const { data } = auth.auth.onAuthStateChange((event, next) => {
+            if (event === 'TOKEN_REFRESHED' && next !== null) {
+              socketRef.current?.refreshToken(next.access_token)
+            }
+          })
+          unsubscribeAuth = () => data.subscription.unsubscribe()
         }
         const url = defaultRiverSocketUrl(window.location)
         const socket = new RiverSocket(
@@ -892,7 +957,9 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             )
           ) {
             try {
-              socket.command({ kind: 'submitSeed', seed: browserFairnessSeed() })
+              const seed = browserFairnessSeed()
+              ownSeedRef.current = { handNumber: message.view.handNumber, seed }
+              socket.command({ kind: 'submitSeed', seed })
             } catch {
               setNotice('Reconnecting…')
             }
@@ -994,6 +1061,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     return () => {
       disposed = true
       if (reconnectRef.current !== null) window.clearTimeout(reconnectRef.current)
+      unsubscribeAuth?.()
       unsubscribeMessage?.()
       unsubscribeState?.()
       socketRef.current?.close()

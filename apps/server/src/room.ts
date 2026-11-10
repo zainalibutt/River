@@ -32,9 +32,12 @@ import {
   streetDealMs,
 } from '@river/engine'
 import {
+  derivedFallbackSeed,
   type FairnessClientSeed,
+  type FallbackSeed,
   fairDeck,
   fairnessCommit,
+  fallbackSeedsCommit,
   freshFairnessSeed,
   isFairnessSeed,
 } from './fairness.js'
@@ -241,15 +244,25 @@ export class Room implements RoomHandle {
   private currentServerSeed: string | null = null
   private revealedSeed: string | null = null
   private pendingClientSeeds = new Map<string, string>()
+  /** Each dealt seat's fallback seed, drawn and committed as the hand starts. */
+  private pendingFallbacks = new Map<number, string>()
+  private fallbackCommit: string | null = null
+  private revealedFallbacks: FallbackSeed[] | null = null
   private settledClientSeeds: FairnessClientSeed[] | null = null
   private status: string | null = null
-  private readonly eventLog: RoomEvent[] = []
   private readonly recorder = new HandRecorder()
   /**
    * Players who left while all in. Their hand plays out with their seat in it,
    * away, and they are stood up when it settles.
    */
   private readonly leavingAfterHand = new Set<string>()
+  /**
+   * Players removed while all in: kicked, or gone past their reconnect grace.
+   * Releasing the seat there and then threw their cards away with their share
+   * of the pot still in it, so the hand plays out with them in it, as for a
+   * leave, and only a reconnect cannot undo it.
+   */
+  private readonly removedAfterHand = new Set<string>()
   /**
    * The stack each player who left during this hand took with them, by seat, so
    * its record has them down what they bet rather than all they sat down with.
@@ -368,6 +381,11 @@ export class Room implements RoomHandle {
           ? this.config.turnBudgetsMs[this.lastStreet]
           : null,
       commit: this.currentCommit,
+      fallbackCommit: this.fallbackCommit,
+      fallbackSeeds:
+        this.revealedSeed === null || this.revealedFallbacks === null
+          ? null
+          : this.revealedFallbacks.map((entry) => ({ ...entry })),
       revealedSeed: this.revealedSeed,
       clientSeeds:
         this.revealedSeed === null || this.settledClientSeeds === null
@@ -537,7 +555,6 @@ export class Room implements RoomHandle {
     this.migrateHost(playerId)
     events.push({ kind: 'left', playerId })
     if (this.phase === 'seeding' && this.activeSeats().length < 2) this.callOffDeal(events)
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -572,6 +589,8 @@ export class Room implements RoomHandle {
     this.dealerSeat = this.dealerBeforeDeal
     this.pendingServerSeed = null
     this.currentCommit = null
+    this.fallbackCommit = null
+    this.pendingFallbacks.clear()
     this.pendingClientSeeds.clear()
     // Before the first hand, the host deals it; after one, the gap between
     // hands deals the next once two players are seated again.
@@ -587,7 +606,7 @@ export class Room implements RoomHandle {
 
   /** Stand up the players who left while all in, now that their hand is over. */
   private standUpLeavers(events: RoomEvent[]): void {
-    for (const playerId of this.leavingAfterHand) {
+    for (const playerId of new Set([...this.leavingAfterHand, ...this.removedAfterHand])) {
       const player = this.players.get(playerId)
       if (player === undefined || player.seat === null) continue
       const seat = player.seat
@@ -598,6 +617,7 @@ export class Room implements RoomHandle {
       events.push({ kind: 'leftAfterHand', playerId, seat, stack })
     }
     this.leavingAfterHand.clear()
+    this.removedAfterHand.clear()
   }
 
   private sit(
@@ -687,12 +707,28 @@ export class Room implements RoomHandle {
     this.pendingServerSeed = freshFairnessSeed(this.config.randomBytes)
     this.currentServerSeed = null
     this.currentCommit = fairnessCommit(this.pendingServerSeed)
+    // Every seat's fallback, drawn now, before any player seed can arrive, and
+    // committed with the server's seed, in the order they used to be drawn at
+    // the deal so a deterministic table deals the decks it always did.
+    this.pendingFallbacks.clear()
+    this.revealedFallbacks = null
+    for (const seat of active) {
+      this.pendingFallbacks.set(
+        this.seats.indexOf(seat),
+        freshFairnessSeed(this.config.randomBytes),
+      )
+    }
+    this.fallbackCommit = fallbackSeedsCommit(this.fallbackList())
     this.phase = 'seeding'
     const events: RoomEvent[] = [
-      { kind: 'seedCommitted', handNumber: this.handNumber, commit: this.currentCommit },
+      {
+        kind: 'seedCommitted',
+        handNumber: this.handNumber,
+        commit: this.currentCommit,
+        fallbackCommit: this.fallbackCommit,
+      },
     ]
     if (this.config.seedCollectionMs === 0) this.finalizeSeedsInto(events)
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -714,7 +750,6 @@ export class Room implements RoomHandle {
     ) {
       this.finalizeSeedsInto(events)
     }
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -722,7 +757,6 @@ export class Room implements RoomHandle {
     if (this.phase !== 'seeding') return this.reject(null, 'seed collection is not active')
     const events: RoomEvent[] = []
     this.finalizeSeedsInto(events)
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -741,10 +775,14 @@ export class Room implements RoomHandle {
       const playerId = seat.playerId
       if (playerId === null) throw new Error('active seat missing player')
       const submitted = this.pendingClientSeeds.get(playerId)
+      const seatIndex = this.seatOfPlayer(playerId)
       return {
         playerId,
-        seat: this.seatOfPlayer(playerId),
-        seed: submitted ?? freshFairnessSeed(this.config.randomBytes),
+        seat: seatIndex,
+        seed:
+          submitted ??
+          this.pendingFallbacks.get(seatIndex) ??
+          derivedFallbackSeed(serverSeed, seatIndex),
         defaulted: submitted === undefined,
       }
     })
@@ -925,12 +963,19 @@ export class Room implements RoomHandle {
       if (player !== undefined && !player.folded && !player.allIn) {
         this.forfeit(targetPlayerId, events, 'awayPlayed')
       }
+      if (player?.allIn && !player.folded && target.seat !== null) {
+        // All in, with nothing left to decide: the seat stays in the hand until
+        // it settles, and is released then with whatever the hand left it.
+        this.removedAfterHand.add(targetPlayerId)
+        target.disconnected = true
+        events.push({ kind: 'kicked', playerId: targetPlayerId, reason })
+        return { ok: true, events }
+      }
     }
     this.releaseSeat(target)
     this.players.delete(targetPlayerId)
     this.migrateHost(targetPlayerId)
     events.push({ kind: 'kicked', playerId: targetPlayerId, reason })
-    this.log(events)
     return { ok: true, events }
   }
 
@@ -946,19 +991,11 @@ export class Room implements RoomHandle {
 
   private reject(playerId: string | null, message: string): RoomResult {
     const event: RoomEvent = { kind: 'rejected', playerId, message }
-    this.eventLog.push(event)
     return { ok: false, events: [event] }
   }
 
   private result(event: RoomEvent): RoomResult {
-    this.eventLog.push(event)
     return { ok: true, events: [event] }
-  }
-
-  private log(events: RoomEvent[]): void {
-    for (const event of events) {
-      this.eventLog.push(event)
-    }
   }
 
   private apply(
@@ -1080,6 +1117,20 @@ export class Room implements RoomHandle {
    * turn on the normal clock. One gone for longer, or one leaving after an
    * all-in, is played away at once so the table does not wait on them.
    */
+  /**
+   * What each player dealt into the hand in progress has put in its pot, while
+   * the pot is still unawarded. Empty between hands and while seeds are taken,
+   * before any blind is posted.
+   */
+  unsettledContributions(): Map<string, number> {
+    const contributions = new Map<string, number>()
+    if (this.phase !== 'hand' || this.betting === null) return contributions
+    for (const player of this.betting.players) {
+      if (player.betThisHand > 0) contributions.set(player.id, player.betThisHand)
+    }
+    return contributions
+  }
+
   /** Whether the player owns the turn in progress and its clock is still running. */
   heldTurnFor(playerId: string): boolean {
     return (
@@ -1304,6 +1355,7 @@ export class Room implements RoomHandle {
     }
     this.awardRep(winners, events)
     this.revealedSeed = this.currentServerSeed
+    this.revealedFallbacks = this.fallbackList()
     events.push({
       kind: 'seedRevealed',
       handNumber: this.handNumber,
@@ -1461,6 +1513,12 @@ export class Room implements RoomHandle {
       }
       return seat
     })
+  }
+
+  private fallbackList(): FallbackSeed[] {
+    return [...this.pendingFallbacks]
+      .map(([seat, seed]) => ({ seat, seed }))
+      .sort((left, right) => left.seat - right.seat)
   }
 
   private activeSeats(): SeatState[] {

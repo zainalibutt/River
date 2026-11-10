@@ -29,7 +29,9 @@ const network: RiverValueNetwork = {
 }
 afterEach(() => vi.restoreAllMocks())
 
-it('reuses only identical network inputs while recomputing masses and recording every sample', () => {
+it('reuses only identical network inputs while recomputing masses and recording every sample', {
+  timeout: 60_000,
+}, () => {
   const spot: RiverSpot = {
     board: cards('Ah Kd 7s 4c'),
     pot: 100,

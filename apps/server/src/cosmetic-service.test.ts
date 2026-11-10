@@ -35,6 +35,7 @@ class FakeLedger implements Ledger {
   }
   async apply(entry: { delta: number; ref: string; reason: string }): Promise<number> {
     if (this.entries.some((one) => one.ref === entry.ref)) return this.current
+    if (this.current + entry.delta < 0) throw new Error('insufficient balance')
     this.entries.push({ delta: entry.delta, ref: entry.ref, reason: entry.reason })
     this.current += entry.delta
     return this.current

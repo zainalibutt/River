@@ -36,6 +36,7 @@ class FakeLedger implements Ledger {
   }
   async apply(entry: { delta: number; ref: string }): Promise<number> {
     if (this.entries.some((one) => one.ref === entry.ref)) return this.current
+    if (this.current + entry.delta < 0) throw new Error('insufficient balance')
     this.entries.push({ delta: entry.delta, ref: entry.ref })
     this.current += entry.delta
     return this.current
@@ -62,6 +63,24 @@ describe('table items', () => {
     const out = await purchaseItem('alice', cheapest?.id ?? '', { ledger, store })
     expect(out).toMatchObject({ kind: 'refused', reason: 'insufficient-chips' })
     expect(ledger.entries).toHaveLength(0)
+  })
+
+  it('delivers an item charged for but never added when it is bought again, chips spent or not', async () => {
+    const price = cheapest?.priceChips ?? 0
+    const ledger = new FakeLedger(price)
+    const failing = new FakeStore()
+    failing.add = async () => {
+      throw new Error('the store is unreachable')
+    }
+    await expect(
+      purchaseItem('alice', cheapest?.id ?? '', { ledger, store: failing }),
+    ).rejects.toThrow()
+    // Charged, with nothing to show for it and nothing left to pay with.
+    expect(ledger.entries).toHaveLength(1)
+    const out = await purchaseItem('alice', cheapest?.id ?? '', { ledger, store })
+    expect(out).toMatchObject({ kind: 'purchased' })
+    expect(ledger.entries).toHaveLength(1)
+    expect(store.rows.map((row) => row.itemId)).toEqual([cheapest?.id])
   })
 
   it('refuses an unknown item rather than charging for nothing', async () => {

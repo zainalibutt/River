@@ -4,12 +4,14 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 export interface AuthenticatedPlayer {
   playerId: string
   anonymous: boolean
+  /** JWT expiry in seconds. Custom in-process verifiers may omit it. */
+  exp?: number
   /**
    * Whether this player holds the developer role.
    *
    * Read from the signed token rather than looked up, so the check costs
-   * nothing on the connection path and cannot be stale. Granting it is a
-   * service-role operation - see supabase/migrations for the statement.
+   * nothing on the connection path. It is valid only until token expiry.
+   * Granting it is a service-role operation - see supabase/migrations for the statement.
    */
   admin: boolean
 }
@@ -51,10 +53,14 @@ function playerFromClaims(payload: JWTPayload): AuthenticatedPlayer {
   if (typeof payload.sub !== 'string' || !UUID.test(payload.sub)) {
     throw new Error('token has no valid player id')
   }
+  if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) {
+    throw new Error('token has no valid expiry')
+  }
   return {
     playerId: payload.sub,
     anonymous: payload.is_anonymous === true,
     admin: isDeveloperClaim(payload),
+    exp: payload.exp,
   }
 }
 

@@ -927,3 +927,18 @@ describe('rabbit hunt', () => {
     expect(room.submit({ kind: 'rabbitHunt', playerId: 'bob' }).ok).toBe(false)
   })
 })
+
+describe('room event retention', () => {
+  it('returns success and rejection events without retaining an append-only log', () => {
+    const room = makeRoom('bounded-events')
+    const joined = room.submit({ kind: 'join', playerId: 'alice', name: 'Alice' })
+    expect(joined.ok).toBe(true)
+    expect(joined.events.length).toBeGreaterThan(0)
+    for (let index = 0; index < 1_000; index += 1) {
+      const rejected = room.submit({ kind: 'stand', playerId: 'alice' })
+      expect(rejected.ok).toBe(false)
+      expect(rejected.events[0]?.kind).toBe('rejected')
+    }
+    expect(room).not.toHaveProperty('eventLog')
+  })
+})

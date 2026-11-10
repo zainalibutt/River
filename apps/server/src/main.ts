@@ -225,24 +225,28 @@ async function start(): Promise<void> {
       void upgrade(request, socket, head)
     })
   }
-  // Stop taking connections first, then hand every seated stack back before
-  // the process that is holding those tables in memory goes away. Sockets close
-  // first so nobody can buy in to a table that is about to stop existing.
+  // Hand every seated stack back before the process holding those tables in
+  // memory goes away, then close every socket so its client reconnects to the
+  // server that replaces this one.
   let settling = false
   const shutdown = (): void => {
     if (settling) return
     settling = true
-    sockets.close(() => {
-      void hub
-        .settleAllTables()
-        .catch((error: unknown) => {
-          console.error('shutdown: could not settle every table', error)
-        })
-        .finally(async () => {
-          await Promise.all([botThinker?.close(), safe?.close()])
-          server.close()
-        })
-    })
+    // Settling freezes every table first, so nothing can buy in or play on.
+    // Waiting for the sockets to close first never settled anything while a
+    // tab was open: closing the socket server waits for every client, and the
+    // process was killed before they had gone.
+    void hub
+      .settleAllTables()
+      .catch((error: unknown) => {
+        console.error('shutdown: could not settle every table', error)
+      })
+      .finally(async () => {
+        for (const client of sockets.clients) client.close(1012, 'Server restarting')
+        sockets.close()
+        await Promise.all([botThinker?.close(), safe?.close()])
+        server.close()
+      })
   }
   process.once('SIGINT', shutdown)
   process.once('SIGTERM', shutdown)

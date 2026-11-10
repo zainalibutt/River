@@ -115,7 +115,7 @@ export type RoomEvent =
   | { kind: 'stood'; playerId: string; seat: number; stack: number }
   | { kind: 'rejected'; playerId: string | null; message: string }
   | { kind: 'handStarted'; handNumber: number; dealerSeat: number; commit: string }
-  | { kind: 'seedCommitted'; handNumber: number; commit: string }
+  | { kind: 'seedCommitted'; handNumber: number; commit: string; fallbackCommit?: string }
   | { kind: 'seedSubmitted'; playerId: string; seat: number }
   | {
       kind: 'seedRevealed'
@@ -207,6 +207,10 @@ export interface RoomView {
   turnDeadlineMs: number | null
   turnBudgetMs: number | null
   commit: string | null
+  /** The commitment to every seat's fallback seed, published with `commit`. */
+  fallbackCommit?: string | null
+  /** Every seat's fallback seed, revealed with the server seed. */
+  fallbackSeeds?: { seat: number; seed: string }[] | null
   revealedSeed: string | null
   clientSeeds: FairnessClientSeed[] | null
   message: string | null

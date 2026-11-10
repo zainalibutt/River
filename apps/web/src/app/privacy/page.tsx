@@ -53,7 +53,7 @@ export default function PrivacyPage() {
         <article className="club-folio club-scene record-folio privacy-folio">
           <header className="club-folio-head">
             <h1 className="club-folio-title">Privacy</h1>
-            <p className="club-folio-sub">Last updated 2 November 2026</p>
+            <p className="club-folio-sub">Last updated 10 November 2026</p>
             {/* On a phone the folio covers the rail, and its Back with it. */}
             <Link href="/" className="club-link privacy-back">
               Back to River
@@ -103,7 +103,8 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong>Seatings.</strong> When you sit down at a table and when you leave, with your
-              buy-in, so a seat lost to a server crash can be refunded.
+              buy-in, so a seat lost to a server crash can be refunded. A crash refund pays back
+              what you bought in with, since your stack at that moment is lost with the server.
             </li>
             <li>
               <strong>Your hand record.</strong> One row per hand you played: the actions at the
@@ -169,7 +170,11 @@ export default function PrivacyPage() {
           <p>
             Your account and what it records are kept for as long as the account exists, apart from
             the hand record, which keeps your newest 2,000 hands. Ask us to delete your account and
-            we will remove it and the information linked to it.
+            we will remove it and the information linked to it: your sign-in, your display name,
+            your hand records, friends, invites, items and what the bots learned about your play.
+            The chip ledger keeps its entries, so the bank still balances, under a number that
+            nothing links to you any more. Your old display name can still appear in the hand
+            records of players you sat with.
           </p>
 
           <h2 className="record-heading">Your rights</h2>

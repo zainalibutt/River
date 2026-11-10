@@ -19,7 +19,7 @@ import { type HandAwareBotPolicy, HandSolveCache } from './bot-policy-hand.js'
 import { type BotDecisionTrace, randomBotTable } from './bot-service.js'
 import type { BotRiverThinker, ThinkRequest } from './bot-thinker.js'
 import type { LedgerRow, SupabaseEconomy } from './economy-service.js'
-import type { Ledger, LedgerEntry, Seating, SeatingStore } from './ledger.js'
+import type { Ledger, LedgerEntry, SeatDebit, Seating, SeatingStore } from './ledger.js'
 import { defaultRoomConfig, Room, stakeForId, turnBudgetsForPreset } from './room.js'
 import type {
   ClientPeer,
@@ -63,6 +63,13 @@ class MemoryLedger implements Ledger, SeatingStore {
       })
     }
     return balance
+  }
+
+  async debitSeat(entry: LedgerEntry, seating: Seating | undefined): Promise<SeatDebit> {
+    const replay = this.refs.has(`${entry.playerId}:${entry.ref}`)
+    const balance =
+      seating === undefined ? await this.apply(entry) : await this.openWith(entry, seating)
+    return { balance, replay }
   }
 
   async closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {
@@ -145,6 +152,20 @@ class DyingBook implements Ledger, SeatingStore {
 
   closeWith(entry: LedgerEntry, seating: Seating): Promise<number> {
     return this.write(() => this.book.closeWith(entry, seating))
+  }
+
+  debitSeat(entry: LedgerEntry, seating: Seating | undefined): Promise<SeatDebit> {
+    return this.write(() => this.book.debitSeat(entry, seating))
+  }
+}
+
+/** A ledger whose credits fail while `refusing` is set, as an unreachable database would. */
+class RefusingCredits extends MemoryLedger {
+  refusing = false
+
+  override async apply(entry: LedgerEntry): Promise<number> {
+    if (this.refusing && entry.delta > 0) throw new Error('the ledger is unreachable')
+    return super.apply(entry)
   }
 }
 
@@ -1446,7 +1467,7 @@ describe('leaving in the middle of a hand', () => {
     const host = clients[0]
     if (host === undefined) throw new Error('nobody to deal')
     await send(host, 'deal', { kind: 'startHand' })
-    return { ledger, clients, total: await everyChip(ledger, host) }
+    return { ledger, hub, clients, total: await everyChip(ledger, host) }
   }
 
   it('folds and pays out a player who leaves on their own turn', async () => {
@@ -1523,6 +1544,61 @@ describe('leaving in the middle of a hand', () => {
     expect(await ledger.balance(ALICE)).toBe(50_000)
     expect(await everyChip(ledger, bob)).toBe(total)
   })
+
+  it('plays out the hand of an all-in player the host removes, then pays what it won', async () => {
+    // Deuces for Alice, aces for Bob.
+    const { ledger, clients, total } = await dealTo(['alice', 'bob'], '2c As 2d Ad 5h 5c Ks Kd Qs')
+    const [alice] = clients as [Client, Client]
+    const bob = clients[1] as Client
+    await send(alice, 'alice-call', { kind: 'act', action: { kind: 'call' } })
+    await send(bob, 'bob-shove', { kind: 'act', action: { kind: 'allIn' } })
+    await send(alice, 'kick-bob', { kind: 'kick', targetPlayerId: BOB, reason: 'host' })
+    // Removed, but his cards and his share of the pot stay in the hand.
+    expect(viewOf(alice).seats[1]).toMatchObject({ playerId: BOB, disconnected: true })
+    expect(ledger.entries.filter((entry) => entry.playerId === BOB && entry.delta > 0)).toEqual([])
+    await send(alice, 'alice-call-shove', { kind: 'act', action: { kind: 'call' } })
+    expect(viewOf(alice).phase).toBe('between')
+    expect(viewOf(alice).seats[1]?.playerId).toBeNull()
+    expect(ledger.entries.filter((entry) => entry.reason === 'table_leave')).toEqual([
+      { playerId: BOB, delta: 100_000, reason: 'table_leave', ref: 'river-one:bob-sit:leave' },
+    ])
+    expect(await ledger.balance(BOB)).toBe(150_000)
+    expect(await everyChip(ledger, alice)).toBe(total)
+  })
+
+  it('moves no chips for a stand the room refuses', async () => {
+    const { ledger, clients } = await dealTo(['alice', 'bob'])
+    const [alice] = clients as [Client, Client]
+    const before = ledger.entries.length
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    expect(alice.peer.last('error')).toMatchObject({ code: 'command_rejected' })
+    expect(viewOf(alice).seats[0]?.playerId).toBe(ALICE)
+    expect(ledger.entries).toHaveLength(before)
+  })
+
+  it('gives back what each player bet when a shutdown cuts a hand off', async () => {
+    const { ledger, hub, clients } = await dealTo(['alice', 'bob', 'dev'])
+    const [alice, bob] = clients as [Client, Client, Client]
+    await send(alice, 'alice-call', { kind: 'act', action: { kind: 'call' } })
+    // Bob folds out by leaving, with his blind in the pot, and is paid his stack.
+    await send(bob, 'bob-leave', { kind: 'leave' })
+    expect(viewOf(alice).phase).toBe('hand')
+    expect(viewOf(alice).pot).toBeGreaterThan(0)
+    await hub.settleAllTables()
+    // The hand never ended, so its pot goes back where it came from.
+    for (const playerId of [ALICE, BOB, DEV]) {
+      expect(await ledger.balance(playerId)).toBe(100_000)
+    }
+    expect(ledger.entries).toContainEqual(
+      expect.objectContaining({ playerId: BOB, reason: 'table_shutdown_void' }),
+    )
+    // Frozen: the hand cannot play on and pay its pot a second time.
+    const settled = ledger.entries.length
+    const dev = clients[2] as Client
+    await send(dev, 'dev-check', { kind: 'act', action: { kind: 'check' } })
+    await send(alice, 'alice-stand-late', { kind: 'stand' })
+    expect(ledger.entries).toHaveLength(settled)
+  })
 })
 
 describe('buy-ins a crash left behind', () => {
@@ -1548,6 +1624,77 @@ describe('buy-ins a crash left behind', () => {
     expect(viewOf(alice).seats[0]?.stack).toBe(0)
     return { alice, bob }
   }
+
+  it('refuses a sit the ledger has already paid for, once the server has forgotten it', async () => {
+    const ledger = new MemoryLedger()
+    const alice = await sitDown(hubOver(ledger, { book: true }), 'alice', 0)
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    // A new server, with no memory of having answered it, hears the sit again.
+    const again = await sitDown(hubOver(ledger, { book: true }), 'alice', 0)
+    expect(again.peer.last('error')).toMatchObject({
+      code: 'command_rejected',
+      message: 'that request was already handled',
+    })
+    expect(viewOf(again).seats[0]?.playerId).toBeNull()
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
+
+  it('keeps a seating open while its stack is owed, and pays it when the ledger is back', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new RefusingCredits()
+    const hub = hubOver(ledger, { book: true })
+    const alice = await sitDown(hub, 'alice', 0)
+    ledger.refusing = true
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    // Stood up, owed her stack, and her seating still open for it.
+    expect(viewOf(alice).seats[0]?.playerId).toBeNull()
+    expect(await ledger.balance(ALICE)).toBe(50_000)
+    expect([...ledger.seatings.values()].every((entry) => !entry.closed)).toBe(true)
+    ledger.refusing = false
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    expect([...ledger.seatings.values()].every((entry) => entry.closed)).toBe(true)
+    vi.setSystemTime(RESTART)
+    expect(await hubOver(ledger, { book: true }).refundCrashedSeatings(RESTART)).toBe(0)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
+
+  it('owes two players their stacks apart when their requests share an id', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new RefusingCredits()
+    const hub = hubOver(ledger, { book: true })
+    const alice = await sitDown(hub, 'alice', 0)
+    const bob = await sitDown(hub, 'bob', 1)
+    ledger.refusing = true
+    await send(alice, 'stand', { kind: 'stand' })
+    await send(bob, 'stand', { kind: 'stand' })
+    ledger.refusing = false
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+    expect(await ledger.balance(BOB)).toBe(100_000)
+    expect([...ledger.seatings.values()].every((entry) => entry.closed)).toBe(true)
+  })
+
+  it('leaves a payout that never landed for the crash refund, not closed and lost', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOON)
+    const ledger = new RefusingCredits()
+    const hub = hubOver(ledger, { book: true })
+    const alice = await sitDown(hub, 'alice', 0)
+    ledger.refusing = true
+    await send(alice, 'alice-stand', { kind: 'stand' })
+    // Exhaust the finite payout retries while the room sweeper keeps running.
+    await vi.advanceTimersByTimeAsync(300_000)
+    await hub.settleAllTables()
+    expect(await ledger.balance(ALICE)).toBe(50_000)
+    ledger.refusing = false
+    vi.setSystemTime(RESTART)
+    expect(await hubOver(ledger, { book: true }).refundCrashedSeatings(RESTART)).toBe(1)
+    expect(await ledger.balance(ALICE)).toBe(100_000)
+  })
 
   it('pays back the buy-in and rebuys of a seating a crash left open, once', async () => {
     vi.useFakeTimers()
@@ -3255,4 +3402,426 @@ describe('the name a player sits under', () => {
     expect(await seatedName(hub, 'bob', 1)).toBe('Guest')
     expect(errors).toEqual(['enter: could not read a member name'])
   })
+})
+
+type HubResources = {
+  activePlayers: RoomHub['activePlayers']
+  clearRoomTimers: RoomHub['clearRoomTimers']
+  completed: RoomHub['completed']
+  enqueue: RoomHub['enqueue']
+  evictionTimer: RoomHub['evictionTimer']
+  midasTables: RoomHub['midasTables']
+  pendingPayouts: RoomHub['pendingPayouts']
+  room: RoomHub['room']
+  rooms: RoomHub['rooms']
+}
+
+function resources(hub: RoomHub): HubResources {
+  return hub as unknown as HubResources
+}
+
+describe('bounded hub resources', () => {
+  it('caps rejected and successful command replies together, oldest first', async () => {
+    const { hub } = setup()
+    const { connection } = await connectAndEnter(hub, 'alice', 'Alice')
+    for (let index = 0; index <= 10_000; index += 1) {
+      await connection.receive(
+        JSON.stringify({
+          kind: 'command',
+          requestId: `reject-${index}`,
+          command: { kind: 'stand' },
+        }),
+      )
+    }
+    expect(resources(hub).completed.size).toBe(10_000)
+    expect(resources(hub).completed.has(`${ALICE}:reject-0`)).toBe(false)
+    expect(resources(hub).completed.has(`${ALICE}:reject-1`)).toBe(true)
+    await connection.receive(
+      JSON.stringify({
+        kind: 'command',
+        requestId: 'sit-bounded',
+        command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+      }),
+    )
+    expect(resources(hub).completed.size).toBe(10_000)
+    expect(resources(hub).completed.has(`${ALICE}:reject-1`)).toBe(false)
+    expect(resources(hub).completed.get(`${ALICE}:sit-bounded`)?.kind).toBe('snapshot')
+    await hub.settleAllTables()
+  })
+
+  function idleHub() {
+    const hub = new RoomHub({
+      ledger: new MemoryLedger(),
+      roomIdleTimeoutMs: 1_000,
+      verifyToken: async () => ({ playerId: ALICE, anonymous: true, admin: false }),
+      createRoom: (id) => new Room(id, defaultRoomConfig({ seed: id, reconnectGraceMs: 100 })),
+    })
+    return hub
+  }
+
+  it('evicts only after idle time, releases Midas bookkeeping and stops its unref sweep at shutdown', async () => {
+    vi.useFakeTimers()
+    const hub = idleHub()
+    const { connection } = await connectAndEnter(hub, 'alice', 'Alice')
+    const state = resources(hub).rooms.get('river-one')
+    if (state === undefined) throw new Error('missing test room')
+    state.botPreset = 'midas'
+    resources(hub).midasTables.add('river-one')
+    expect(resources(hub).evictionTimer.hasRef()).toBe(false)
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(resources(hub).rooms.size).toBe(1)
+    await connection.close()
+    await vi.advanceTimersByTimeAsync(999)
+    expect(resources(hub).rooms.size).toBe(1)
+    await vi.advanceTimersByTimeAsync(1_001)
+    expect(resources(hub).rooms.size).toBe(0)
+    expect(resources(hub).midasTables.size).toBe(0)
+    const cleared = vi.spyOn(globalThis, 'clearInterval')
+    await hub.settleAllTables()
+    expect(cleared).toHaveBeenCalledWith(resources(hub).evictionTimer)
+    cleared.mockRestore()
+  })
+
+  it.each(['hand', 'seeding'] as const)('keeps a room in phase %s', async (phase) => {
+    vi.useFakeTimers()
+    const hub = idleHub()
+    const state = resources(hub).room('river-one')
+    const view = state.room.viewFor('')
+    vi.spyOn(state.room, 'viewFor').mockReturnValue({ ...view, phase })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(resources(hub).rooms.size).toBe(1)
+    vi.restoreAllMocks()
+    await hub.settleAllTables()
+  })
+
+  it('keeps disconnected humans and even bot-shaped players whose seating is held', async () => {
+    vi.useFakeTimers()
+    const hub = idleHub()
+    const state = resources(hub).room('river-one')
+    const playerId = 'bot:river-one:0'
+    state.room.submit({ kind: 'join', playerId, name: 'Bot' })
+    expect(state.room.submit({ kind: 'sit', playerId, seat: 0, buyIn: 50_000 }).ok).toBe(true)
+    state.seatings.set(playerId, {
+      playerId,
+      ref: 'river-one:seat',
+      buyIn: 50_000,
+      openedAtMs: Date.now(),
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(resources(hub).rooms.size).toBe(1)
+    state.seatings.clear()
+    state.room.submit({ kind: 'stand', playerId })
+    state.room.submit({ kind: 'join', playerId: ALICE, name: 'Alice' })
+    state.room.submit({ kind: 'sit', playerId: ALICE, seat: 0, buyIn: 50_000 })
+    state.room.submit({ kind: 'disconnect', playerId: ALICE })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(resources(hub).rooms.size).toBe(1)
+    await hub.settleAllTables()
+  })
+
+  it('keeps an empty room while its payout is owed, without pinning unrelated rooms', async () => {
+    vi.useFakeTimers()
+    const hub = idleHub()
+    resources(hub).room('river-one')
+    resources(hub).room('river-two')
+    resources(hub).pendingPayouts.set('owed', {
+      seating: undefined,
+      entry: { playerId: ALICE, delta: 100, reason: 'expiry', ref: 'river-one:seat:expiry' },
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect([...resources(hub).rooms.keys()]).toEqual(['river-one'])
+    resources(hub).pendingPayouts.clear()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(resources(hub).rooms.size).toBe(0)
+    await hub.settleAllTables()
+  })
+
+  it.each([
+    'seedTimer',
+    'turnTimer',
+    'botTimer',
+    'nextHandTimer',
+    'reconnectTimers',
+    'speechTimers',
+    'peekTimers',
+  ] as const)('keeps a room while %s matters and clears timers on eviction', async (kind) => {
+    vi.useFakeTimers()
+    const hub = idleHub()
+    const state = resources(hub).room('river-one')
+    const timer = setTimeout(() => undefined, 100_000)
+    if (kind === 'reconnectTimers' || kind === 'peekTimers') state[kind].set(ALICE, timer)
+    else if (kind === 'speechTimers') state[kind].add(timer)
+    else state[kind] = timer
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(resources(hub).rooms.size).toBe(1)
+    resources(hub).clearRoomTimers(state)
+    const clear = vi.spyOn(resources(hub), 'clearRoomTimers')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(resources(hub).rooms.size).toBe(0)
+    expect(clear).toHaveBeenCalledWith(state)
+    await hub.settleAllTables()
+  })
+
+  it('waits for queued work and starts idle time after that work completes', async () => {
+    vi.useFakeTimers()
+    const hub = idleHub()
+    const state = resources(hub).room('river-one')
+    let finish = () => {}
+    const pending = resources(hub).enqueue(
+      state,
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    )
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(resources(hub).rooms.size).toBe(1)
+    finish()
+    await pending
+    await vi.advanceTimersByTimeAsync(999)
+    expect(resources(hub).rooms.size).toBe(1)
+    await vi.advanceTimersByTimeAsync(1_001)
+    expect(resources(hub).rooms.size).toBe(0)
+    await hub.settleAllTables()
+  })
+})
+
+describe('connection authentication lifetime', () => {
+  it.each(['silent', 'verifying', 'opening'] as const)(
+    'times out a %s connection and ignores late authentication',
+    async (stage) => {
+      vi.useFakeTimers()
+      let finish = () => {}
+      const wait = new Promise<void>((resolve) => {
+        finish = resolve
+      })
+      const ledger = new MemoryLedger()
+      if (stage === 'opening')
+        vi.spyOn(ledger, 'balance').mockImplementation(async () => {
+          await wait
+          return 100_000
+        })
+      const hub = new RoomHub({
+        ledger,
+        verifyToken: async () => {
+          if (stage === 'verifying') await wait
+          return { playerId: ALICE, anonymous: false, admin: true }
+        },
+      })
+      const peer = new TestPeer()
+      const connection = hub.connect(peer)
+      const auth =
+        stage === 'silent'
+          ? Promise.resolve()
+          : connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'valid' }))
+      await vi.advanceTimersByTimeAsync(9_999)
+      expect(peer.closed).toBeNull()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(peer.closed).toEqual({ code: 4000, reason: 'Authentication timeout' })
+      finish()
+      await auth
+      expect(peer.last('authenticated')).toBeUndefined()
+      expect(resources(hub).activePlayers.size).toBe(0)
+      await hub.settleAllTables()
+    },
+  )
+
+  it('cancels the auth deadline on success or close and drops receives after close', async () => {
+    vi.useFakeTimers()
+    const { hub } = setup()
+    const { connection, peer } = await connectAndEnter(hub, 'alice', 'Alice')
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(peer.closed).toBeNull()
+    await connection.close()
+    const count = peer.messages.length
+    await connection.receive(JSON.stringify({ kind: 'listTables', requestId: 'late' }))
+    expect(peer.messages).toHaveLength(count)
+    const silent = new TestPeer()
+    await hub.connect(silent).close()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(silent.closed).toBeNull()
+    await hub.settleAllTables()
+  })
+
+  it.each([false, true])(
+    'expires regular and admin sessions at the signed deadline (admin=%s)',
+    async (admin) => {
+      vi.useFakeTimers()
+      vi.setSystemTime(1_000_000)
+      const ledger = new MemoryLedger()
+      const hub = new RoomHub({
+        ledger,
+        verifyToken: async () => ({ playerId: ALICE, anonymous: false, admin, exp: 1_001 }),
+      })
+      const peer = new TestPeer()
+      const connection = hub.connect(peer)
+      await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'valid' }))
+      await vi.advanceTimersByTimeAsync(999)
+      await connection.receive(JSON.stringify({ kind: 'listTables', requestId: 'valid' }))
+      expect(peer.last('tables')).toMatchObject({ requestId: 'valid' })
+      await vi.advanceTimersByTimeAsync(1)
+      await connection.receive(
+        JSON.stringify({
+          kind: 'admin',
+          requestId: 'expired',
+          action: { kind: 'grantChips', targetPlayerId: BOB, amount: 100 },
+        }),
+      )
+      expect(peer.closed).toEqual({ code: 4005, reason: 'Session expired' })
+      expect(ledger.entries).toHaveLength(0)
+      expect(resources(hub).activePlayers.size).toBe(0)
+      await hub.settleAllTables()
+    },
+  )
+})
+
+it('rejects an expired token returned by a custom verifier before opening a session', async () => {
+  vi.useFakeTimers()
+  const ledger = new MemoryLedger()
+  const balance = vi.spyOn(ledger, 'balance')
+  const hub = new RoomHub({
+    ledger,
+    verifyToken: async () => ({ playerId: ALICE, anonymous: false, admin: true, exp: 0 }),
+  })
+  const peer = new TestPeer()
+  await hub.connect(peer).receive(JSON.stringify({ kind: 'authenticate', accessToken: 'expired' }))
+  expect(peer.closed).toEqual({ code: 4005, reason: 'Session expired' })
+  expect(balance).not.toHaveBeenCalled()
+  await hub.settleAllTables()
+})
+
+it('rechecks token expiry before running a command waiting in a room queue', async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(1_000_000)
+  const hub = new RoomHub({
+    ledger: new MemoryLedger(),
+    verifyToken: async () => ({ playerId: ALICE, anonymous: false, admin: false, exp: 1_001 }),
+  })
+  const { connection, peer } = await connectAndEnter(hub, 'alice', 'Alice')
+  const state = resources(hub).rooms.get('river-one')
+  if (state === undefined) throw new Error('missing test room')
+  let finish = () => {}
+  const blocked = resources(hub).enqueue(
+    state,
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve
+      }),
+  )
+  const command = connection.receive(
+    JSON.stringify({
+      kind: 'command',
+      requestId: 'queued',
+      command: { kind: 'sit', seat: 0, buyIn: 50_000 },
+    }),
+  )
+  await vi.advanceTimersByTimeAsync(1_000)
+  finish()
+  await Promise.all([blocked, command])
+  expect(peer.closed).toEqual({ code: 4005, reason: 'Session expired' })
+  expect(state.room.viewFor(ALICE).seats.every((seat) => seat.playerId === null)).toBe(true)
+  await connection.close()
+  await hub.settleAllTables()
+})
+
+it('keeps a newer session when a timed-out authentication later fails', async () => {
+  vi.useFakeTimers()
+  let finish = () => {}
+  const wait = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  const ledger = new MemoryLedger()
+  vi.spyOn(ledger, 'balance').mockImplementationOnce(async () => {
+    await wait
+    throw new Error('late ledger failure')
+  })
+  const hub = new RoomHub({
+    ledger,
+    verifyToken: async () => ({ playerId: ALICE, anonymous: true, admin: false }),
+  })
+  const oldPeer = new TestPeer()
+  const oldAuth = hub
+    .connect(oldPeer)
+    .receive(JSON.stringify({ kind: 'authenticate', accessToken: 'old' }))
+  await vi.advanceTimersByTimeAsync(10_000)
+  const newer = new TestPeer()
+  await hub.connect(newer).receive(JSON.stringify({ kind: 'authenticate', accessToken: 'new' }))
+  finish()
+  await oldAuth
+  expect(oldPeer.closed).toEqual({ code: 4000, reason: 'Authentication timeout' })
+  expect(newer.last('authenticated')).toBeDefined()
+  expect(resources(hub).activePlayers.get(ALICE)?.peer).toBe(newer)
+  await hub.settleAllTables()
+})
+
+it('keeps a connection signed in on a refreshed token, and acts on the message after it', async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(1_000_000)
+  const tokens: Record<string, number> = { first: 1_001, refreshed: 5_000 }
+  const hub = new RoomHub({
+    ledger: new MemoryLedger(),
+    verifyToken: async (token) => ({
+      playerId: ALICE,
+      anonymous: false,
+      admin: false,
+      exp: tokens[token] ?? 0,
+    }),
+  })
+  const peer = new TestPeer()
+  const connection = hub.connect(peer)
+  await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'first' }))
+  await vi.advanceTimersByTimeAsync(2_000)
+  // The first token has run out, and the refreshed one arrives before the next action.
+  await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'refreshed' }))
+  await connection.receive(
+    JSON.stringify({
+      kind: 'enter',
+      requestId: 'enter',
+      roomId: 'river-one',
+      name: 'Alice',
+      inviteCode: 'river2',
+    }),
+  )
+  expect(peer.closed).toBeNull()
+  expect(peer.last('snapshot')).toBeDefined()
+  await connection.close()
+  await hub.settleAllTables()
+})
+
+it('refuses a refreshed token for somebody else', async () => {
+  const hub = new RoomHub({
+    ledger: new MemoryLedger(),
+    verifyToken: async (token) => ({
+      playerId: token === 'bob' ? BOB : ALICE,
+      anonymous: false,
+      admin: false,
+    }),
+  })
+  const peer = new TestPeer()
+  const connection = hub.connect(peer)
+  await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'alice' }))
+  await connection.receive(JSON.stringify({ kind: 'authenticate', accessToken: 'bob' }))
+  expect(peer.last('error')).toMatchObject({ code: 'already_authenticated' })
+  await connection.close()
+  await hub.settleAllTables()
+})
+
+it('returns bets from a called-off hand on every restart, not only the first', async () => {
+  const ledger = new MemoryLedger()
+  for (const run of [1, 2]) {
+    const hub = hubOver(ledger)
+    const clients: Client[] = []
+    for (const [seat, token] of (['alice', 'bob', 'dev'] as const).entries()) {
+      const client = await connectAndEnter(hub, token, token)
+      await send(client, `${token}-sit-${run}`, { kind: 'sit', seat, buyIn: 50_000 })
+      clients.push(client)
+    }
+    const [alice, bob] = clients as [Client, Client, Client]
+    await send(alice, `deal-${run}`, { kind: 'startHand' })
+    await send(alice, `alice-call-${run}`, { kind: 'act', action: { kind: 'call' } })
+    await send(bob, `bob-leave-${run}`, { kind: 'leave' })
+    await hub.settleAllTables()
+    for (const playerId of [ALICE, BOB, DEV]) expect(await ledger.balance(playerId)).toBe(100_000)
+  }
+  expect(ledger.entries.filter((entry) => entry.reason === 'table_shutdown_void')).toHaveLength(2)
 })
