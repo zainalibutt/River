@@ -394,7 +394,8 @@ export interface RoomHubOptions {
   cosmetics?: CosmeticStore
   /**
    * Who is barred from entering. Defaults to a list that lives as long as the
-   * process - see `MemoryBanList` for what that costs.
+   * process - see `MemoryBanList` for what that costs. A list that throws when
+   * asked keeps the player out: entry is refused until it answers.
    */
   bans?: BanList
   createRoom?: (roomId: string, settings?: RoomCreationSettings) => Room
@@ -1066,7 +1067,23 @@ export class RoomHub {
       this.error(connection, message.requestId, 'already_in_room', 'Leave the current room first')
       return
     }
-    if (await this.bans.isBanned(player.playerId)) {
+    let banned: boolean
+    try {
+      banned = await this.bans.isBanned(player.playerId)
+    } catch (error) {
+      // A ban list that cannot be read keeps everyone out until it can. Letting
+      // players in unchecked would lift every ban for as long as the database
+      // is slow, and a table cannot seat anyone without that database anyway.
+      this.onError('enter: could not read the ban list', error)
+      this.error(
+        connection,
+        message.requestId,
+        'join_unavailable',
+        'Tables are unavailable right now. Try again in a moment.',
+      )
+      return
+    }
+    if (banned) {
       // Refused at the door rather than seated and removed. The wording does
       // not distinguish a ban from a bad code, because a banned player learning
       // exactly which state they are in is the first step to working around it.

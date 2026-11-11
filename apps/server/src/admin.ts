@@ -27,10 +27,9 @@ export interface BanList {
  * A ban list that lives as long as the process.
  *
  * Honest about what it is: restarting the server forgets every ban. That is
- * enough for a table full of friends and a developer who is present, and it is
- * not enough for a public game - the fix is another implementation of `BanList`
- * backed by a table, which is why this is an interface and not a Set inside the
- * hub.
+ * enough for tests and for a table full of friends with a developer present,
+ * and it is not enough for a public game: `SupabaseBanList` in `ban-store.ts`
+ * is the one that keeps bans in the database.
  */
 export class MemoryBanList implements BanList {
   private readonly banned = new Set<string>()
