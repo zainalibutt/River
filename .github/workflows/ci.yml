@@ -55,3 +55,31 @@ jobs:
       - run: npm run build --workspace @river/engine
       - run: node scripts/dev-db.mjs start
       - run: node scripts/dev-db.mjs exec npx vitest run apps/server/src/ledger.local.test.ts apps/server/src/player-names.local.test.ts apps/server/src/bot-opponent-store.local.test.ts apps/server/src/player-erasure.local.test.ts
+
+  # One hand in a real browser against the built app, the game server and a
+  # local Supabase stack: the menu renders, a guest sits down with a bot, is
+  # dealt in, acts, and the browser verifies the hand's seed. The jobs above
+  # never open a page, so a table that fails to render would pass them.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/dev-db.mjs start
+      - run: npm run build
+      - run: node scripts/dev-db.mjs exec npx playwright test apps/web/e2e/smoke.spec.ts
+        env:
+          RIVER_E2E_SERVER: 1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: failure()
+        with:
+          name: browser-smoke-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
