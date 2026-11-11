@@ -268,6 +268,8 @@ export class Room implements RoomHandle {
    * its record has them down what they bet rather than all they sat down with.
    */
   private readonly leftWith = new Map<number, number>()
+  /** Players whose running turn was already extended for a dropped connection this hand. */
+  private readonly returnAllowanceUsed = new Set<string>()
   /** Where the button was before the deal in progress, for a deal that is called off. */
   private dealerBeforeDeal = -1
 
@@ -699,6 +701,7 @@ export class Room implements RoomHandle {
     this.betweenSince = 0
     this.status = null
     this.pendingPlayerId = null
+    this.returnAllowanceUsed.clear()
     this.turnDeadlineMs = null
     for (const seat of this.seats) {
       seat.hole = []
@@ -923,8 +926,25 @@ export class Room implements RoomHandle {
     // anybody who reloaded or pressed Back while facing a bet, before they
     // could get back to the table; the deadline still ends the turn the usual
     // way if they do not return in time.
+    this.allowReturn(playerId)
     const events: RoomEvent[] = [{ kind: 'disconnected', playerId }]
     return { ok: true, events }
+  }
+
+  /**
+   * Leave a player who drops during their own turn long enough to come back.
+   *
+   * A reload takes a few seconds, and with less than that left on the clock
+   * the turn timed out before the page was back, folding the hand. The turn
+   * now runs for at least the reload hold from the drop, never longer than a
+   * full turn, and once a hand for each player, so dropping again buys nothing.
+   */
+  private allowReturn(playerId: string): void {
+    if (!this.heldTurnFor(playerId) || this.turnDeadlineMs === null) return
+    if (this.returnAllowanceUsed.has(playerId)) return
+    this.returnAllowanceUsed.add(playerId)
+    const allowance = Math.min(this.config.reloadHoldMs, this.config.turnBudgetsMs[this.lastStreet])
+    this.turnDeadlineMs = Math.max(this.turnDeadlineMs, this.now() + allowance)
   }
 
   private reconnect(playerId: string): RoomResult {

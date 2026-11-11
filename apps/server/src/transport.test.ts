@@ -1230,6 +1230,65 @@ describe('room hub', () => {
     })
   })
 
+  it('keeps the hand for a player who reloads with little of their turn left', async () => {
+    vi.useFakeTimers()
+    const { hub } = setup()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    await send(alice, 'alice-sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    await send(bob, 'bob-sit', { kind: 'sit', seat: 1, buyIn: 50_000 })
+    await send(alice, 'start', { kind: 'startHand' })
+    const dealt = viewOf(alice)
+    const actor = dealt.currentActor?.playerId
+    const deadline = dealt.turnDeadlineMs ?? 0
+    const [acting, waiting, token, name] =
+      actor === ALICE
+        ? ([alice, bob, 'alice', 'Alice'] as const)
+        : ([bob, alice, 'bob', 'Bob'] as const)
+
+    await vi.advanceTimersByTimeAsync(deadline - Date.now() - 2_000)
+    const droppedAt = Date.now()
+    await acting.connection.close()
+    expect(viewOf(waiting).turnDeadlineMs).toBe(droppedAt + 10_000)
+
+    // The reload takes longer than the turn had left.
+    await vi.advanceTimersByTimeAsync(5_000)
+    const back = await connectAndEnter(hub, token, name)
+    const view = viewOf(back)
+    expect(view.handNumber).toBe(dealt.handNumber)
+    expect(view.currentActor?.playerId).toBe(actor)
+    expect(view.turnDeadlineMs).toBe(droppedAt + 10_000)
+    expect(view.seats.find((seat) => seat.playerId === actor)).toMatchObject({
+      folded: false,
+      disconnected: false,
+    })
+  })
+
+  it('times out a player who drops in their own turn and does not come back', async () => {
+    vi.useFakeTimers()
+    const { hub } = setup()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    await send(alice, 'alice-sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    await send(bob, 'bob-sit', { kind: 'sit', seat: 1, buyIn: 50_000 })
+    await send(alice, 'start', { kind: 'startHand' })
+    const dealt = viewOf(alice)
+    const actor = dealt.currentActor?.playerId
+    const [acting, waiting] = actor === ALICE ? [alice, bob] : [bob, alice]
+
+    await vi.advanceTimersByTimeAsync((dealt.turnDeadlineMs ?? 0) - Date.now() - 2_000)
+    await acting.connection.close()
+    await vi.advanceTimersByTimeAsync(9_999)
+    expect(viewOf(waiting).currentActor?.playerId).toBe(actor)
+    await vi.advanceTimersByTimeAsync(1)
+    const timedOut = waiting.peer.messages.some(
+      (message) =>
+        message.kind === 'snapshot' &&
+        message.events.some((event) => event.kind === 'timedOut' && event.playerId === actor),
+    )
+    expect(timedOut).toBe(true)
+  })
+
   it('still releases the seat when a second tab signs in and never comes back to the table', async () => {
     vi.useFakeTimers()
     const { hub, ledger } = setup(20)

@@ -704,6 +704,60 @@ describe('room disconnect and reconnect', () => {
     expect(ended.events.some((e) => e.kind === 'timedOut' && e.action.kind === 'fold')).toBe(true)
   })
 
+  it('gives a player who drops late in their own turn time to come back', () => {
+    let now = 0
+    const room = makeRoom('reload-late', deckOf(DECK_11), { nowMs: () => now })
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'raiseTo', to: 1500 } })
+    const deadline = room.viewFor('alice').turnDeadlineMs ?? 0
+    now = deadline - 2_000
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    expect(room.viewFor('alice').turnDeadlineMs).toBe(now + room.config.reloadHoldMs)
+    now = deadline + 3_000
+    expect(room.submit({ kind: 'timeoutTurn' }).ok).toBe(false)
+    room.submit({ kind: 'reconnect', playerId: 'bob' })
+    expect(room.viewFor('bob').currentActor?.playerId).toBe('bob')
+    const called = room.submit({ kind: 'act', playerId: 'bob', action: { kind: 'call' } })
+    expect(called.events.some((e) => e.kind === 'acted' && e.playerId === 'bob')).toBe(true)
+  })
+
+  it('extends a dropped turn once a hand, and still times out a player who stays away', () => {
+    let now = 0
+    const room = makeRoom('reload-once', deckOf(DECK_11), { nowMs: () => now })
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'raiseTo', to: 1500 } })
+    now = (room.viewFor('alice').turnDeadlineMs ?? 0) - 1_000
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    const extended = room.viewFor('alice').turnDeadlineMs ?? 0
+    expect(extended).toBe(now + room.config.reloadHoldMs)
+    now = extended - 1_000
+    room.submit({ kind: 'reconnect', playerId: 'bob' })
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    expect(room.viewFor('alice').turnDeadlineMs).toBe(extended)
+    now = extended
+    const ended = room.submit({ kind: 'timeoutTurn' })
+    expect(ended.events.some((e) => e.kind === 'timedOut' && e.action.kind === 'fold')).toBe(true)
+  })
+
+  it('never extends a dropped turn past a full turn, or for a player off their turn', () => {
+    let now = 0
+    const room = makeRoom('reload-bound', deckOf(DECK_11), {
+      nowMs: () => now,
+      turnBudgetsMs: { preflop: 4_000, flop: 4_000, turn: 4_000, river: 4_000 },
+    })
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'raiseTo', to: 1500 } })
+    const deadline = room.viewFor('alice').turnDeadlineMs ?? 0
+    now = deadline - 1_000
+    room.submit({ kind: 'disconnect', playerId: 'alice' })
+    expect(room.viewFor('bob').turnDeadlineMs).toBe(deadline)
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    expect(room.viewFor('alice').turnDeadlineMs).toBe(now + 4_000)
+  })
+
   it('waits on a just-disconnected player whose turn arrives, not one long gone', () => {
     let now = 0
     const room = makeRoom('reload-next', deckOf(DECK_11), { nowMs: () => now })
