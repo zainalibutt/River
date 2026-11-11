@@ -7,11 +7,12 @@ test.beforeEach(async ({ page }) => {
 
 /**
  * Daily chips on the menu, against a faked server: no account or database is touched.
- * The menu shows what /api/daily says can be claimed, claims it once, counts the
- * bankroll up and says when the next claim opens.
+ * The menu offers the day's spin when /api/daily says it is open, claims it once from the
+ * wheel, counts the bankroll up after the wheel settles and says when the next spin opens.
  */
 
 const PLAYER = '00000000-0000-4000-8000-0000000000d1'
+const PRIZES = [10_000, 20_000, 30_000, 40_000, 50_000]
 
 async function fakeClub(page: Page, claimable: boolean) {
   let claims = 0
@@ -45,9 +46,10 @@ async function fakeClub(page: Page, claimable: boolean) {
   const status = (open: boolean, streakDay: number) => ({
     daily: {
       claimable: open,
-      amount: open ? 15_000 : 0,
+      amount: 0,
       streakDay,
       nextAtMs: open ? Date.now() : Date.now() + 5 * 3_600_000,
+      prizes: PRIZES,
     },
     rescue: { claimable: false, amount: 0, left: 3 },
   })
@@ -55,7 +57,13 @@ async function fakeClub(page: Page, claimable: boolean) {
     if (route.request().method() === 'POST') {
       claims += 1
       return route.fulfill({
-        json: { kind: 'granted', delta: 15_000, balance: 55_000, status: status(false, 2) },
+        json: {
+          kind: 'granted',
+          delta: 30_000,
+          segment: 2,
+          balance: 70_000,
+          status: status(false, 2),
+        },
       })
     }
     return route.fulfill({ json: { status: status(claimable, claimable ? 2 : 1) } })
@@ -63,18 +71,28 @@ async function fakeClub(page: Page, claimable: boolean) {
   return { claims: () => claims }
 }
 
-test('claims daily chips from the menu once, and says when the next ones open', async ({
+test('spins the daily wheel from the menu once, and says when the next spin opens', async ({
   page,
 }) => {
   const club = await fakeClub(page, true)
   await page.goto('/')
-  const claim = page.getByRole('button', { name: 'Claim 15,000' })
-  await expect(claim).toBeVisible()
-  await expect(page.locator('.club-daily')).toContainText('Day 2 streak')
-  await claim.click()
-  await expect(page.locator('.club-daily')).toContainText('+15,000')
-  await expect(page.locator('.club-daily')).toContainText(/next in \d+h/i)
-  await expect(page.locator('.club-capsule-value')).toHaveText('55,000')
+  await expect(page.locator('.club-daily')).toContainText('Free spin ready')
+  await page.getByRole('button', { name: 'Spin the daily wheel' }).click()
+  const wheel = page.getByRole('dialog', { name: 'Daily spin' })
+  await expect(wheel).toBeVisible()
+  await expect(wheel.locator('.club-wheel-label')).toHaveText(['10K', '20K', '30K', '40K', '50K'])
+  expect(club.claims()).toBe(0)
+  await wheel.getByRole('button', { name: 'Spin', exact: true }).click()
+  // The prize stays the wheel's to tell: the bankroll does not move while it turns.
+  await expect(wheel.getByRole('status')).toHaveText('Spinning…')
+  await expect(page.locator('.club-capsule-value')).toHaveText('40,000')
+  await expect(wheel.getByRole('status')).toHaveText('+30,000 chips')
+  await wheel.getByRole('button', { name: 'Collect', exact: true }).click()
+  await expect(wheel).toHaveCount(0)
+  await expect(page.locator('.club-daily')).toContainText('+30,000')
+  await expect(page.locator('.club-daily')).toContainText(/next spin in \d+h/i)
+  await expect(page.locator('.club-capsule-value')).toHaveText('70,000')
+  await expect(page.getByRole('button', { name: 'Spin the daily wheel' })).toHaveCount(0)
   expect(club.claims()).toBe(1)
 })
 
@@ -82,7 +100,7 @@ test('shows only the wait when today has been claimed', async ({ page }) => {
   await fakeClub(page, false)
   await page.goto('/')
   await expect(page.locator('.club-daily')).toContainText(/next in \d+h/i)
-  await expect(page.getByRole('button', { name: /^Claim/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Spin the daily wheel' })).toHaveCount(0)
 })
 
 test.describe('on a phone', () => {
@@ -91,7 +109,7 @@ test.describe('on a phone', () => {
   test('keeps the player capsule, daily chips included, on the screen', async ({ page }) => {
     await fakeClub(page, true)
     await page.goto('/')
-    await expect(page.getByRole('button', { name: 'Claim 15,000' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Spin the daily wheel' })).toBeVisible()
     const capsule = await page.locator('.club-capsule-player').boundingBox()
     expect(capsule).not.toBeNull()
     expect(capsule?.x ?? -1).toBeGreaterThanOrEqual(0)
