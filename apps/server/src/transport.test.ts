@@ -2304,6 +2304,48 @@ describe('the developer account', () => {
     expect(again.peer.last('snapshot')).toBeDefined()
   })
 
+  it('keeps everyone out while the ban list cannot be read, and lets them in once it can', async () => {
+    let reachable = false
+    const reported: string[] = []
+    const hub = new RoomHub({
+      ledger: new MemoryLedger(),
+      verifyToken: async () => ({ playerId: BOB, anonymous: false, admin: false }),
+      onError: (context) => reported.push(context),
+      bans: {
+        isBanned: async () => {
+          if (!reachable) throw new Error('Supabase did not answer within 5000ms')
+          return false
+        },
+        setBanned: async () => {},
+        list: async () => [],
+      },
+      createRoom: (roomId) =>
+        new Room(roomId, defaultRoomConfig({ seed: roomId, inviteCode: 'RIVER2' })),
+    })
+
+    const refused = await connectAndEnter(hub, 'bob', 'Bob')
+    expect(refused.peer.last('snapshot')).toBeUndefined()
+    expect(refused.peer.last('error')).toMatchObject({
+      code: 'join_unavailable',
+      requestId: 'enter-bob',
+    })
+    expect(reported).toEqual(['enter: could not read the ban list'])
+
+    // The same connection is still usable: the failure refused one request
+    // and nothing else.
+    reachable = true
+    await refused.connection.receive(
+      JSON.stringify({
+        kind: 'enter',
+        requestId: 'enter-again',
+        roomId: 'river-one',
+        name: 'Bob',
+        inviteCode: 'river2',
+      }),
+    )
+    expect(refused.peer.last('snapshot')).toBeDefined()
+  })
+
   it('rejects a malformed action at the wire rather than in the handler', async () => {
     expect(parseClientMessage(JSON.stringify({ kind: 'admin', requestId: 'a' }))).toBeNull()
     expect(
