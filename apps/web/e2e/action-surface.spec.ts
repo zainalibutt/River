@@ -51,6 +51,10 @@ let context: BrowserContext
  * A fresh anonymous session carries the signup bankroll. An inherited one can
  * be empty, which disables every seat and used to surface as a setup timeout.
  * The table now takes the first affordable seat automatically.
+ *
+ * The table is asked for a full ring of bots. Left to itself a new table draws
+ * three to eight of them from its room id, and the placards are measured where
+ * they are most crowded.
  */
 async function reachLiveTurn(target: Page): Promise<void> {
   await target.goto('/')
@@ -58,7 +62,7 @@ async function reachLiveTurn(target: Page): Promise<void> {
     localStorage.clear()
     sessionStorage.clear()
   })
-  await target.goto('/table')
+  await target.goto('/table?new=1&bots=fill')
   await expect(target.getByRole('button', { name: 'DEAL', exact: true })).toBeVisible({
     timeout: 90_000,
   })
@@ -164,6 +168,17 @@ test.describe('the action surface, in base-canvas pixels', () => {
         faces: document.querySelectorAll('.hero-cards .playing-card').length,
       }))
     const cardsAtRest = await countCards()
+    // Held Tab reads the table only while focus is on no control; once a control
+    // has focus, Tab moves between controls. So it is held here, before anything
+    // below has been pressed.
+    const platesShown = () =>
+      page.evaluate(() => document.querySelector('.seat-ring.plates-held') !== null)
+    await page.keyboard.down('Tab')
+    await page.waitForTimeout(150)
+    const platesWhileHeld = await platesShown()
+    await page.keyboard.up('Tab')
+    await page.waitForTimeout(150)
+    const platesAfterRelease = await platesShown()
     await page.keyboard.press('r')
     // Presence, not Playwright's visibility check, which reported the layer
     // hidden while the page had already rendered it.
@@ -217,14 +232,6 @@ test.describe('the action surface, in base-canvas pixels', () => {
       await page.mouse.up()
       await page.waitForTimeout(150)
     }
-    const platesShown = () =>
-      page.evaluate(() => document.querySelector('.seat-ring.plates-held') !== null)
-    await page.keyboard.down('Tab')
-    await page.waitForTimeout(150)
-    const platesWhileHeld = await platesShown()
-    await page.keyboard.up('Tab')
-    await page.waitForTimeout(150)
-    const platesAfterRelease = await platesShown()
     snapshot = {
       ...table,
       ...menu,
