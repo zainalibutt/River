@@ -51,6 +51,13 @@ export interface RoomConfig {
   inviteCode: string
   hostPlayerId: string
   reconnectGraceMs: number
+  /**
+   * How long after a disconnect a turn that reaches the player still waits on
+   * the normal clock rather than being played away at once. Long enough for a
+   * reload or a Back-then-Forward; short enough that a player who has gone for
+   * good does not hold every later turn up.
+   */
+  reloadHoldMs: number
   seedCollectionMs: number
   randomBytes: (size: number) => Uint8Array
   turnBudgetsMs: Record<Street, number>
@@ -92,6 +99,8 @@ export type RoomCommand =
   | { kind: 'expireReconnect'; playerId: string }
   /** Whether this player shows a losing hand at a showdown rather than throwing it away. */
   | { kind: 'showHands'; playerId: string; always: boolean }
+  /** Turn over the cards that would have come, after a hand that ended before the river. */
+  | { kind: 'rabbitHunt'; playerId: string }
 
 export type RoomEvent =
   | { kind: 'joined'; playerId: string; name: string }
@@ -106,7 +115,7 @@ export type RoomEvent =
   | { kind: 'stood'; playerId: string; seat: number; stack: number }
   | { kind: 'rejected'; playerId: string | null; message: string }
   | { kind: 'handStarted'; handNumber: number; dealerSeat: number; commit: string }
-  | { kind: 'seedCommitted'; handNumber: number; commit: string }
+  | { kind: 'seedCommitted'; handNumber: number; commit: string; fallbackCommit?: string }
   | { kind: 'seedSubmitted'; playerId: string; seat: number }
   | {
       kind: 'seedRevealed'
@@ -121,6 +130,12 @@ export type RoomEvent =
   | { kind: 'timedOut'; playerId: string; action: TurnAction }
   | { kind: 'awayPlayed'; playerId: string; action: TurnAction }
   | { kind: 'uncontested'; playerId: string; amount: number }
+  /**
+   * The rabbit: the board cards a hand that ended early never dealt, turned over on a
+   * player's ask once the hand is settled. They come off the same committed deck in the
+   * order they would have been dealt, and they change no chips and no record.
+   */
+  | { kind: 'rabbit'; handNumber: number; playerId: string; cards: Card[] }
   | {
       kind: 'showdown'
       awards: { playerId: string; amount: number }[]
@@ -163,6 +178,12 @@ export interface RoomSeatView {
   dealer: boolean
 }
 
+/** The rabbit as one player may see it: offered to those dealt in, its cards once turned. */
+export interface RabbitOffer {
+  handNumber: number
+  cards: Card[] | null
+}
+
 export interface RoomView {
   /**
    * Which room this table is in.
@@ -186,6 +207,10 @@ export interface RoomView {
   turnDeadlineMs: number | null
   turnBudgetMs: number | null
   commit: string | null
+  /** The commitment to every seat's fallback seed, published with `commit`. */
+  fallbackCommit?: string | null
+  /** Every seat's fallback seed, revealed with the server seed. */
+  fallbackSeeds?: { seat: number; seed: string }[] | null
   revealedSeed: string | null
   clientSeeds: FairnessClientSeed[] | null
   message: string | null

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { EconomyConfig, EconomyState, GrantDecision } from './economy.js'
-import { claimDaily, claimRescue, deriveEconomyState, economyStatus, utcDay } from './economy.js'
+import {
+  claimDaily,
+  claimRescue,
+  DAILY_WHEEL_PRIZES,
+  deriveEconomyState,
+  economyStatus,
+  utcDay,
+} from './economy.js'
 
 const DAY_MS = 86_400_000
 const BASE_DAY = Date.UTC(2026, 7, 24)
@@ -175,7 +182,13 @@ describe('economyStatus', () => {
   it('offers exactly what a claim would grant, and the next midnight once claimed', () => {
     const now = dayN(3) + 5 * 3_600_000
     const waiting = economyStatus(state(), CONFIG, now)
-    expect(waiting.daily).toEqual({ claimable: true, amount: 10_000, streakDay: 1, nextAtMs: now })
+    expect(waiting.daily).toEqual({
+      claimable: true,
+      amount: 10_000,
+      streakDay: 1,
+      nextAtMs: now,
+      prizes: DAILY_WHEEL_PRIZES,
+    })
     const claimed = mustGrant(claimDaily(state(), CONFIG, now)).nextState
     const after = economyStatus(claimed, CONFIG, now)
     expect(after.daily.claimable).toBe(false)
@@ -188,7 +201,7 @@ describe('economyStatus', () => {
     for (let day = 1; day <= 8; day += 1) {
       const status = economyStatus(current, CONFIG, dayN(day))
       const decision = mustGrant(claimDaily(current, CONFIG, dayN(day)))
-      expect(status.daily.amount).toBe(decision.delta)
+      expect(status.daily.amount).toBe(DAILY_WHEEL_PRIZES[0])
       expect(status.daily.streakDay).toBe(decision.nextState.streakDay)
       current = decision.nextState
     }
@@ -217,5 +230,61 @@ describe('deriveEconomyState', () => {
       streakDay: 2,
       rescuesToday: 1,
     })
+  })
+})
+
+describe('daily wheel', () => {
+  it('maps a digest onto one of the five equal segments', async () => {
+    const { wheelSegment, DAILY_WHEEL_PRIZES } = await import('./economy.js')
+    expect(DAILY_WHEEL_PRIZES).toEqual([10_000, 20_000, 30_000, 40_000, 50_000])
+    expect(wheelSegment(Uint8Array.from([0, 0, 0, 7]))).toBe(2)
+    expect(wheelSegment(Uint8Array.from([255, 255, 255, 255]))).toBe(0xffffffff % 5)
+  })
+
+  it('lands the same player on the same segment all day, and only the secret decides it', async () => {
+    const { dailyWheelSegment } = await import('./economy.js')
+    const first = await dailyWheelSegment('secret', 'alice', '2026-11-09')
+    expect(await dailyWheelSegment('secret', 'alice', '2026-11-09')).toBe(first)
+    const segments = new Set<number>()
+    for (let day = 1; day <= 28; day += 1) {
+      segments.add(
+        await dailyWheelSegment('secret', 'alice', `2026-11-${String(day).padStart(2, '0')}`),
+      )
+    }
+    // Four weeks of one player should touch most of the wheel, not sit on one slice.
+    expect(segments.size).toBeGreaterThanOrEqual(4)
+  })
+
+  it('spreads close to evenly across players', async () => {
+    const { dailyWheelSegment } = await import('./economy.js')
+    const counts = [0, 0, 0, 0, 0]
+    for (let player = 0; player < 500; player += 1) {
+      const segment = await dailyWheelSegment('secret', `p${player}`, '2026-11-09')
+      counts[segment] = (counts[segment] ?? 0) + 1
+    }
+    for (const count of counts) expect(count).toBeGreaterThan(70)
+  })
+
+  it('pays the wheel prize in place of the base and streak', async () => {
+    const { claimDaily } = await import('./economy.js')
+    const state = {
+      playerId: 'alice',
+      balance: 0,
+      seated: false,
+      lastDailyClaimDay: null,
+      streakDay: 0,
+      rescuesToday: 0,
+      rescueDay: null,
+    }
+    const config = {
+      signupBankroll: 0,
+      rescueFloor: 0,
+      rescueThreshold: 0,
+      rescueDailyCap: 0,
+      dailyBase: 5_000,
+      dailyStreakBonus: [0, 1_000],
+    }
+    expect(claimDaily(state, config, Date.UTC(2026, 10, 9), 40_000)?.delta).toBe(40_000)
+    expect(claimDaily(state, config, Date.UTC(2026, 10, 9))?.delta).toBe(5_000)
   })
 })

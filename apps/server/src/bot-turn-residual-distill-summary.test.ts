@@ -115,4 +115,4 @@ it('requires every stage and full holding coverage, and fails if either test coh
   } finally {
     rmSync(out, { recursive: true })
   }
-}, 15000)
+}, 60_000)

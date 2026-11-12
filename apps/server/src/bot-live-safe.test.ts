@@ -2,7 +2,12 @@ import { EventEmitter } from 'node:events'
 import { Worker } from 'node:worker_threads'
 import { championPersonality, midasPersonality, mulberry32, personalityPool } from '@river/engine'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { liveBotThinker, liveSafeBotPolicy, liveSafeConfig } from './bot-live-safe.js'
+import {
+  type LiveSafeEvent,
+  liveBotThinker,
+  liveSafeBotPolicy,
+  liveSafeConfig,
+} from './bot-live-safe.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { hasPreflopPack } from './bot-preflop-tables.js'
 import { actionFor, botPlayerId } from './bot-service.js'
@@ -40,7 +45,13 @@ function request(): ThinkRequest {
 }
 
 class FakeWorker extends EventEmitter {
-  readonly sent: { type: string; safe?: boolean; id?: number }[] = []
+  readonly sent: {
+    type: string
+    safe?: boolean
+    id?: number
+    stopAfterMs?: number
+    hardStopAfterMs?: number
+  }[] = []
   readonly terminate = vi.fn(async () => 0)
   constructor(
     private readonly respond: (worker: FakeWorker, message: FakeWorker['sent'][number]) => void,
@@ -100,6 +111,25 @@ describe('live safe policy routing and hard budget', () => {
 
   it.each(['v9go', 'v9gp', 'v9gpw', 'v9gpw2'])('accepts the %s variant', (variant) => {
     expect(liveSafeConfig({ BOT_LIVE_SAFE_VARIANT: variant }).variant).toBe(variant)
+  })
+
+  it('defaults seats to one fewer than the validated worker count, with a minimum of one', () => {
+    for (const [threads, seats] of [
+      [1, 1],
+      [2, 1],
+      [3, 2],
+      [4, 3],
+    ]) {
+      expect(liveSafeConfig({ BOT_LIVE_SAFE_THREADS: String(threads) }).seats).toBe(seats)
+    }
+    expect(liveSafeConfig({ BOT_LIVE_SAFE_THREADS: '99' }).seats).toBe(1)
+    expect(liveSafeConfig({ BOT_LIVE_SAFE_THREADS: '4', BOT_LIVE_SAFE_SEATS: '2' }).seats).toBe(2)
+    expect(liveSafeConfig({ BOT_LIVE_SAFE_SEATS: '5' }).seats).toBe(5)
+    for (const value of ['0', '-1', '1.5', 'bad', 'Infinity']) {
+      expect(liveSafeConfig({ BOT_LIVE_SAFE_THREADS: '4', BOT_LIVE_SAFE_SEATS: value }).seats).toBe(
+        3,
+      )
+    }
   })
 
   it('defaults unknown variants to v9gpw2', () => {
@@ -279,6 +309,57 @@ describe('live safe policy routing and hard budget', () => {
       expect(policy.stats.workerStarts).toBe(2)
     } finally {
       retired()
+      await policy.close()
+    }
+  })
+
+  it('tells the worker when to stop adding iterations and counts the solves it cut short', async () => {
+    const worker = new FakeWorker((fake, message) => {
+      if (message.type === 'think')
+        fake.emit('message', {
+          type: 'result',
+          id: message.id,
+          action: { kind: 'call' },
+          reason: null,
+          shortened: 2,
+          chains: 0,
+          entries: 0,
+          bytes: 0,
+        })
+    })
+    const events: LiveSafeEvent[] = []
+    const policy = liveSafeBotPolicy(
+      { ...liveSafeConfig(), enabled: true, threads: 1, budgetMs: 8000 },
+      { workerFactory: () => worker as unknown as Worker, onEvent: (event) => events.push(event) },
+    )
+    try {
+      await expect(policy.think(request(), 8000)).resolves.toEqual({ kind: 'call' })
+      const sent = worker.sent.find((message) => message.type === 'think')?.stopAfterMs
+      expect(sent).toBeGreaterThan(5000)
+      expect(sent).toBeLessThanOrEqual(6000)
+      const hard = worker.sent.find((message) => message.type === 'think')?.hardStopAfterMs
+      expect(hard).toBeGreaterThan(7000)
+      expect(hard).toBeLessThanOrEqual(7250)
+      expect(policy.stats.shortenedSolves).toBe(2)
+      expect(policy.stats.fallbacks).toEqual({})
+      expect(events.find((event) => event.type === 'decision')?.shortened).toBe(2)
+    } finally {
+      await policy.close()
+    }
+  })
+
+  it('sends no deadline when the margin is off', async () => {
+    const worker = new FakeWorker((fake, message) => {
+      if (message.type === 'think') fake.send(message.id)
+    })
+    const policy = liveSafeBotPolicy(
+      { ...liveSafeConfig({ BOT_LIVE_SAFE_ANYTIME_MARGIN_MS: '0' }), enabled: true, threads: 1 },
+      { workerFactory: () => worker as unknown as Worker },
+    )
+    try {
+      await policy.think(request(), 8000)
+      expect(worker.sent.find((message) => message.type === 'think')?.stopAfterMs).toBeUndefined()
+    } finally {
       await policy.close()
     }
   })

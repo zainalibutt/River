@@ -12,8 +12,12 @@ Server-authoritative multiplayer Texas Hold'em for the browser.
 
 River is a poker room for friend groups: private tables behind a short link,
 public tables that bots keep full, and a champion bot to challenge. It runs on
-desktop and phone, in a 2D layout by default, with optional 3D venues and
-characters on tables that support them.
+desktop and phone in a 2D layout. 3D venues and characters are built in the
+same codebase and switched off in public builds until they are finished.
+
+I designed and built River on my own, from the rules engine to the
+deployment, and I run it. It has been live since September 2026. Play is with
+play money only.
 
 ## Engineering highlights
 
@@ -26,19 +30,50 @@ characters on tables that support them.
 - **Verifiable dealing.** The server commits to a seed before each hand, every
   seated player contributes one, and the deck is a deterministic shuffle of
   both. After the hand anyone can recompute it. See [fairness](docs/fairness.md).
-- **Chips that cannot go missing.** An append-only ledger in Postgres with
-  idempotent references, server-side seat settlement, and recovery that pays
-  back players a crashed server left seated.
+- **A chip ledger that settles every seat.** An append-only ledger in Postgres
+  with idempotent references and one entry at a time per player, and
+  server-side settlement for each way a seat ends. A deploy calls off any
+  hand in progress and pays each player their stack and what they had bet in
+  it. A crash pays back each open seat's buy-in and rebuys: the stack at that
+  moment lived only in the memory the crash lost.
 - **Bots that are measured, not tuned by eye.** Rule-based tiers, a CFR+ river
   solver running in a worker thread, value networks trained in PyTorch and run
   in plain TypeScript, evaluated on held-out seeds against a best-response
-  opponent and an outside benchmark. See [bots](docs/bots.md).
-- **A reproducible art pipeline.** Venues and characters are built by Blender
+  opponent and an outside benchmark. See [bots](docs/bots.md). The training
+  code is in [`ml/`](ml/); the trained weights and the latest bot's results
+  are not published yet.
+- **A scripted art pipeline.** Venues and characters are built by Blender
   Python scripts and exported to budgeted glTF assets, with the gates written as
-  code. See [art pipeline](docs/art-pipeline.md).
+  code. The character master scenes are kept private. See
+  [art pipeline](docs/art-pipeline.md).
 - **Tests at every layer**: unit tests for the engine, the server and the
   client's logic run in CI on Node 22 and 24, and Playwright tests drive the
   table interface in a real browser.
+
+## Problems worth reading about
+
+**Two debits at once could spend the same chips.** In an audit of the live
+service I found that `apply_ledger_entry` read a balance and then inserted an
+entry without locking anything. On the local database, ten debits fired
+together against a bankroll with room for four, and all ten landed. The
+function now locks the player's row before it reads, and
+[`ledger.local.test.ts`](apps/server/src/ledger.local.test.ts) races entries
+against a real Postgres to keep it that way. The same audit turned up several
+more ways for chips to go missing or appear from nowhere, among them a payout
+that failed every retry and still closed its seat, and a shutdown that paid out
+stacks but not the chips already in the pot.
+
+**The server could choose the deck.** When a player sent no seed, the server
+filled one in after it had seen every other seed, which is enough to steer the
+shuffle. Fallback seeds are now drawn and committed as the hand starts and
+revealed after it. The browser verifier, which used to check only the seed
+against its commitment, now reshuffles the deck and checks every card the hand
+showed.
+
+**Reloading during your own turn folded your hand.** A reload late in the turn
+let the clock run out while the page came back, so the player lost the hand.
+A player who drops during their turn now gets enough time to return, once per
+hand, so the hold cannot be used to stall the table.
 
 ## Architecture
 
@@ -88,7 +123,10 @@ npm test            # unit tests (Vitest)
 npm run test:ui     # interface tests (Playwright), against a running app
 ```
 
-CI runs lint, typecheck and the unit suite on every push and pull request.
+CI runs on every pull request and every push to `main`: lint, typecheck and the unit suite on
+Node 22 and 24, the database tests against a local Postgres, a secret scan, and
+a browser test that plays a hand on a production build and checks that it
+verifies. `main` is protected and accepts changes only when CI passes.
 
 ## Running locally
 
@@ -127,13 +165,11 @@ machine only and are never pushed to a hosted project.
 
 ## AI-assisted development
 
-I used AI coding assistants extensively during River's development, for
-implementation, analysis, tooling and bounded sub-tasks, choosing between them
-by what each did best. I retained ownership of the product, architecture, task
-decomposition, integration, review and release. Assistant output was not
-treated as correct by default: changes had to pass automated tests, benchmarks,
-browser checks and generated-asset gates, and anything visual was judged by eye
-before it landed.
+I used AI coding assistants throughout River, for implementation, analysis and
+tooling, the way I would use any other tool. The decisions were mine: what
+River is, how it is built, how the work is split, and what ships. I treated
+assistant output as a draft. Nothing landed until it passed the tests, the
+benchmarks and the browser checks, and anything visual was judged by eye.
 [Development method](docs/development-method.md) describes the workflow.
 
 The public Git history begins from a sanitised baseline. River predates this

@@ -1,9 +1,14 @@
 import { createHash } from 'node:crypto'
+import { parseCard } from '@river/engine'
 import { describe, expect, it } from 'vitest'
 import {
+  evidenceAgrees,
   isVerifySeed,
+  observeHand,
   recomputeCommit,
+  recomputeDeck,
   recomputeDeckEntropy,
+  recomputeFallbackCommit,
   type VerifyClientSeed,
   verifyHand,
 } from './verify.js'
@@ -77,5 +82,114 @@ describe('client-side fairness verification', () => {
     expect(isVerifySeed(SERVER_SEED)).toBe(true)
     expect(isVerifySeed('abc')).toBe(false)
     expect(isVerifySeed(`${'a'.repeat(63)}z`)).toBe(false)
+  })
+})
+
+describe('checking the cards themselves', () => {
+  const cards = (text: string) => text.split(' ').map((card) => parseCard(card))
+  // The server's own fairDeck for these seeds, printed from apps/server/src/fairness.ts.
+  const SERVER_DECK = cards('2d 4c 7c 7s Tc 9s 5c Qs 3c')
+  const commit = serverCommit(SERVER_SEED)
+  /** Heads up with Alice on the button: she is dealt first, then the board after both. */
+  const dealt = (aliceHole: string, board: string) => ({
+    board: cards(board),
+    seats: [
+      { seat: 0, hole: cards(aliceHole), dealer: true },
+      { seat: 2, hole: null, dealer: false },
+    ],
+  })
+
+  it('shuffles exactly as the server does', async () => {
+    const deck = await recomputeDeck(SERVER_SEED, seats)
+    expect(deck?.slice(0, 9)).toEqual(SERVER_DECK)
+    expect(new Set(deck?.map((card) => card.rank + card.suit)).size).toBe(52)
+  })
+
+  it('passes a hand whose shown cards are the ones the deck deals', async () => {
+    const result = await verifyHand(commit, SERVER_SEED, seats, dealt('2d 7c', 'Tc 9s 5c Qs 3c'))
+    expect(result).toMatchObject({ status: 'match', cardsChecked: 7 })
+  })
+
+  it('fails a hand whose seed matches its commit but whose cards were not the deck', async () => {
+    const swapped = await verifyHand(commit, SERVER_SEED, seats, dealt('2d 7c', 'Tc 9s 5c Qs As'))
+    expect(swapped.status).toBe('mismatch')
+    const wrongHole = await verifyHand(commit, SERVER_SEED, seats, dealt('7c 2d', 'Tc 9s 5c Qs 3c'))
+    expect(wrongHole.status).toBe('mismatch')
+  })
+
+  it('fails a filled-in seed that is not the fallback committed before the deal', async () => {
+    const committed = [
+      { seat: 0, seed: ALICE_SEED },
+      { seat: 2, seed: 'd'.repeat(64) },
+    ]
+    const fallbackCommit = (await recomputeFallbackCommit(committed)) ?? ''
+    const defaulted = seats.map((entry) => ({ ...entry, defaulted: entry.playerId === 'alice' }))
+    const honest = await verifyHand(commit, SERVER_SEED, defaulted, undefined, {
+      commit: fallbackCommit,
+      seeds: committed,
+    })
+    expect(honest.status).toBe('match')
+    // Bob's seed is the one filled in now, and it is not what was committed for him.
+    const swapped = seats.map((entry) => ({ ...entry, defaulted: entry.playerId === 'bob' }))
+    const chosen = await verifyHand(commit, SERVER_SEED, swapped, undefined, {
+      commit: fallbackCommit,
+      seeds: committed,
+    })
+    expect(chosen.status).toBe('mismatch')
+  })
+})
+
+describe('holding the reveal to what the hand showed', () => {
+  const cards = (text: string) => text.split(' ').map((card) => parseCard(card))
+  const during = {
+    handNumber: 4,
+    commit: 'c'.repeat(64),
+    fallbackCommit: 'f'.repeat(64),
+    revealedSeed: null,
+    clientSeeds: null,
+    board: cards('Tc 9s 5c'),
+    seats: [{ playerId: 'alice', hole: cards('2d 7c') }],
+    selfId: 'alice',
+  }
+  const reveal = {
+    ...during,
+    revealedSeed: 'a'.repeat(64),
+    board: cards('Tc 9s 5c Qs 3c'),
+    clientSeeds: [{ playerId: 'alice', seat: 0, seed: 'b'.repeat(64), defaulted: false }],
+  }
+  const seen = observeHand(null, during, 'b'.repeat(64))
+
+  it('agrees with a reveal that tells the same story', () => {
+    expect(evidenceAgrees(observeHand(seen, reveal, null), reveal)).toBe(true)
+  })
+
+  it('catches a reveal that swaps the commitment, the cards or the seed', () => {
+    expect(evidenceAgrees(seen, { ...reveal, commit: 'd'.repeat(64) })).toBe(false)
+    expect(evidenceAgrees(seen, { ...reveal, fallbackCommit: 'e'.repeat(64) })).toBe(false)
+    expect(evidenceAgrees(seen, { ...reveal, board: cards('Tc 9s 4c Qs 3c') })).toBe(false)
+    expect(
+      evidenceAgrees(seen, { ...reveal, seats: [{ playerId: 'alice', hole: cards('2d 7s') }] }),
+    ).toBe(false)
+    expect(
+      evidenceAgrees(seen, {
+        ...reveal,
+        clientSeeds: [{ playerId: 'alice', seat: 0, seed: 'e'.repeat(64), defaulted: false }],
+      }),
+    ).toBe(false)
+  })
+
+  it('catches a flop rewritten during the hand even when the reveal matches it', () => {
+    const rewritten = observeHand(seen, { ...during, board: cards('Tc 9s 4c') }, null)
+    const revealedLater = { ...reveal, board: cards('Tc 9s 4c Qs 3c') }
+    expect(evidenceAgrees(observeHand(rewritten, revealedLater, null), revealedLater)).toBe(false)
+  })
+
+  it('still agrees after the player stands up and their cards leave the seat', () => {
+    const stood = { ...reveal, seats: [{ playerId: 'alice', hole: null }] }
+    expect(evidenceAgrees(observeHand(seen, stood, null), stood)).toBe(true)
+  })
+
+  it('has nothing to hold a hand to that it joined at the reveal', () => {
+    expect(evidenceAgrees(observeHand(null, reveal, null), reveal)).toBe(true)
   })
 })

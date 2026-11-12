@@ -2,13 +2,21 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { setTimeout as pause } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { mulberry32, personalityPool, seedFromString, type TurnAction } from '@river/engine'
+import {
+  midasPersonality,
+  mulberry32,
+  personalityPool,
+  seedFromString,
+  type TurnAction,
+} from '@river/engine'
 import {
   type LiveSafeBotPolicy,
   type LiveSafeConfig,
   type LiveSafeEvent,
+  type LiveSafeVariant,
   liveSafeBotPolicy,
   liveSafeConfig,
+  MAX_LIVE_SAFE_BUDGET_MS,
 } from './bot-live-safe.js'
 import { pokerGuardPolicy } from './bot-poker-guard.js'
 import { actionFor, botPlayerId } from './bot-service.js'
@@ -136,8 +144,8 @@ async function main() {
     ![1, 2, 4].includes(threads) ||
     !Number.isFinite(budgetMs) ||
     budgetMs < 1 ||
-    budgetMs > 8000 ||
-    !['v9go', 'v9gp'].includes(variant)
+    budgetMs > MAX_LIVE_SAFE_BUDGET_MS ||
+    !['v9go', 'v9gp', 'v9gpw', 'v9gpw2'].includes(variant)
   )
     throw new Error('invalid hands, threads, budget-ms or variant')
   const output = resolve(value('--out', 'out/bot-live-readiness.json'))
@@ -169,7 +177,7 @@ async function main() {
   const config = {
     ...liveSafeConfig(),
     enabled: true,
-    variant: variant as 'v9go' | 'v9gp',
+    variant: variant as LiveSafeVariant,
     threads,
     budgetMs,
   }
@@ -211,9 +219,13 @@ async function main() {
       throw new Error(`model workers did not load: ${JSON.stringify(events)}`)
     }
     const loadedRss = process.memoryUsage().rss
-    const cast = personalityPool()
-      .filter((person) => person.skill === 'og')
-      .slice(0, 2)
+    // The wrapper only takes Midas's seat; the other chair is an OG on v8z's base.
+    const cast = [
+      midasPersonality(),
+      ...personalityPool()
+        .filter((person) => person.skill === 'og')
+        .slice(0, 1),
+    ]
     if (cast.length !== 2) throw new Error('need two OG personalities')
     const entrants = cast.map((personality) => ({ personality }))
     const ids = cast.map((person) => botPlayerId(person.id))

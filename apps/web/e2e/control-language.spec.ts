@@ -176,6 +176,9 @@ test.describe('the desktop control language baseline', () => {
       await expect(arc).toHaveAttribute('aria-valuenow', '1500')
       await expect.poll(() => sound.count('wheel_tick')).toBe(1)
       const position = await knob.getAttribute('transform')
+      // Notches closer together than the wheel's 18ms gap are one sound, and a
+      // scripted key can land inside it where a hand cannot.
+      await page.waitForTimeout(40)
       await page.keyboard.press('ArrowLeft')
       await expect(arc).toHaveAttribute('aria-valuenow', '1000')
       await expect.poll(() => sound.count('wheel_tick')).toBe(2)
@@ -205,6 +208,27 @@ test.describe('the desktop control language baseline', () => {
       await expect.poll(() => fixture.commands.filter((kind) => kind === 'act')).toHaveLength(1)
     })
   }
+
+  test('leaves Tab to move between controls once one has focus', async ({ page }) => {
+    await offlineTableFixture(page)
+    await page.goto('/table?new=1')
+    await page.getByRole('button', { name: 'DEAL', exact: true }).click()
+    await expect(page.getByRole('region', { name: 'Your action' })).toBeVisible()
+    const hand = page.locator('.hero-cards')
+    const seatRing = page.locator('.seat-ring')
+    // Pressing the cards leaves focus on them. Tab then moves on to the next
+    // control and the plates stay down; Shift still reads the table from anywhere.
+    await hand.click()
+    await expect(hand).toBeFocused()
+    await page.keyboard.down('Tab')
+    await expect(hand).not.toBeFocused()
+    await expect(seatRing).not.toHaveClass(/plates-held/)
+    await page.keyboard.up('Tab')
+    await page.keyboard.down('Shift')
+    await expect(seatRing).toHaveClass(/plates-held/)
+    await page.keyboard.up('Shift')
+    await expect(seatRing).not.toHaveClass(/plates-held/)
+  })
 
   test('keeps the wheel labels and interactions intact while recording style baselines', async ({
     page,
@@ -236,6 +260,14 @@ test.describe('the desktop control language baseline', () => {
     const faces = page.locator('.hero-cards .playing-card')
     await expect(backsAtRest).toHaveCount(2)
     await expect(faces).toHaveCount(0)
+
+    // Held Tab reads the table while focus is on no control.
+    const seatRing = page.locator('.seat-ring')
+    await page.keyboard.down('Tab')
+    await expect(seatRing).toHaveClass(/plates-held/)
+    await page.keyboard.up('Tab')
+    await expect(seatRing).not.toHaveClass(/plates-held/)
+
     const hand = page.locator('.hero-cards')
     const handBox = await hand.boundingBox()
     expect(handBox).not.toBeNull()
@@ -247,12 +279,6 @@ test.describe('the desktop control language baseline', () => {
     await page.mouse.up()
     await expect(faces).toHaveCount(0)
     await expect(backsAtRest).toHaveCount(2)
-
-    const seatRing = page.locator('.seat-ring')
-    await page.keyboard.down('Tab')
-    await expect(seatRing).toHaveClass(/plates-held/)
-    await page.keyboard.up('Tab')
-    await expect(seatRing).not.toHaveClass(/plates-held/)
 
     const measureStyles = (styleSelectors: string[]) =>
       page.evaluate((selectorsToMeasure) => {

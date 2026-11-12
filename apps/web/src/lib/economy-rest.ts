@@ -1,10 +1,13 @@
 import {
   claimDaily,
+  DAILY_WHEEL_PRIZES,
+  dailyWheelSegment,
   deriveEconomyState,
   type EconomyConfig,
   type EconomyStatus,
   economyStatus,
   type LedgerRow,
+  utcDay,
 } from '@river/engine'
 
 /**
@@ -46,17 +49,34 @@ function base(rest: EconomyRest): string {
   return rest.supabaseUrl.replace(/\/$/, '')
 }
 
+/** Ledger rows read at a time, under the rows Supabase returns for one request. */
+const LEDGER_PAGE = 500
+
+/**
+ * A player's whole ledger, a page at a time. Supabase returns at most a fixed
+ * number of rows to one request, so a long history read whole was cut short and
+ * the balance and streak worked out from it were wrong.
+ */
 async function readRows(rest: EconomyRest, playerId: string): Promise<LedgerRow[]> {
-  const query = new URL(`${base(rest)}/rest/v1/chip_ledger`)
-  query.searchParams.set('player_id', `eq.${playerId}`)
-  query.searchParams.set('select', 'ref,reason,delta')
-  const body = await readJson(rest, query)
-  if (!Array.isArray(body)) throw new Error('Supabase returned an invalid ledger')
-  return body.map((item: Record<string, unknown>) => ({
-    ref: String(item.ref ?? ''),
-    reason: String(item.reason ?? ''),
-    delta: Number(item.delta ?? 0),
-  }))
+  const rows: LedgerRow[] = []
+  for (let offset = 0; ; offset += LEDGER_PAGE) {
+    const query = new URL(`${base(rest)}/rest/v1/chip_ledger`)
+    query.searchParams.set('player_id', `eq.${playerId}`)
+    query.searchParams.set('select', 'ref,reason,delta')
+    query.searchParams.set('order', 'id.asc')
+    query.searchParams.set('limit', String(LEDGER_PAGE))
+    query.searchParams.set('offset', String(offset))
+    const body = await readJson(rest, query)
+    if (!Array.isArray(body)) throw new Error('Supabase returned an invalid ledger')
+    rows.push(
+      ...body.map((item: Record<string, unknown>) => ({
+        ref: String(item.ref ?? ''),
+        reason: String(item.reason ?? ''),
+        delta: Number(item.delta ?? 0),
+      })),
+    )
+    if (body.length < LEDGER_PAGE) return rows
+  }
 }
 
 async function readConfig(rest: EconomyRest): Promise<EconomyConfig> {
@@ -100,7 +120,7 @@ export async function readEconomyStatus(
 }
 
 export type DailyClaim =
-  | { kind: 'granted'; delta: number; balance: number; status: EconomyStatus }
+  | { kind: 'granted'; delta: number; segment: number; balance: number; status: EconomyStatus }
   | { kind: 'already-claimed'; status: EconomyStatus }
 
 /** Claims today's daily chips for this player, once, by the engine's rule. */
@@ -111,7 +131,9 @@ export async function claimDailyChips(
 ): Promise<DailyClaim> {
   const [rows, config] = await Promise.all([readRows(rest, playerId), readConfig(rest)])
   const state = { ...deriveEconomyState(rows, true, nowMs), playerId }
-  const decision = claimDaily(state, config, nowMs)
+  // Keyed exactly as the table's claim is, so either one pays the same prize, once.
+  const segment = await dailyWheelSegment(rest.serviceRoleKey, playerId, utcDay(nowMs))
+  const decision = claimDaily(state, config, nowMs, DAILY_WHEEL_PRIZES[segment])
   if (decision === null) {
     return { kind: 'already-claimed', status: economyStatus(state, config, nowMs) }
   }
@@ -132,6 +154,7 @@ export async function claimDailyChips(
   return {
     kind: 'granted',
     delta: decision.delta,
+    segment,
     balance: Number.isFinite(balance) ? balance : state.balance + decision.delta,
     status: economyStatus(decision.nextState, config, nowMs),
   }

@@ -1,4 +1,4 @@
-"""CPU-only tests for Claude; never train or require the full 35GB packed cache."""
+"""CPU-only tests; never train or require the full 35GB packed cache."""
 import json
 import unittest
 import tempfile

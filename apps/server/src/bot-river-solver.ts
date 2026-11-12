@@ -35,6 +35,63 @@ export interface RiverSpot {
 
 export type Player = 0 | 1
 
+/**
+ * Live play only. Past `at` (performance.now()), every solve stops after its
+ * current iteration once it has run `floor` of the iterations it was asked
+ * for. Past `hardAt`, it stops after its current iteration whatever it has
+ * run, so a slow machine plays a rougher average instead of running out the
+ * clock. Fewer DCFR iterations is still a well-formed average, and carried
+ * values come from that same average. Offline runs never set a deadline, so
+ * their solves stay bit-identical.
+ */
+let solveDeadline:
+  | { readonly at: number; readonly floor: number; readonly hardAt: number }
+  | undefined
+let shortenedSolves = 0
+let belowFloorSolves = 0
+
+export function setSolveDeadline(
+  at: number | undefined,
+  floor = 0.5,
+  hardAt = Number.POSITIVE_INFINITY,
+): void {
+  if (at === undefined) {
+    solveDeadline = undefined
+    return
+  }
+  if (!(Number.isFinite(at) && floor > 0 && floor <= 1 && hardAt >= at))
+    throw new Error('a solve deadline needs a finite time, a floor in (0, 1] and a later hard stop')
+  solveDeadline = { at, floor, hardAt }
+}
+
+/** How many solves the deadline has cut short since this was last read. */
+export function takeShortenedSolves(): number {
+  const count = shortenedSolves
+  shortenedSolves = 0
+  return count
+}
+
+/** How many of those were cut by the hard stop, below their floor. */
+export function takeBelowFloorSolves(): number {
+  const count = belowFloorSolves
+  belowFloorSolves = 0
+  return count
+}
+
+function pastDeadline(iteration: number, iterations: number): boolean {
+  if (solveDeadline === undefined || iteration >= iterations) return false
+  const now = performance.now()
+  if (now >= solveDeadline.hardAt) {
+    shortenedSolves += 1
+    if (iteration < Math.ceil(iterations * solveDeadline.floor)) belowFloorSolves += 1
+    return true
+  }
+  if (iteration < Math.ceil(iterations * solveDeadline.floor)) return false
+  if (now < solveDeadline.at) return false
+  shortenedSolves += 1
+  return true
+}
+
 /** Brown & Sandholm (2019); omitted options preserve linear-average CFR+. */
 export interface CfrOptions {
   /** Diagnostic only: retain numeric learning state for a later root solve. */
@@ -579,6 +636,7 @@ export function solveRiver(
       const weight = beginIteration(completed + iteration)
       walk(root, 0, hands[0].weights, free1, fixed1, weight)
       walk(root, 1, hands[1].weights, free0, fixed0, weight)
+      if (pastDeadline(iteration, iterations)) break
     }
   } else {
     // The gadget's choice, per holding of the re-solved player: regrets for
@@ -631,6 +689,7 @@ export function solveRiver(
         followRegret[o] = updatedRegret(followRegret[o] as number, (played[o] as number) - value)
         takeRegret[o] = updatedRegret(takeRegret[o] as number, taken - value)
       }
+      if (pastDeadline(iteration, iterations)) break
     }
     followShareOut = Float64Array.from(followSum, (sum) => sum / averageWeight)
     if (options.captureState)

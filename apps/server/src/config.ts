@@ -5,6 +5,38 @@ export interface ServerConfig {
   serviceRoleKey: string
 }
 
+export interface ServerResourceConfig {
+  allowedOrigins: string[] | null
+  maxSockets: number
+  maxSocketsPerIp: number
+  trustProxy: boolean
+  roomIdleTimeoutMs: number
+}
+
+export function readServerResourceConfig(
+  env: Readonly<Record<string, string | undefined>>,
+): ServerResourceConfig {
+  const positiveInteger = (name: string, fallback: number): number => {
+    const value = Number(env[name] ?? fallback)
+    if (!Number.isSafeInteger(value) || value <= 0 || value > 2_147_483_647) {
+      throw new Error(`${name} must be a positive integer at most 2147483647`)
+    }
+    return value
+  }
+  return {
+    allowedOrigins:
+      env.RIVER_ALLOWED_ORIGINS === undefined
+        ? null
+        : env.RIVER_ALLOWED_ORIGINS.split(',')
+            .map((origin) => origin.trim())
+            .filter(Boolean),
+    maxSockets: positiveInteger('RIVER_MAX_SOCKETS', 2_000),
+    maxSocketsPerIp: positiveInteger('RIVER_MAX_SOCKETS_PER_IP', 20),
+    trustProxy: env.RIVER_TRUST_PROXY === '1',
+    roomIdleTimeoutMs: positiveInteger('RIVER_ROOM_IDLE_TIMEOUT_MS', 30 * 60_000),
+  }
+}
+
 export function readServerConfig(env: Readonly<Record<string, string | undefined>>): ServerConfig {
   const supabaseUrl = env.SUPABASE_URL
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY

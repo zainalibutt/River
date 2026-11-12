@@ -1588,6 +1588,19 @@ button.invite-chip.showing-code {
     inset 0 0 0 1px var(--river-brass);
 }
 
+.hero-cards .hero-peek-hint {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  color: rgb(244 236 220 / 70%);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  pointer-events: none;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 85%);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
 .hud-corner > .leave-table {
   position: relative;
   overflow: hidden;
@@ -1635,6 +1648,13 @@ button.invite-chip.showing-code {
 
 .upgrade-panel.positive {
   border-color: rgb(111 191 139 / 64%);
+}
+
+.upgrade-privacy {
+  justify-self: center;
+  color: var(--river-cream-dim);
+  font-size: 13px;
+  letter-spacing: 0.04em;
 }
 
 .hero-card.peeked {
@@ -1693,6 +1713,16 @@ button.invite-chip.showing-code {
 
   .viewport-warning span {
     color: var(--river-cream-dim);
+  }
+
+  .viewport-turn {
+    margin: 8px 0 0;
+    padding: 10px 18px;
+    border: 1px solid var(--club-brass-bright);
+    border-radius: 999px;
+    color: var(--river-amber-bright);
+    font-weight: 600;
+    letter-spacing: 0.04em;
   }
 
   .viewport-rotate,
@@ -3883,6 +3913,56 @@ button.verify-pill.verify-mismatch {
   white-space: nowrap;
 }
 
+/* First hand only: what the wheel's three buttons mean, beside the wheel. */
+.action-coach {
+  position: absolute;
+  /* Low and wide: level with the wheel it sat over the next seat's medallion. */
+  top: 150px;
+  right: calc(100% + 18px);
+  width: 300px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--river-brass-lit);
+  border-radius: 12px;
+  background: rgb(8 11 9 / 88%);
+  color: var(--river-cream);
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 50%);
+}
+
+/* The keys that do what the buttons do, shown once a keyboard is on them. */
+.action-keys {
+  position: absolute;
+  bottom: -34px;
+  left: 50%;
+  margin: 0;
+  color: rgb(244 236 220 / 78%);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  pointer-events: none;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 85%);
+  transform: translateX(-50%);
+  transition: opacity 140ms var(--ease-out);
+  white-space: nowrap;
+}
+
+.action-menu:focus-within .action-keys {
+  opacity: 1;
+}
+
+.action-keys kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  margin: 0 0.3em 0 0.7em;
+  padding: 1px 4px;
+  border: 1px solid rgb(244 236 220 / 40%);
+  border-radius: 4px;
+  font: inherit;
+  text-align: center;
+}
+
 .action-base {
   position: absolute;
   border-radius: 50%;
@@ -3960,6 +4040,22 @@ button.verify-pill.verify-mismatch {
   position: absolute;
   width: 66px;
   height: 66px;
+}
+
+/* Every action says what it is: icons alone timed a new player out. */
+.action-caption {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  color: rgb(244 236 220 / 82%);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgb(0 0 0 / 90%);
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .action-slot.call {
@@ -5037,4 +5133,57 @@ button.verify-pill.verify-mismatch {
 .phone-table .friend-invites {
   position: static;
   margin-top: 10px;
+}
+
+/* The rabbit, at the head of the table: the board the last hand never dealt. */
+.rabbit-hunt {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  z-index: 23;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  transform: translateX(-50%);
+  color: var(--river-cream-dim);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.rabbit-hunt button {
+  padding: 9px 18px;
+  border: 1px solid var(--river-brass-lit);
+  border-radius: 999px;
+  background: rgb(10 13 12 / 80%);
+  color: var(--river-amber-bright);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.rabbit-hunt.shown {
+  padding: 8px 12px 10px;
+  border: 1px dashed var(--river-brass-lit);
+  border-radius: 10px;
+  background: rgb(10 13 12 / 72%);
+}
+
+.rabbit-cards {
+  display: flex;
+  gap: 6px;
+  opacity: 0.85;
+}
+
+.rabbit-cards .playing-card {
+  width: 44px;
+  height: 62px;
+}
+
+/* On the phone it sits in the dock, in the flow, above the waiting controls. */
+.phone-table .rabbit-hunt {
+  position: static;
+  transform: none;
+  margin-bottom: 8px;
 }

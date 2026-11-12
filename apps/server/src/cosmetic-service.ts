@@ -1,5 +1,5 @@
 import { type Cosmetic, cosmeticCatalogue } from '@river/engine'
-import type { Ledger } from './ledger.js'
+import { isInsufficientBalance, type Ledger } from './ledger.js'
 
 export interface OwnedCosmetic {
   cosmeticId: string
@@ -26,8 +26,9 @@ export function cosmeticById(cosmeticId: string): Cosmetic | undefined {
  * Buy a cosmetic with chips.
  *
  * Identical guarantees to a table item purchase: the ledger ref is
- * deterministic per player and cosmetic, so a double click debits once. The
- * balance check is a courtesy, the ref is the guard.
+ * deterministic per player and cosmetic, so a double click debits once, and
+ * buying again after a charge whose cosmetic never landed debits nothing and
+ * delivers it. The ledger checks the balance.
  */
 export async function buyCosmetic(
   playerId: string,
@@ -42,15 +43,18 @@ export async function buyCosmetic(
     return { kind: 'refused', reason: 'already-owned' }
   }
 
-  const balance = await deps.ledger.balance(playerId)
-  if (balance < cosmetic.priceChips) return { kind: 'refused', reason: 'insufficient-chips' }
-
-  const next = await deps.ledger.apply({
-    playerId,
-    delta: -cosmetic.priceChips,
-    reason: 'cosmetic',
-    ref: `cosmetic:${playerId}:${cosmeticId}`,
-  })
+  let next: number
+  try {
+    next = await deps.ledger.apply({
+      playerId,
+      delta: -cosmetic.priceChips,
+      reason: 'cosmetic',
+      ref: `cosmetic:${playerId}:${cosmeticId}`,
+    })
+  } catch (error) {
+    if (isInsufficientBalance(error)) return { kind: 'refused', reason: 'insufficient-chips' }
+    throw error
+  }
   await deps.store.add(playerId, cosmetic)
   return { kind: 'purchased', cosmeticId, balance: next }
 }

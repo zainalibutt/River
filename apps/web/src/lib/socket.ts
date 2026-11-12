@@ -115,6 +115,18 @@ export class RiverSocket {
   }
 
   /**
+   * Hand the server the token the auth client has just refreshed, so the
+   * connection outlives the one it signed in with. Without it the server
+   * closes the connection once that token expires, and the action that finds
+   * it expired is lost.
+   */
+  refreshToken(accessToken: string): void {
+    const socket = this.socket
+    if (socket === null || socket.readyState !== WebSocket.OPEN) return
+    socket.send(JSON.stringify({ kind: 'authenticate', accessToken }))
+  }
+
+  /**
    * `venueId` decides which room a NEW table opens in. The server ignores it
    * for a table that already exists, so joining never moves anyone.
    */

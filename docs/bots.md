@@ -324,7 +324,7 @@ Memory caught up with it during the exam. Each cached solution kept a separate s
 ## What comes next
 
 - **v8z in production.** Watch its think time and memory on the production server.
-- **Value networks.** No bot can solve a whole hand while it is being played. A neural network trained in PyTorch on a GPU learns, from millions of solved spots, what any spot is worth, so the live bot can solve the flop and turn as well, where the shark now wins most. A wider heads-up button waits on it. DeepStack, one of the research bots that beat professional players, combined a solver with networks like these.
+- **Value networks.** No bot can solve a whole hand while it is being played. A neural network trained in PyTorch on a GPU learns, from millions of solved spots, what any spot is worth, so the live bot can solve the flop and turn as well, where the shark now wins most. A wider heads-up button waits on it. DeepStack, one of the research bots that beat professional players, combined a solver with networks like these. *Since written:* these networks were built and trained (the training code is in [`ml/`](../ml/)), and the bot built on them was measured against Slumbot. That work is being written up and is not covered here.
 - **More seats.** Preflop play for two to nine players, then pots with three or more players, where even the best bots rely on approximations.
 - **Outside results.** More hands against Slumbot to narrow the interval, and other public benchmarks where their terms allow.
 
@@ -340,7 +340,7 @@ The closest thing to this in my own work is [an age-group classifier](https://gi
 | Labels | Every training image has the right answer | Nobody knows the right move; its value shows only through play, against a particular opponent |
 | Hand-made features | HOG gradients | Pot odds, position, equity against a range |
 | A classic model on those features | SVM, MLP | The rule policy (hand-written) and the first learned model (a small MLP on 22 features) |
-| A deep model | ResNet18 in PyTorch | Value networks, next |
+| A deep model | ResNet18 in PyTorch | Value networks (`ml/`) |
 | Train, validation, test | Split images | Development seeds for tuning, fresh seeds for the confirmation run |
 | Leakage | Test images seen in training | Hidden cards reaching a policy; a test proves the shark cannot peek |
 | Overfitting | Tuning until the validation set looks good | Tuning until the test styles look good; hence the pass mark written before fresh cards |

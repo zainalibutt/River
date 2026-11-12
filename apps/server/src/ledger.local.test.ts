@@ -129,4 +129,68 @@ describe.skipIf(!local)('a seat moves its chips and its seating in one transacti
     expect(open.some((entry) => entry.ref === other.ref)).toBe(false)
     expect(open.some((entry) => entry.ref === seating.ref)).toBe(true)
   })
+
+  it('never lets entries landing together overspend a bankroll', async () => {
+    const playerId = await player()
+    const start = await ledger.balance(playerId)
+    const each = Math.floor(start / 4)
+    // Ten debits at once, under ten references, against room for four.
+    const results = await Promise.allSettled(
+      Array.from({ length: 10 }, (_, index) =>
+        ledger.apply({
+          playerId,
+          delta: -each,
+          reason: 'table_buy_in',
+          ref: `race-${randomUUID()}-${index}`,
+        }),
+      ),
+    )
+    const landed = results.filter((result) => result.status === 'fulfilled').length
+    expect(landed).toBe(4)
+    expect(await ledger.balance(playerId)).toBe(start - 4 * each)
+    for (const result of results) {
+      if (result.status === 'rejected')
+        expect(String(result.reason)).toContain('insufficient balance')
+    }
+  })
+
+  it('says when a seat debit is a replay, and writes its seating only the first time', async () => {
+    const playerId = await player()
+    const start = await ledger.balance(playerId)
+    const seating = seat(playerId, 20_000)
+    const debit = { playerId, delta: -20_000, reason: 'table_buy_in', ref: `${seating.ref}:debit` }
+    expect(await ledger.debitSeat(debit, seating)).toEqual({
+      balance: start - 20_000,
+      replay: false,
+    })
+    await ledger.close(seating)
+    expect(await ledger.debitSeat(debit, seating)).toEqual({
+      balance: start - 20_000,
+      replay: true,
+    })
+    expect((await seatingRow(playerId, seating.ref))?.closed_at).not.toBeNull()
+    // Without a seating, only the ledger moves.
+    const bare = { playerId, delta: -5_000, reason: 'table_rebuy', ref: `${seating.ref}:rebuy` }
+    expect(await ledger.debitSeat(bare, undefined)).toEqual({
+      balance: start - 25_000,
+      replay: false,
+    })
+    expect(await ledger.debitSeat(bare, undefined)).toEqual({
+      balance: start - 25_000,
+      replay: true,
+    })
+  })
+
+  it('settles two copies of one seat debit racing each other into one entry and one replay', async () => {
+    const playerId = await player()
+    const start = await ledger.balance(playerId)
+    const seating = seat(playerId, 20_000)
+    const debit = { playerId, delta: -20_000, reason: 'table_buy_in', ref: `${seating.ref}:debit` }
+    const both = await Promise.all([
+      ledger.debitSeat(debit, seating),
+      ledger.debitSeat(debit, seating),
+    ])
+    expect(both.map((one) => one.replay).sort()).toEqual([false, true])
+    expect(await ledger.balance(playerId)).toBe(start - 20_000)
+  })
 })

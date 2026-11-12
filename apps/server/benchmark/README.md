@@ -3,8 +3,8 @@
 `frozen-v1.json` is the versioned definition. Hash it, the source tree, model
 exports and preflop packs before collecting a result. Changing any of them
 creates a new configuration. Do not tune on confirmation outcomes or stop a
-match when an interval first looks favorable. The historical results in
-`REPORT.md` are retrospective evidence, not fresh confirmation on these seeds.
+match when an interval first looks favorable. Results measured before this
+definition existed are not confirmation on these seeds.
 The reference's four model exports and the v3 preflop packs are identified by
 verified SHA-256 hashes in the definition. Runner hashes must match them for
 that configuration; model filenames alone do not establish a match.

@@ -17,7 +17,11 @@ function deckOf(text: string): Card[] {
   return text.split(' ').map((token) => parseCard(token))
 }
 
-function makeRoom(seed: string, deck?: Card[]): Room {
+function makeRoom(
+  seed: string,
+  deck?: Card[],
+  overrides: Partial<Parameters<typeof defaultRoomConfig>[0]> = {},
+): Room {
   let value = [...seed].reduce((total, character) => total + character.charCodeAt(0), 0)
   return new Room(
     `room-${seed}`,
@@ -31,6 +35,7 @@ function makeRoom(seed: string, deck?: Card[]): Room {
           value = (value + 29) & 255
           return value
         }),
+      ...overrides,
     }),
     deck,
   )
@@ -609,7 +614,7 @@ describe('leaving in the middle of a hand', () => {
 
 describe('room disconnect and reconnect', () => {
   it('auto-plays an away player with a check and completes the hand', () => {
-    const room = makeRoom('away', deckOf(DECK_11))
+    const room = makeRoom('away', deckOf(DECK_11), { reloadHoldMs: 0 })
     seatTwo(room)
     room.submit({ kind: 'startHand' })
     room.submit({ kind: 'disconnect', playerId: 'bob' })
@@ -620,7 +625,7 @@ describe('room disconnect and reconnect', () => {
   })
 
   it('folds an away player who faces a bet', () => {
-    const room = makeRoom('awayfold', deckOf(DECK_11))
+    const room = makeRoom('awayfold', deckOf(DECK_11), { reloadHoldMs: 0 })
     seatTwo(room)
     room.submit({ kind: 'startHand' })
     room.submit({ kind: 'disconnect', playerId: 'bob' })
@@ -635,7 +640,7 @@ describe('room disconnect and reconnect', () => {
   })
 
   it('folds an away player who faces a bet', () => {
-    const room = makeRoom('awayfold', deckOf(DECK_11))
+    const room = makeRoom('awayfold', deckOf(DECK_11), { reloadHoldMs: 0 })
     seatTwo(room)
     room.submit({ kind: 'startHand' })
     room.submit({ kind: 'disconnect', playerId: 'bob' })
@@ -666,6 +671,155 @@ describe('room disconnect and reconnect', () => {
     expect(room.submit({ kind: 'disconnect', playerId: 'cara' }).events).toEqual([
       { kind: 'disconnected', playerId: 'cara' },
     ])
+  })
+
+  it('keeps a running turn for a player who reloads facing a bet', () => {
+    const room = makeRoom('reload-turn', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'raiseTo', to: 1500 } })
+    expect(room.viewFor('bob').currentActor?.playerId).toBe('bob')
+    const deadline = room.viewFor('bob').turnDeadlineMs
+    expect(room.submit({ kind: 'disconnect', playerId: 'bob' }).events).toEqual([
+      { kind: 'disconnected', playerId: 'bob' },
+    ])
+    expect(room.viewFor('alice').currentActor?.playerId).toBe('bob')
+    expect(room.viewFor('alice').turnDeadlineMs).toBe(deadline)
+    room.submit({ kind: 'reconnect', playerId: 'bob' })
+    const called = room.submit({ kind: 'act', playerId: 'bob', action: { kind: 'call' } })
+    expect(called.ok).toBe(true)
+    expect(called.events.some((e) => e.kind === 'acted' && e.playerId === 'bob')).toBe(true)
+  })
+
+  it('ends a disconnected turn at its deadline the way any timeout ends', () => {
+    let now = 0
+    const room = makeRoom('reload-expire', deckOf(DECK_11), { nowMs: () => now })
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'raiseTo', to: 1500 } })
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    expect(room.submit({ kind: 'timeoutTurn' }).ok).toBe(false)
+    now = room.viewFor('alice').turnDeadlineMs ?? 0
+    const ended = room.submit({ kind: 'timeoutTurn' })
+    expect(ended.events.some((e) => e.kind === 'timedOut' && e.action.kind === 'fold')).toBe(true)
+  })
+
+  it('gives a player who drops late in their own turn time to come back', () => {
+    let now = 0
+    const room = makeRoom('reload-late', deckOf(DECK_11), { nowMs: () => now })
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'raiseTo', to: 1500 } })
+    const deadline = room.viewFor('alice').turnDeadlineMs ?? 0
+    now = deadline - 2_000
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    expect(room.viewFor('alice').turnDeadlineMs).toBe(now + room.config.reloadHoldMs)
+    now = deadline + 3_000
+    expect(room.submit({ kind: 'timeoutTurn' }).ok).toBe(false)
+    room.submit({ kind: 'reconnect', playerId: 'bob' })
+    expect(room.viewFor('bob').currentActor?.playerId).toBe('bob')
+    const called = room.submit({ kind: 'act', playerId: 'bob', action: { kind: 'call' } })
+    expect(called.events.some((e) => e.kind === 'acted' && e.playerId === 'bob')).toBe(true)
+  })
+
+  it('extends a dropped turn once a hand, and still times out a player who stays away', () => {
+    let now = 0
+    const room = makeRoom('reload-once', deckOf(DECK_11), { nowMs: () => now })
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'raiseTo', to: 1500 } })
+    now = (room.viewFor('alice').turnDeadlineMs ?? 0) - 1_000
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    const extended = room.viewFor('alice').turnDeadlineMs ?? 0
+    expect(extended).toBe(now + room.config.reloadHoldMs)
+    now = extended - 1_000
+    room.submit({ kind: 'reconnect', playerId: 'bob' })
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    expect(room.viewFor('alice').turnDeadlineMs).toBe(extended)
+    now = extended
+    const ended = room.submit({ kind: 'timeoutTurn' })
+    expect(ended.events.some((e) => e.kind === 'timedOut' && e.action.kind === 'fold')).toBe(true)
+  })
+
+  it('never extends a dropped turn past a full turn, or for a player off their turn', () => {
+    let now = 0
+    const room = makeRoom('reload-bound', deckOf(DECK_11), {
+      nowMs: () => now,
+      turnBudgetsMs: { preflop: 4_000, flop: 4_000, turn: 4_000, river: 4_000 },
+    })
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'raiseTo', to: 1500 } })
+    const deadline = room.viewFor('alice').turnDeadlineMs ?? 0
+    now = deadline - 1_000
+    room.submit({ kind: 'disconnect', playerId: 'alice' })
+    expect(room.viewFor('bob').turnDeadlineMs).toBe(deadline)
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    expect(room.viewFor('alice').turnDeadlineMs).toBe(now + 4_000)
+  })
+
+  it('waits on a just-disconnected player whose turn arrives, not one long gone', () => {
+    let now = 0
+    const room = makeRoom('reload-next', deckOf(DECK_11), { nowMs: () => now })
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    now = 2_000
+    const raised = room.submit({
+      kind: 'act',
+      playerId: 'alice',
+      action: { kind: 'raiseTo', to: 1500 },
+    })
+    expect(raised.events.some((e) => e.kind === 'awayPlayed')).toBe(false)
+    expect(room.viewFor('alice').currentActor?.playerId).toBe('bob')
+
+    let later = 0
+    const gone = makeRoom('reload-gone', deckOf(DECK_11), { nowMs: () => later })
+    seatTwo(gone)
+    gone.submit({ kind: 'startHand' })
+    gone.submit({ kind: 'disconnect', playerId: 'bob' })
+    later = gone.config.reloadHoldMs
+    const folded = gone.submit({
+      kind: 'act',
+      playerId: 'alice',
+      action: { kind: 'raiseTo', to: 1500 },
+    })
+    expect(folded.events.some((e) => e.kind === 'awayPlayed' && e.action.kind === 'fold')).toBe(
+      true,
+    )
+  })
+
+  it('does not release a seat whose held turn is still on its clock', () => {
+    let now = 0
+    const room = makeRoom('reload-expiry', deckOf(DECK_11), { nowMs: () => now })
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    room.submit({ kind: 'act', playerId: 'alice', action: { kind: 'raiseTo', to: 1500 } })
+    room.submit({ kind: 'disconnect', playerId: 'bob' })
+    const deadline = room.viewFor('alice').turnDeadlineMs ?? 0
+    now = deadline - 1
+    expect(room.heldTurnFor('bob')).toBe(true)
+    const early = room.submit({ kind: 'expireReconnect', playerId: 'bob' })
+    expect(early.ok).toBe(false)
+    expect(room.viewFor('alice').currentActor?.playerId).toBe('bob')
+    now = deadline
+    expect(room.heldTurnFor('bob')).toBe(false)
+  })
+
+  it('keeps the running turn and its clock when another player is removed', () => {
+    let now = 0
+    const room = makeRoom('kick-off-turn', deckOf(DECK_11), { nowMs: () => now })
+    seatThree(room)
+    room.submit({ kind: 'startHand' })
+    const actor = room.viewFor('alice').currentActor?.playerId ?? ''
+    const other = ['alice', 'bob', 'cara'].find((id) => id !== actor && id !== 'alice') ?? 'cara'
+    const deadline = room.viewFor('alice').turnDeadlineMs
+    now = 5_000
+    room.submit({ kind: 'disconnect', playerId: other })
+    const kicked = room.submit({ kind: 'expireReconnect', playerId: other })
+    expect(kicked.ok).toBe(true)
+    expect(room.viewFor('alice').currentActor?.playerId).toBe(actor)
+    expect(room.viewFor('alice').turnDeadlineMs).toBe(deadline)
   })
 
   it('rejects duplicate disconnect and unknown ids', () => {
@@ -764,5 +918,81 @@ describe('per-player projection and adversarial hidden information', () => {
       }
     }
     expect(roomA.viewFor('alice').phase).toBe('between')
+  })
+})
+
+describe('rabbit hunt', () => {
+  it('turns over the board a preflop fold never dealt, in deal order, once', () => {
+    const room = makeRoom('rabbit', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    expect(room.submit({ kind: 'rabbitHunt', playerId: 'bob' }).ok).toBe(false)
+    const actor = room.viewFor('alice').currentActor?.playerId ?? 'alice'
+    room.submit({ kind: 'act', playerId: actor, action: { kind: 'fold' } })
+    expect(room.viewFor('alice').phase).toBe('between')
+    const hunted = room.submit({ kind: 'rabbitHunt', playerId: 'bob' })
+    expect(hunted.ok).toBe(true)
+    const rabbit = hunted.events.find((event) => event.kind === 'rabbit')
+    expect(rabbit?.kind === 'rabbit' ? rabbit.cards : null).toEqual(deckOf('5h 5c Ks Kd Qs'))
+    expect(room.submit({ kind: 'rabbitHunt', playerId: 'alice' }).events).toEqual([])
+  })
+
+  it('refuses anybody not dealt into the hand', () => {
+    const room = makeRoom('rabbit-outsider', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'join', playerId: 'cara', name: 'cara' })
+    room.submit({ kind: 'startHand' })
+    const actor = room.viewFor('alice').currentActor?.playerId ?? 'alice'
+    room.submit({ kind: 'act', playerId: actor, action: { kind: 'fold' } })
+    expect(room.submit({ kind: 'rabbitHunt', playerId: 'cara' }).ok).toBe(false)
+  })
+
+  it('keeps the rabbit on offer through the next hand, then lets it go', () => {
+    const room = makeRoom('rabbit-next', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    const actor = room.viewFor('alice').currentActor?.playerId ?? 'alice'
+    room.submit({ kind: 'act', playerId: actor, action: { kind: 'fold' } })
+    room.submit({ kind: 'startHand' })
+    expect(room.viewFor('alice').phase).toBe('hand')
+    const hunted = room.submit({ kind: 'rabbitHunt', playerId: 'alice' })
+    expect(hunted.events.some((event) => event.kind === 'rabbit')).toBe(true)
+  })
+
+  it('shows the offer, then the cards, only to players dealt in', () => {
+    const room = makeRoom('rabbit-view', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'join', playerId: 'cara', name: 'cara' })
+    room.submit({ kind: 'startHand' })
+    expect(room.rabbitFor('alice')).toBeNull()
+    const actor = room.viewFor('alice').currentActor?.playerId ?? 'alice'
+    room.submit({ kind: 'act', playerId: actor, action: { kind: 'fold' } })
+    expect(room.rabbitFor('alice')).toEqual({ handNumber: 1, cards: null })
+    expect(room.rabbitFor('cara')).toBeNull()
+    room.submit({ kind: 'rabbitHunt', playerId: 'bob' })
+    expect(room.rabbitFor('alice')?.cards).toEqual(deckOf('5h 5c Ks Kd Qs'))
+  })
+
+  it('has nothing to hunt after a showdown', () => {
+    const room = makeRoom('rabbit-showdown', deckOf(DECK_11))
+    seatTwo(room)
+    room.submit({ kind: 'startHand' })
+    playToPhase(room, 'between')
+    expect(room.submit({ kind: 'rabbitHunt', playerId: 'bob' }).ok).toBe(false)
+  })
+})
+
+describe('room event retention', () => {
+  it('returns success and rejection events without retaining an append-only log', () => {
+    const room = makeRoom('bounded-events')
+    const joined = room.submit({ kind: 'join', playerId: 'alice', name: 'Alice' })
+    expect(joined.ok).toBe(true)
+    expect(joined.events.length).toBeGreaterThan(0)
+    for (let index = 0; index < 1_000; index += 1) {
+      const rejected = room.submit({ kind: 'stand', playerId: 'alice' })
+      expect(rejected.ok).toBe(false)
+      expect(rejected.events[0]?.kind).toBe('rejected')
+    }
+    expect(room).not.toHaveProperty('eventLog')
   })
 })

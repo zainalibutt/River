@@ -455,6 +455,7 @@
   font-size: 0.66rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  text-decoration: none;
   cursor: pointer;
   transition: color var(--club-focus) var(--club-glide);
 }
@@ -1058,6 +1059,42 @@
   width: min(100%, 392px);
 }
 
+/* A seat left behind by Back: still held, with the way back to it. */
+.club-seat-held {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--club-brass-bright);
+  border-radius: 12px;
+  background: rgb(10 12 10 / 78%);
+  color: var(--river-cream);
+}
+
+.club-seat-held p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.club-seat-held span {
+  color: var(--river-cream-dim);
+  font-size: 13px;
+}
+
+.club-seat-held button {
+  flex: none;
+  padding: 10px 16px;
+  border: 1px solid var(--club-brass-bright);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--river-amber-bright);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .club-home-play {
   display: grid;
   gap: 8px;
@@ -1180,7 +1217,7 @@
 
 .club-home-action-detail {
   color: var(--club-ivory-dim);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.06em;
 }
 
@@ -1301,6 +1338,18 @@
 .club-home-account .club-capsule-links .club-link:hover,
 .club-home-account .club-capsule-links .club-link:focus-visible {
   color: var(--club-brass-bright);
+}
+
+/* The notice's link in a panel: a line of type, with a thumb's worth of target. */
+.club-privacy-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 0;
+  font-size: 12px;
+  text-decoration: underline;
+  text-decoration-color: var(--club-hairline-strong);
+  text-underline-offset: 5px;
 }
 
 .club-home-dialog {
@@ -1859,4 +1908,138 @@
   .club-daily .club-capsule-sub {
     white-space: nowrap;
   }
+}
+
+/* The daily wheel: over the whole menu, five equal brass and felt slices. */
+.club-wheel-backdrop {
+  position: fixed;
+  z-index: 60;
+}
+
+.club-wheel {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  width: min(380px, calc(100vw - 32px));
+  padding: 26px 22px 20px;
+  border: 1px solid var(--club-brass);
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 0%, rgb(198 164 105 / 14%), transparent 60%), #0d110f;
+  color: var(--club-ivory);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 60%);
+}
+
+.club-wheel h2 {
+  margin: 0;
+  color: var(--club-brass-bright);
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.club-wheel-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--club-hairline);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--club-ivory);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.club-wheel-stage {
+  position: relative;
+  width: min(280px, 70vw);
+  aspect-ratio: 1;
+}
+
+.club-wheel-face {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 4px var(--club-brass),
+    0 10px 30px rgb(0 0 0 / 55%);
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.12, 0.7, 0.18, 1);
+}
+
+.club-wheel-slice.slice-0 {
+  fill: #1f4a35;
+}
+
+.club-wheel-slice.slice-1 {
+  fill: #6b2433;
+}
+
+.club-wheel-slice {
+  stroke: var(--club-brass);
+  stroke-width: 1;
+}
+
+.club-wheel-label {
+  fill: var(--club-ivory);
+  font-size: 15px;
+  font-weight: 700;
+  dominant-baseline: middle;
+  text-anchor: middle;
+}
+
+.club-wheel-hub {
+  fill: var(--club-brass);
+}
+
+/* The pointer at twelve o'clock, over the rim. */
+.club-wheel-pointer {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  border-right: 11px solid transparent;
+  border-left: 11px solid transparent;
+  border-top: 20px solid var(--club-brass-bright);
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 70%));
+  transform: translateX(-50%);
+}
+
+.club-wheel-result {
+  min-height: 1.4em;
+  margin: 0;
+  color: var(--club-brass-bright);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.club-wheel-spin {
+  min-width: 160px;
+  padding: 12px 22px;
+  border: 1px solid var(--club-brass-bright);
+  border-radius: 999px;
+  background: rgb(198 164 105 / 18%);
+  color: var(--club-ivory);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.club-wheel-spin:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.club-wheel-odds {
+  margin: 0;
+  color: rgb(237 228 212 / 62%);
+  font-size: 12px;
+  text-align: center;
 }

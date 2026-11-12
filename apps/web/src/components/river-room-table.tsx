@@ -34,6 +34,7 @@ import { RiverSoundControl } from '@/components/river-sound-control'
 import type { HoleSeat } from '@/components/river-venue-scene'
 import { RollingAmount } from '@/components/rolling-amount'
 import { Table2D, type TablePresentation } from '@/components/table-2d/table-2d'
+import { TableModal } from '@/components/table-modal'
 import {
   ActionPin,
   CardBack,
@@ -49,8 +50,10 @@ import {
   upgradeRiverSession,
 } from '@/lib/auth'
 import { sizingPresets } from '@/lib/betting'
+import { botAdmissionDestination } from '@/lib/bot-capabilities'
 import { affordableBuyIn } from '@/lib/buy-in'
 import { type ChipMoment, chipMomentFor } from '@/lib/chip-flow'
+import { coachLine, firstHandPlayed, markFirstHandPlayed } from '@/lib/first-hand'
 import { readoutFor } from '@/lib/hand-readout'
 import { type SessionHand, withSettledHands } from '@/lib/history'
 import { phoneViewport } from '@/lib/phone-layout'
@@ -108,6 +111,8 @@ import { tableSound } from '@/lib/table-sound'
 import {
   initialRoomTarget,
   LAST_TABLE_KEY,
+  markLeftSeated,
+  rememberedTable,
   rememberTable,
   shortTableLink,
 } from '@/lib/table-target'
@@ -119,7 +124,13 @@ import {
   venueOf,
   worldSeats,
 } from '@/lib/venue'
-import { type VerifyResult, verifyHand } from '@/lib/verify'
+import {
+  evidenceAgrees,
+  type HandEvidence,
+  observeHand,
+  type VerifyResult,
+  verifyHand,
+} from '@/lib/verify'
 
 const boardSlots = ['flop-one', 'flop-two', 'flop-three', 'turn', 'river'] as const
 
@@ -133,6 +144,24 @@ function isBotPlayerId(playerId: string | null): boolean {
 
 /** Mirrors the server: a second press inside most of a look is the same look. */
 const LOOK_INTERVAL_MS = 1_200
+/** A Tab released this soon is a tap: it moves to your actions instead of reading the table. */
+const TAB_TAP_MS = 250
+
+/**
+ * Whether the last input was a key rather than a pointer. A keyboard player
+ * whose focus was dropped - the DEAL button they pressed is gone - is put back
+ * on their actions when the turn comes; a mouse player's focus is left alone.
+ */
+let keyboardDriven = false
+
+/** The first control a keyboard player can press in the action area. */
+function focusFirstAction(): boolean {
+  const target = document.querySelector<HTMLElement>(
+    '.action-menu button:not(:disabled), .raise-layer button:not(:disabled), .ram button:not(:disabled)',
+  )
+  target?.focus({ preventScroll: true })
+  return target !== null
+}
 
 /** How many chip moments the running list keeps. The scene only reads the newest few. */
 const CHIP_HISTORY = 16
@@ -238,9 +267,9 @@ function emptyView(selfId = 'pending', venueId: VenueId = DEFAULT_VENUE): RoomVi
 function verifyStatusLabel(status: VerifyResult['status']): string {
   switch (status) {
     case 'match':
-      return 'Fairness verified, commit matches the revealed seed'
+      return 'Fairness verified, the seeds and the cards match'
     case 'mismatch':
-      return 'Fairness check failed, commit does not match'
+      return 'Fairness check failed, the seeds or the cards do not match'
     case 'live':
       return 'Fairness commit published, seed still hidden'
     default:
@@ -264,9 +293,9 @@ function verifyHeadline(status: VerifyResult['status']): string {
 function verifyCopy(status: VerifyResult['status']): string {
   switch (status) {
     case 'match':
-      return 'Recomputed in your browser: the revealed seed hashes to the commit published before the deal. Nobody could have chosen this deck after seeing a card.'
+      return 'Recomputed in your browser: the revealed seed hashes to the commit published before the deal, and the deck it makes with every player seed deals each card you saw. Nobody could have chosen this deck after seeing a card.'
     case 'mismatch':
-      return 'The revealed seed does not hash to the published commit. Do not keep playing at this table.'
+      return 'The revealed seeds do not match what was committed before the deal, or the deck they make does not deal the cards on this table. Do not keep playing at this table.'
     case 'live':
       return 'The commit is published and the server seed stays hidden until the hand settles. Your own seed is mixed in, so the deck is not the server’s alone.'
     default:
@@ -531,6 +560,15 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     setSaveDismissed(true)
   }
   const [hands, setHands] = useState<readonly SessionHand[]>([])
+  // The rabbit for the hand just ended early: offered once it is settled, its cards once
+  // somebody asks, gone when the next hand is dealt.
+  const [rabbit, setRabbit] = useState<{ handNumber: number; cards: Card[] | null } | null>(null)
+  // Bumped on every reconnect, so the felt lays the next view out rather than dealing it.
+  const [resync, setResync] = useState(0)
+  // A hand played to the end here ends the first-hand coaching for good.
+  useEffect(() => {
+    if (hands.length > 0) markFirstHandPlayed()
+  }, [hands.length])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [tables, setTables] = useState<readonly TableSummary[]>([])
   const [lobbyOpen, setLobbyOpen] = useState(false)
@@ -542,6 +580,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     status: 'idle',
     recomputedCommit: null,
     deckEntropy: null,
+    cardsChecked: 0,
   })
   // The table comes up from black when this screen first appears, and at no
   // other time. The veil belongs to the screen rather than to the connection,
@@ -561,15 +600,64 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     return () => window.clearTimeout(timer)
   }, [])
 
+  // What this table showed during each hand, kept so the check at the reveal
+  // is against what was seen then, not only against the snapshot that reveals.
+  const evidenceRef = useRef<HandEvidence | null>(null)
+  const ownSeedRef = useRef<{ handNumber: number; seed: string } | null>(null)
+  const settledRef = useRef<{ handNumber: number; seed: string; result: VerifyResult } | null>(null)
   useEffect(() => {
     let cancelled = false
-    void verifyHand(view.commit, view.revealedSeed, view.clientSeeds).then((result) => {
-      if (!cancelled) setVerify(result)
+    const ownSeed =
+      ownSeedRef.current?.handNumber === view.handNumber ? ownSeedRef.current.seed : null
+    const evidence = observeHand(evidenceRef.current, view, ownSeed)
+    evidenceRef.current = evidence
+    const settled = settledRef.current
+    if (
+      settled !== null &&
+      settled.handNumber === view.handNumber &&
+      settled.seed === view.revealedSeed
+    ) {
+      setVerify(settled.result)
+      return
+    }
+    const seats = view.seats.map((seat) =>
+      seat.playerId === view.selfId &&
+      (seat.hole?.length ?? 0) === 0 &&
+      evidence.ownHole.length === 2
+        ? { ...seat, hole: [...evidence.ownHole] }
+        : seat,
+    )
+    const fallbacks =
+      view.fallbackCommit != null && view.fallbackSeeds != null
+        ? { commit: view.fallbackCommit, seeds: view.fallbackSeeds }
+        : null
+    void verifyHand(
+      view.commit,
+      view.revealedSeed,
+      view.clientSeeds,
+      { board: view.board, seats },
+      fallbacks,
+    ).then((result) => {
+      if (cancelled) return
+      const checked: VerifyResult =
+        result.status === 'match' && !evidenceAgrees(evidence, view)
+          ? { ...result, status: 'mismatch' }
+          : result
+      // Once a hand is revealed its verdict is final: what happens at the
+      // table afterwards, a stand that clears the seat, cannot change it.
+      if (view.revealedSeed !== null && checked.status !== 'live') {
+        settledRef.current = {
+          handNumber: view.handNumber,
+          seed: view.revealedSeed,
+          result: checked,
+        }
+      }
+      setVerify(checked)
     })
     return () => {
       cancelled = true
     }
-  }, [view.commit, view.revealedSeed, view.clientSeeds])
+  }, [view])
   const socketRef = useRef<RiverSocket | null>(null)
   const authRef = useRef<SupabaseClient | null>(null)
   const kickRef = useRef<KickState>(null)
@@ -627,6 +715,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     let disposed = false
     let unsubscribeMessage: (() => void) | null = null
     let unsubscribeState: (() => void) | null = null
+    let unsubscribeAuth: (() => void) | null = null
     // One retry pending at a time, backing off while the server stays away. A lost socket
     // and a failed attempt can both ask for one, and two would open two sockets.
     let retryMs = RECONNECT_FIRST_MS
@@ -651,6 +740,14 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
           const session = await ensureRiverSession(auth)
           if (disposed) return
           accessToken = session.access_token
+          // Each refreshed token goes to the server over the open socket.
+          unsubscribeAuth?.()
+          const { data } = auth.auth.onAuthStateChange((event, next) => {
+            if (event === 'TOKEN_REFRESHED' && next !== null) {
+              socketRef.current?.refreshToken(next.access_token)
+            }
+          })
+          unsubscribeAuth = () => data.subscription.unsubscribe()
         }
         const url = defaultRiverSocketUrl(window.location)
         const socket = new RiverSocket(
@@ -666,6 +763,11 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             return
           }
           if (message.kind === 'error') {
+            const destination = botAdmissionDestination(message.code)
+            if (destination !== null) {
+              window.location.assign(destination)
+              return
+            }
             const refused = seatRequestRef.current
             if (
               refused !== null &&
@@ -799,6 +901,9 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             setShowdown(plan)
             setShowdownAtMs(-1)
           }
+          // The server says what rabbit this player may hunt or has seen, in every
+          // snapshot, so a reload or a missed reveal finds it as it stands.
+          setRabbit(message.rabbit ?? null)
           if (message.events.some((event) => event.kind === 'handStarted')) {
             setHeldPeeks([])
             // A showdown still being told when the next hand is dealt is over: what it held
@@ -852,7 +957,9 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             )
           ) {
             try {
-              socket.command({ kind: 'submitSeed', seed: browserFairnessSeed() })
+              const seed = browserFairnessSeed()
+              ownSeedRef.current = { handNumber: message.view.handNumber, seed }
+              socket.command({ kind: 'submitSeed', seed })
             } catch {
               setNotice('Reconnecting…')
             }
@@ -916,6 +1023,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
         unsubscribeState = socket.subscribeState((state: RiverSocketState) => {
           if (state === 'connected') {
             retryMs = RECONNECT_FIRST_MS
+            setResync((count) => count + 1)
             setConnection('connected')
             setNotice(null)
             return
@@ -953,6 +1061,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     return () => {
       disposed = true
       if (reconnectRef.current !== null) window.clearTimeout(reconnectRef.current)
+      unsubscribeAuth?.()
       unsubscribeMessage?.()
       unsubscribeState?.()
       socketRef.current?.close()
@@ -1001,6 +1110,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   // It used to turn the cards over in the corner and nothing else: your character sat
   // perfectly still while you read your hand, and nobody else saw you do it.
   const lastLook = useRef(0)
+  const tabDownAt = useRef<number | null>(null)
   const heroHolding = useRef(false)
   useEffect(() => {
     const current = viewRef.current
@@ -1035,7 +1145,8 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     const down = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return
-      if (event.code === 'Space') setPeek(true)
+      // Space on a focused button presses that button; it must not also peek.
+      if (event.code === 'Space' && !(event.target instanceof HTMLButtonElement)) setPeek(true)
       // Hold to read the table: names, stacks and state, on demand.
       //
       // The reference uses Tab and so does this now. It was Shift, because Tab
@@ -1056,32 +1167,69 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
       const current = viewRef.current
       const inHand =
         current.phase === 'hand' && current.seats.some((seat) => seat.playerId === current.selfId)
+      //
+      // Held, Tab reads the table. Tapped, it moves to your actions, so a
+      // keyboard player is never stuck outside the buttons. Once focus is on a
+      // control, Tab goes back to moving between controls as it does anywhere.
       if (event.key === 'Tab' && inHand) {
-        event.preventDefault()
-        setPlatesHeld(true)
+        const focused = document.activeElement
+        const onControl =
+          focused instanceof HTMLElement && focused !== document.body && focused.isConnected
+        if (!onControl) {
+          event.preventDefault()
+          if (!event.repeat) tabDownAt.current = performance.now()
+          setPlatesHeld(true)
+        }
       }
-      if (event.key.toLowerCase() === 'c') {
+      // Letter shortcuts never fire with a modifier: Ctrl+C is copy, not call.
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+      const key = event.key.toLowerCase()
+      if (key === 'c') {
         if (view.legal?.check.enabled) command({ kind: 'act', action: { kind: 'check' } })
         else if (view.legal?.call.enabled) command({ kind: 'act', action: { kind: 'call' } })
+      }
+      // Fold by key only when facing a bet. With a free check, folding is the
+      // mistake the fold button asks a hold for, and a key cannot be held to
+      // confirm it the same way.
+      if (key === 'f' && view.legal?.fold.enabled && !view.legal.check.enabled) {
+        command({ kind: 'act', action: { kind: 'fold' } })
       }
     }
     const up = (event: KeyboardEvent) => {
       if (event.code === 'Space') setPeek(false)
       if (event.key === 'Shift' || event.key === 'Tab') setPlatesHeld(false)
+      if (event.key === 'Tab' && tabDownAt.current !== null) {
+        const tapped = performance.now() - tabDownAt.current < TAB_TAP_MS
+        tabDownAt.current = null
+        if (tapped) focusFirstAction()
+      }
     }
     // A key held when the window loses focus never sends its keyup, so the
     // plates would stay up for good after an alt-tab.
     const drop = () => {
       setPeek(false)
       setPlatesHeld(false)
+      tabDownAt.current = null
     }
+    const pointer = () => {
+      keyboardDriven = false
+    }
+    // Capture, so a key pressed inside a dialog - which stops its keys from
+    // reaching the table's shortcuts - still counts as keyboard use.
+    const keyed = () => {
+      keyboardDriven = true
+    }
+    window.addEventListener('keydown', keyed, true)
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     window.addEventListener('blur', drop)
+    window.addEventListener('pointerdown', pointer)
     return () => {
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', drop)
+      window.removeEventListener('pointerdown', pointer)
+      window.removeEventListener('keydown', keyed, true)
     }
   }, [command, view.legal])
 
@@ -1206,6 +1354,24 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
   }, [repFlash])
 
   const localTurn = view.currentActor?.playerId === view.selfId
+
+  // One panel at a time: opening History over Settings stacked two modals.
+  const openPanel = (panel: 'history' | 'settings' | 'verify') => {
+    setHistoryOpen(panel === 'history')
+    setSettingsOpen(panel === 'settings')
+    setVerifyOpen(panel === 'verify')
+  }
+  // Your turn closes any panel. They cover the action area, and the clock
+  // runs behind them, so a player reading the history was timed out unseen.
+  const myTurnKey = localTurn
+    ? `${view.handNumber}:${view.street}:${view.turnDeadlineMs ?? ''}`
+    : null
+  useEffect(() => {
+    if (myTurnKey === null) return
+    setHistoryOpen(false)
+    setSettingsOpen(false)
+    setVerifyOpen(false)
+  }, [myTurnKey])
 
   useInterfaceSound()
   useEffect(() => {
@@ -1339,6 +1505,37 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
     rememberTable({ roomId, inviteCode: view.inviteCode, venueId })
   }, [roomId, venueId, view.inviteCode, lab])
 
+  // Back at the table: any note about a seat left behind is answered. Going
+  // away still seated - Back, a closed tab - leaves one, so the club can say
+  // the seat is held and the chips are on their way back.
+  useEffect(() => {
+    if (lab !== undefined) return
+    // Only coming back to the table the note is about answers it; a fresh
+    // Quick Play table leaves the old seat's note standing.
+    const answer = () => {
+      if (rememberedTable()?.roomId === roomId) markLeftSeated(false)
+    }
+    answer()
+    const away = () => {
+      // A tab another tab took over is not holding a seat open.
+      if (kickRef.current !== null) return
+      const current = viewRef.current
+      if (current.seats.some((seat) => seat.playerId === current.selfId)) markLeftSeated(true)
+    }
+    // Forward can bring this page back from the browser's cache without
+    // mounting it again; being here answers the note all the same.
+    const back = () => answer()
+    window.addEventListener('pagehide', away)
+    window.addEventListener('pageshow', back)
+    return () => {
+      window.removeEventListener('pagehide', away)
+      window.removeEventListener('pageshow', back)
+      // Back inside the app is a route change, not a page going away: the
+      // table unmounts and pagehide never fires.
+      away()
+    }
+  }, [lab, roomId])
+
   // A fresh token for the friends route; the motion lab has no account and gets none.
   const friendsToken = useCallback(async () => {
     const auth = authRef.current
@@ -1385,6 +1582,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
             onSelect: setSelectedSeat,
             onHeroDealt: setHeroDealt,
             onPresentation: setPresentation,
+            resync,
             showingSeat: showing,
             bubbles,
             heldPeeks,
@@ -1392,7 +1590,9 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
           }}
           peek={peek}
           onPeek={setPeek}
-          localTurn={localTurn}
+          // A tab another tab took over shows no turn: its buttons would look
+          // live and do nothing. It offers to play here instead.
+          localTurn={localTurn && kick === null}
           connected={connection === 'connected'}
           status={
             kick === null
@@ -1400,41 +1600,48 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               : kickCopy(kick.reason)
           }
           waitingActions={
-            <ActionMenu
-              view={shownView}
-              localTurn={false}
-              raiseTo={raiseTo}
-              onRaiseTo={setRaiseTo}
-              onAction={(action) => command({ kind: 'act', action })}
-              onDeal={() => command({ kind: 'startHand' })}
-              rebuyAmount={entryBuyIn}
-              onRebuy={(amount) =>
-                setSeatRequest((current) => toggleSeatRequest(current, { kind: 'rebuy', amount }))
-              }
-              onStand={() =>
-                setSeatRequest((current) => toggleSeatRequest(current, { kind: 'stand' }))
-              }
-              pendingSeat={pendingSeat}
-              balance={balance}
-              claimsEnabled={connection === 'connected'}
-              onClaimDaily={() => socketRef.current?.claimDaily()}
-              onClaimRescue={() => socketRef.current?.claimRescue()}
-              canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
-              seated={selfSeat !== null}
-              kicked={kick !== null}
-              preset={preset}
-              onPreset={setPreset}
-              presetArmable={false}
-              remainingMs={turnRemaining}
-              budgetMs={view.turnBudgetMs}
-              turnKey={`${view.handNumber}:${view.street}:${view.currentActor?.playerId ?? ''}:${view.turnDeadlineMs ?? ''}`}
-              onRejoin={() => {
-                kickRef.current = null
-                setKick(null)
-                socketRef.current?.enter(roomId, nameRef.current, joinCode || undefined)
-              }}
-              bigBlind={bigBlind}
-            />
+            <>
+              <RabbitHunt
+                rabbit={rabbit}
+                onHunt={() => socketRef.current?.command({ kind: 'rabbitHunt' })}
+              />
+              <ActionMenu
+                view={shownView}
+                localTurn={false}
+                raiseTo={raiseTo}
+                onRaiseTo={setRaiseTo}
+                onAction={(action) => command({ kind: 'act', action })}
+                onDeal={() => command({ kind: 'startHand' })}
+                rebuyAmount={entryBuyIn}
+                onRebuy={(amount) =>
+                  setSeatRequest((current) => toggleSeatRequest(current, { kind: 'rebuy', amount }))
+                }
+                onStand={() =>
+                  setSeatRequest((current) => toggleSeatRequest(current, { kind: 'stand' }))
+                }
+                pendingSeat={pendingSeat}
+                balance={balance}
+                claimsEnabled={connection === 'connected'}
+                onClaimDaily={() => socketRef.current?.claimDaily()}
+                onClaimRescue={() => socketRef.current?.claimRescue()}
+                canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
+                seated={selfSeat !== null}
+                kicked={kick !== null}
+                rejoinLabel={kick?.reason === 'duplicate-session' ? 'PLAY HERE' : 'RETURN TO TABLE'}
+                preset={preset}
+                onPreset={setPreset}
+                presetArmable={false}
+                remainingMs={turnRemaining}
+                budgetMs={view.turnBudgetMs}
+                turnKey={`${view.handNumber}:${view.street}:${view.currentActor?.playerId ?? ''}:${view.turnDeadlineMs ?? ''}`}
+                onRejoin={() => {
+                  kickRef.current = null
+                  setKick(null)
+                  socketRef.current?.enter(roomId, nameRef.current, joinCode || undefined)
+                }}
+                bigBlind={bigBlind}
+              />
+            </>
           }
           raiseTo={raiseTo}
           onRaiseTo={setRaiseTo}
@@ -1577,6 +1784,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               onSelect={setSelectedSeat}
               onHeroDealt={setHeroDealt}
               onPresentation={setPresentation}
+              resync={resync}
               showingSeat={showing}
               bubbles={bubbles}
               heldPeeks={heldPeeks}
@@ -1599,7 +1807,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 }}
               >
                 {leaveState === 'idle'
-                  ? 'LEAVE TABLE'
+                  ? 'HOLD TO LEAVE'
                   : leaveState === 'waiting'
                     ? 'LEAVING AFTER HAND'
                     : 'LEAVING'}
@@ -1627,7 +1835,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 disabled={view.commit === null}
                 aria-label={verifyStatusLabel(verify.status)}
                 title={verifyStatusLabel(verify.status)}
-                onClick={() => setVerifyOpen(true)}
+                onClick={() => openPanel('verify')}
               >
                 {/* The eight-character commit read as loose hexadecimal to
                     anyone not already convinced. The full figure lives in the
@@ -1644,7 +1852,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 className={`settings-toggle${settingsOpen ? ' open' : ''}`}
                 aria-haspopup="dialog"
                 aria-expanded={settingsOpen}
-                onClick={() => setSettingsOpen((open) => !open)}
+                onClick={() => (settingsOpen ? setSettingsOpen(false) : openPanel('settings'))}
               >
                 SETTINGS
               </button>
@@ -1658,86 +1866,76 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               />
             ) : null}
             {verifyOpen ? (
-              <div className="modal-backdrop" role="presentation">
-                <section
-                  className="modal verify-modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="verify-title"
-                >
-                  <button
-                    className="modal-close"
-                    type="button"
-                    onClick={() => setVerifyOpen(false)}
-                  >
-                    CLOSE
-                  </button>
-                  <p className="eyebrow">FAIRNESS</p>
-                  <h2 id="verify-title">{verifyHeadline(verify.status)}</h2>
+              <TableModal
+                className="verify-modal"
+                labelledBy="verify-title"
+                onClose={() => setVerifyOpen(false)}
+              >
+                <button className="modal-close" type="button" onClick={() => setVerifyOpen(false)}>
+                  CLOSE
+                </button>
+                <p className="eyebrow">FAIRNESS</p>
+                <h2 id="verify-title">{verifyHeadline(verify.status)}</h2>
 
-                  <dl className="verify-rows">
-                    <dt>COMMIT</dt>
-                    <dd>
-                      <code>{view.commit ?? '--'}</code>
-                    </dd>
-                    {view.revealedSeed === null ? null : (
-                      <>
-                        <dt>REVEALED SERVER SEED</dt>
-                        <dd>
-                          <code>{view.revealedSeed}</code>
-                        </dd>
-                        <dt>RECOMPUTED</dt>
-                        <dd>
-                          <code>{verify.recomputedCommit ?? '--'}</code>
-                        </dd>
-                        <dt>DECK ENTROPY</dt>
-                        <dd>
-                          <code>{verify.deckEntropy ?? '--'}</code>
-                        </dd>
-                      </>
-                    )}
-                  </dl>
-
-                  {view.clientSeeds === null ? null : (
-                    <ul className="verify-seeds">
-                      {[...view.clientSeeds]
-                        .sort((left, right) => left.seat - right.seat)
-                        .map((entry) => (
-                          <li key={entry.playerId}>
-                            <span>SEAT {entry.seat + 1}</span>
-                            <code>{entry.seed.slice(0, 16)}</code>
-                            {entry.defaulted ? <em>SERVER DEFAULT</em> : null}
-                          </li>
-                        ))}
-                    </ul>
+                <dl className="verify-rows">
+                  <dt>COMMIT</dt>
+                  <dd>
+                    <code>{view.commit ?? '--'}</code>
+                  </dd>
+                  {view.revealedSeed === null ? null : (
+                    <>
+                      <dt>REVEALED SERVER SEED</dt>
+                      <dd>
+                        <code>{view.revealedSeed}</code>
+                      </dd>
+                      <dt>RECOMPUTED</dt>
+                      <dd>
+                        <code>{verify.recomputedCommit ?? '--'}</code>
+                      </dd>
+                      <dt>DECK ENTROPY</dt>
+                      <dd>
+                        <code>{verify.deckEntropy ?? '--'}</code>
+                      </dd>
+                    </>
                   )}
+                </dl>
 
-                  <p role="status" className={`verify-verdict verify-${verify.status}`}>
-                    {verifyCopy(verify.status)}
-                  </p>
-                </section>
-              </div>
+                {view.clientSeeds === null ? null : (
+                  <ul className="verify-seeds">
+                    {[...view.clientSeeds]
+                      .sort((left, right) => left.seat - right.seat)
+                      .map((entry) => (
+                        <li key={entry.playerId}>
+                          <span>SEAT {entry.seat + 1}</span>
+                          <code>{entry.seed.slice(0, 16)}</code>
+                          {entry.defaulted ? <em>SERVER DEFAULT</em> : null}
+                        </li>
+                      ))}
+                  </ul>
+                )}
+
+                <p role="status" className={`verify-verdict verify-${verify.status}`}>
+                  {verifyCopy(verify.status)}
+                </p>
+              </TableModal>
             ) : null}
             {settingsOpen ? (
-              <div className="modal-backdrop" role="presentation">
-                <section
-                  className="modal settings-modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="settings-title"
+              <TableModal
+                className="settings-modal"
+                labelledBy="settings-title"
+                onClose={() => setSettingsOpen(false)}
+              >
+                <button
+                  className="modal-close"
+                  type="button"
+                  onClick={() => setSettingsOpen(false)}
                 >
-                  <button
-                    className="modal-close"
-                    type="button"
-                    onClick={() => setSettingsOpen(false)}
-                  >
-                    CLOSE
-                  </button>
-                  <p className="eyebrow">THIS BROWSER</p>
-                  <h2 id="settings-title">Settings</h2>
-                  <RiverSettings preferences={preferences} onChange={setPreferences} />
-                </section>
-              </div>
+                  CLOSE
+                </button>
+                <p className="eyebrow">THIS BROWSER</p>
+                <h2 id="settings-title">Settings</h2>
+                <RiverSettings preferences={preferences} onChange={setPreferences} />
+              </TableModal>
             ) : null}
             {/* The venue picker lived here, shown before the first hand. It is
                 gone for the same reason the stepper on the private table screen
@@ -1933,7 +2131,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 type="button"
                 className="verify-pill history-pill"
                 aria-label={`Hand history, ${hands.length} hands recorded`}
-                onClick={() => setHistoryOpen(true)}
+                onClick={() => openPanel('history')}
               >
                 <span>HANDS</span>
                 <strong>{hands.length}</strong>
@@ -2145,6 +2343,10 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
                 {presetNotice}
               </div>
             )}
+            <RabbitHunt
+              rabbit={rabbit}
+              onHunt={() => socketRef.current?.command({ kind: 'rabbitHunt' })}
+            />
             <ActionMenu
               view={shownView}
               localTurn={localTurn}
@@ -2167,6 +2369,7 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
               canDeal={isHost && seatedCount + botSeats >= 2 && view.handNumber === 0}
               seated={selfSeat !== null}
               kicked={kick !== null}
+              rejoinLabel={kick?.reason === 'duplicate-session' ? 'PLAY HERE' : 'RETURN TO TABLE'}
               preset={preset}
               onPreset={setPreset}
               presetArmable={presetArmable}
@@ -2214,6 +2417,16 @@ export function RiverRoomTable({ lab }: { lab?: TableLab } = {}) {
         <div className="viewport-small">
           <strong>Turn your phone upright.</strong>
           <span>The phone table is laid out upright, with your controls at the bottom.</span>
+          {/* The table is hidden sideways, and its clock is not: without this a
+              rotate on your turn ended in a timeout nobody saw coming. */}
+          {localTurn && turnRemaining !== null ? (
+            <p className="viewport-turn" role="status">
+              Your turn: {Math.max(0, Math.ceil(turnRemaining / 1000))} s left
+              {view.legal?.call.enabled
+                ? `, ${formatAmount(view.legal.call.amount, false, bigBlind)} to call`
+                : ''}
+            </p>
+          ) : null}
         </div>
       </div>
       {arriving ? (
@@ -2247,9 +2460,12 @@ function waitingCopy(
   if (view.phase !== 'open') return null
   if (seatedCount === 0) return 'Taking your seat…'
   if (seatedCount + botSeats < 2) return 'Waiting for one more player.'
-  return isHost
-    ? 'Table is ready. DEAL when your group is seated.'
-    : 'Waiting for the host to deal.'
+  if (!isHost) return 'Waiting for the host to deal.'
+  // With bots filling the seats there is no group to wait for.
+  // Bots sit down on the deal, so until then the felt looks empty: say who is coming.
+  if (botSeats === 1) return 'Table is ready. Press DEAL and your opponent sits down.'
+  if (botSeats > 1) return `Table is ready. Press DEAL and ${botSeats} players sit down.`
+  return 'Table is ready. DEAL when your group is seated.'
 }
 
 function kickCopy(reason: Exclude<KickState, null>['reason']): string {
@@ -2323,6 +2539,13 @@ function TableCluster({
             ? hero.hole.map((card) => <PlayingCard key={`${card.rank}${card.suit}`} card={card} />)
             : [<CardBack key="first" />, <CardBack key="second" />]}
           {hero.folded ? <span className="fold-stamp" aria-hidden="true" /> : null}
+          {/* The phone says it under its cards; the desktop said nothing, and
+              face-down cards read as a hand nobody can see. */}
+          {peek || hero.folded ? null : (
+            <span className="hero-peek-hint" aria-hidden="true">
+              HOLD TO PEEK
+            </span>
+          )}
         </button>
       ) : null}
       {hero === undefined ? null : (
@@ -2640,6 +2863,7 @@ function ActionMenu({
   canDeal,
   seated,
   kicked,
+  rejoinLabel,
   onRejoin,
   preset,
   onPreset,
@@ -2667,6 +2891,8 @@ function ActionMenu({
   canDeal: boolean
   seated: boolean
   kicked: boolean
+  /** What the way back says: PLAY HERE when another tab has the seat. */
+  rejoinLabel: string
   onRejoin: () => void
   preset: PresetKind | null
   onPreset: (kind: PresetKind | null) => void
@@ -2679,6 +2905,11 @@ function ActionMenu({
 }) {
   const [lit, setLit] = useState<MenuSlot | null>(null)
   const [raising, setRaising] = useState(false)
+  // Read per turn rather than once: the first hand ends between two turns.
+  const [coaching, setCoaching] = useState(false)
+  useEffect(() => {
+    if (turnKey.length > 0) setCoaching(!firstHandPlayed())
+  }, [turnKey])
   const legal = localTurn ? view.legal : null
 
   // A raise layer left open, or a slot left lit, must not survive into the
@@ -2689,11 +2920,20 @@ function ActionMenu({
     setLit(null)
   }, [turnKey])
 
+  const hasTurn = legal !== null
+  useEffect(() => {
+    if (!hasTurn || turnKey.length === 0 || !keyboardDriven) return
+    const focused = document.activeElement
+    if (focused === null || focused === document.body || !focused.isConnected) focusFirstAction()
+  }, [hasTurn, turnKey])
+
   useEffect(() => {
     if (legal === null) return
     const onKey = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return
+      // Ctrl+R is reload and Shift is held to read the table: neither raises.
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
       const key = event.key.toLowerCase()
       if (!raising && key === 'r' && legal.raiseTo.enabled) {
         event.preventDefault()
@@ -2718,7 +2958,7 @@ function ActionMenu({
     return (
       <div className="ram ram-solo">
         <button type="button" onClick={onRejoin}>
-          RETURN TO TABLE
+          {rejoinLabel}
         </button>
       </div>
     )
@@ -2890,6 +3130,31 @@ function ActionMenu({
     <section className="action-menu" aria-label="Your action">
       <TurnArc key={turnKey} remainingMs={remainingMs} budgetMs={budgetMs} />
       <p className="action-label">{lit === null ? 'YOUR TURN' : labels[lit]}</p>
+      {coaching ? (
+        <p className="action-coach" role="note">
+          {coachLine(
+            checking,
+            checking ? 'Check' : `Call ${formatAmount(legal.call.amount, false, bigBlind)}`,
+            legal.raiseTo.enabled,
+          )}
+        </p>
+      ) : null}
+      {/* Shown only once a keyboard is on the buttons: the keys that skip them. */}
+      <p className="action-keys" aria-hidden="true">
+        <kbd>C</kbd> {checking ? 'CHECK' : 'CALL'}
+        {legal.raiseTo.enabled ? (
+          <>
+            {' '}
+            <kbd>R</kbd> {checking ? 'BET' : 'RAISE'}
+          </>
+        ) : null}
+        {checking ? null : (
+          <>
+            {' '}
+            <kbd>F</kbd> FOLD
+          </>
+        )}
+      </p>
       <div className="action-base" data-lit={lit ?? undefined}>
         <span className="action-seams" />
       </div>
@@ -2899,12 +3164,16 @@ function ActionMenu({
           duration={0}
           disabled={!(checking || legal.call.enabled)}
           ariaLabel={labels.call}
+          keyShortcut="C"
           onComplete={() => onAction(checking ? { kind: 'check' } : { kind: 'call' })}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             {checking ? MENU_ICON.check : MENU_ICON.call}
           </svg>
         </HoldAction>
+        <span className="action-caption" aria-hidden="true">
+          {labels.call}
+        </span>
       </span>
       <span className="action-slot raise" {...slotEvents('raise')}>
         {legal.raiseTo.enabled ? (
@@ -2912,6 +3181,7 @@ function ActionMenu({
             type="button"
             className="action-button"
             aria-label={labels.raise}
+            aria-keyshortcuts="R"
             onClick={() => setRaising(true)}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2931,6 +3201,9 @@ function ActionMenu({
             </svg>
           </HoldAction>
         )}
+        <span className="action-caption" aria-hidden="true">
+          {labels.raise}
+        </span>
       </span>
       <span className="action-slot fold" {...slotEvents('fold')}>
         {/* Folding when checking is free is always a mistake, so it is the one
@@ -2941,12 +3214,18 @@ function ActionMenu({
           duration={checking ? 400 : 0}
           disabled={!legal.fold.enabled}
           ariaLabel={checking ? 'Fold, hold to confirm' : 'Fold'}
+          keyShortcut={checking ? undefined : 'F'}
           onComplete={() => onAction({ kind: 'fold' })}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             {MENU_ICON.fold}
           </svg>
         </HoldAction>
+        {/* Said, because a fold that wants a hold looked like a button that
+            had not heard the click, and the second click landed on Check. */}
+        <span className="action-caption" aria-hidden="true">
+          {checking ? 'HOLD TO FOLD' : 'FOLD'}
+        </span>
       </span>
     </section>
   )
@@ -3240,6 +3519,7 @@ function HoldAction({
   className,
   style,
   ariaLabel,
+  keyShortcut,
   onComplete,
   onAnimationEnd,
   children,
@@ -3249,6 +3529,8 @@ function HoldAction({
   className: string
   style?: CSSProperties
   ariaLabel?: string
+  /** The key that does the same, announced to assistive technology. */
+  keyShortcut?: string | undefined
   onComplete: () => void
   onAnimationEnd?: () => void
   children: React.ReactNode
@@ -3282,6 +3564,7 @@ function HoldAction({
       className={`${className}${holding ? ' holding' : ''}`}
       disabled={disabled}
       aria-label={ariaLabel}
+      aria-keyshortcuts={keyShortcut}
       style={{ ...style, '--hold-duration': `${duration}ms` } as CSSProperties}
       onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
         if (event.button !== 0) return
@@ -3370,6 +3653,43 @@ function UpgradePanel({
       <button type="button" onClick={onClose}>
         NOT NOW
       </button>
+      {/* A new tab, so reading it never costs the seat. */}
+      <a className="upgrade-privacy" href="/privacy" target="_blank" rel="noopener">
+        How River uses your email
+      </a>
     </form>
+  )
+}
+
+/**
+ * The rabbit: after a hand that ended before the river, the cards that would have come.
+ * A button while nobody has asked, then the cards themselves, until the next deal.
+ */
+function RabbitHunt({
+  rabbit,
+  onHunt,
+}: {
+  rabbit: { handNumber: number; cards: Card[] | null } | null
+  onHunt: () => void
+}) {
+  if (rabbit === null) return null
+  if (rabbit.cards === null)
+    return (
+      <div className="rabbit-hunt">
+        <button type="button" onClick={onHunt}>
+          RABBIT HUNT
+        </button>
+        <span>See what would have come</span>
+      </div>
+    )
+  return (
+    <section className="rabbit-hunt shown" aria-label="The cards that would have come">
+      <span>WOULD HAVE COME</span>
+      <div className="rabbit-cards">
+        {rabbit.cards.map((card) => (
+          <PlayingCard key={`${card.rank}${card.suit}`} card={card} />
+        ))}
+      </div>
+    </section>
   )
 }
