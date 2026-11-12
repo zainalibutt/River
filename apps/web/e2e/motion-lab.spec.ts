@@ -33,7 +33,12 @@ interface Box {
 
 async function watch(page: Page, scene: string, seconds: number): Promise<Sample[]> {
   await page.goto(`/dev/motion?scene=${scene}&speed=2`)
-  await page.locator('.motion-lab').waitFor()
+  // The lab is a development page. A production build serves its not-found page
+  // there instead, and then there is nothing to watch.
+  const lab = page.locator('.motion-lab')
+  const missing = page.getByText('This page could not be found')
+  await expect(lab.or(missing)).toBeVisible()
+  test.skip(await missing.isVisible(), 'The motion lab is not served by a production build')
   return page.evaluate(async (forMs) => {
     const box = (element: Element | null) => {
       if (element === null) return null
