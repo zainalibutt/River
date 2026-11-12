@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { config as loadEnv } from 'dotenv'
 import { serveApiRoutes } from './api-routes.js'
 import { createSupabaseTokenVerifier } from './auth.js'
+import { SupabaseBanList } from './ban-store.js'
 import { BotApi } from './bot-api.js'
 import { withBotApi } from './bot-api-http.js'
 import { SupabaseBotApiKeyStore } from './bot-api-keys.js'
@@ -122,8 +123,21 @@ async function start(): Promise<void> {
   // Paying back what a crash left seated needs the table its migration makes;
   // off until that migration has been applied and this is switched on.
   const refundCrashes = process.env.TABLE_CRASH_REFUND === 'true'
+  // Bans kept in the database need the table their migration makes, and a
+  // check against a table that is not there refuses every player at the door;
+  // off, and held in memory, until that migration has been applied and this is
+  // switched on.
+  const durableBans = process.env.PLAYER_BANS_DURABLE === 'true'
   const hub = new RoomHub({
     ...(refundCrashes ? { seatings: ledger } : {}),
+    ...(durableBans
+      ? {
+          bans: new SupabaseBanList({
+            supabaseUrl: config.supabaseUrl,
+            serviceRoleKey: config.serviceRoleKey,
+          }),
+        }
+      : {}),
     // A person who opens River alone should find a table with people at it:
     // three to eight of them, in chairs the table's room id picks.
     botSeats: 'random',

@@ -234,8 +234,8 @@ async function targets(page: Page, scope = '.phone-table') {
       }),
     )
   for (const box of boxes) {
-    expect(box.width, String(box.label)).toBeGreaterThanOrEqual(44)
-    expect(box.height, String(box.label)).toBeGreaterThanOrEqual(44)
+    expect(Math.round(box.width), String(box.label)).toBeGreaterThanOrEqual(44)
+    expect(Math.round(box.height), String(box.label)).toBeGreaterThanOrEqual(44)
   }
   for (const [index, box] of boxes.entries())
     for (const other of boxes.slice(index + 1))

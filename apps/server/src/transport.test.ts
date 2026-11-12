@@ -1230,6 +1230,65 @@ describe('room hub', () => {
     })
   })
 
+  it('keeps the hand for a player who reloads with little of their turn left', async () => {
+    vi.useFakeTimers()
+    const { hub } = setup()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    await send(alice, 'alice-sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    await send(bob, 'bob-sit', { kind: 'sit', seat: 1, buyIn: 50_000 })
+    await send(alice, 'start', { kind: 'startHand' })
+    const dealt = viewOf(alice)
+    const actor = dealt.currentActor?.playerId
+    const deadline = dealt.turnDeadlineMs ?? 0
+    const [acting, waiting, token, name] =
+      actor === ALICE
+        ? ([alice, bob, 'alice', 'Alice'] as const)
+        : ([bob, alice, 'bob', 'Bob'] as const)
+
+    await vi.advanceTimersByTimeAsync(deadline - Date.now() - 2_000)
+    const droppedAt = Date.now()
+    await acting.connection.close()
+    expect(viewOf(waiting).turnDeadlineMs).toBe(droppedAt + 10_000)
+
+    // The reload takes longer than the turn had left.
+    await vi.advanceTimersByTimeAsync(5_000)
+    const back = await connectAndEnter(hub, token, name)
+    const view = viewOf(back)
+    expect(view.handNumber).toBe(dealt.handNumber)
+    expect(view.currentActor?.playerId).toBe(actor)
+    expect(view.turnDeadlineMs).toBe(droppedAt + 10_000)
+    expect(view.seats.find((seat) => seat.playerId === actor)).toMatchObject({
+      folded: false,
+      disconnected: false,
+    })
+  })
+
+  it('times out a player who drops in their own turn and does not come back', async () => {
+    vi.useFakeTimers()
+    const { hub } = setup()
+    const alice = await connectAndEnter(hub, 'alice', 'Alice')
+    const bob = await connectAndEnter(hub, 'bob', 'Bob')
+    await send(alice, 'alice-sit', { kind: 'sit', seat: 0, buyIn: 50_000 })
+    await send(bob, 'bob-sit', { kind: 'sit', seat: 1, buyIn: 50_000 })
+    await send(alice, 'start', { kind: 'startHand' })
+    const dealt = viewOf(alice)
+    const actor = dealt.currentActor?.playerId
+    const [acting, waiting] = actor === ALICE ? [alice, bob] : [bob, alice]
+
+    await vi.advanceTimersByTimeAsync((dealt.turnDeadlineMs ?? 0) - Date.now() - 2_000)
+    await acting.connection.close()
+    await vi.advanceTimersByTimeAsync(9_999)
+    expect(viewOf(waiting).currentActor?.playerId).toBe(actor)
+    await vi.advanceTimersByTimeAsync(1)
+    const timedOut = waiting.peer.messages.some(
+      (message) =>
+        message.kind === 'snapshot' &&
+        message.events.some((event) => event.kind === 'timedOut' && event.playerId === actor),
+    )
+    expect(timedOut).toBe(true)
+  })
+
   it('still releases the seat when a second tab signs in and never comes back to the table', async () => {
     vi.useFakeTimers()
     const { hub, ledger } = setup(20)
@@ -2243,6 +2302,48 @@ describe('the developer account', () => {
     await send(hub, 'dev', { kind: 'setBan', targetPlayerId: BOB, banned: false }, 'admin-2')
     const again = await connectAndEnter(hub, 'bob', 'Bob')
     expect(again.peer.last('snapshot')).toBeDefined()
+  })
+
+  it('keeps everyone out while the ban list cannot be read, and lets them in once it can', async () => {
+    let reachable = false
+    const reported: string[] = []
+    const hub = new RoomHub({
+      ledger: new MemoryLedger(),
+      verifyToken: async () => ({ playerId: BOB, anonymous: false, admin: false }),
+      onError: (context) => reported.push(context),
+      bans: {
+        isBanned: async () => {
+          if (!reachable) throw new Error('Supabase did not answer within 5000ms')
+          return false
+        },
+        setBanned: async () => {},
+        list: async () => [],
+      },
+      createRoom: (roomId) =>
+        new Room(roomId, defaultRoomConfig({ seed: roomId, inviteCode: 'RIVER2' })),
+    })
+
+    const refused = await connectAndEnter(hub, 'bob', 'Bob')
+    expect(refused.peer.last('snapshot')).toBeUndefined()
+    expect(refused.peer.last('error')).toMatchObject({
+      code: 'join_unavailable',
+      requestId: 'enter-bob',
+    })
+    expect(reported).toEqual(['enter: could not read the ban list'])
+
+    // The same connection is still usable: the failure refused one request
+    // and nothing else.
+    reachable = true
+    await refused.connection.receive(
+      JSON.stringify({
+        kind: 'enter',
+        requestId: 'enter-again',
+        roomId: 'river-one',
+        name: 'Bob',
+        inviteCode: 'river2',
+      }),
+    )
+    expect(refused.peer.last('snapshot')).toBeDefined()
   })
 
   it('rejects a malformed action at the wire rather than in the handler', async () => {
