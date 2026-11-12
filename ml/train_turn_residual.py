@@ -1,6 +1,6 @@
-"""Matched D8 experiment. All writes remain in the worktree; no git operations.
+"""Matched D8 experiment. All writes stay inside the checkout.
 
-Reuse the TS diagnose/prepare cache described in ml/D8.md. Train one model per
+Reuse the TS diagnose/prepare cache. Train one model per
 process with two CPU threads. The default 300-second fit deadline includes GPU
 transfer, epoch selection and exact held-hand scoring; a timeout fails the fit.
 """

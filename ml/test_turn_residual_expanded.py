@@ -1,4 +1,4 @@
-"""Run by Claude with unittest; no GPU or production data required."""
+"""Unit tests; no GPU or production data required."""
 import copy
 import hashlib
 import json
