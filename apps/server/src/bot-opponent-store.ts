@@ -4,6 +4,7 @@ import {
   type OpponentModelStateV1,
   updateOpponentModel,
 } from '@river/engine'
+import { serviceHeaders } from './supabase-rest.js'
 
 export interface BotOpponentObservation {
   botId: string
@@ -199,12 +200,7 @@ export class SupabaseBotOpponentStore implements BotOpponentStore {
   private async send(target: URL | string, init: RequestInit = {}): Promise<Response> {
     return this.request(target, {
       ...init,
-      headers: {
-        apikey: this.serviceRoleKey,
-        authorization: `Bearer ${this.serviceRoleKey}`,
-        'content-type': 'application/json',
-        ...init.headers,
-      },
+      headers: { ...serviceHeaders(this.serviceRoleKey), ...init.headers },
       signal: AbortSignal.timeout(this.timeoutMs),
     })
   }

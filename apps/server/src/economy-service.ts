@@ -9,6 +9,7 @@ import {
   utcDay,
 } from '@river/engine'
 import type { Ledger, LedgerEntry } from './ledger.js'
+import { serviceHeaders } from './supabase-rest.js'
 
 export type GrantOutcome =
   | { kind: 'granted'; delta: number; balance: number; ref: string }
@@ -100,11 +101,7 @@ const LEDGER_PAGE = 500
 export function createSupabaseEconomy(options: SupabaseEconomyOptions): SupabaseEconomy {
   const baseUrl = options.supabaseUrl.replace(/\/$/, '')
   const request = options.fetch ?? fetch
-  const headers = (): Record<string, string> => ({
-    apikey: options.serviceRoleKey,
-    authorization: `Bearer ${options.serviceRoleKey}`,
-    'content-type': 'application/json',
-  })
+  const headers = (): Record<string, string> => serviceHeaders(options.serviceRoleKey)
   return {
     // Read a page at a time: Supabase returns at most a fixed number of rows to
     // one request, and a long-standing player's history is longer than that.
@@ -152,11 +149,7 @@ export async function loadEconomyConfig(client: EconomyRestClient): Promise<Econ
   if (cached !== undefined && Date.now() - cached.loadedAt < CONFIG_TTL_MS) {
     return cached.value
   }
-  const headers = {
-    apikey: client.serviceRoleKey,
-    authorization: `Bearer ${client.serviceRoleKey}`,
-    'content-type': 'application/json',
-  }
+  const headers = serviceHeaders(client.serviceRoleKey)
   const configUrl = new URL(`${baseUrl}/rest/v1/economy_config`)
   configUrl.searchParams.set('select', 'key,value')
   const configBody = await readJson(request, configUrl, headers)

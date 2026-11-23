@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { serviceHeaders } from './supabase-rest.js'
 
 // Keys for the bot API. A key is shown once, when it is made; only its SHA-256
 // hash is kept, so a leaked table gives nobody a working key. A player holds a
@@ -254,12 +255,7 @@ export class SupabaseBotApiKeyStore implements BotApiKeyStore {
   private async send(target: URL, init: RequestInit = {}): Promise<Response> {
     return this.request(target, {
       ...init,
-      headers: {
-        apikey: this.serviceRoleKey,
-        authorization: `Bearer ${this.serviceRoleKey}`,
-        'content-type': 'application/json',
-        ...init.headers,
-      },
+      headers: { ...serviceHeaders(this.serviceRoleKey), ...init.headers },
       signal: AbortSignal.timeout(this.timeoutMs),
     })
   }
