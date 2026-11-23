@@ -1,6 +1,7 @@
 'use client'
 
 import { type RefObject, useEffect } from 'react'
+import { focusableIn } from '@/lib/use-dialog-focus'
 
 export function usePhoneSheetFocus(
   root: RefObject<HTMLElement | null>,
@@ -19,17 +20,7 @@ export function usePhoneSheetFocus(
       )
       .map((child) => ({ child, inert: child.inert }))
     for (const { child } of background) child.inert = true
-    const controls = () =>
-      [
-        ...dialog.querySelectorAll<HTMLElement>(
-          'button, input, textarea, select, a[href], [tabindex]',
-        ),
-      ].filter(
-        (control) =>
-          control.tabIndex >= 0 &&
-          !control.matches(':disabled') &&
-          control.getClientRects().length > 0,
-      )
+    const controls = () => focusableIn(dialog)
     const first = () => controls()[0]?.focus({ preventScroll: true })
     first()
     const key = (event: KeyboardEvent) => {

@@ -1,4 +1,5 @@
 import type { Card, HandRecord } from '@river/engine'
+import { serviceHeaders } from './supabase-rest.js'
 
 /**
  * Each person's private record of the hands they played (table public.player_hands).
@@ -89,9 +90,7 @@ export class SupabasePlayerHandStore implements PlayerHandStore {
     const response = await this.request(this.url, {
       method: 'POST',
       headers: {
-        apikey: this.serviceRoleKey,
-        authorization: `Bearer ${this.serviceRoleKey}`,
-        'content-type': 'application/json',
+        ...serviceHeaders(this.serviceRoleKey),
         // A hand written twice, by a retry, is the same hand.
         prefer: 'resolution=ignore-duplicates,return=minimal',
       },

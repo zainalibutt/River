@@ -372,5 +372,5 @@ The forecasting experiments in part one are the most like the age-group project:
 - The instrument: `apps/server/src/bot-session-benchmark.ts`, `apps/server/src/bot-session-evaluation.ts`.
 - The shark and all-in valuation: `apps/server/src/bot-lbr.ts`, `apps/server/src/bot-allin-equity.ts`.
 - Slumbot: `apps/server/src/bot-slumbot.ts`.
-- The river solver: `apps/server/src/bot-cfr.ts`, `apps/server/src/bot-river-solver.ts`, `apps/server/src/bot-river-policy.ts`, `apps/server/src/bot-public-replay.ts`, and `apps/server/src/bot-thinker.ts` for the live thread.
+- The river solver: `apps/server/src/bot-river-solver.ts`, `apps/server/src/bot-river-policy.ts`, `apps/server/src/bot-public-replay.ts`, and `apps/server/src/bot-thinker.ts` for the live thread. The general CFR it grew from, checked against Kuhn poker, is `apps/server/research/bot-cfr.ts`.
 - The statistics behind the reads: `packages/engine/src/opponent-stats.ts`.

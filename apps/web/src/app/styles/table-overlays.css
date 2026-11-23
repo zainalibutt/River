@@ -1,0 +1,677 @@
+/*
+ * The menu's settings over the table. The list is the menu's own, drawn at the
+ * table's size: the menu sets its type for a window, and the table's panels
+ * are read from further back.
+ */
+.settings-modal {
+  width: 640px;
+  min-height: 0;
+  padding: 48px 44px 40px;
+}
+
+.settings-modal h2 {
+  margin-bottom: 28px;
+  font-size: 44px;
+}
+
+.settings-modal .river-settings {
+  gap: 12px;
+}
+
+.settings-modal .club-setting-toggle {
+  min-height: 64px;
+  padding: 0 22px;
+  font-size: 16px;
+}
+
+.settings-modal .club-capsule-sub {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.history-summary {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin: 0 0 24px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--river-room-edge);
+  border-radius: 14px;
+  background: var(--river-room-edge);
+}
+
+.history-summary div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  background: var(--river-room);
+}
+
+.history-stat-key {
+  color: var(--river-cream-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.history-stat-value {
+  margin: 0;
+  color: var(--river-cream);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.history-stat-value.up {
+  color: var(--river-win);
+}
+
+.history-stat-value.down {
+  color: var(--river-danger);
+}
+
+.history-empty {
+  margin: 0;
+  padding: 32px 0;
+  max-width: 46ch;
+  color: var(--river-cream-dim);
+  line-height: 1.6;
+}
+
+.history-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 8px 4px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.history-row {
+  flex: none;
+  border: 1px solid var(--river-room-edge);
+  border-radius: 12px;
+  background: var(--river-room);
+  overflow: hidden;
+}
+
+.history-row.outcome-won {
+  border-left: 3px solid var(--river-win);
+}
+
+.history-row.outcome-lost {
+  border-left: 3px solid var(--river-danger);
+}
+
+.history-row.outcome-away {
+  opacity: 0.62;
+}
+
+.history-head {
+  display: grid;
+  grid-template-columns: 64px 84px 1fr 150px 24px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--river-cream-dim);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-head:hover {
+  background: var(--river-room-raised);
+}
+
+.history-head:focus-visible {
+  outline: 2px solid var(--club-brass-bright);
+  outline-offset: -2px;
+}
+
+.history-number {
+  color: var(--river-cream-faint);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.history-street {
+  color: var(--river-cream-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.history-pot {
+  color: var(--river-amber);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.history-outcome {
+  color: var(--river-cream);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.history-toggle {
+  color: var(--river-cream-faint);
+  text-align: center;
+}
+
+.history-replay {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 18px 20px;
+  border-top: 1px solid var(--river-room-edge);
+  background: var(--river-void);
+}
+
+.replay-board {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+}
+
+.replay-noboard {
+  color: var(--river-cream-faint);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.replay-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 1px solid var(--river-card-edge);
+  border-radius: 6px;
+  background: var(--river-card-face);
+  color: var(--river-suit-spade);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.replay-card.suit-h {
+  color: var(--river-suit-heart);
+}
+
+.replay-card.suit-d {
+  color: var(--river-suit-diamond);
+}
+
+.replay-card.suit-c {
+  color: var(--river-suit-club);
+}
+
+.replay-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  color: var(--river-cream);
+  font-size: 15px;
+}
+
+.replay-total {
+  color: var(--river-amber);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.replay-scrub {
+  display: block;
+}
+
+.replay-scrub input {
+  width: 100%;
+  accent-color: var(--river-amber);
+  cursor: pointer;
+}
+
+.replay-ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replay-ticks button {
+  padding: 5px 12px;
+  border: 1px solid var(--river-room-edge);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--river-cream-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.replay-ticks button:hover {
+  border-color: var(--river-amber);
+  color: var(--river-amber);
+}
+
+.replay-ticks button:focus-visible {
+  outline: 2px solid var(--club-brass-bright);
+  outline-offset: 2px;
+}
+
+.replay-proof {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--river-room-edge);
+}
+
+.replay-proof-key {
+  color: var(--river-cream-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.replay-proof-value {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.replay-proof-value code {
+  color: var(--river-cream-dim);
+  font-size: 11px;
+}
+
+.hand-readout {
+  margin: 10px 0 0;
+  padding: 7px 18px;
+  border: 1px solid var(--river-room-edge);
+  border-radius: 999px;
+  background: rgb(20 27 24 / 88%);
+  color: var(--river-amber);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Nameplates are held, not worn.
+
+   The reference carries no persistent plate over a seat: a player is identified
+   by their silhouette, and the name, stack and rank appear only while a key is
+   down. River showed all of it permanently, so nine lit cards floated over the
+   table at all times and competed with every face behind them.
+
+   The bet amount and the turn marker stay visible - those are the small
+   world-space pins the reference does keep. */
+.seat .seat-copy,
+.seat .avatar {
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+  pointer-events: none;
+}
+
+/* Your own plate is gated like everyone else's. It used to be exempt, which
+   meant one lit panel sat over the near rail for the whole hand while the rest
+   of the table was clean, and the felt never got to be empty. Your stack is on
+   the all-in wedge at all times regardless. */
+.seat-ring.plates-held .seat .seat-copy,
+.seat-ring.plates-held .seat .avatar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* An open seat is the one thing here a player aims at, so it keeps its ring
+   when everything else collapses to a pin. Stripping its border and ground was
+   what left a bare SIT floating with nothing under it. */
+.seat-ring:not(.plates-held) .seat:not(.open-seat) {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.seat-ring:not(.plates-held) .seat:not(.open-seat).active {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.hero-seat .seat-bet {
+  display: none;
+}
+
+/* A glyph pin: checked, folded, away, sitting out.
+
+   Small and quiet by design. The reference marks a seat with a mark about the
+   size of a fingertip and nothing else, and the rule that only one marker ever
+   floats over a seat is enforced in the engine rather than here. */
+.seat-glyph {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  display: grid;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgb(42 52 47 / 80%);
+  border-radius: 999px;
+  background: rgb(19 25 22 / 88%);
+  color: var(--river-cream-dim);
+  font-size: 13px;
+  line-height: 1;
+  place-items: center;
+  transform: translateX(-50%);
+}
+
+.seat-glyph.fold {
+  color: var(--river-cream-faint);
+  opacity: 0.7;
+}
+
+.seat-glyph.away,
+.seat-glyph.sittingOut {
+  color: var(--river-amber);
+}
+
+/* The showdown, as a moment rather than a state change.
+
+   A hand used to end by simply being over: the pot moved and the next one
+   started. Now the table goes quiet, the hands are turned over one at a time in
+   the order a dealer calls for them, the room darkens before the one that
+   decides it, and the pot goes only once that one is face up.
+
+   Transient by definition, so it is allowed to sit over the felt in a way no
+   persistent element is. It clears itself when the schedule runs out. */
+.showdown-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 23;
+  pointer-events: none;
+}
+
+/* The quiet: the edges of the room fall away toward the middle of the table. */
+.showdown-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 42%, transparent 38%, rgb(0 0 0 / 52%) 100%);
+  animation: showdown-hush 900ms var(--ease-out) both;
+}
+
+/* Before the deciding hand the room closes in further. */
+.showdown-vignette::after {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 42%, transparent 22%, rgb(0 0 0 / 50%) 100%);
+  content: "";
+  opacity: 0;
+  transition: opacity 600ms var(--ease-out);
+}
+
+.showdown-stage.tension .showdown-vignette::after {
+  opacity: 1;
+}
+
+.showdown-card {
+  position: absolute;
+  /* Above the pot, not on it: the pot is what the caption is about to pay out. */
+  top: 262px;
+  left: 50%;
+  display: grid;
+  gap: 2px;
+  min-width: 220px;
+  padding: 14px 28px;
+  border: 1px solid rgb(232 169 60 / 45%);
+  border-radius: 14px;
+  background: rgb(10 13 12 / 88%);
+  text-align: center;
+  transform: translateX(-50%);
+  transition:
+    border-color 300ms var(--ease-out),
+    box-shadow 300ms var(--ease-out);
+}
+
+/* The held breath: the card pulses while the last hand waits to be turned. The
+   pulse is on `scale`, which composes with the centring transform instead of
+   replacing it. */
+.showdown-stage.tension .showdown-card {
+  border-color: var(--river-amber-bright);
+  animation: showdown-pulse 520ms ease-in-out infinite alternate;
+}
+
+.showdown-stage.awarding .showdown-card {
+  border-color: var(--river-amber-bright);
+  box-shadow: 0 0 42px rgb(232 169 60 / 40%);
+  animation: showdown-award 640ms var(--ease-out) both;
+}
+
+/* A hand thrown away unseen: said quietly, and nothing turned over. */
+.showdown-hand.showdown-muck {
+  color: var(--river-cream-faint);
+  letter-spacing: 0.24em;
+}
+
+/* Whose hand is being told: the caption takes the spotlight its seat is lit in. */
+.showdown-stage.spotlit .showdown-card {
+  border-color: var(--river-spotlight);
+  box-shadow: 0 0 34px rgb(127 211 255 / 24%);
+}
+
+.showdown-stage.spotlit .showdown-who {
+  color: var(--river-spotlight);
+}
+
+/* Your own hand, while the showdown tells it. */
+.table-cluster.showing .hero-cards {
+  border-radius: 10px;
+  box-shadow: 0 0 22px rgb(127 211 255 / 34%);
+  outline: 2px solid var(--river-spotlight);
+  outline-offset: 4px;
+}
+
+.showdown-kicker {
+  color: var(--river-amber-bright);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  animation: showdown-kicker 900ms var(--ease-out) both;
+}
+
+.showdown-award {
+  display: grid;
+  gap: 2px;
+}
+
+@keyframes showdown-hush {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes showdown-kicker {
+  from {
+    letter-spacing: 1.1em;
+    opacity: 0;
+  }
+}
+
+@keyframes showdown-pulse {
+  from {
+    box-shadow: 0 0 0 rgb(232 169 60 / 0%);
+    scale: 1;
+  }
+  to {
+    box-shadow: 0 0 34px rgb(232 169 60 / 42%);
+    scale: 1.035;
+  }
+}
+
+@keyframes showdown-award {
+  from {
+    scale: 1.12;
+  }
+}
+
+@keyframes showdown-flip {
+  from {
+    opacity: 0.4;
+    rotate: y 90deg;
+  }
+}
+
+@keyframes showdown-shiver {
+  to {
+    translate: 0 -3px;
+  }
+}
+
+@keyframes showdown-name {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+.showdown-who {
+  color: var(--river-cream-dim);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.showdown-hand {
+  color: var(--river-cream);
+  animation: showdown-name 420ms var(--ease-out) both;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.showdown-win {
+  color: var(--river-amber-bright);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* The hand itself, under its name. A showdown that says "two pair" without the
+   two cards is asking the table to take its word for it. */
+.showdown-cards {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  perspective: 600px;
+}
+
+/* A card is turned over, not swapped: it swings in from edge-on. */
+.showdown-cards .playing-card {
+  width: 50px;
+  height: 70px;
+  border-radius: 7px;
+  animation: showdown-flip 380ms var(--ease-out) both;
+}
+
+.showdown-cards .card-back {
+  width: 50px;
+  height: 70px;
+  border-radius: 7px;
+  font-size: 22px;
+}
+
+.showdown-stage.tension .showdown-cards .card-back {
+  animation: showdown-shiver 160ms ease-in-out infinite alternate;
+}
+
+.showdown-stage.tension .showdown-cards .card-back:last-child {
+  animation-delay: 80ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .showdown-vignette,
+  .showdown-kicker,
+  .showdown-hand,
+  .showdown-cards .playing-card,
+  .showdown-stage.tension .showdown-card,
+  .showdown-stage.awarding .showdown-card,
+  .showdown-stage.tension .showdown-cards .card-back {
+    animation: none;
+  }
+}
+
+.showdown-cards .playing-card > span:first-child {
+  top: 5px;
+  left: 6px;
+  font-size: 19px;
+}
+
+.showdown-cards .playing-card > b {
+  font-size: 30px;
+}
+
+/*
+ * The corner rows.
+ *
+ * The hand-history pill, the invite strip and the chat toggle were once each
+ * pinned to top 54px / right 96px independently, so all three occupied the
+ * same band and the corner rendered as one illegible stack - COPY INVITE was
+ * under CHAT, and the history pill was entirely underneath the table code.
+ *
+ * Both corners are flex rows now and no child carries its own anchor, so the
+ * old neutralising rules went with the positions they neutralised. A control
+ * that joins a row inherits the corner treatment near the top of this file
+ * and lands dressed.
+ */
+.hud-corner {
+  position: absolute;
+  z-index: 22;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hud-corner-left {
+  top: 54px;
+  left: 96px;
+}
+
+.hud-corner-right {
+  top: 54px;
+  right: 96px;
+}
+
+/*
+ * The challenge strip steps back while an overlay is up.
+ *
+ * It shares the right edge with the shop and chat panels, so an open panel
+ * covered two thirds of it and left a third poking out - the worst of both,
+ * since a partly covered readout is neither readable nor absent. The reference
+ * treats overlays as a quick folio over a game that keeps running: fast in,
+ * fast out, one at a time, and nothing competing with them while they are open.
+ */
+.challenge-strip.behind {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}

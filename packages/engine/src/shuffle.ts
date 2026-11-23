@@ -1,12 +1,5 @@
 import type { Rng } from './rng.js'
-
-function at<T>(items: readonly T[], index: number): T {
-  const value = items[index]
-  if (value === undefined) {
-    throw new Error(`no element at index ${index} in array of length ${items.length}`)
-  }
-  return value
-}
+import { at } from './util.js'
 
 export function shuffle<T>(items: readonly T[], rng: Rng): T[] {
   const deck = [...items]

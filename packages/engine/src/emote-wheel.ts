@@ -1,3 +1,5 @@
+import { clamp01 } from './util.js'
+
 export interface WheelSelection {
   index: number | null
   reach: number
@@ -38,10 +40,4 @@ export function wheelSelection(
   const bucket = Math.floor(angle / step)
   const raw = ((bucket % count) + count) % count
   return { index: raw, reach }
-}
-
-function clamp01(value: number): number {
-  if (value < 0) return 0
-  if (value > 1) return 1
-  return value
 }

@@ -35,8 +35,8 @@ try {
     if ($d8Code -ne 0) { throw "$Name failed, exit $d8Code; see $d8Out/$Name.log" }
   }
   if (-not $Prepared) {
-    Invoke-D8Step 'diagnose' $env:ComSpec (@('/c','npx','tsx','apps/server/src/bot-turn-residual-run.ts','diagnose',$d8Out) + $Data)
-    Invoke-D8Step 'prepare' $env:ComSpec (@('/c','npx','tsx','apps/server/src/bot-turn-residual-run.ts','prepare',$d8Out) + $Data)
+    Invoke-D8Step 'diagnose' $env:ComSpec (@('/c','npx','tsx','apps/server/research/bot-turn-residual-run.ts','diagnose',$d8Out) + $Data)
+    Invoke-D8Step 'prepare' $env:ComSpec (@('/c','npx','tsx','apps/server/research/bot-turn-residual-run.ts','prepare',$d8Out) + $Data)
   }
   Invoke-D8Step 'python-probe' $Python @('--version')
   Invoke-D8Step 'python-tests' $Python @('-m','unittest','discover','-s','ml','-p','test_turn_residual.py')
@@ -49,10 +49,10 @@ try {
     Invoke-D8Step "export-parity-$d8Seed" $Python @('ml/export_turn_residual_parity.py','--out',$d8Out,'--seed',"$d8Seed")
     foreach ($d8Backend in @('ts','wasm')) {
       $env:RIVER_VALUE_BACKEND = $d8Backend
-      Invoke-D8Step "parity-$d8Seed-$d8Backend" $env:ComSpec @('/c','npx','tsx','apps/server/src/bot-turn-residual-parity-run.ts',"$d8Out/parity-$d8Seed.json")
+      Invoke-D8Step "parity-$d8Seed-$d8Backend" $env:ComSpec @('/c','npx','tsx','apps/server/research/bot-turn-residual-parity-run.ts',"$d8Out/parity-$d8Seed.json")
     }
   }
   $env:RIVER_VALUE_BACKEND = 'wasm'
-  Invoke-D8Step 'benchmark' $env:ComSpec @('/c','npx','tsx','apps/server/src/bot-turn-residual-benchmark.ts',"$d8Out/feature-cases.json","$d8Out/residual-0")
+  Invoke-D8Step 'benchmark' $env:ComSpec @('/c','npx','tsx','apps/server/research/bot-turn-residual-benchmark.ts',"$d8Out/feature-cases.json","$d8Out/residual-0")
   Invoke-D8Step 'summary' $Python @('ml/train_turn_residual.py','--out',$d8Out,'--summary')
 } finally { Pop-Location }

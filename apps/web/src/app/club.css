@@ -292,21 +292,6 @@
   flex: 1;
 }
 
-/*
- * "Soon", not silence.
- *
- * A greyed-out item with no explanation does not read as unbuilt. It reads as
- * withheld - the first person to use this menu asked why he was banned from the
- * wardrobe. A disabled control has to say which of the two it is.
- */
-.club-nav-soon {
-  font-size: 0.58rem;
-  letter-spacing: 0.18em;
-  color: var(--club-brass-deep);
-  border: 1px solid var(--club-hairline);
-  padding: 0.14rem 0.4rem;
-}
-
 /* A nav item whose destination is not built yet says so rather than lying. */
 .club-nav-item[disabled] {
   color: var(--club-ivory-faint);
@@ -397,23 +382,6 @@
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--club-ivory-faint);
-}
-
-/* Progress is brass, like focus, because it is the same idea: where you are. */
-.club-progress {
-  position: relative;
-  height: 2px;
-  width: clamp(90px, 9vw, 150px);
-  margin-top: 0.5rem;
-  background: rgba(198, 164, 105, 0.16);
-  overflow: hidden;
-}
-
-.club-progress-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: var(--club-brass);
-  transition: width var(--club-screen) var(--club-glide);
 }
 
 /* -------------------------------------------------------------- sign in --- */
@@ -550,14 +518,6 @@
   color: var(--club-brass-deep);
 }
 
-.club-folio-tagline {
-  margin: -0.3rem 0 0.3rem;
-  font-size: 0.76rem;
-  line-height: 1.5;
-  color: var(--club-ivory-dim);
-  font-style: italic;
-}
-
 .club-folio-note {
   margin: 0.2rem 0 0;
   font-size: 0.66rem;
@@ -593,33 +553,6 @@
    before it is discovered. */
 .club-row-fixed .club-row-value {
   color: var(--club-ivory-dim);
-}
-
-.club-row-control {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-}
-
-.club-row-control .club-row-value {
-  min-width: 10ch;
-  text-align: center;
-}
-
-.club-step {
-  padding: 0.2rem 0.45rem;
-  border: 0;
-  background: transparent;
-  color: var(--club-brass-deep);
-  font-size: 0.6rem;
-  cursor: pointer;
-  transition: color var(--club-focus) var(--club-glide);
-}
-
-.club-step:hover,
-.club-step:focus-visible {
-  color: var(--club-brass-bright);
-  outline: none;
 }
 
 /*
@@ -743,11 +676,6 @@
 }
 
 /* Swapping the room should be a dissolve, not a cut. */
-.club-stage-swap {
-  animation:
-    club-fade-in var(--club-screen) var(--club-glide) both,
-    club-drift 48s var(--club-glide) infinite alternate;
-}
 
 @keyframes club-fade-in {
   from {
@@ -755,12 +683,6 @@
   }
   to {
     opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .club-stage-swap {
-    animation: none;
   }
 }
 

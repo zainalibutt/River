@@ -208,7 +208,7 @@ A short smoke tests the pipeline; it does not establish production coefficients.
 
 ## Measuring our bot
 
-`src/bot-realisation-calibrate.ts` runs **v9gp against v9gp**, with the normal
+`research/bot-realisation-calibrate.ts` runs **v9gp against v9gp**, with the normal
 40-round DCFR postflop chain, table preflop at both seats, and fresh hands without
 session reads. This measures our continuation policy against a competent copy
 of itself, and makes its reconstructed table belief the opponent's generating
@@ -269,11 +269,11 @@ $env:RIVER_RIVER_NETWORK='<models>/night1-buckets/river-buckets-128'
 $env:RIVER_VALUE_BACKEND='wasm'
 $env:RIVER_VALUE_THREADS='1'
 # Repeat this exact command to skip completed shards and resume.
-cmd /c npx tsx apps/server/src/bot-realisation-calibrate.ts --seed calibration-100bb-v1 --worker 0 --shards 10 --hands-per-shard 5 --depth 100 --equity-samples 8192 --seconds 540 --out out/realisation-100bb-v1
-cmd /c npx tsx apps/server/src/bot-realisation-calibrate.ts --fit --input out/realisation-100bb-v1 --out out/realisation-100bb-v1/realisation.json
-cmd /c npx vitest run apps/server/src/bot-realisation-calibrate.test.ts --maxWorkers 1 --no-file-parallelism
+cmd /c npx tsx apps/server/research/bot-realisation-calibrate.ts --seed calibration-100bb-v1 --worker 0 --shards 10 --hands-per-shard 5 --depth 100 --equity-samples 8192 --seconds 540 --out out/realisation-100bb-v1
+cmd /c npx tsx apps/server/research/bot-realisation-calibrate.ts --fit --input out/realisation-100bb-v1 --out out/realisation-100bb-v1/realisation.json
+cmd /c npx vitest run apps/server/research/bot-realisation-calibrate.test.ts --maxWorkers 1 --no-file-parallelism
 cmd /c npx tsc -p apps/server --noEmit
-cmd /c npx biome check apps/server/src/bot-realisation-calibrate.ts apps/server/src/bot-realisation-fit.ts apps/server/src/bot-realisation-calibrate.test.ts
+cmd /c npx biome check apps/server/research/bot-realisation-calibrate.ts apps/server/research/bot-realisation-fit.ts apps/server/research/bot-realisation-calibrate.test.ts
 ```
 
 Collection defaults to one value thread and rejects more than four. `--seconds`

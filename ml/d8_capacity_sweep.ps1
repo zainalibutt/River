@@ -58,8 +58,8 @@ try {
   # Never regenerate a present prepared cache. Validate its sources, then Python
   # verifies every cache/source hash and the frozen split for every fit.
   if (-not (Test-Path -LiteralPath (Join-Path $sweepCache 'cache.json'))) {
-    Invoke-SweepStep 'diagnose' $env:ComSpec (@('/c','npx','tsx','apps/server/src/bot-turn-residual-run.ts','diagnose',$sweepCache) + $Data)
-    Invoke-SweepStep 'prepare' $env:ComSpec (@('/c','npx','tsx','apps/server/src/bot-turn-residual-run.ts','prepare',$sweepCache) + $Data)
+    Invoke-SweepStep 'diagnose' $env:ComSpec (@('/c','npx','tsx','apps/server/research/bot-turn-residual-run.ts','diagnose',$sweepCache) + $Data)
+    Invoke-SweepStep 'prepare' $env:ComSpec (@('/c','npx','tsx','apps/server/research/bot-turn-residual-run.ts','prepare',$sweepCache) + $Data)
   }
   $sweepSnapshot = Get-Content -Raw (Join-Path $sweepCache 'snapshot.json') | ConvertFrom-Json
   $sweepSources = @($Data | ForEach-Object { Get-ChildItem -LiteralPath $_ -File | Where-Object { $_.Name -match '^turnstart-w\d+-\d+\.bin$' } | ForEach-Object { $_.FullName } } | Sort-Object)
@@ -89,14 +89,14 @@ try {
       Invoke-SweepStep "$($sweepConfig.Name)-$sweepSeed-export" $Python @('ml/export_turn_residual_parity.py','--out',$sweepFitOut,'--cache',$sweepCache,'--seed',"$sweepSeed")
       foreach ($sweepBackend in @('ts','wasm')) {
         $env:RIVER_VALUE_BACKEND = $sweepBackend
-        Invoke-SweepStep "$($sweepConfig.Name)-$sweepSeed-parity-$sweepBackend" $env:ComSpec @('/c','npx','tsx','apps/server/src/bot-turn-residual-parity-run.ts',"$sweepFitOut/parity-$sweepSeed.json")
+        Invoke-SweepStep "$($sweepConfig.Name)-$sweepSeed-parity-$sweepBackend" $env:ComSpec @('/c','npx','tsx','apps/server/research/bot-turn-residual-parity-run.ts',"$sweepFitOut/parity-$sweepSeed.json")
       }
     }
     $sweepTimings = @{}
     foreach ($sweepBackend in @('ts','wasm')) {
       $env:RIVER_VALUE_BACKEND = $sweepBackend
       $sweepTimingPath = Join-Path $sweepFitOut "speed-$sweepBackend.json"
-      Invoke-SweepStep "$($sweepConfig.Name)-speed-$sweepBackend" $env:ComSpec @('/c','npx','tsx','apps/server/src/bot-turn-residual-benchmark.ts',"$sweepCache/feature-cases.json","$sweepFitOut/residual-0",$sweepTimingPath)
+      Invoke-SweepStep "$($sweepConfig.Name)-speed-$sweepBackend" $env:ComSpec @('/c','npx','tsx','apps/server/research/bot-turn-residual-benchmark.ts',"$sweepCache/feature-cases.json","$sweepFitOut/residual-0",$sweepTimingPath)
       $sweepTimings[$sweepBackend] = Get-Content -Raw $sweepTimingPath | ConvertFrom-Json
       if ($sweepTimings[$sweepBackend].backend -ne $sweepBackend -or $sweepTimings[$sweepBackend].threads -ne 1) { throw 'Unexpected inference backend/thread count' }
     }

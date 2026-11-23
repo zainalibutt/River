@@ -21,13 +21,10 @@ import type { BotRiverThinker, ThinkRequest } from './bot-thinker.js'
 import type { LedgerRow, SupabaseEconomy } from './economy-service.js'
 import type { Ledger, LedgerEntry, SeatDebit, Seating, SeatingStore } from './ledger.js'
 import { defaultRoomConfig, Room, stakeForId, turnBudgetsForPreset } from './room.js'
-import type {
-  ClientPeer,
-  RoomCreationSettings,
-  RoomHubOptions,
-  ServerMessage,
-} from './transport.js'
-import { parseClientMessage, RoomHub } from './transport.js'
+import type { ClientPeer, RoomHubOptions } from './transport.js'
+import { RoomHub } from './transport.js'
+import type { RoomCreationSettings, ServerMessage } from './wire.js'
+import { parseClientMessage } from './wire.js'
 
 const ALICE = '323c30d2-9e36-4c4d-96c8-a315322b113d'
 const BOB = '78047f44-a536-4861-9d8f-784d77bda917'

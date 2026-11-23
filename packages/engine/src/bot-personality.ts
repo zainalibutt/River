@@ -1,4 +1,5 @@
 import type { BotSkill } from './bots.js'
+import { clamp01, hashMix } from './util.js'
 
 /**
  * Which characters a table's bots are drawn from. The first four are the
@@ -272,13 +273,6 @@ function pickFromPool(
   return selected
 }
 
-function hashMix(seed: number, index: number): number {
-  let value = (((seed + index * 0x9e3779b9) ^ (seed >>> 16)) >>> 0) + 0x85ebca6b
-  value = Math.imul(value ^ (value >>> 13), 0xc2b2ae35)
-  value = value ^ (value >>> 16)
-  return value >>> 0
-}
-
 export function blend(base: BotPersonality, tiltFactor: number): BotPersonality {
   const safeTilt = clamp01(tiltFactor)
   const delta = safeTilt * (1 - base.tiltResistance)
@@ -289,10 +283,4 @@ export function blend(base: BotPersonality, tiltFactor: number): BotPersonality 
     bluffRate: clamp01(base.bluffRate + delta * 0.5),
     tiltResistance: clamp01(base.tiltResistance * (1 - delta)),
   }
-}
-
-function clamp01(value: number): number {
-  if (value < 0) return 0
-  if (value > 1) return 1
-  return value
 }

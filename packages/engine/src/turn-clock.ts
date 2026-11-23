@@ -1,4 +1,5 @@
 import type { Street } from './betting.js'
+import { clamp01 } from './util.js'
 
 export interface TurnClockConfig {
   preflopSeconds?: number
@@ -74,10 +75,4 @@ export function turnClock(
     handDegrees,
     urgent,
   }
-}
-
-function clamp01(value: number): number {
-  if (value < 0) return 0
-  if (value > 1) return 1
-  return value
 }

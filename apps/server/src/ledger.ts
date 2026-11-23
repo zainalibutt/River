@@ -1,3 +1,5 @@
+import { readBody, sendBounded, serviceHeaders } from './supabase-rest.js'
+
 export interface LedgerEntry {
   playerId: string
   delta: number
@@ -157,7 +159,7 @@ export class SupabaseLedger implements Ledger, SeatingStore {
     query.searchParams.set('player_id', `eq.${playerId}`)
     query.searchParams.set('select', 'balance')
     const response = await this.send(query)
-    const body = await this.read(response)
+    const body = await readBody(response)
     if (!Array.isArray(body) || body.length > 1) {
       throw new Error('Supabase returned an invalid bankroll response')
     }
@@ -203,7 +205,7 @@ export class SupabaseLedger implements Ledger, SeatingStore {
             }),
       }),
     })
-    const body = await this.read(response)
+    const body = await readBody(response)
     if (typeof body !== 'object' || body === null) {
       throw new Error('Supabase returned an invalid seat debit')
     }
@@ -232,7 +234,7 @@ export class SupabaseLedger implements Ledger, SeatingStore {
       query.searchParams.set('order', 'opened_at.asc,player_id.asc,ref.asc')
       query.searchParams.set('limit', String(SEATING_PAGE))
       query.searchParams.set('offset', String(offset))
-      const body = await this.read(await this.send(query))
+      const body = await readBody(await this.send(query))
       if (!Array.isArray(body)) throw new Error('Supabase returned an invalid seating response')
       seatings.push(...body.map(asSeating))
       if (body.length < SEATING_PAGE) return seatings
@@ -257,7 +259,7 @@ export class SupabaseLedger implements Ledger, SeatingStore {
         ...seating,
       }),
     })
-    return asSafeBalance(await this.read(response))
+    return asSafeBalance(await readBody(response))
   }
 
   /**
@@ -271,57 +273,15 @@ export class SupabaseLedger implements Ledger, SeatingStore {
       { method: 'POST', body: JSON.stringify(row) },
       { prefer: 'return=minimal,resolution=merge-duplicates' },
     )
-    await this.read(response)
+    await readBody(response)
   }
 
-  private async send(
+  private send(
     target: URL | string,
     init: RequestInit = {},
     extraHeaders: Record<string, string> = {},
   ): Promise<Response> {
-    try {
-      return await this.request(target, {
-        ...init,
-        headers: { ...this.headers(), ...extraHeaders },
-        signal: AbortSignal.timeout(this.timeoutMs),
-      })
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.name === 'TimeoutError' || error.name === 'AbortError')
-      ) {
-        throw new Error(`Supabase did not answer within ${this.timeoutMs}ms`)
-      }
-      throw error
-    }
-  }
-
-  private headers(): Record<string, string> {
-    return {
-      apikey: this.serviceRoleKey,
-      authorization: `Bearer ${this.serviceRoleKey}`,
-      'content-type': 'application/json',
-    }
-  }
-
-  private async read(response: Response): Promise<unknown> {
-    // A write asked for nothing back answers with an empty body.
-    const text = await response.text()
-    let body: unknown = null
-    if (text.length > 0) {
-      try {
-        body = JSON.parse(text) as unknown
-      } catch (error) {
-        if (response.ok) throw error
-      }
-    }
-    if (!response.ok) {
-      const message =
-        typeof body === 'object' && body !== null && 'message' in body
-          ? String(body.message)
-          : `Supabase request failed with ${response.status}`
-      throw new Error(message)
-    }
-    return body
+    const headers = { ...serviceHeaders(this.serviceRoleKey), ...extraHeaders }
+    return sendBounded(this.request, target, init, headers, this.timeoutMs)
   }
 }

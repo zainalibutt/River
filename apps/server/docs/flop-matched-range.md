@@ -4,7 +4,7 @@ Run from the worktree root with the same network and preflop environment as the
 original production replay. Nothing contacts Slumbot or trains a network.
 
 ```powershell
-npx.cmd tsx apps/server/src/bot-flop-matched-range.ts --spots dump-a.jsonl dump-b.jsonl --index index.jsonl --solver solver-dumps --logs log-a.jsonl log-b.jsonl --mode both --out matched-both.jsonl --shard 1/1
+npx.cmd tsx apps/server/research/bot-flop-matched-range.ts --spots dump-a.jsonl dump-b.jsonl --index index.jsonl --solver solver-dumps --logs log-a.jsonl log-b.jsonl --mode both --out matched-both.jsonl --shard 1/1
 ```
 
 Replace the input names with your files. `--spots` and `--logs` take one or more

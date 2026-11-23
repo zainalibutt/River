@@ -174,7 +174,7 @@ export function defaultRoomConfig(overrides: Partial<RoomConfig> & { seed: strin
 
 const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
-function newInviteCode(source?: (size: number) => Uint8Array): string {
+export function newInviteCode(source?: (size: number) => Uint8Array): string {
   const bytes = source === undefined ? randomBytes(6) : source(6)
   if (bytes.length < 6) throw new Error('invite random source must return at least 6 bytes')
   return Array.from(bytes.slice(0, 6), (byte) => INVITE_ALPHABET[byte & 31] ?? 'R').join('')

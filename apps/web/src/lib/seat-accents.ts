@@ -32,14 +32,6 @@ export const ACCENTS: readonly Accent[] = [
 
 export const PLAYER_SEATS = 9
 
-/**
- * The exported material the accent replaces, by the name the export gives it.
- *
- * Matching on a name is only safe because the scene says so when nothing matched: a
- * renamed material would otherwise leave eight identical men and no error anywhere.
- */
-export const ACCENT_MATERIAL = 'A11 silk facing PBR'
-
 export function accentFor(
   seat: number,
   heroSeat: number | null,

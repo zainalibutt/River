@@ -7,7 +7,7 @@ turn-start leaves, including any network and 40-round solver error.
 
 ## Recorder and observation contract
 
-`src/bot-realisation-solver-calibrate.ts` enumerates every non-all-in flop
+`research/bot-realisation-solver-calibrate.ts` enumerates every non-all-in flop
 terminal in the 100/200 bb v3 packs. It uses the production
 `exactPreflopRanges` to multiply every physical holding's table action
 probabilities. There is no range normalization, support floor, or pruning.
@@ -193,15 +193,15 @@ $env:NODE_OPTIONS='--v8-pool-size=1'
 $env:RIVER_VALUE_THREADS='1'
 $env:RIVER_TURN_START_NETWORK='<models>/turnstart-c1-53k-e50/river-buckets-128'
 
-cmd /c npx tsx apps/server/src/bot-realisation-solver-calibrate.ts --seed solver-pilot-20261025 --worker 0 --shards 36 --seconds 480 --out out/realisation-solver-pilot
-cmd /c npx tsx apps/server/src/bot-realisation-solver-calibrate.ts --seed solver-pilot-20261025 --worker 1 --shards 24 --seconds 480 --out out/realisation-solver-pilot
+cmd /c npx tsx apps/server/research/bot-realisation-solver-calibrate.ts --seed solver-pilot-20261025 --worker 0 --shards 36 --seconds 480 --out out/realisation-solver-pilot
+cmd /c npx tsx apps/server/research/bot-realisation-solver-calibrate.ts --seed solver-pilot-20261025 --worker 1 --shards 24 --seconds 480 --out out/realisation-solver-pilot
 # Same commands resume; our verification used --seconds 60 and skipped all shards.
-cmd /c npx tsx apps/server/src/bot-realisation-solver-calibrate.ts --fit --input out/realisation-solver-pilot --heldout-worker 1 --out apps/server/preflop/v4/realisation.json
+cmd /c npx tsx apps/server/research/bot-realisation-solver-calibrate.ts --fit --input out/realisation-solver-pilot --heldout-worker 1 --out apps/server/preflop/v4/realisation.json
 cmd /c npx tsx apps/server/src/bot-preflop-solve-run.ts --depth 100 --tree v3 --pack-version v4 --seconds 180 --target 0.001 --realisation apps/server/preflop/v4/realisation.json --output-dir apps/server/preflop/v4
 cmd /c npx tsx apps/server/src/bot-preflop-solve-run.ts --depth 200 --tree v3 --pack-version v4 --seconds 180 --target 0.001 --realisation apps/server/preflop/v4/realisation.json --output-dir apps/server/preflop/v4
 cmd /c npx vitest run apps/server/src/bot-realisation apps/server/src/bot-preflop-solve apps/server/src/bot-flop-turn-leaves.test.ts --maxWorkers=1 --no-file-parallelism
 cmd /c npx tsc -p apps/server --noEmit
-cmd /c npx biome check apps/server/src/bot-realisation-solver-calibrate.ts apps/server/src/bot-realisation-solver-calibrate.test.ts apps/server/src/bot-realisation-fit.ts apps/server/src/bot-preflop-solve-output.ts apps/server/src/bot-preflop-solve-run.ts apps/server/src/bot-preflop-solve-realisation.test.ts apps/server/src/bot-preflop-solve.test.ts
+cmd /c npx biome check apps/server/research/bot-realisation-solver-calibrate.ts apps/server/research/bot-realisation-solver-calibrate.test.ts apps/server/research/bot-realisation-fit.ts apps/server/src/bot-preflop-solve-output.ts apps/server/src/bot-preflop-solve-run.ts apps/server/src/bot-preflop-solve-realisation.test.ts apps/server/src/bot-preflop-solve.test.ts
 ```
 
 Fit, both final pack solves, checksum restarts, tests (5 files, 59 tests),
@@ -253,8 +253,8 @@ the flop/pre-board calibration mismatch, and check on-policy range shifts
 before a large performance run. [pilot-summary.json](pilot-summary.json)
 contains the exact frequencies, fit parameters, planning fields and exit codes.
 
-Changed sources are `src/bot-realisation-solver-calibrate.ts`, its test,
-`src/bot-realisation-fit.ts`, `src/bot-preflop-solve-{run,output}.ts`,
+Changed sources are `research/bot-realisation-solver-calibrate.ts`, its test,
+`research/bot-realisation-fit.ts`, `src/bot-preflop-solve-{run,output}.ts`,
 `src/bot-preflop-solve-{realisation.test,test}.ts`, plus the preflop README
 link and this v4 directory's config, fit report, summary and JSON/text packs.
 All writes stayed in this worktree. No git command, commit or push was used.

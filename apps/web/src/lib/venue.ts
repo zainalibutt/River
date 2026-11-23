@@ -227,9 +227,6 @@ export function venueOf(id: VenueId): Venue {
   return VENUES[id]
 }
 
-/** Kept for the existing scene import; the Rooftop remains the default room. */
-export const rooftopCamera = VENUES.rooftop.camera
-
 /**
  * How many places the venue lays around the felt.
  *

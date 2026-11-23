@@ -191,7 +191,7 @@ try {
       $env:RIVER_VALUE_BACKEND=$distillBackend
       $profileFile = Join-Path $Out "$Name-$distillBackend.json"
       $profileInputs = @('.json','-bucket.json','-bucket.bin','-head.json','-head.bin' | ForEach-Object { "$Stem$_" })
-      Invoke-DistillStep "$Name-profile-$distillBackend" $distillNode @($distillTsx,'apps/server/src/bot-turn-residual-benchmark.ts',(Join-Path $Cache 'feature-cases.json'),$Stem,$profileFile) @($profileFile) {
+      Invoke-DistillStep "$Name-profile-$distillBackend" $distillNode @($distillTsx,'apps/server/research/bot-turn-residual-benchmark.ts',(Join-Path $Cache 'feature-cases.json'),$Stem,$profileFile) @($profileFile) {
         $p = Get-Content -Raw $profileFile | ConvertFrom-Json
         $p.trainedResidual -and $p.backend -eq $distillBackend -and $p.threads -le 2 -and $p.residual.medianUs -gt 0
       } $profileInputs
@@ -216,7 +216,7 @@ try {
     } $fitFiles
     foreach ($distillBackend in @('ts','wasm')) {
       $env:RIVER_VALUE_BACKEND=$distillBackend
-      Invoke-DistillStep "$Config-$Seed-parity-$distillBackend" $distillNode @($distillTsx,'apps/server/src/bot-turn-residual-parity-run.ts',$parityFile) @() {
+      Invoke-DistillStep "$Config-$Seed-parity-$distillBackend" $distillNode @($distillTsx,'apps/server/research/bot-turn-residual-parity-run.ts',$parityFile) @() {
         $p = Get-Content -Raw (Join-Path $Out "$Config-$Seed-parity-$distillBackend.log") | ConvertFrom-Json
         $p.backend -eq $distillBackend -and $p.cases -ge 5 -and $p.featureMax -le 1e-5 -and $p.outputMax -le 1e-5
       } @($parityFile)
@@ -234,7 +234,7 @@ try {
   foreach ($distillSeed in @(1,2)) { Invoke-DistillFit $distillBest $distillSeed }
   $summaryInputs = @((Join-Path $Out 'selection.json'))
   $summaryInputs += @(Get-ChildItem $distillReceiptDir -Filter '*.json' | Where-Object { $_.BaseName -ne 'summary' } | Sort-Object Name | Select-Object -ExpandProperty FullName)
-  Invoke-DistillStep 'summary' $distillNode @($distillTsx,'apps/server/src/bot-turn-residual-distill-summary.ts',$Out,$Teacher,$Packed) @((Join-Path $Out 'summary.json'),(Join-Path $Out 'summary.csv'),(Join-Path $Out 'summary.md')) { $true } $summaryInputs
+  Invoke-DistillStep 'summary' $distillNode @($distillTsx,'apps/server/research/bot-turn-residual-distill-summary.ts',$Out,$Teacher,$Packed) @((Join-Path $Out 'summary.json'),(Join-Path $Out 'summary.csv'),(Join-Path $Out 'summary.md')) { $true } $summaryInputs
   [pscustomobject]@{complete=$true;seconds=$distillClock.Elapsed.TotalSeconds;best=$distillBest} | ConvertTo-Json | Set-Content (Join-Path $Out 'complete.json')
   Get-Content (Join-Path $Out 'summary.md') | ForEach-Object { Write-Host $_ }
 } finally {

@@ -65,7 +65,7 @@ fold and all-in hands.
 cmd /c npx vitest run apps/server/src/bot-live-safe apps/server/src/bot-live-readiness apps/server/src/bot-service apps/server/src/bot-thinker apps/server/src/bot-value-simd apps/server/src/transport --maxWorkers=1 --no-file-parallelism
 cmd /c npx tsc -p apps/server --noEmit
 cmd /c npx tsc -p apps/server/tsconfig.build.json
-cmd /c npx biome check apps/server/src/bot-live-safe.ts apps/server/src/bot-live-safe-worker.ts apps/server/src/bot-live-safe.test.ts apps/server/src/bot-live-safe-worker.test.ts apps/server/src/bot-live-readiness.ts apps/server/src/bot-live-readiness.test.ts apps/server/src/bot-thinker.ts apps/server/src/main.ts apps/server/src/transport.ts apps/server/src/transport.test.ts
+cmd /c npx biome check apps/server/src/bot-live-safe.ts apps/server/src/bot-live-safe-worker.ts apps/server/src/bot-live-safe.test.ts apps/server/src/bot-live-safe-worker.test.ts apps/server/research/bot-live-readiness.ts apps/server/research/bot-live-readiness.test.ts apps/server/src/bot-thinker.ts apps/server/src/main.ts apps/server/src/transport.ts apps/server/src/transport.test.ts
 ```
 
 For the measurements each PowerShell invocation set these four variables first:
@@ -80,11 +80,11 @@ $env:RIVER_RIVER_NETWORK='<models>/night1-buckets/river-buckets-128'
 Run these as separate invocations to preserve the process-time bound:
 
 ```powershell
-cmd /c npx tsx apps/server/src/bot-live-readiness.ts --hands 25 --first-hand 0 --threads 2 --budget-ms 8000 --out out/bot-live-readiness-00-24.json
-cmd /c npx tsx apps/server/src/bot-live-readiness.ts --hands 25 --first-hand 25 --threads 2 --budget-ms 8000 --out out/bot-live-readiness-25-49.json
-cmd /c npx tsx apps/server/src/bot-live-readiness.ts --hands 25 --first-hand 50 --threads 2 --budget-ms 8000 --out out/bot-live-readiness-50-74.json
-cmd /c npx tsx apps/server/src/bot-live-readiness.ts --hands 25 --first-hand 75 --threads 2 --budget-ms 8000 --out out/bot-live-readiness-75-99.json
-cmd /c npx tsx apps/server/src/bot-live-readiness.ts --merge out/bot-live-readiness-00-24.json out/bot-live-readiness-25-49.json out/bot-live-readiness-50-74.json out/bot-live-readiness-75-99.json --out out/bot-live-readiness-100x2.json
+cmd /c npx tsx apps/server/research/bot-live-readiness.ts --hands 25 --first-hand 0 --threads 2 --budget-ms 8000 --out out/bot-live-readiness-00-24.json
+cmd /c npx tsx apps/server/research/bot-live-readiness.ts --hands 25 --first-hand 25 --threads 2 --budget-ms 8000 --out out/bot-live-readiness-25-49.json
+cmd /c npx tsx apps/server/research/bot-live-readiness.ts --hands 25 --first-hand 50 --threads 2 --budget-ms 8000 --out out/bot-live-readiness-50-74.json
+cmd /c npx tsx apps/server/research/bot-live-readiness.ts --hands 25 --first-hand 75 --threads 2 --budget-ms 8000 --out out/bot-live-readiness-75-99.json
+cmd /c npx tsx apps/server/research/bot-live-readiness.ts --merge out/bot-live-readiness-00-24.json out/bot-live-readiness-25-49.json out/bot-live-readiness-50-74.json out/bot-live-readiness-75-99.json --out out/bot-live-readiness-100x2.json
 cmd /c node apps/server/dist/bot-live-readiness.js --hands 2 --threads 2 --budget-ms 8000 --out out/bot-live-readiness-compiled.json
 cmd /c node apps/server/dist/bot-live-readiness.js --hands 2 --threads 2 --variant v9gp --budget-ms 8000 --out out/bot-live-readiness-v9gp-compiled.json
 ```
@@ -92,7 +92,7 @@ cmd /c node apps/server/dist/bot-live-readiness.js --hands 2 --threads 2 --varia
 ## Files and remaining limits
 
 New: `src/bot-live-safe.ts`, `src/bot-live-safe-worker.ts`,
-`src/bot-live-readiness.ts`, their three test files, and these two docs.
+`research/bot-live-readiness.ts`, their three test files, and these two docs.
 Updated: `src/main.ts`, `src/bot-thinker.ts`, `src/transport.ts`,
 `src/transport.test.ts`. Local build output is in `dist`; raw run artifacts
 are in the worktree's `out` directory.

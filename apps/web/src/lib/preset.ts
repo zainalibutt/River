@@ -11,8 +11,6 @@ import type { LegalActions, TurnAction } from '@river/engine'
  */
 export type PresetKind = 'check-fold' | 'call-any' | 'fold'
 
-export const PRESET_KINDS: readonly PresetKind[] = ['check-fold', 'call-any', 'fold']
-
 export const PRESET_LABELS: Record<PresetKind, string> = {
   'check-fold': 'CHECK / FOLD',
   'call-any': 'CALL ANY',

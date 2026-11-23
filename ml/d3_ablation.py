@@ -80,7 +80,7 @@ def main() -> None:
                 elif identity in training_ids:
                     raise ValueError("training/exam identity overlap")
     tsx = ["node", "--import", "tsx"]
-    run("cache", [*tsx, "apps/server/src/bot-flop-buckets-run.ts", str(out / "data")])
+    run("cache", [*tsx, "apps/server/research/bot-flop-buckets-run.ts", str(out / "data")])
     results = []
     descriptions = []
     for name in ("baseline", "potential"):
@@ -95,8 +95,8 @@ def main() -> None:
         descriptions.append(json.loads(stem.with_suffix(".json").read_text()))
         parity = out / f"parity-{name}.json"
         run(f"export-parity-{name}", [sys.executable, "ml/export_value_parity.py", str(out / "data"), str(parity), "--d3-model", str(stem)])
-        run(f"check-parity-{name}", [*tsx, "apps/server/src/bot-d3-parity-run.ts", str(parity)])
-        grading = [*tsx, "apps/server/src/bot-flop-end-check.ts", str(out / "exam"), str(stem)]
+        run(f"check-parity-{name}", [*tsx, "apps/server/research/bot-d3-parity-run.ts", str(parity)])
+        grading = [*tsx, "apps/server/research/bot-flop-end-check.ts", str(out / "exam"), str(stem)]
         if args.smoke:
             grading += ["8"]
         text = run(f"exam-{name}", grading)

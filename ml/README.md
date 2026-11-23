@@ -2,7 +2,7 @@
 
 Training for v9's value networks, which let the bots solve the turn and flop the way v8z solves the river. The plan and its measurements are in [docs/bots.md](../docs/bots.md).
 
-The data comes from the TypeScript side: `apps/server/src/bot-river-value-data-run.ts` solves random rivers with the bots' own river solver and writes them as fixed-size records. Python only trains; nothing here runs on the server, which reads the exported weights itself.
+The data comes from the TypeScript side: `apps/server/research/bot-river-value-data-run.ts` solves random rivers with the bots' own river solver and writes them as fixed-size records. Python only trains; nothing here runs on the server, which reads the exported weights itself.
 
 - `river_value_data.py` reads a run's records into numpy arrays, after checking its `manifest.json` describes the layout this reader expects.
 - `train_river_value.py` trains the river network on a GPU and exports its weights as little-endian float32, described by a JSON file.
@@ -19,8 +19,8 @@ turn-end factory, then solves the full live turn tree (100 iterations). Choose t
 leaf teacher explicitly; model stems name `.json`/`.bin` exports:
 
 ```
-npx tsx apps/server/src/bot-turn-start-data-run.ts <out> <seed> <worker> <shards> <spots-per-shard> turn-end <turn-end-model-stem>
-npx tsx apps/server/src/bot-turn-start-data-run.ts <out> <seed> <worker> <shards> <spots-per-shard> per-river <river-model-stem>
+npx tsx apps/server/research/bot-turn-start-data-run.ts <out> <seed> <worker> <shards> <spots-per-shard> turn-end <turn-end-model-stem>
+npx tsx apps/server/research/bot-turn-start-data-run.ts <out> <seed> <worker> <shards> <spots-per-shard> per-river <river-model-stem>
 ```
 
 Omit the stem (or pass `-`) to use `RIVER_TURN_NETWORK` / `RIVER_RIVER_NETWORK`.

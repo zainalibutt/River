@@ -1,4 +1,5 @@
 import type { BanList } from './admin.js'
+import { readBody, sendBounded, serviceHeaders } from './supabase-rest.js'
 
 export interface SupabaseBanListOptions {
   supabaseUrl: string
@@ -61,7 +62,7 @@ export class SupabaseBanList implements BanList {
     const query = this.table()
     query.searchParams.set('player_id', `eq.${id}`)
     query.searchParams.set('select', 'player_id')
-    const body = await this.read(await this.send(query))
+    const body = await readBody(await this.send(query))
     if (!Array.isArray(body) || body.length > 1) {
       throw new Error('Supabase returned an invalid ban response')
     }
@@ -84,12 +85,12 @@ export class SupabaseBanList implements BanList {
         { method: 'POST', body: JSON.stringify({ player_id: id }) },
         { prefer: 'return=minimal,resolution=ignore-duplicates' },
       )
-      await this.read(response)
+      await readBody(response)
       return
     }
     const query = this.table()
     query.searchParams.set('player_id', `eq.${id}`)
-    await this.read(await this.send(query, { method: 'DELETE' }, { prefer: 'return=minimal' }))
+    await readBody(await this.send(query, { method: 'DELETE' }, { prefer: 'return=minimal' }))
   }
 
   async list(): Promise<string[]> {
@@ -100,7 +101,7 @@ export class SupabaseBanList implements BanList {
       query.searchParams.set('order', 'player_id.asc')
       query.searchParams.set('limit', String(BAN_PAGE))
       query.searchParams.set('offset', String(offset))
-      const body = await this.read(await this.send(query))
+      const body = await readBody(await this.send(query))
       if (!Array.isArray(body)) throw new Error('Supabase returned an invalid ban response')
       banned.push(...body.map(bannedId))
       if (body.length < BAN_PAGE) return banned.sort()
@@ -111,51 +112,12 @@ export class SupabaseBanList implements BanList {
     return new URL(`${this.baseUrl}/rest/v1/player_bans`)
   }
 
-  private async send(
+  private send(
     target: URL,
     init: RequestInit = {},
     extraHeaders: Record<string, string> = {},
   ): Promise<Response> {
-    try {
-      return await this.request(target, {
-        ...init,
-        headers: {
-          apikey: this.serviceRoleKey,
-          authorization: `Bearer ${this.serviceRoleKey}`,
-          'content-type': 'application/json',
-          ...extraHeaders,
-        },
-        signal: AbortSignal.timeout(this.timeoutMs),
-      })
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.name === 'TimeoutError' || error.name === 'AbortError')
-      ) {
-        throw new Error(`Supabase did not answer within ${this.timeoutMs}ms`)
-      }
-      throw error
-    }
-  }
-
-  private async read(response: Response): Promise<unknown> {
-    // A write asked for nothing back answers with an empty body.
-    const text = await response.text()
-    let body: unknown = null
-    if (text.length > 0) {
-      try {
-        body = JSON.parse(text) as unknown
-      } catch (error) {
-        if (response.ok) throw error
-      }
-    }
-    if (!response.ok) {
-      const message =
-        typeof body === 'object' && body !== null && 'message' in body
-          ? String(body.message)
-          : `Supabase request failed with ${response.status}`
-      throw new Error(message)
-    }
-    return body
+    const headers = { ...serviceHeaders(this.serviceRoleKey), ...extraHeaders }
+    return sendBounded(this.request, target, init, headers, this.timeoutMs)
   }
 }
