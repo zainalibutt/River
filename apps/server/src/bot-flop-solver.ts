@@ -49,9 +49,6 @@ export function solveFlop(
   )
 }
 
-/** Turn and river cards an all-in on the flop is averaged over, of the 1,176 there are. */
-export const FLOP_ALL_IN_RUNOUTS = 60
-
 /** `runouts` distinct turn and river pairs for a flop, the same ones every time for that flop. */
 export function flopRunouts(
   board: RiverSpot['board'],

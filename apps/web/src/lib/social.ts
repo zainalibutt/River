@@ -12,17 +12,6 @@ export const EMOTE_LABELS: Record<Emote, string> = {
   tableKnock: 'KNOCK',
 }
 
-export const EMOTE_ORDER: readonly Emote[] = [
-  'wave',
-  'laugh',
-  'fistPump',
-  'facepalm',
-  'chipTrick',
-  'tableKnock',
-  'dance',
-  'confetti',
-]
-
 export type SocialFeedKind = 'chat' | 'emote' | 'vo'
 
 export interface SocialFeedEntry {
@@ -119,9 +108,6 @@ export function applySpeaking(
   else next.delete(event.playerId)
   return next
 }
-
-/** Lines a player can send in one tap: short, friendly, and what a table of friends says. */
-export const QUICK_LINES = ['Nice hand', 'Good luck', 'Unlucky', 'Well played', 'Thanks'] as const
 
 /** How long a line stays up at the seat that said it. */
 export const BUBBLE_MS = 4_200

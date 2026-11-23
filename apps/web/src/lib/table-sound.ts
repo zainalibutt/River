@@ -1,5 +1,5 @@
 /**
- * The table's sound: fourteen short effects, played on the moments the table already draws.
+ * The table's sound: sixteen short effects, played on the moments the table already draws.
  *
  * The effects were synthesised and gated weeks ago and nothing ever played them. They load
  * on the first press or key, because a browser will not start audio before a person has
