@@ -1,6 +1,7 @@
 import type { Street } from './betting.js'
 import type { Card } from './cards.js'
 import type { HandAction, HandRecord } from './hand-history.js'
+import { groupThousands } from './util.js'
 
 export interface ReplayFrame {
   index: number
@@ -62,7 +63,7 @@ export function buildReplay(record: HandRecord): readonly ReplayFrame[] {
   frames.push({
     index: frames.length,
     street,
-    label: `Pot settled at ${formatChips(settled)}`,
+    label: `Pot settled at ${groupThousands(settled)}`,
     potAfter: settled,
     boardAfter: boardFor(record, street),
     actingSeat: null,
@@ -136,7 +137,7 @@ function actionLabel(action: HandAction): string {
   const seat = `Seat ${action.seat}`
   switch (action.action.kind) {
     case 'raiseTo':
-      return `${seat} raises to ${formatChips(action.action.to)}`
+      return `${seat} raises to ${groupThousands(action.action.to)}`
     case 'call':
       return `${seat} calls`
     case 'check':
@@ -146,12 +147,6 @@ function actionLabel(action: HandAction): string {
     case 'allIn':
       return `${seat} goes all in`
   }
-}
-
-function formatChips(amount: number): string {
-  const sign = amount < 0 ? '-' : ''
-  const digits = String(Math.abs(Math.trunc(amount)))
-  return `${sign}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
 }
 
 function boardFor(record: HandRecord, street: Street): Card[] {

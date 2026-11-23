@@ -1,3 +1,5 @@
+import { hashMix } from './util.js'
+
 export type ChallengeMetric =
   | 'handsPlayed'
   | 'handsWon'
@@ -109,13 +111,6 @@ export function dailySet(daySeed: number, count = 3): readonly Challenge[] {
     if (challenge !== undefined) selected.push(challenge)
   }
   return selected
-}
-
-function hashMix(seed: number, index: number): number {
-  let value = (((seed + index * 0x9e3779b9) ^ (seed >>> 16)) >>> 0) + 0x85ebca6b
-  value = Math.imul(value ^ (value >>> 13), 0xc2b2ae35)
-  value = value ^ (value >>> 16)
-  return value >>> 0
 }
 
 export function progressFor(challenge: Challenge, tally: MetricTally): ChallengeProgress {

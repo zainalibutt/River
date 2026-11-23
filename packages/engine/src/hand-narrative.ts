@@ -1,4 +1,5 @@
 import type { HandAction, HandRecord, HandSeatResult } from './hand-history.js'
+import { groupThousands } from './util.js'
 
 export interface ShowdownLine {
   seat: number
@@ -123,13 +124,13 @@ function buildOutcome(
   if (delta > 0) {
     const uncontested = !record.results.some((result) => result.showed)
     return showed
-      ? `won ${formatChips(delta)} at the showdown`
-      : `won ${formatChips(delta)}${uncontested ? ' uncontested' : ''} ${streetWord}`
+      ? `won ${groupThousands(delta)} at the showdown`
+      : `won ${groupThousands(delta)}${uncontested ? ' uncontested' : ''} ${streetWord}`
   }
   if (delta < 0) {
     return showed
-      ? `lost ${formatChips(-delta)} at the showdown`
-      : `lost ${formatChips(-delta)} ${streetWord}`
+      ? `lost ${groupThousands(-delta)} at the showdown`
+      : `lost ${groupThousands(-delta)} ${streetWord}`
   }
   return showed ? `broke even at the showdown` : `broke even ${streetWord}`
 }
@@ -156,10 +157,4 @@ function finalStreet(record: HandRecord): Street {
 
 function streetIndex(street: Street | StreetTuple): number {
   return STREET_ORDER.indexOf(street)
-}
-
-function formatChips(amount: number): string {
-  const sign = amount < 0 ? '-' : ''
-  const digits = String(Math.abs(Math.trunc(amount)))
-  return `${sign}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
 }

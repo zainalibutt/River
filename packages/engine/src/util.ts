@@ -23,3 +23,24 @@ export function combinations<T>(items: readonly T[], size: number): T[][] {
   visit(0)
   return result
 }
+
+/** A seed and an index mixed into a well-spread 32-bit integer. */
+export function hashMix(seed: number, index: number): number {
+  let value = (((seed + index * 0x9e3779b9) ^ (seed >>> 16)) >>> 0) + 0x85ebca6b
+  value = Math.imul(value ^ (value >>> 13), 0xc2b2ae35)
+  value = value ^ (value >>> 16)
+  return value >>> 0
+}
+
+export function clamp01(value: number): number {
+  if (value < 0) return 0
+  if (value > 1) return 1
+  return value
+}
+
+/** A whole number of chips with its thousands grouped: 12,345. */
+export function groupThousands(amount: number): string {
+  const sign = amount < 0 ? '-' : ''
+  const digits = String(Math.abs(Math.trunc(amount)))
+  return `${sign}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
+}
