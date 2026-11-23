@@ -128,7 +128,7 @@ All outputs are inside the worktree. No git command, commit, or push is involved
 ```text
 cmd /c npx tsx apps/server/src/bot-preflop-solve-run.ts --depth 100 --tree v3 --seconds 120 --target 0.001
 cmd /c npx tsx apps/server/src/bot-preflop-solve-run.ts --depth 200 --tree v3 --seconds 120 --target 0.001
-cmd /c npx tsx apps/server/src/bot-preflop-translation-audit.ts <six completed JSONL paths>
+cmd /c npx tsx apps/server/research/bot-preflop-translation-audit.ts <six completed JSONL paths>
 cmd /c npx vitest run apps/server/src/bot-preflop apps/server/src/bot-v9g-policy.test.ts --maxWorkers=1 --no-file-parallelism
 cmd /c npx tsc -p apps/server --noEmit
 cmd /c node apps/server/tools/check-preflop-mutations.mjs
@@ -155,9 +155,9 @@ Changed files:
 - `src/bot-preflop-solve-output.ts`: v3 labels, all open headlines and node grids.
 - `src/bot-preflop-solve-run.ts`: `--tree v2|v3`, v3 default output directory.
 - `src/bot-preflop-tables.ts`: default v3 loading and version-keyed pack cache.
-- `src/bot-preflop-translation-audit.ts`: public ACPC replay through the live mapper.
+- `research/bot-preflop-translation-audit.ts`: public ACPC replay through the live mapper.
 - `src/bot-preflop-solve.test.ts`, `src/bot-preflop-solve-realisation.test.ts`,
-  `src/bot-preflop-tables.test.ts`, `src/bot-preflop-translation-audit.test.ts`:
+  `src/bot-preflop-tables.test.ts`, `research/bot-preflop-translation-audit.test.ts`:
   legality, all-node lookup/sampling, exact 2 bb mapping, pack certificates,
   legacy loading, reach products, and historical replay regression coverage.
 - `tools/check-preflop-mutations.mjs`: repaired all-in mutation anchor.
@@ -169,5 +169,5 @@ Paths above are relative to `apps/server/`. V1/v2 JSON and text packs were not
 rewritten. The exact final lint command was:
 
 ```text
-cmd /c npx biome check apps/server/src/bot-preflop-solve-tree.ts apps/server/src/bot-preflop-solve-output.ts apps/server/src/bot-preflop-solve-run.ts apps/server/src/bot-preflop-tables.ts apps/server/src/bot-preflop-solve.test.ts apps/server/src/bot-preflop-solve-realisation.test.ts apps/server/src/bot-preflop-tables.test.ts apps/server/src/bot-preflop-translation-audit.ts apps/server/src/bot-preflop-translation-audit.test.ts apps/server/tools/check-preflop-mutations.mjs
+cmd /c npx biome check apps/server/src/bot-preflop-solve-tree.ts apps/server/src/bot-preflop-solve-output.ts apps/server/src/bot-preflop-solve-run.ts apps/server/src/bot-preflop-tables.ts apps/server/src/bot-preflop-solve.test.ts apps/server/src/bot-preflop-solve-realisation.test.ts apps/server/src/bot-preflop-tables.test.ts apps/server/research/bot-preflop-translation-audit.ts apps/server/research/bot-preflop-translation-audit.test.ts apps/server/tools/check-preflop-mutations.mjs
 ```

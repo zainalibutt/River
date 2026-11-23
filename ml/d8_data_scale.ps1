@@ -115,7 +115,7 @@ try {
     if ($code -ne 0) { throw "$Name failed, exit $code; see its log in $Out" }
   }
   if (-not (Test-Path -LiteralPath (Join-Path $scaleCache 'cache.json'))) {
-    $scalePrepareArgs = @('/c','npx','tsx','apps/server/src/bot-turn-residual-expanded-run.ts',$scaleC1,$scaleCache,$BucketModel) + $C2Data
+    $scalePrepareArgs = @('/c','npx','tsx','apps/server/research/bot-turn-residual-expanded-run.ts',$scaleC1,$scaleCache,$BucketModel) + $C2Data
     if ($TeacherModel) { $scalePrepareArgs += @('--teacher-model',$TeacherModel) }
     Invoke-ScaleStep 'prepare' $env:ComSpec $scalePrepareArgs
   }
@@ -145,7 +145,7 @@ try {
         Invoke-ScaleStep "$scaleConfig-$scaleSeed-export" $Python @('ml/export_turn_residual_parity.py','--out',$scaleFitOut,'--cache',$scaleCache,'--seed',"$scaleSeed")
         foreach ($scaleBackend in @('ts','wasm')) {
           $env:RIVER_VALUE_BACKEND = $scaleBackend
-          Invoke-ScaleStep "$scaleConfig-$scaleSeed-parity-$scaleBackend" $env:ComSpec @('/c','npx','tsx','apps/server/src/bot-turn-residual-parity-run.ts',"$scaleFitOut/parity-$scaleSeed.json")
+          Invoke-ScaleStep "$scaleConfig-$scaleSeed-parity-$scaleBackend" $env:ComSpec @('/c','npx','tsx','apps/server/research/bot-turn-residual-parity-run.ts',"$scaleFitOut/parity-$scaleSeed.json")
         }
       }
     }

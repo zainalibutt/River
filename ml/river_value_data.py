@@ -1,6 +1,6 @@
 """Reads the river value network's training data (docs/bots.md).
 
-The data factory (apps/server/src/bot-river-value-data-run.ts) writes fixed-size,
+The data factory (apps/server/research/bot-river-value-data-run.ts) writes fixed-size,
 little-endian records in shards named river-wNN-NNNNN.bin, beside a manifest.json
 that describes the layout. Holdings are numbered 0 to 1,325 by their two card keys,
 in the order (0, 1), (0, 2) ... (50, 51), where a card key is the card's place in the

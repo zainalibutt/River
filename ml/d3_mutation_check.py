@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TS = "apps/server/src/bot-flop-buckets.ts"
 NET = "apps/server/src/bot-value-network.ts"
 PY = "ml/d3_prepare.py"
-CLI = "apps/server/src/bot-flop-buckets-run.ts"
+CLI = "apps/server/research/bot-flop-buckets-run.ts"
 MUTANTS = [
     ("variance", TS, "+ p * p", "+ p"),
     ("ties", TS, "((start + end) / 2 / members.length)", "(start / members.length)"),
@@ -38,7 +38,7 @@ def main() -> None:
         content = original.decode()
         if content.count(before) != 1:
             raise AssertionError(f"mutation anchor changed: {name}")
-        test_file = "apps/server/src/bot-flop-buckets-run.test.ts" if file == CLI else "apps/server/src/bot-flop-buckets.test.ts"
+        test_file = "apps/server/research/bot-flop-buckets-run.test.ts" if file == CLI else "apps/server/src/bot-flop-buckets.test.ts"
         command = ([sys.executable, "ml/test_d3_prepare.py"] if file == PY else
                    ["node", "node_modules/vitest/vitest.mjs", "run", test_file])
         try:

@@ -3,8 +3,8 @@
 Run from the repository root (PowerShell uses `npx.cmd`):
 
 ```sh
-npx tsx apps/server/src/bot-street-parity.ts --make-spec --dumps apps/server/benchmark/flop-root.jsonl --count 10 --seed parity-1 --street river --pot 10 --stack 30 --iterations 40 --out apps/server/benchmark/river-spec.jsonl
-npx tsx apps/server/src/bot-street-parity.ts --spec apps/server/benchmark/river-spec.jsonl --out apps/server/benchmark/river-parity.jsonl --iterations-multiplier 10 --texas-dir apps/server/benchmark/texas-river --threads 8
+npx tsx apps/server/research/bot-street-parity.ts --make-spec --dumps apps/server/benchmark/flop-root.jsonl --count 10 --seed parity-1 --street river --pot 10 --stack 30 --iterations 40 --out apps/server/benchmark/river-spec.jsonl
+npx tsx apps/server/research/bot-street-parity.ts --spec apps/server/benchmark/river-spec.jsonl --out apps/server/benchmark/river-parity.jsonl --iterations-multiplier 10 --texas-dir apps/server/benchmark/texas-river --threads 8
 ```
 
 Use `--street turn` to generate turn games. Turn solves require
