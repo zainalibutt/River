@@ -8,7 +8,7 @@ export function writeLearningArtifact(value: unknown, filename: string): string 
     throw new Error('unsupported learning artifact name')
   }
   const source = dirname(fileURLToPath(import.meta.url))
-  const output = resolve(source, '..', filename)
+  const output = resolve(source, '../models', filename)
   const biome = resolve(source, '../../../node_modules/@biomejs/biome/bin/biome')
   const content = execFileSync(process.execPath, [biome, 'format', `--stdin-file-path=${output}`], {
     input: `${JSON.stringify(value, null, 2)}\n`,

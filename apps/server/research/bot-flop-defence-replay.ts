@@ -101,7 +101,7 @@ export function replayOutputPath(file: string) {
       rel !== '' &&
       rel !== '..' &&
       !rel.startsWith(`..\\`) &&
-      !rel.startsWith('../..') &&
+      !rel.startsWith('../') &&
       !isAbsolute(rel)
     )
   }

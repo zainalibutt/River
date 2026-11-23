@@ -302,7 +302,7 @@ export function writeSolverShard(
 function inside(path: string) {
   const absolute = resolve(path),
     rel = relative(process.cwd(), absolute)
-  if (rel === '..' || rel.startsWith('..\\') || rel.startsWith('../..') || isAbsolute(rel))
+  if (rel === '..' || rel.startsWith('..\\') || rel.startsWith('../') || isAbsolute(rel))
     throw new Error('writes must stay inside the worktree')
   return absolute
 }
