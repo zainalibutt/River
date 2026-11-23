@@ -76,16 +76,6 @@
   transform: translateX(-50%);
 }
 
-.action-pin {
-  box-shadow:
-    0 0 0 2px var(--river-brass-lo),
-    0 0 0 3px var(--river-brass-face),
-    0 1px 0 3px rgb(255 216 154 / 22%),
-    0 10px 22px rgb(0 0 0 / 55%),
-    inset 0 0 0 2px color-mix(in srgb, currentColor 34%, transparent),
-    inset 0 1px 6px rgb(0 0 0 / 60%);
-}
-
 .action-pin svg {
   width: 25px;
   height: 25px;
