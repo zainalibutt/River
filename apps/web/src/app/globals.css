@@ -204,25 +204,6 @@ input:focus-visible {
   pointer-events: auto;
 }
 
-.dom-table-fallback {
-  position: absolute;
-  inset: 70px 52px 108px;
-  z-index: 0;
-  border: 34px solid var(--river-rail);
-  border-radius: 48% / 42%;
-  background: var(--river-felt);
-  background-image: radial-gradient(
-    ellipse at 50% 46%,
-    var(--river-felt-lit) 0%,
-    var(--river-felt) 52%,
-    var(--river-felt-shadow) 100%
-  );
-  box-shadow:
-    inset 0 3px 0 var(--river-rail-hi),
-    0 30px 80px rgb(0 0 0 / 58%),
-    0 0 0 1px rgb(184 115 51 / 28%);
-}
-
 .felt {
   position: absolute;
   inset: 0;
@@ -257,36 +238,12 @@ input:focus-visible {
   opacity: 0.94;
 }
 
-/*
- * The top row, on the club tokens.
- *
- * Ten controls used to sit up here in four treatments: lamp-room buttons, two
- * pill shapes, an amber invite strip and a pair of loose toggles. The menus
- * settled one vocabulary in club.css and its custom properties are declared on
- * :root, so the row borrows them directly rather than growing a second
- * palette: smoked glass, a single hairline rule, tracked ivory micro-caps, and
- * brass kept for the open or live state. Every control in either corner row
- * shares the one rule below, which is what makes the next control land
- * already dressed.
- */
-.menu-cluster {
-  /* Kept for river-table.tsx, which still renders the old cluster. The live
-     table's controls sit in the .hud-corner rows instead. */
-  position: absolute;
-  top: 54px;
-  left: 96px;
-  z-index: 20;
-  display: flex;
-  gap: 14px;
-}
-
 /* Same lamp as the ring. These were flat glass with a hairline and nothing
    else, which read fine in isolation and cheap beside a machined dial, so they
    take the grain, the lit top edge and the occluded bottom one that everything
    else in the HUD now carries. */
 .hud-corner > button,
-.hud-corner > .network-mark,
-.menu-cluster button {
+.hud-corner > .network-mark {
   display: flex;
   align-items: center;
   height: 44px;
@@ -323,7 +280,6 @@ input:focus-visible {
 /* An open panel is where the player's attention is: brass, like any focus. */
 button.lobby-toggle-button.open,
 button.settings-toggle.open,
-button.shop-toggle.open,
 button.social-toggle.open {
   border-color: var(--club-brass);
   color: var(--club-brass);
@@ -353,40 +309,9 @@ button.invite-chip.showing-code {
   font-variant-numeric: tabular-nums;
 }
 
-.pot-readout {
-  /* The reference has no pot text at all - the pot is a pile of chips on the
-     felt. The number stays because the venue does not yet count chips for
-     you, but it stays as a figure, not a panel: no ground, a micro-label, and
-     tabular ivory where a 30px amber shout used to be. */
-  position: absolute;
-  top: 236px;
-  left: 810px;
-  display: grid;
-  width: 300px;
-  gap: 4px;
-  justify-items: center;
-  text-align: center;
-}
-
-.pot-readout > span {
-  color: var(--club-brass);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.34em;
-  text-indent: 0.34em;
-}
-
 /* A hairline rule under the pot, lit in the middle and fading at both ends, so
    the figure sits on something without acquiring a panel. */
-.pot-readout::after {
-  width: 132px;
-  height: 1px;
-  margin-top: 2px;
-  background: linear-gradient(90deg, transparent, var(--river-brass), transparent);
-  content: "";
-}
 
-.street-label,
 .eyebrow {
   color: var(--river-cream-faint);
   font-size: 20px;
@@ -394,24 +319,6 @@ button.invite-chip.showing-code {
   letter-spacing: 0.12em;
 }
 
-.pot-readout strong {
-  color: var(--river-amber-bright);
-  font-size: 36px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  text-shadow: 0 3px 14px rgb(0 0 0 / 84%);
-}
-
-.pot-chips {
-  position: absolute;
-  right: 198px;
-  bottom: -5px;
-  width: 36px;
-  height: 20px;
-}
-
-.pot-chips i,
 .seat-bet i {
   position: absolute;
   width: 36px;
@@ -420,14 +327,6 @@ button.invite-chip.showing-code {
   border-radius: 50%;
   background: #b03a32;
   box-shadow: 0 2px 5px rgb(0 0 0 / 45%);
-}
-
-.pot-chips i:nth-child(2) {
-  translate: 0 -7px;
-}
-
-.pot-chips i:nth-child(3) {
-  translate: 0 -14px;
 }
 
 .board {
@@ -439,21 +338,7 @@ button.invite-chip.showing-code {
   text-align: center;
 }
 
-.street-label {
-  display: block;
-  height: 28px;
-}
-
-.board-cards {
-  display: flex;
-  height: 134px;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-}
-
-.playing-card,
-.card-well {
+.playing-card {
   position: relative;
   width: 96px;
   height: 134px;
@@ -497,15 +382,6 @@ button.invite-chip.showing-code {
   font-size: 56px;
 }
 
-.playing-card .card-corner {
-  position: absolute;
-  right: 10px;
-  bottom: 8px;
-  font-size: 26px;
-  font-weight: 800;
-  rotate: 180deg;
-}
-
 .suit-h {
   color: var(--river-suit-heart);
 }
@@ -518,25 +394,12 @@ button.invite-chip.showing-code {
   color: var(--river-suit-club);
 }
 
-.deck-two-colour .suit-d {
-  color: var(--river-suit-heart);
-}
-
-.deck-two-colour .suit-c {
-  color: var(--river-suit-spade);
-}
-
 /* An undealt card is nothing, not a grey box.
 
    The well still occupies its slot so the board does not jump as cards land -
    that is the whole reason it exists - but it stops painting itself onto the
    felt. Preflop this was five lit rectangles lying across the table, which is
    the one place the reference never puts a persistent element. */
-.card-well {
-  border: 0;
-  background: none;
-  box-shadow: none;
-}
 
 .status-line {
   /* "Waiting for next hand" belongs low and quiet. At 800x56 and 26px this ran
@@ -649,8 +512,7 @@ button.invite-chip.showing-code {
     0 20px 38px rgb(0 0 0 / 50%);
 }
 
-.seat.folded,
-.seat.sitting-out {
+.seat.folded {
   opacity: 0.55;
 }
 
@@ -728,38 +590,9 @@ button.invite-chip.showing-code {
   color: var(--river-amber-bright);
 }
 
-.timer-housing {
-  width: 64px;
-  height: 64px;
-  border: 2px solid rgb(138 129 119 / 22%);
-  border-radius: 50%;
-}
-
 .hero-seat .avatar {
   width: 72px;
   height: 72px;
-}
-
-.hero-seat .timer-housing {
-  width: 56px;
-  height: 56px;
-}
-
-.dealer-button {
-  position: absolute;
-  right: -28px;
-  bottom: -22px;
-  display: grid;
-  width: 56px;
-  height: 56px;
-  place-items: center;
-  border: 5px solid var(--river-copper);
-  border-radius: 50%;
-  background: var(--river-cream);
-  color: var(--river-rail);
-  font-size: 26px;
-  font-weight: 800;
-  box-shadow: 0 8px 20px rgb(0 0 0 / 50%);
 }
 
 .seat-bet {
@@ -835,10 +668,6 @@ button.invite-chip.showing-code {
   font-size: 34px;
 }
 
-.seat-cards .playing-card .card-corner {
-  display: none;
-}
-
 .card-back {
   display: grid;
   place-items: center;
@@ -852,86 +681,10 @@ button.invite-chip.showing-code {
   font-size: 28px;
 }
 
-/*
- * Your hand, bottom left, and it does not move.
- *
- * This block used to be `.hero-seat .seat-cards` at left: -278px from the
- * hero's seat marker, and that marker sits at the seat's projected 3D
- * position - so orbiting the camera swung your own cards across the screen.
- * The two things a player reads most were the two that would not hold still.
- *
- * The measured position from the shot-composition study: a bottom-left
- * block, clear of the action rail, holding the hole cards and what they make.
- * Coordinates are in the HUD's authored 1920x1080 space.
- */
-.hero-hand {
-  position: absolute;
-  left: 96px;
-  bottom: 188px;
-  z-index: 16;
-  display: grid;
-  gap: 14px;
-  pointer-events: none;
-}
-
-/* Held, not laid out. The pair fans from a shared origin the way a hand does
-   in the world, which is the cheapest thing on this screen that reads as a
-   physical object rather than as two divs in a flex row. */
-.hero-hand-cards {
-  display: flex;
-  gap: 2px;
-  padding-bottom: 12px;
-}
-
-.hero-hand .playing-card:first-child,
-.hero-hand .card-back:first-child {
-  transform: rotate(-5deg) translateY(6px);
-  transform-origin: bottom center;
-}
-
-.hero-hand .playing-card:last-child,
-.hero-hand .card-back:last-child {
-  transform: rotate(5deg) translateY(6px);
-  transform-origin: bottom center;
-}
-
 /* 168 x 235 base-canvas pixels, from 04-anatomy.md. At 120 x 168 the hand a
    player is reading under a fifteen second clock was the smallest thing on
    screen carrying information, and the pip and rank scale with the card rather
    than staying at the community-card size. */
-.hero-hand .playing-card,
-.hero-hand .card-back {
-  width: 168px;
-  height: 235px;
-  border-radius: 16px;
-}
-
-.hero-hand .playing-card > span:first-child {
-  top: 11px;
-  left: 14px;
-  font-size: 45px;
-}
-
-.hero-hand .playing-card > b {
-  font-size: 78px;
-}
-
-.hero-hand .playing-card .card-corner {
-  right: 14px;
-  bottom: 11px;
-  font-size: 36px;
-}
-
-.hero-hand-readout {
-  margin: 0;
-  max-width: 348px;
-  color: var(--river-amber);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-shadow: 0 2px 10px rgb(0 0 0 / 70%);
-  text-transform: uppercase;
-}
 
 .action-rail {
   position: absolute;
@@ -948,14 +701,6 @@ button.invite-chip.showing-code {
   border-radius: 24px 24px 0 0;
   background: linear-gradient(180deg, var(--river-rail-hi) 0, var(--river-rail) 3px, #2e2018 100%);
   box-shadow: 0 -16px 40px rgb(0 0 0 / 38%);
-}
-
-.action-rail.single-action {
-  justify-content: center;
-}
-
-.action-rail.single-action > button {
-  width: 420px;
 }
 
 .bet-sizing {
@@ -997,76 +742,6 @@ button.invite-chip.showing-code {
   color: var(--river-cream-dim);
   font-size: 20px;
   font-weight: 700;
-}
-
-.action-buttons {
-  display: grid;
-  width: 1040px;
-  grid-template-columns: 196px repeat(3, 260px);
-  gap: 16px;
-}
-
-.action-buttons > button,
-.single-action > button {
-  position: relative;
-  height: 88px;
-  overflow: hidden;
-  border: 2px solid var(--river-room-edge);
-  border-radius: 10px;
-  background: linear-gradient(180deg, #24302b, #171e1b);
-  color: var(--river-cream);
-  font-size: 26px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 6%),
-    0 8px 24px rgb(0 0 0 / 50%);
-}
-
-.action-buttons > button:hover:not(:disabled),
-.single-action > button:hover:not(:disabled) {
-  translate: 0 -2px;
-  border-color: var(--river-amber);
-}
-
-.action-buttons > button:disabled {
-  cursor: default;
-  opacity: 0.4;
-}
-
-.action-buttons .all-in-button,
-.action-buttons .raise-button {
-  border-color: var(--river-amber);
-}
-
-.action-buttons .fold-button {
-  border-color: var(--river-danger-deep);
-  color: var(--river-danger);
-}
-
-.action-buttons .holding::after {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgb(232 169 60 / 28%), transparent);
-  content: "";
-  transform-origin: left;
-  animation: hold-fill var(--hold-duration) linear forwards;
-}
-
-.playback-label {
-  position: absolute;
-  top: 718px;
-  left: 50%;
-  z-index: 13;
-  padding: 12px 24px;
-  border: 1px solid rgb(232 169 60 / 35%);
-  border-radius: 999px;
-  background: rgb(19 25 22 / 82%);
-  color: var(--river-amber-bright);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  transform: translateX(-50%);
 }
 
 .modal-backdrop {
@@ -1116,53 +791,6 @@ button.invite-chip.showing-code {
   background: var(--river-room);
   color: var(--river-cream-dim);
   font-weight: 700;
-}
-
-.skill-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
-.skill-grid button,
-.deck-toggle {
-  min-height: 132px;
-  padding: 22px;
-  border: 1px solid var(--river-room-edge);
-  border-radius: 16px;
-  background: var(--river-room);
-  text-align: left;
-}
-
-.skill-grid button.selected {
-  border-color: var(--river-amber);
-  box-shadow: inset 0 0 0 2px rgb(232 169 60 / 18%);
-}
-
-.skill-grid strong,
-.skill-grid span {
-  display: block;
-}
-
-.skill-grid strong {
-  margin-bottom: 12px;
-  color: var(--river-cream);
-  font-size: 24px;
-}
-
-.skill-grid span {
-  color: var(--river-cream-dim);
-  font-size: 18px;
-  line-height: 1.4;
-}
-
-.deck-toggle {
-  width: 100%;
-  min-height: 64px;
-  margin-top: 16px;
-  color: var(--river-cream-dim);
-  font-weight: 700;
-  text-align: center;
 }
 
 .verify-modal code {
@@ -1418,28 +1046,6 @@ button.invite-chip.showing-code {
 
 .seat.reconnecting .seat-copy small {
   color: var(--river-amber-bright);
-}
-
-.remote-timer {
-  position: absolute;
-  top: -48px;
-  left: 50%;
-  display: grid;
-  width: 76px;
-  height: 76px;
-  place-items: center;
-  border: 4px solid var(--river-amber);
-  border-radius: 50%;
-  background: conic-gradient(
-    var(--river-amber) calc(var(--timer-progress) * 1turn),
-    rgb(10 13 12 / 86%) 0
-  );
-  box-shadow: 0 6px 18px rgb(0 0 0 / 50%);
-  color: var(--river-cream);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  transform: translateX(-50%);
 }
 
 .kick-control {
@@ -1786,10 +1392,6 @@ button.invite-chip.showing-code {
     animation-iteration-count: 1;
     transition-duration: 120ms;
   }
-
-  .action-buttons .holding::after {
-    animation-duration: var(--hold-duration);
-  }
 }
 
 /* Verify panel — the fairness commit is only a claim until the player can
@@ -1895,52 +1497,6 @@ button.verify-pill.verify-mismatch {
 /* Preset actions. Private to the player, so they sit outside the RAM wedge
    circle and read at reduced emphasis - the public half of this mechanic is the
    avatar gesture, not the HUD. */
-.preset-rail {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  min-inline-size: auto;
-  position: absolute;
-  bottom: 300px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 22;
-  display: flex;
-  gap: 12px;
-}
-
-.preset-chip {
-  padding: 10px 18px;
-  border: 1px dashed var(--river-room-edge);
-  border-radius: 999px;
-  background: rgb(27 35 32 / 62%);
-  color: var(--river-cream-faint);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  opacity: 0.72;
-  transition:
-    opacity 140ms var(--ease-out),
-    color 140ms var(--ease-out);
-}
-
-.preset-chip:hover {
-  opacity: 0.92;
-  color: var(--river-cream-dim);
-}
-
-.preset-chip.armed {
-  opacity: 1;
-  border-style: solid;
-  border-color: var(--river-amber);
-  color: var(--river-amber);
-}
-
-.preset-chip:focus-visible {
-  outline: 2px solid var(--club-brass-bright);
-  outline-offset: 3px;
-}
 
 .preset-notice {
   position: absolute;
@@ -1951,12 +1507,6 @@ button.verify-pill.verify-mismatch {
   color: var(--river-amber);
   font-size: 15px;
   font-weight: 600;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .preset-chip {
-    transition: none;
-  }
 }
 
 /* Chat and emotes. A River divergence - the reference has no typed chat. The panel
@@ -3114,26 +2664,6 @@ button.verify-pill.verify-mismatch {
   box-shadow: none;
 }
 
-.seat-ring:not(.plates-held) .seat:not(.open-seat) .dealer-button,
-.seat-ring:not(.plates-held) .seat:not(.open-seat) .remote-timer {
-  top: 50%;
-  right: auto;
-  bottom: auto;
-  left: 50%;
-  width: auto;
-  height: auto;
-  padding: 3px 7px 4px;
-  border: 0;
-  border-bottom: 2px solid var(--river-amber);
-  border-radius: 0;
-  background: rgb(5 8 7 / 78%);
-  box-shadow: none;
-  color: var(--river-amber-bright);
-  font-size: 10px;
-  line-height: 1;
-  transform: translate(-50%, 22px);
-}
-
 .hero-seat .seat-bet {
   display: none;
 }
@@ -3168,10 +2698,6 @@ button.verify-pill.verify-mismatch {
 .seat-glyph.away,
 .seat-glyph.sittingOut {
   color: var(--river-amber);
-}
-
-.remote-timer.urgent {
-  border-color: var(--river-amber-bright);
 }
 
 /* The showdown, as a moment rather than a state change.
@@ -3411,10 +2937,6 @@ button.verify-pill.verify-mismatch {
   font-size: 30px;
 }
 
-.showdown-cards .playing-card .card-corner {
-  display: none;
-}
-
 /*
  * The corner rows.
  *
@@ -3603,10 +3125,6 @@ button.verify-pill.verify-mismatch {
 
 .shown-hand .playing-card > b {
   font-size: 20px;
-}
-
-.shown-hand .playing-card .card-corner {
-  display: none;
 }
 
 .action-pin-amount {
@@ -4587,11 +4105,6 @@ button.verify-pill.verify-mismatch {
   --river-suit-club: var(--river-suit-spade);
 }
 
-.deck-four-colour {
-  --river-suit-diamond: #2a64a0;
-  --river-suit-club: #1c6b3e;
-}
-
 /* The HUD layer ignores the pointer so the camera can be orbited through it.
    Anything you press or drag has to take the pointer back, and the raise arc is
    a div rather than a button, so the knob could not be dragged at all: the drag
@@ -4653,12 +4166,6 @@ button.verify-pill.verify-mismatch {
 
 .hero-cards .playing-card > b {
   font-size: 34px;
-}
-
-.hero-cards .playing-card .card-corner {
-  right: 6px;
-  bottom: 5px;
-  font-size: 18px;
 }
 
 /* A card back rather than a blank: a wine field inside a lit brass frame with
@@ -4839,10 +4346,6 @@ button.verify-pill.verify-mismatch {
 
 .cluster-board .playing-card > b {
   font-size: 26px;
-}
-
-.cluster-board .playing-card .card-corner {
-  display: none;
 }
 
 @keyframes board-card-in {
